@@ -1,0 +1,2 @@
+# StrangeUtaGame
+一款由RhythmicaLyrics启发的打轴软件
