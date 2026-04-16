@@ -3,13 +3,12 @@
 应用主容器，使用 PyQt-Fluent-Widgets 的 FluentWindow。
 """
 
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QFileDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFileDialog
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QKeySequence
 from qfluentwidgets import FluentWindow, NavigationInterface, NavigationItemPosition
 from qfluentwidgets import FluentIcon as FIF
 
-import sys
 from typing import Optional
 from pathlib import Path
 
@@ -222,23 +221,4 @@ class MainWindow(FluentWindow):
         self._current_project = None
 
 
-def main():
-    """应用入口"""
-    # 启用 DPI 缩放
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
-
-    # 创建应用
-    app = QApplication(sys.argv)
-
-    # 创建主窗口
-    window = MainWindow()
-    window.show()
-
-    # 运行应用
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
+# 注意：main() 函数已移至 main.py，以确保 QApplication 先于任何 UI 导入创建
