@@ -388,6 +388,35 @@ class SettingsInterface(QWidget):
         btn_reset.clicked.connect(self._reset_settings)
         layout.addWidget(btn_reset)
 
+        layout.addSpacing(20)
+
+        # 关于部分
+        about_title = QLabel("关于")
+        about_title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        layout.addWidget(about_title)
+
+        about_content = QLabel(
+            "StrangeUtaGame - 歌词打轴软件\n"
+            "版本: 1.0.0\n"
+            "由 RhythmicaLyrics 启发\n\n"
+            "项目地址:\n"
+        )
+        about_content.setStyleSheet("color: gray;")
+        about_content.setWordWrap(True)
+        layout.addWidget(about_content)
+
+        # GitHub 链接
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+
+        self.lbl_github = QLabel(
+            '<a href="https://github.com/Xuan-cc/StrangeUtaGame" style="color: #0066cc;">'
+            "https://github.com/Xuan-cc/StrangeUtaGame</a>"
+        )
+        self.lbl_github.setOpenExternalLinks(True)
+        self.lbl_github.setStyleSheet("font-size: 12px;")
+        layout.addWidget(self.lbl_github)
+
         layout.addStretch()
 
         # 配置文件路径显示
