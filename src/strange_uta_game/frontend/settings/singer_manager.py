@@ -24,7 +24,6 @@ from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,
     LineEdit,
-    CardWidget,
     ListWidget,
     InfoBar,
     InfoBarPosition,

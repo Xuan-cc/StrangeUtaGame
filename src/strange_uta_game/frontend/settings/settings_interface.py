@@ -26,15 +26,9 @@ from qfluentwidgets import (
     ComboBox,
     SpinBox,
     LineEdit,
-    CardWidget,
     InfoBar,
     InfoBarPosition,
     FluentIcon as FIF,
-    SettingCardGroup,
-    OptionsSettingCard,
-    RangeSettingCard,
-    SwitchSettingCard,
-    HyperlinkCard,
 )
 
 from typing import Optional, Dict, Any

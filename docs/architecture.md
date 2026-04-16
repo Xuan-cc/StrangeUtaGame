@@ -161,6 +161,192 @@
 - 变速播放（0.5x ~ 2.0x）
 - 位置变化回调（~60fps）
 
+## 回调接口规范
+
+### 设计原则
+
+- 上层通过**回调函数**或**接口对象**与下层通信
+- 回调中**不包含 UI 对象**，只传递数据
+- 回调调用时机：状态变更完成后立即调用
+
+### 核心回调接口定义
+
+```python
+from typing import Protocol, Dict, List, Optional
+from dataclasses import dataclass
+
+# ========== 数据对象（用于回调参数） ==========
+
+@dataclass
+class TimeTagInfo:
+    """时间标签信息"""
+    singer_id: str
+    line_idx: int
+    char_idx: int
+    checkpoint_idx: int
+    timestamp_ms: int
+    tag_type: str
+
+@dataclass
+class SingerPosition:
+    """演唱者位置信息"""
+    singer_id: str
+    line_idx: int
+    char_idx: int
+    checkpoint_idx: int
+    color: str
+
+@dataclass
+class PlaybackPosition:
+    """播放位置信息"""
+    position_ms: int
+    duration_ms: int
+    is_playing: bool
+
+# ========== TimingService 回调 ==========
+
+class TimingCallbacks(Protocol):
+    """打轴服务回调接口"""
+    
+    def on_timetag_added(self, info: TimeTagInfo) -> None:
+        """时间标签添加时"""
+        ...
+    
+    def on_timetag_removed(self, info: TimeTagInfo) -> None:
+        """时间标签删除时"""
+        ...
+    
+    def on_position_changed(self, position: PlaybackPosition,
+                           singer_positions: Dict[str, SingerPosition]) -> None:
+        """
+        播放位置变化时（约 60fps）
+        singer_positions: {singer_id: SingerPosition}
+        """
+        ...
+    
+    def on_singer_changed(self, new_singer_id: str, 
+                         prev_singer_id: str) -> None:
+        """演唱者切换时（自动管理触发）"""
+        ...
+    
+    def on_checkpoint_moved(self, singer_id: str,
+                           line_idx: int, char_idx: int, 
+                           checkpoint_idx: int) -> None:
+        """Checkpoint 位置移动时"""
+        ...
+    
+    def on_timing_warning(self, warning_type: str, 
+                         message: str, details: dict) -> None:
+        """打轴警告（如时间倒退）"""
+        ...
+
+# ========== ProjectService 回调 ==========
+
+class ProjectCallbacks(Protocol):
+    """项目管理服务回调接口"""
+    
+    def on_project_loaded(self, project_id: str, 
+                         metadata: dict) -> None:
+        """项目加载完成时"""
+        ...
+    
+    def on_project_saved(self, project_id: str, 
+                        file_path: str) -> None:
+        """项目保存完成时"""
+        ...
+    
+    def on_project_error(self, error_type: str, 
+                        message: str) -> None:
+        """项目操作错误时"""
+        ...
+
+# ========== ExportService 回调 ==========
+
+class ExportCallbacks(Protocol):
+    """导出服务回调接口"""
+    
+    def on_export_started(self, format_name: str, 
+                         output_path: str) -> None:
+        """导出开始时"""
+        ...
+    
+    def on_export_progress(self, current: int, total: int) -> None:
+        """导出进度更新"""
+        ...
+    
+    def on_export_completed(self, format_name: str, 
+                           output_path: str, success: bool) -> None:
+        """导出完成时"""
+        ...
+
+# ========== SingerService 回调 ==========
+
+class SingerCallbacks(Protocol):
+    """演唱者服务回调接口"""
+    
+    def on_singer_added(self, singer_id: str, 
+                       name: str, color: str) -> None:
+        """演唱者添加时"""
+        ...
+    
+    def on_singer_removed(self, singer_id: str) -> None:
+        """演唱者删除时"""
+        ...
+    
+    def on_singer_updated(self, singer_id: str, 
+                         updates: dict) -> None:
+        """演唱者属性更新时"""
+        ...
+
+# ========== CommandManager 回调（撤销/重做） ==========
+
+class CommandCallbacks(Protocol):
+    """命令管理器回调接口"""
+    
+    def on_undo_state_changed(self, can_undo: bool, 
+                             undo_desc: Optional[str]) -> None:
+        """撤销状态变化时"""
+        ...
+    
+    def on_redo_state_changed(self, can_redo: bool, 
+                             redo_desc: Optional[str]) -> None:
+        """重做状态变化时"""
+        ...
+```
+
+### 回调注册方式
+
+```python
+class TimingService:
+    def __init__(self):
+        self.callbacks: Optional[TimingCallbacks] = None
+    
+    def register_callbacks(self, callbacks: TimingCallbacks) -> None:
+        """注册回调接口"""
+        self.callbacks = callbacks
+    
+    def _notify_timetag_added(self, info: TimeTagInfo) -> None:
+        """内部通知方法"""
+        if self.callbacks:
+            self.callbacks.on_timetag_added(info)
+```
+
+### 回调调用时序示例
+
+```
+用户按下 Space 键
+    ↓
+TimingService.on_timing_key()
+    ↓
+添加时间标签到领域对象
+    ↓
+调用 callbacks.on_timetag_added()  ← UI 更新显示
+    ↓
+移动到下一个 Checkpoint
+    ↓
+调用 callbacks.on_checkpoint_moved()  ← UI 更新光标位置
+```
+
 ## 错误处理策略
 
 ### 分层错误类型

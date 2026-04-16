@@ -16,12 +16,37 @@
 - SingerService（获取当前演唱者）
 
 **状态**：
-- 当前演唱者 ID（singer_id）
+- 当前 Checkpoint 位置（全局索引）
+- 当前演唱者 ID（从 Checkpoint 自动推导）
 - 当前行索引（在演唱者内的索引）
 - 当前字符索引
 - 当前节奏点索引（checkpoint_idx）
 - 录制状态（是否正在打轴）
 - 显示模式（单演唱者/全部演唱者）
+
+**关于演唱者管理的说明**：
+
+**核心原则**：用户不需要手动切换演唱者，系统后台自动管理。
+
+**两种使用模式**：
+
+1. **打轴模式（自动管理）**：
+   - 系统维护全局 Checkpoint 序列（跨所有演唱者）
+   - 用户按顺序打轴，系统自动识别当前 Checkpoint 所属演唱者
+   - UI 自动切换到对应演唱者的歌词显示
+   - 用户感知为"连续往下打"，无感知切换
+
+2. **配置模式（手动选择）**：
+   - 仅在 SingerManagerInterface 中使用
+   - 用户手动选择演唱者进行属性配置（名称、颜色）
+   - 不涉及打轴流程
+
+**状态关系**：
+```
+全局 Checkpoint 索引 → 查询 Checkpoint 所属 singer_id → 当前演唱者 ID
+```
+- 当前演唱者 ID 是从 Checkpoint 位置推导的，不是独立状态
+- 移动 Checkpoint 时自动更新当前演唱者
 
 **主要用例**：
 
@@ -126,10 +151,54 @@
    - 范围：0.5x ~ 2.0x
 
 **回调接口**：
-- 时间标签添加时回调（singer_id, 行索引, 字符索引, 节奏点索引, 时间戳）
-- 位置变化时回调（当前时间戳, Map<singer_id, 当前行索引>）
-- 演唱者切换时回调（新 singer_id）
-- 显示模式切换时回调（新模式）
+
+```python
+class TimingCallbacks:
+    """TimingService 回调接口定义"""
+    
+    def on_timetag_added(self, 
+                        singer_id: str, 
+                        line_idx: int, 
+                        char_idx: int, 
+                        checkpoint_idx: int, 
+                        timestamp_ms: int) -> None:
+        """时间标签添加时回调"""
+        pass
+    
+    def on_position_changed(self, 
+                           position_ms: int,
+                           singer_positions: Dict[str, int]) -> None:
+        """
+        播放位置变化时回调
+        singer_positions: {singer_id: line_idx} 各演唱者的当前行索引
+        """
+        pass
+    
+    def on_singer_changed(self, 
+                         new_singer_id: str, 
+                         prev_singer_id: str) -> None:
+        """演唱者切换时回调（自动管理触发）"""
+        pass
+    
+    def on_display_mode_changed(self, 
+                               mode: str) -> None:
+        """显示模式切换时回调 (single/all)"""
+        pass
+    
+    def on_checkpoint_moved(self,
+                           line_idx: int,
+                           char_idx: int,
+                           checkpoint_idx: int,
+                           singer_id: str) -> None:
+        """Checkpoint 位置移动时回调"""
+        pass
+    
+    def on_timing_error(self, 
+                       error_type: str, 
+                       message: str) -> None:
+        """打轴错误回调（如时间倒退警告）"""
+        pass
+```
 
 **配置参数**（从 SettingsService 获取）：
 - `timing_offset_ms`: 打轴偏移量（默认 -20ms，补偿反应延迟）
@@ -254,17 +323,19 @@
 **主要用例**：
 
 1. **创建新项目**
-   - 验证音频文件存在性
-   - 创建 Project 对象
+   - 创建 Project 对象（仅包含歌词数据）
+   - 音频文件在后续由用户单独选择
    - 触发项目加载回调
 
-2. **打开项目**
-   - 解析 RLF 文件
-   - 重建 Project 对象
+2. **打开项目（加载 SUG 文件）**
+   - 解析 SUG 文件，重建 Project 对象（仅歌词和时间数据）
+   - **弹出音频选择对话框**，让用户选择/拖入音频文件
+   - 验证音频时长与项目数据是否匹配（可选，提示用户）
    - 触发项目加载回调
 
 3. **保存项目**
-   - 序列化 Project 到 RLF
+   - 序列化 Project 到 SUG（只包含歌词、时间标签、演唱者）
+   - **不保存音频路径**
    - 写入文件系统
    - 触发保存完成回调
 
@@ -273,10 +344,27 @@
    - 解析歌词文本
    - 创建 LyricLine 并添加到 Project
 
+**项目加载流程（重要）**：
+
+```
+用户打开 .sug 文件
+    ↓
+ProjectService 解析 SUG，重建 Project（歌词 + 时间数据）
+    ↓
+弹出音频选择对话框
+    ↓
+用户选择/拖入音频文件
+    ↓
+验证音频（时长匹配提示，不匹配时警告但不阻止）
+    ↓
+加载完成，进入 EditorInterface
+```
+
 **错误处理**：
-- 文件不存在
+- SUG 文件不存在或损坏
 - 格式解析错误
 - 权限错误
+- 音频文件验证警告（不阻止）
 
 ### ExportService（导出服务）
 
@@ -368,6 +456,199 @@
 - 分析前：显示预估的节奏点总数
 - 分析后：在预览中高亮显示差异（如新增加的 rhythm points）
 - 支持撤销分析结果
+
+## 撤销/重做机制 (Undo/Redo)
+
+### 全局命令模式
+
+采用**命令模式 (Command Pattern)** 实现全局撤销/重做：
+
+```python
+from abc import ABC, abstractmethod
+from typing import List, Optional
+
+class Command(ABC):
+    """命令基类"""
+    
+    @abstractmethod
+    def execute(self) -> None:
+        """执行命令"""
+        pass
+    
+    @abstractmethod
+    def undo(self) -> None:
+        """撤销命令"""
+        pass
+    
+    @abstractmethod
+    def redo(self) -> None:
+        """重做命令（默认与 execute 相同）"""
+        pass
+    
+    @property
+    @abstractmethod
+    def description(self) -> str:
+        """命令描述（用于 UI 显示，如"添加时间标签"）"""
+        pass
+
+# 具体命令示例
+class AddTimeTagCommand(Command):
+    """添加时间标签命令"""
+    
+    def __init__(self, project: Project, singer_id: str, 
+                 line_idx: int, char_idx: int, timestamp_ms: int):
+        self.project = project
+        self.singer_id = singer_id
+        self.line_idx = line_idx
+        self.char_idx = char_idx
+        self.timestamp_ms = timestamp_ms
+        self.added_tag: Optional[TimeTag] = None
+    
+    def execute(self) -> None:
+        line = self.project.get_line(self.line_idx)
+        self.added_tag = TimeTag(
+            timestamp_ms=self.timestamp_ms,
+            singer_id=self.singer_id,
+            char_idx=self.char_idx
+        )
+        line.add_timetag(self.added_tag)
+    
+    def undo(self) -> None:
+        line = self.project.get_line(self.line_idx)
+        line.remove_timetag(self.added_tag)
+    
+    @property
+    def description(self) -> str:
+        return f"添加时间标签 [{self.timestamp_ms}ms]"
+
+class DeleteCheckpointCommand(Command):
+    """删除节奏点命令"""
+    
+    def execute(self) -> None:
+        # 保存删除前的状态
+        # 执行删除
+        pass
+    
+    def undo(self) -> None:
+        # 恢复删除前的状态
+        pass
+```
+
+### 命令管理器
+
+```python
+class CommandManager:
+    """命令管理器 - 维护撤销/重做栈"""
+    
+    def __init__(self, max_history: int = 100):
+        self.undo_stack: List[Command] = []
+        self.redo_stack: List[Command] = []
+        self.max_history = max_history
+    
+    def execute(self, command: Command) -> None:
+        """执行命令并加入撤销栈"""
+        command.execute()
+        self.undo_stack.append(command)
+        self.redo_stack.clear()  # 新操作后清空重做栈
+        
+        # 限制历史记录数量
+        if len(self.undo_stack) > self.max_history:
+            self.undo_stack.pop(0)
+    
+    def undo(self) -> Optional[str]:
+        """撤销上一个命令，返回命令描述"""
+        if not self.undo_stack:
+            return None
+        
+        command = self.undo_stack.pop()
+        command.undo()
+        self.redo_stack.append(command)
+        return command.description
+    
+    def redo(self) -> Optional[str]:
+        """重做下一个命令，返回命令描述"""
+        if not self.redo_stack:
+            return None
+        
+        command = self.redo_stack.pop()
+        command.redo()
+        self.undo_stack.append(command)
+        return command.description
+    
+    def can_undo(self) -> bool:
+        return len(self.undo_stack) > 0
+    
+    def can_redo(self) -> bool:
+        return len(self.redo_stack) > 0
+    
+    def get_undo_description(self) -> Optional[str]:
+        """获取下一个可撤销命令的描述"""
+        if self.undo_stack:
+            return self.undo_stack[-1].description
+        return None
+    
+    def get_redo_description(self) -> Optional[str]:
+        """获取下一个可重做命令的描述"""
+        if self.redo_stack:
+            return self.redo_stack[-1].description
+        return None
+```
+
+### 支持撤销的操作
+
+**必须支持撤销**：
+1. 添加/删除时间标签
+2. 添加/删除 Checkpoint（+/- 键）
+3. 修改句尾标记（L 键）
+4. 时间调整（批量偏移、比例调整）
+5. 添加/删除歌词行
+6. 添加/删除演唱者
+7. 修改注音
+8. 自动检查结果应用
+
+**不支持撤销**：
+1. 音频播放控制（播放/暂停/跳转）- 纯 UI 操作
+2. 界面缩放（Alt+滚轮）- 纯 UI 设置
+3. 设置更改 - 单独管理
+
+### 快捷键绑定
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Ctrl+Z` | 撤销 |
+| `Ctrl+Y` 或 `Ctrl+Shift+Z` | 重做 |
+
+### 批量操作的撤销
+
+批量操作（如自动检查、批量时间调整）作为一个整体命令：
+
+```python
+class BatchCommand(Command):
+    """批量命令 - 包含多个子命令"""
+    
+    def __init__(self, commands: List[Command], description: str):
+        self.commands = commands
+        self._description = description
+    
+    def execute(self) -> None:
+        for cmd in self.commands:
+            cmd.execute()
+    
+    def undo(self) -> None:
+        # 逆向撤销
+        for cmd in reversed(self.commands):
+            cmd.undo()
+    
+    @property
+    def description(self) -> str:
+        return self._description
+```
+
+### 与保存的集成
+
+- 撤销栈不影响"是否已保存"状态
+- 保存操作不清空撤销栈
+- 关闭项目时清空撤销栈
 
 ## 服务间协作
 

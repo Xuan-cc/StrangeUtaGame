@@ -16,12 +16,19 @@
 
 **属性**：
 - `id`: 唯一标识符（UUID）
+- `singer_id`: 所属演唱者 ID（必填，关联到 Singer）
 - `text`: 原始文本
-- `chars`: 拆分的字符列表
+- `chars`: 拆分的字符列表（由 text 动态生成，用于索引）
 - `timetags`: 时间标签列表（按时间排序）
 - `rubies`: 注音列表
 - `checkpoints`: 节奏点配置列表（与 chars 一一对应）
 - `is_line_end`: 行尾标记（表示此行末尾是否有休止/长音）
+
+**关于 text 和 chars 的关系**：
+- `chars` 是 `text` 的拆分结果，运行时动态生成
+- 持久化时两者都存储，用于数据校验（确保 chars 与 text 一致）
+- 加载时优先使用存储的 chars，如果与 text 不符则重新拆分
+- 拆分规则由 TextSplitter 服务处理（日文/英文/符号分别处理）
 
 **业务规则**：
 1. 时间标签必须按时间递增
@@ -67,16 +74,17 @@
 
 **属性**：
 - `id`: 唯一标识符
-- `audio_path`: 关联的音频文件路径
 - `lines`: 歌词行列表（所有演唱者的歌词混合存储，通过 singer_id 关联）
 - `singers`: 演唱者列表
-- `metadata`: 元数据（标题、艺术家等）
+- `metadata`: 元数据（标题、艺术家、语言等）
+- `audio_duration_ms`: 音频时长（毫秒，用于验证用户选择的音频是否匹配）
 
 **业务规则**：
 1. 歌词行按时间顺序排列（可选，允许乱序以支持和声）
-2. 每行有唯一 ID，并关联到特定演唱者
-3. 项目必须关联有效音频文件
-4. 必须至少有一个演唱者（默认）
+2. 每行有唯一 ID，并关联到特定演唱者（singer_id 必填）
+3. 必须至少有一个演唱者（default = true）
+4. 所有时间标签必须携带 singer_id，确保多演唱者场景数据完整
+5. **不存储音频路径** - 音频由用户每次使用时单独选择
 
 **行为**：
 - 添加演唱者
@@ -152,8 +160,10 @@ check：  2         0     1     1
 
 **属性**：
 - `timestamp_ms`: 绝对时间（毫秒）
-- `tag_type`: 标签类型（字符开始/中间/行尾）
-- `singer_id`: 所属演唱者 ID（用于多声部）
+- `tag_type`: 标签类型（`char_start`, `char_middle`, `line_end`, `rest`）
+- `singer_id`: 所属演唱者 ID（必填，用于多声部和和声场景）
+- `char_idx`: 对应字符索引（在 LyricLine.chars 中的位置）
+- `checkpoint_idx`: 在该字符内的第几个节奏点（从 0 开始）
 
 **相等性**：timestamp_ms、tag_type 和 singer_id 都相同
 
@@ -411,6 +421,64 @@ check：  2         0     1     1
 - ❌ 直接修改 TimeTag.timestamp_ms
 - ❌ 手动创建未关联到 Project 的 LyricLine
 
+## 音频时长验证
+
+### 用途
+
+虽然项目文件不存储音频路径，但存储音频时长（`audio_duration_ms`）用于：
+- 提示用户选择的音频是否与原项目匹配
+- 时长差异过大时显示警告（但不阻止使用）
+
+### 验证逻辑
+
+```python
+def validate_audio_match(project: Project, audio_path: str) -> Tuple[bool, str]:
+    """
+    验证用户选择的音频是否与原项目匹配
+    返回: (是否通过, 提示信息)
+    """
+    audio_duration = get_audio_duration(audio_path)
+    stored_duration = project.audio_duration_ms
+    
+    if stored_duration == 0:
+        return True, "新项目，无音频时长记录"
+    
+    diff_ratio = abs(audio_duration - stored_duration) / stored_duration
+    
+    if diff_ratio < 0.01:  # 差异 < 1%
+        return True, "音频匹配"
+    elif diff_ratio < 0.05:  # 差异 < 5%
+        return True, "音频时长略有差异，可能为不同版本"
+    else:
+        return False, "音频时长差异过大，请确认是否为正确的音频文件"
+```
+
+### 用户交互
+
+- 差异 < 1%：静默通过
+- 差异 1-5%：显示提示但不阻止（"音频可能为不同版本，是否继续？"）
+- 差异 > 5%：显示警告，用户确认后仍可继续
+
+## 非日语歌词处理
+
+### 语言检测
+
+- 通过 `metadata.language` 字段标识
+- 支持语言：`ja` (日语), `zh` (中文), `en` (英文), 等
+
+### 注音支持
+
+- **日语**：完整注音支持（RubyAnalyzer）
+- **中文**：可选拼音注音（扩展点）
+- **英文**：单词级注音（可选，显示音标）
+- **其他**：禁用注音功能
+
+### 字符拆分
+
+- **日语**：汉字、假名、长音、促音分别处理
+- **中文**：按字拆分（每个汉字一个字符）
+- **英文**：按字母拆分，支持连字符（如 don't → do + n't）
+
 ## 测试策略
 
 ### 单元测试范围
@@ -418,8 +486,11 @@ check：  2         0     1     1
 - 实体行为方法
 - 值对象相等性
 - 业务规则验证
+- 路径解析逻辑
 
 ### 测试数据
 
 - 使用内存中的对象，不涉及文件/数据库
 - 构造各种边界情况（空行、无时间标签等）
+- 多演唱者场景测试
+- 时间倒退场景测试

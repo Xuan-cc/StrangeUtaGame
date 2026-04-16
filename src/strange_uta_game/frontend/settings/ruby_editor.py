@@ -25,7 +25,6 @@ from qfluentwidgets import (
     PrimaryPushButton,
     LineEdit,
     SpinBox,
-    CardWidget,
     TableWidget,
     InfoBar,
     InfoBarPosition,

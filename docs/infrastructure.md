@@ -67,30 +67,41 @@
 
 ### IProjectParser 接口
 
-**职责**：解析和保存项目文件（RLF）
+**职责**：解析和保存项目文件（SUG）
 
-**RLF 格式设计**：
+**SUG 格式设计**：
 - 基于 JSON
 - 包含完整的项目数据（歌词、时间标签、节奏点配置、注音）
 - 版本控制，支持向后兼容
-- 文件扩展名：.rlf
+- 文件扩展名：.sug（StrangeUtaGame 的缩写）
 
 **数据结构**：
 ```json
 {
   "version": "1.0",
   "id": "项目UUID",
-  "audio_path": "音频文件路径",
   "metadata": {
     "title": "歌曲标题",
     "artist": "艺术家",
     "album": "专辑",
     "created_at": "创建时间",
-    "updated_at": "更新时间"
+    "updated_at": "更新时间",
+    "language": "ja"
   },
+  "singers": [
+    {
+      "id": "演唱者UUID",
+      "name": "演唱者1",
+      "color": "#FF6B6B",
+      "is_default": true,
+      "display_priority": 0,
+      "enabled": true
+    }
+  ],
   "lines": [
     {
       "id": "行UUID",
+      "singer_id": "演唱者UUID",
       "text": "歌词文本",
       "chars": ["字", "符", "列", "表"],
       "checkpoints": [
@@ -117,9 +128,9 @@
         }
       ],
       "timetags": [
-        {"timestamp_ms": 12340, "char_idx": 0, "checkpoint_idx": 0},
-        {"timestamp_ms": 12560, "char_idx": 0, "checkpoint_idx": 1},
-        {"timestamp_ms": 12800, "char_idx": 1, "checkpoint_idx": 0}
+        {"timestamp_ms": 12340, "char_idx": 0, "checkpoint_idx": 0, "tag_type": "char_start", "singer_id": "演唱者UUID"},
+        {"timestamp_ms": 12560, "char_idx": 0, "checkpoint_idx": 1, "tag_type": "char_middle", "singer_id": "演唱者UUID"},
+        {"timestamp_ms": 12800, "char_idx": 1, "checkpoint_idx": 0, "tag_type": "char_start", "singer_id": "演唱者UUID"}
       ],
       "rubies": [
         {
@@ -135,26 +146,77 @@
 
 **关键设计说明**：
 
-1. **节奏点配置（checkpoints）**：
+1. **项目文件设计原则（音频不绑定）**：
+   - **RLF 文件不存储音频路径** - 用户每次使用时重新选择音频
+   - **好处**：
+     - 项目文件更小（只存歌词和时间数据）
+     - 音频文件可随时更换（如从低音质换到高音质）
+     - 项目文件可在不同设备间共享
+     - 实现更简单，无需处理路径解析
+
+2. **演唱者列表（singers）**：
+   - 必须至少有一个演唱者（default = true）
+   - 每个歌词行通过 `singer_id` 关联到演唱者
+   - 颜色用于 UI 区分不同演唱者
+   - `enabled` 控制是否参与打轴和导出
+
+3. **歌词行（lines）**：
+   - `singer_id`: 必填，标识该行属于哪个演唱者
+   - `text` 和 `chars`: `chars` 是 `text` 拆分后的字符列表，运行时动态生成，持久化时两者都存储用于校验
+
+4. **节奏点配置（checkpoints）**：
    - 与 `chars` 一一对应，描述每个字符的节奏属性
    - `check_count`: 该字符需要击打几次（如「赤」(あか)=2）
    - `is_line_end`: 标记行末字符（通常有长音或休止）
    - `is_rest`: 标记休止符（非歌词字符的停顿）
 
-2. **时间标签（timetags）**：
+5. **时间标签（timetags）**：
    - 记录实际打轴的时间戳
    - `char_idx`: 对应字符索引
    - `checkpoint_idx`: 该字符的第几个节奏点（支持连打）
-   - 通过这两个索引可以精确定位到具体字符的具体击打位置
+   - `tag_type`: 标签类型（`char_start`, `char_middle`, `line_end`, `rest`）
+   - `singer_id`: 所属演唱者 ID（用于多演唱者场景）
+   - 通过 char_idx + checkpoint_idx + singer_id 可以精确定位
 
-3. **注音（rubies）**：
+6. **注音（rubies）**：
    - 描述注音文本及其覆盖范围
    - 支持多对一（一个注音对应多个字符）
+   - 非日语项目可省略此字段
 
 **版本兼容**：
 - 版本号遵循语义化版本（Semantic Versioning）
 - 读取时检查版本，向后兼容旧版本
 - 写入时总是使用最新版本
+
+**版本迁移策略**：
+
+当加载旧版本 SUG 文件时，自动执行迁移：
+
+```python
+# 迁移器示例
+class SugMigrator:
+    MIGRATIONS = {
+        "1.0": None,  # 基础版本，无需迁移
+        # 未来版本添加迁移函数
+        # "1.1": migrate_v1_to_v1_1,
+    }
+    
+    @staticmethod
+    def migrate(data: dict, from_version: str) -> dict:
+        """将旧版本数据迁移到最新版本"""
+        # 迁移逻辑
+        return migrated_data
+```
+
+**命名说明**：
+- **SUG** = **S**trange**U**ta**G**ame
+- 避免与 RhythmicaLyrics 的 .rlf 格式混淆
+
+**向后兼容原则**：
+1. 新增字段：提供默认值
+2. 删除字段：忽略旧数据
+3. 修改结构：提供转换函数
+4. 所有迁移操作保持数据完整性
 
 ## 导出器
 

@@ -32,14 +32,12 @@ from qfluentwidgets import (
     SpinBox,
     DoubleSpinBox,
     LineEdit,
-    CardWidget,
     InfoBar,
     InfoBarPosition,
     FluentIcon as FIF,
     SplitPushButton,
     RoundMenu,
     Action,
-    FluentWindow,
 )
 
 from typing import Optional, List, Callable
@@ -55,7 +53,7 @@ from strange_uta_game.backend.application import (
 from strange_uta_game.backend.infrastructure.audio import SoundDeviceEngine
 
 
-class TransportBar(CardWidget):
+class TransportBar(QWidget):
     """播放控制栏
 
     包含：

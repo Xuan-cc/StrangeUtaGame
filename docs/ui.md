@@ -90,6 +90,7 @@ MainWindow (FluentWindow)
 - 歌词初始输入和导入
 - 音频文件选择
 - 项目创建入口
+- **打开已有项目**
 
 **布局**：
 
@@ -105,9 +106,12 @@ StartupInterface
 │   │   - "从文件导入 (TXT/LRC/KRA)"
 │   │   - "从剪贴板粘贴"
 │   │   - "清空"
-│   └── 文件拖拽区域
-│       - 高亮显示拖放区域
-│       - 支持 .txt, .lrc, .kra 文件
+│   ├── 文件拖拽区域
+│   │   - 高亮显示拖放区域
+│   │   - 支持 .txt, .lrc, .kra 文件
+│   └── **打开项目按钮**（新增）
+│       - "打开现有项目 (.rlf)"
+│       - 文件选择对话框
 ├── 中间：ImportPreview（导入预览）
 │   ├── 歌词结构预览表
 │   │   - 行号
@@ -124,7 +128,7 @@ StartupInterface
     ├── 音频文件选择
     │   - 文件路径输入框
     │   - 浏览按钮
-    │   - 拖拽支持
+    │   - **拖拽支持**（支持拖入音频文件）
     ├── 音频信息预览
     │   - 文件名
     │   - 时长
@@ -155,16 +159,26 @@ StartupInterface
 
 4. **音频选择**
    - 选择音频文件（MP3, WAV, FLAC, AAC 等）
+   - **支持直接拖拽音频文件到区域**
    - 验证音频有效性
    - 显示音频基本信息
 
 5. **创建项目**
    - 验证歌词和音频都已提供
-   - 生成 RLF 项目文件
+   - 生成 SUG 项目文件
+   - 切换到 EditorInterface
+
+6. **打开已有项目（新增）**
+   - 选择 .sug 项目文件
+   - 解析项目数据（歌词 + 时间标签）
+   - **弹出音频选择对话框**（因为 SUG 不存储音频路径）
+   - 用户选择/拖入音频
+   - 验证音频时长（可选）
    - 切换到 EditorInterface
 
 **与下层交互**：
 - 调用 ProjectService.create_new_project()
+- 调用 ProjectService.load_project()（新增）
 - 调用 AutoCheckService 分析歌词
 - 调用 FileParsers 解析导入的歌词文件
 
@@ -688,18 +702,151 @@ SingerManagerInterface
 - 演唱者4：黄色 (#FCE38A)
 - 更多演唱者：循环或用户自定义
 
+#### 5. 播放时渲染逻辑（详细）
+
+**基本渲染规则**：
+- **未开始**：字符显示灰色（#888888）
+- **正在唱**：字符从左到右渐变（已唱部分高亮颜色，未唱部分灰色）
+- **已唱完**：字符完全高亮（演唱者颜色）
+
+**渲染计算（每帧 60fps）**：
+
+**1. 普通字符渲染（单个 Checkpoint）**
+```
+字符：「赤」
+Checkpoint：[10.0秒]
+
+播放时间：10.0秒 → 开始高亮（左边缘）
+播放时间：10.5秒 → 渐变到 50%
+播放时间：11.0秒（下一个 Checkpoint）→ 完全高亮
+```
+
+**渐变计算**：
+- 起始时间 = Checkpoint 时间
+- 结束时间 = 下一个 Checkpoint 时间（或默认 +0.5秒）
+- 进度 = (当前时间 - 起始时间) / (结束时间 - 起始时间)
+- 进度 0% ~ 100% 对应从左到右渐变
+
+**2. 连打字符渲染（多个 Checkpoint）**
+```
+字符：「赤」
+Checkpoint：[10.0秒] [10.2秒] （あ・か）
+
+播放时间：10.0秒 → 开始高亮「あ」
+播放时间：10.2秒 → 「あ」完全高亮，开始「か」
+播放时间：10.4秒 → 「か」完全高亮
+```
+
+**3. 句尾拖音渲染（长按打轴的特殊处理）**
+```
+字符：「た」（句尾，有开始和结束两个 Checkpoint）
+Checkpoint：[20.0秒, 20.8秒]
+
+播放时间：20.0秒 → 按下 Space 记录的开始时间
+播放时间：20.0 ~ 20.8秒 → 持续渐变（进度从 0% 到 100%）
+播放时间：20.8秒 → 抬起 Space 记录的结束时间，完全高亮
+
+特殊效果：
+- 拖音期间显示进度条或光晕效果
+- 可选显示拖音时长（如 "0.8s"）
+```
+
+**4. 连打字符（check_count = 0）渲染**
+```
+字符：「ー」（长音，check_count = 0，和上一个字符连唱）
+前一个字符：「か」[10.2秒]
+
+渲染逻辑：
+- 「か」开始高亮时（10.2秒），「ー」也开始高亮
+- 「か」完全高亮时，「ー」也完全高亮
+- 两者同步，视为一个整体
+```
+
+**5. 多演唱者播放渲染（和声）**
+
+**独立计算每个演唱者**：
+```
+时间点：[10.0秒]
+演唱者1：「赤」Checkpoint [10.0秒] → 开始高亮（红色）
+演唱者2：「青」Checkpoint [10.0秒] → 开始高亮（蓝色）
+
+计算逻辑：
+- 对每个演唱者独立计算当前字符和进度
+- 演唱者1：计算在演唱者1的时间标签中的位置
+- 演唱者2：计算在演唱者2的时间标签中的位置
+- 两者独立渲染，颜色不同
+```
+
+**6. 时间异常渲染**
+
+**检测**：播放时检测时间标签顺序
+```
+演唱者1：
+[10.0秒]「赤」→ 正常
+[12.0秒]「い」→ 正常
+[11.0秒]「花」→ 异常（11.0 < 12.0）
+
+播放时间：11.0秒时：
+- 「赤」已唱完（绿色）
+- 「い」正在唱（进度约 50%，绿色）
+- 「花」也开始高亮（红色闪烁，表示异常）
+
+异常标识：
+- 时间倒退的字符显示红色边框或闪烁
+- 播放完成后显示警告标记
+```
+
+**7. 未打轴字符渲染**
+```
+歌词：「赤い花」
+已打轴：「赤」[10.0秒]「い」[10.5秒]
+未打轴：「花」（无 Checkpoint 时间）
+
+播放时间：10.5秒后 → 「花」显示为未打轴状态
+未打轴状态：
+- 颜色：灰色（或半透明）
+- 标记：显示 "?" 或特殊图标
+- 进度：不计算渐变，保持未开始状态
+```
+
+**渲染优化**：
+- 仅计算当前可视区域内的字符（虚拟列表）
+- 使用双缓冲避免闪烁
+- 缓存渲染结果（时间标签未变更时复用）
+
 ### 菜单栏设计（MenuBar）
 
 MainWindow 顶部菜单栏：
 
 ```
 文件(F)          编辑(E)          视图(V)          工具(T)          设置(S)          帮助(H)
-├── 新建项目      ├── 撤销          ├── 放大歌词      ├── 自动检查      ├── 打轴设置      ├── 使用帮助
-├── 打开项目      ├── 重做          ├── 缩小歌词      ├── 时间标签调整   ├── 显示设置      ├── 快捷键参考
-├── 保存         ├── 剪切          ├── 重置缩放      ├── 批量编辑     ├── 音频设置      ├── 关于
-├── 另存为       ├── 复制          └── 全屏模式      ├── 导入歌词...   ├── 快捷键设置    └── 检查更新
-├── 导出         ├── 粘贴                          └── 修正偏移量...  └── 恢复默认
-├── 最近文件     └── 删除选中标签
+├── 新建项目(.sug) ├── 撤销         ├── 放大歌词      ├── 自动检查      ├── 打轴设置      ├── 使用帮助
+├── 打开项目(.sug) ├── 重做         ├── 缩小歌词      ├── 时间标签调整   ├── 显示设置      ├── 快捷键参考
+├── 打开最近      ├── 剪切          ├── 重置缩放      ├── 批量编辑     ├── 音频设置      ├── 关于
+├── 保存         ├── 复制          └── 全屏模式      ├── 导入歌词...   ├── 快捷键设置    └── 检查更新
+├── 另存为       ├── 粘贴                          └── 修正偏移量...  └── 恢复默认
+├── 导出         └── 删除选中标签
+└── 退出
+```
+
+**重要改进 - 音频文件更换**（新增）：
+
+因为 SUG 文件不存储音频路径，用户可以随时更换音频：
+
+```
+文件(F)
+├── ...
+├── **更换音频文件**（新增）
+│   └── 功能：允许用户重新选择音频文件
+│   └── 场景：
+│       - 加载项目后发现音频不对
+│       - 想换用更高音质的版本
+│       - 音频文件移动后重新关联
+│   └── 行为：
+│       - 弹出音频选择对话框
+│       - 验证时长（提示但不阻止）
+│       - 保持所有时间标签数据不变
+├── ...
 └── 退出
 ```
 
@@ -846,6 +993,263 @@ EditorInterface._on_timetag_added()
 - **高对比度**：支持高对比度模式
 - **屏幕阅读器**：Qt 原生支持
 - **字体缩放**：支持系统字体缩放
+
+## 性能测试计划
+
+### 测试目标
+
+确保应用在各种使用场景下保持流畅：
+
+| 指标 | 目标值 | 测试方法 |
+|------|--------|----------|
+| 打轴延迟 | < 20ms | 按键到时间记录的延迟 |
+| 播放刷新率 | 60fps | 卡拉 OK 预览渲染 |
+| 大文件加载 | < 3秒 | 1000+ 行歌词项目 |
+| 多演唱者渲染 | 60fps | 4 个演唱者同时显示 |
+| 内存占用 | < 500MB | 正常使用时 |
+
+### 测试场景
+
+#### 场景 1: 打轴延迟测试
+
+**测试方法**：
+```python
+def test_timing_latency():
+    """测试打轴延迟"""
+    timestamps = []
+    
+    for i in range(100):
+        start = time.perf_counter_ns()
+        # 模拟按键
+        timing_service.on_timing_key("SPACE")
+        end = time.perf_counter_ns()
+        
+        latency_ms = (end - start) / 1_000_000
+        timestamps.append(latency_ms)
+        
+        time.sleep(0.1)  # 模拟正常打轴间隔
+    
+    avg_latency = sum(timestamps) / len(timestamps)
+    max_latency = max(timestamps)
+    
+    assert avg_latency < 20, f"平均延迟 {avg_latency}ms 超过 20ms"
+    assert max_latency < 50, f"最大延迟 {max_latency}ms 超过 50ms"
+```
+
+**测试数据**：
+- 歌词：100 行，每行 20 个字符
+- 操作：连续打 100 个时间标签
+- 环境：Windows 10, PyQt6, sounddevice
+
+#### 场景 2: 卡拉 OK 预览性能
+
+**测试方法**：
+```python
+def test_karaoke_preview_fps():
+    """测试卡拉 OK 预览帧率"""
+    frame_times = []
+    
+    # 播放 10 秒
+    audio_service.play()
+    start_time = time.time()
+    
+    while time.time() - start_time < 10:
+        frame_start = time.perf_counter_ns()
+        
+        # 更新 KaraokePreview
+        karaoke_preview.update_display()
+        
+        frame_end = time.perf_counter_ns()
+        frame_time_ms = (frame_end - frame_start) / 1_000_000
+        frame_times.append(frame_time_ms)
+        
+        # 等待下一帧（16.67ms = 60fps）
+        time.sleep(0.016)
+    
+    avg_frame_time = sum(frame_times) / len(frame_times)
+    fps = 1000 / avg_frame_time
+    
+    assert fps >= 55, f"平均帧率 {fps}fps 低于 55fps"
+```
+
+**测试数据**：
+- 歌词：50 行，每行 30 个字符
+- 显示范围：±3 行（共 7 行）
+- 操作：正常播放，观察渲染帧率
+
+#### 场景 3: 多演唱者性能
+
+**测试方法**：
+```python
+def test_multi_singer_performance():
+    """测试多演唱者渲染性能"""
+    
+    # 创建 4 个演唱者的项目
+    project = create_test_project(num_singers=4, lines_per_singer=20)
+    
+    frame_times = []
+    
+    # 模拟播放并测量渲染时间
+    for i in range(600):  # 10 秒 @ 60fps
+        frame_start = time.perf_counter_ns()
+        
+        # 同时渲染 4 个演唱者
+        for singer in project.singers:
+            karaoke_preview.render_singer(singer)
+        
+        frame_end = time.perf_counter_ns()
+        frame_time_ms = (frame_end - frame_start) / 1_000_000
+        frame_times.append(frame_time_ms)
+        
+        time.sleep(0.016)
+    
+    avg_frame_time = sum(frame_times) / len(frame_times)
+    
+    assert avg_frame_time < 16.67, f"渲染时间过长: {avg_frame_time}ms"
+```
+
+#### 场景 4: 大文件测试
+
+**测试数据**：
+- 歌词：1000 行
+- 每行：50 个字符
+- 时间标签：全部打轴完成（约 50000 个）
+
+**测试内容**：
+1. 加载时间
+2. 内存占用
+3. 滚动流畅度
+4. 导出时间
+
+```python
+def test_large_file_performance():
+    """大文件性能测试"""
+    
+    # 测试加载时间
+    start = time.time()
+    project = project_service.load_project("large_test.rlf")
+    load_time = time.time() - start
+    
+    assert load_time < 3, f"加载时间过长: {load_time}秒"
+    
+    # 测试内存占用
+    import psutil
+    process = psutil.Process()
+    memory_mb = process.memory_info().rss / 1024 / 1024
+    
+    assert memory_mb < 500, f"内存占用过高: {memory_mb}MB"
+```
+
+#### 场景 5: 时间异常检测性能
+
+**测试方法**：
+```python
+def test_time_anomaly_detection():
+    """测试时间异常检测性能"""
+    
+    # 创建包含大量时间倒退的项目
+    project = create_project_with_anomalies(num_anomalies=100)
+    
+    start = time.time()
+    anomalies = timing_service.detect_time_anomalies(project)
+    detection_time = time.time() - start
+    
+    assert detection_time < 0.5, f"异常检测时间过长: {detection_time}秒"
+    assert len(anomalies) == 100
+```
+
+### 性能优化策略
+
+#### 1. 渲染优化
+
+- **双缓冲**：所有自定义绘制使用双缓冲
+- **局部重绘**：仅重绘变化的字符，而非整行
+- **虚拟列表**：仅渲染可视区域内的歌词行
+- **缓存渲染结果**：时间标签未变更时复用
+
+#### 2. 音频优化
+
+- **预加载**：音频数据加载到内存
+- **环形缓冲区**：减少内存分配
+- **异步 I/O**：大文件使用异步加载
+
+#### 3. 计算优化
+
+- **延迟计算**：时间异常检测在后台线程执行
+- **批量更新**：批量操作时减少回调次数
+- **空间分割**：歌词行使用空间索引加速查找
+
+### 测试工具
+
+```python
+# 性能分析装饰器
+def profile(func):
+    """性能分析装饰器"""
+    def wrapper(*args, **kwargs):
+        profiler = cProfile.Profile()
+        profiler.enable()
+        
+        result = func(*args, **kwargs)
+        
+        profiler.disable()
+        stats = pstats.Stats(profiler)
+        stats.sort_stats('cumulative')
+        stats.print_stats(20)  # 打印前 20 个耗时函数
+        
+        return result
+    return wrapper
+
+# 帧率监控类
+class FPSMonitor:
+    """帧率监控器"""
+    
+    def __init__(self, target_fps: int = 60):
+        self.target_fps = target_fps
+        self.frame_times: List[float] = []
+        self.max_history = target_fps * 2  # 保留 2 秒的历史
+    
+    def tick(self) -> None:
+        """记录一帧"""
+        now = time.perf_counter()
+        self.frame_times.append(now)
+        
+        # 清理旧数据
+        cutoff = now - (self.max_history / self.target_fps)
+        self.frame_times = [t for t in self.frame_times if t > cutoff]
+    
+    def get_fps(self) -> float:
+        """获取当前帧率"""
+        if len(self.frame_times) < 2:
+            return 0.0
+        
+        duration = self.frame_times[-1] - self.frame_times[0]
+        return len(self.frame_times) / duration if duration > 0 else 0.0
+    
+    def is_performant(self) -> bool:
+        """检查性能是否达标"""
+        return self.get_fps() >= self.target_fps * 0.9
+```
+
+### 持续性能监控
+
+在开发版本中集成性能监控：
+
+```python
+# 在 KaraokePreview 中集成
+class KaraokePreview(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.fps_monitor = FPSMonitor(target_fps=60)
+        
+    def paintEvent(self, event):
+        self.fps_monitor.tick()
+        
+        # 如果帧率过低，记录警告
+        if not self.fps_monitor.is_performant():
+            logger.warning(f"Low FPS detected: {self.fps_monitor.get_fps():.1f}")
+        
+        # 正常绘制...
+```
 
 ## 扩展点
 
