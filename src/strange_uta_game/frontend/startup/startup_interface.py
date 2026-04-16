@@ -31,7 +31,6 @@ from qfluentwidgets import (
     PrimaryPushButton,
     TextEdit,
     LineEdit,
-    GroupHeaderCardWidget,
     InfoBar,
     InfoBarPosition,
     FluentIcon as FIF,
@@ -41,8 +40,6 @@ from qfluentwidgets import (
 
 from typing import Optional, List
 from pathlib import Path
-
-from PyQt6.QtWidgets import QApplication
 
 from strange_uta_game.backend.application import (
     ProjectService,
@@ -55,7 +52,7 @@ from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
 )
 
 
-class LyricInputPanel(GroupHeaderCardWidget):
+class LyricInputPanel(QGroupBox):
     """歌词输入面板
 
     支持：
@@ -68,15 +65,16 @@ class LyricInputPanel(GroupHeaderCardWidget):
     file_imported = pyqtSignal(str)  # 文件导入
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setTitle("歌词输入")
+        super().__init__("歌词输入", parent)
         self.setFixedWidth(400)
 
         self._init_ui()
 
     def _init_ui(self):
         """初始化界面"""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
         # 文本编辑区
         self.text_edit = TextEdit(self)
         self.text_edit.setPlaceholderText(
@@ -90,7 +88,11 @@ class LyricInputPanel(GroupHeaderCardWidget):
         self.text_edit.dragEnterEvent = self._drag_enter_event
         self.text_edit.dropEvent = self._drop_event
 
+        layout.addWidget(self.text_edit)
+
         # 按钮区
+        button_layout = QHBoxLayout()
+
         self.btn_import = PushButton("导入文件", self, icon=FIF.FOLDER)
         self.btn_import.clicked.connect(self._on_import_file)
 
@@ -100,27 +102,12 @@ class LyricInputPanel(GroupHeaderCardWidget):
         self.btn_clear = PushButton("清空", self, icon=FIF.DELETE)
         self.btn_clear.clicked.connect(self._on_clear)
 
-        # 添加到卡片
-        self.addGroup(
-            "edit",
-            "歌词编辑",
-            self.text_edit,
-        )
-
-        # 按钮布局
-        button_widget = QWidget()
-        button_layout = QHBoxLayout(button_widget)
-        button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.addWidget(self.btn_import)
         button_layout.addWidget(self.btn_paste)
         button_layout.addWidget(self.btn_clear)
         button_layout.addStretch()
 
-        self.addGroup(
-            "buttons",
-            "操作",
-            button_widget,
-        )
+        layout.addLayout(button_layout)
 
     def _drag_enter_event(self, event: QDragEnterEvent):
         """拖拽进入事件"""
@@ -132,12 +119,12 @@ class LyricInputPanel(GroupHeaderCardWidget):
         urls = event.mimeData().urls()
         if urls:
             file_path = urls[0].toLocalFile()
-            if file_path.lower().endswith((".txt", ".lrc", ".kra")):
+            if file_path.endswith((".txt", ".lrc", ".kra")):
                 self.file_imported.emit(file_path)
             else:
                 InfoBar.error(
-                    title="不支持的文件格式",
-                    content="请拖拽 TXT, LRC 或 KRA 文件",
+                    title="不支持的格式",
+                    content="请选择歌词文件 (TXT, LRC, KRA)",
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP,
@@ -153,43 +140,37 @@ class LyricInputPanel(GroupHeaderCardWidget):
     def _on_import_file(self):
         """导入文件"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "导入歌词文件", "", "歌词文件 (*.txt *.lrc *.kra);;所有文件 (*.*)"
+            self,
+            "选择歌词文件",
+            "",
+            "歌词文件 (*.txt *.lrc *.kra);;所有文件 (*.*)",
         )
-
         if file_path:
             self.file_imported.emit(file_path)
 
     def _on_paste(self):
         """从剪贴板粘贴"""
+        from PyQt6.QtWidgets import QApplication
+
         clipboard = QApplication.clipboard()
         text = clipboard.text()
-
         if text:
             self.text_edit.setPlainText(text)
-            InfoBar.success(
-                title="已粘贴",
-                content="歌词已从剪贴板粘贴",
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=2000,
-                parent=self,
-            )
 
     def _on_clear(self):
-        """清空"""
+        """清空文本"""
         self.text_edit.clear()
 
     def get_lyrics(self) -> str:
-        """获取歌词内容"""
+        """获取当前歌词文本"""
         return self.text_edit.toPlainText()
 
     def set_lyrics(self, text: str):
-        """设置歌词内容"""
+        """设置歌词文本"""
         self.text_edit.setPlainText(text)
 
 
-class AudioSelectPanel(GroupHeaderCardWidget):
+class AudioSelectPanel(QGroupBox):
     """音频选择面板
 
     支持：
@@ -201,9 +182,7 @@ class AudioSelectPanel(GroupHeaderCardWidget):
     audio_selected = pyqtSignal(str)  # 音频路径
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setTitle("音频选择")
+        super().__init__("音频选择", parent)
         self.setFixedWidth(350)
 
         self._audio_path: Optional[str] = None
@@ -212,6 +191,9 @@ class AudioSelectPanel(GroupHeaderCardWidget):
 
     def _init_ui(self):
         """初始化界面"""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
         # 文件路径输入
         self.line_path = LineEdit(self)
         self.line_path.setPlaceholderText("点击选择或拖拽音频文件...")
@@ -227,27 +209,18 @@ class AudioSelectPanel(GroupHeaderCardWidget):
         self.btn_browse.clicked.connect(self._on_browse)
 
         # 路径布局
-        path_widget = QWidget()
-        path_layout = QHBoxLayout(path_widget)
-        path_layout.setContentsMargins(0, 0, 0, 0)
+        path_layout = QHBoxLayout()
         path_layout.addWidget(self.line_path)
         path_layout.addWidget(self.btn_browse)
 
-        self.addGroup(
-            "path",
-            "音频文件",
-            path_widget,
-        )
+        layout.addLayout(path_layout)
 
         # 音频信息显示
         self.lbl_info = QLabel("请选择音频文件")
         self.lbl_info.setStyleSheet("color: gray;")
+        layout.addWidget(self.lbl_info)
 
-        self.addGroup(
-            "info",
-            "音频信息",
-            self.lbl_info,
-        )
+        layout.addStretch()
 
     def _drag_enter_event(self, event: QDragEnterEvent):
         """拖拽进入"""
@@ -273,9 +246,9 @@ class AudioSelectPanel(GroupHeaderCardWidget):
                 )
 
     def _is_audio_file(self, file_path: str) -> bool:
-        """检查是否是音频文件"""
-        ext = Path(file_path).suffix.lower()
-        return ext in (".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a")
+        """检查是否为音频文件"""
+        audio_exts = (".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a")
+        return file_path.lower().endswith(audio_exts)
 
     def _on_browse(self):
         """浏览文件"""
@@ -285,7 +258,6 @@ class AudioSelectPanel(GroupHeaderCardWidget):
             "",
             "音频文件 (*.mp3 *.wav *.flac *.aac *.ogg *.m4a);;所有文件 (*.*)",
         )
-
         if file_path:
             self._set_audio(file_path)
 
@@ -299,59 +271,61 @@ class AudioSelectPanel(GroupHeaderCardWidget):
             from strange_uta_game.backend.infrastructure.audio import SoundDeviceEngine
 
             engine = SoundDeviceEngine()
-            engine.load(file_path)
-            info = engine.get_audio_info()
-
-            if info:
-                duration_sec = info.duration_ms // 1000
-                minutes = duration_sec // 60
-                seconds = duration_sec % 60
-
-                info_text = f"时长: {minutes:02d}:{seconds:02d}\n"
-                info_text += f"采样率: {info.sample_rate} Hz\n"
-                info_text += f"声道数: {info.channels}"
-
-                self.lbl_info.setText(info_text)
-                self.lbl_info.setStyleSheet("color: black;")
-
-            engine.release()
-
+            if engine.load(file_path):
+                info = engine.get_audio_info()
+                if info:
+                    duration_sec = info.duration_ms // 1000
+                    minutes = duration_sec // 60
+                    seconds = duration_sec % 60
+                    self.lbl_info.setText(
+                        f"时长: {minutes}:{seconds:02d} | "
+                        f"采样率: {info.sample_rate}Hz | "
+                        f"声道: {info.channels}"
+                    )
+                engine.release()
+            else:
+                self.lbl_info.setText("无法加载音频文件")
         except Exception as e:
-            self.lbl_info.setText(f"无法读取音频信息: {e}")
-            self.lbl_info.setStyleSheet("color: red;")
+            self.lbl_info.setText(f"音频信息获取失败: {e}")
 
         self.audio_selected.emit(file_path)
 
     def get_audio_path(self) -> Optional[str]:
-        """获取音频路径"""
+        """获取当前音频路径"""
         return self._audio_path
 
 
-class ImportPreview(GroupHeaderCardWidget):
+class ImportPreview(QGroupBox):
     """导入预览面板
 
-    显示解析后的歌词结构：
+    显示自动分析后的歌词结构：
     - 行号
-    - 文本内容
+    - 文本
     - 字符数
-    - 节奏点数量（自动分析）
+    - 节奏点数量
     - 注音预览
     """
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setTitle("导入预览")
+        super().__init__("导入预览", parent)
 
         self._init_ui()
 
     def _init_ui(self):
         """初始化界面"""
-        # 表格
-        self.table = QTableWidget(self)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        # 说明标签
+        desc_label = QLabel("自动分析结果预览")
+        desc_label.setStyleSheet("color: gray;")
+        layout.addWidget(desc_label)
+
+        # 预览表格
+        self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
-            ["行号", "文本", "字符数", "节奏点", "注音"]
+            ["行号", "文本", "字符数", "节奏点", "注音预览"]
         )
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch
@@ -361,31 +335,25 @@ class ImportPreview(GroupHeaderCardWidget):
         )
         self.table.setColumnWidth(0, 50)
         self.table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Fixed
-        )
-        self.table.setColumnWidth(2, 60)
-        self.table.horizontalHeader().setSectionResizeMode(
             3, QHeaderView.ResizeMode.Fixed
         )
         self.table.setColumnWidth(3, 60)
+        self.table.horizontalHeader().setSectionResizeMode(
+            4, QHeaderView.ResizeMode.Fixed
+        )
+        self.table.setColumnWidth(4, 60)
 
         self.table.setMinimumHeight(300)
         self.table.setAlternatingRowColors(True)
 
-        self.addGroup(
-            "preview",
-            "解析结果",
-            self.table,
-        )
+        layout.addWidget(self.table)
 
         # 统计信息
         self.lbl_stats = QLabel("共 0 行")
+        self.lbl_stats.setStyleSheet("color: gray;")
+        layout.addWidget(self.lbl_stats)
 
-        self.addGroup(
-            "stats",
-            "统计",
-            self.lbl_stats,
-        )
+        layout.addStretch()
 
     def set_lines(self, lines: List[LyricLine]):
         """设置歌词行列表"""
@@ -399,36 +367,30 @@ class ImportPreview(GroupHeaderCardWidget):
             self.table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
 
             # 文本
-            text_item = QTableWidgetItem(line.text)
-            text_item.setToolTip(line.text)
-            self.table.setItem(i, 1, text_item)
+            self.table.setItem(i, 1, QTableWidgetItem(line.text))
 
             # 字符数
             char_count = len(line.chars)
             total_chars += char_count
             self.table.setItem(i, 2, QTableWidgetItem(str(char_count)))
 
-            # 节奏点数量
+            # 节奏点
             check_count = sum(c.check_count for c in line.checkpoints)
             total_checkpoints += check_count
             self.table.setItem(i, 3, QTableWidgetItem(str(check_count)))
 
-            # 注音预览
+            # 注音预览（前3个）
             ruby_preview = ""
-            for ruby in line.rubies[:3]:  # 只显示前 3 个
-                if ruby_preview:
-                    ruby_preview += ", "
-                ruby_preview += f"{ruby.text}"
-            if len(line.rubies) > 3:
-                ruby_preview += "..."
-
+            if line.rubies:
+                ruby_texts = [r.text for r in line.rubies[:3]]
+                ruby_preview = ", ".join(ruby_texts)
+                if len(line.rubies) > 3:
+                    ruby_preview += "..."
             self.table.setItem(i, 4, QTableWidgetItem(ruby_preview))
 
         # 更新统计
         self.lbl_stats.setText(
-            f"共 {len(lines)} 行 | "
-            f"总字符数: {total_chars} | "
-            f"总节奏点: {total_checkpoints}"
+            f"共 {len(lines)} 行 | {total_chars} 字符 | {total_checkpoints} 节奏点"
         )
 
     def clear(self):

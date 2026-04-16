@@ -3,10 +3,9 @@
 应用主容器，使用 PyQt-Fluent-Widgets 的 FluentWindow。
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFileDialog
+from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QFileDialog
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QKeySequence
-from qfluentwidgets import FluentWindow, NavigationInterface, NavigationItemPosition
 from qfluentwidgets import FluentIcon as FIF
 
 from typing import Optional
@@ -15,7 +14,7 @@ from pathlib import Path
 from strange_uta_game.backend.domain import Project
 
 
-class MainWindow(FluentWindow):
+class MainWindow(QMainWindow):
     """主窗口
 
     应用主容器，使用 Fluent Design 风格。
