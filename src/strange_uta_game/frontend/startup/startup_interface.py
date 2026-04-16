@@ -75,8 +75,8 @@ class LyricInputPanel(QGroupBox):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        # 文本编辑区
-        self.text_edit = TextEdit(self)
+        # 文本编辑区 - 使用标准 QTextEdit
+        self.text_edit = QTextEdit(self)
         self.text_edit.setPlaceholderText(
             "在此粘贴歌词...\n或拖拽歌词文件到此处\n支持格式: TXT, LRC, KRA"
         )
@@ -194,8 +194,8 @@ class AudioSelectPanel(QGroupBox):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        # 文件路径输入
-        self.line_path = LineEdit(self)
+        # 文件路径输入 - 使用标准 QLineEdit
+        self.line_path = QLineEdit(self)
         self.line_path.setPlaceholderText("点击选择或拖拽音频文件...")
         self.line_path.setReadOnly(True)
 
