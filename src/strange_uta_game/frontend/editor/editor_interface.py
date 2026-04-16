@@ -87,11 +87,11 @@ class TransportBar(QWidget):
         layout.setSpacing(10)
 
         # 播放控制按钮
-        self.btn_stop = PushButton("", self, icon=FIF.CANCEL)
+        self.btn_stop = PushButton(parent=self, text="", icon=FIF.CANCEL)
         self.btn_stop.setFixedSize(36, 36)
         self.btn_stop.clicked.connect(self.stop_clicked.emit)
 
-        self.btn_play = PrimaryPushButton("", self, icon=FIF.PLAY)
+        self.btn_play = PrimaryPushButton(parent=self, text="", icon=FIF.PLAY)
         self.btn_play.setFixedSize(44, 44)
         self.btn_play.clicked.connect(self._on_play_clicked)
 
@@ -493,7 +493,7 @@ class TimingControls(QWidget):
         layout.addWidget(self.lbl_current)
 
         # 主按钮：在当前位置打轴
-        self.btn_tag_now = PrimaryPushButton("在当前位置打轴 (Space)", self)
+        self.btn_tag_now = PrimaryPushButton(parent=self, text="在当前位置打轴 (Space)")
         self.btn_tag_now.setIcon(FIF.PIN)
         self.btn_tag_now.setMinimumHeight(50)
         self.btn_tag_now.clicked.connect(self._on_tag_now)
@@ -506,7 +506,7 @@ class TimingControls(QWidget):
         self._func_buttons = []
 
         for i in range(9):
-            btn = PushButton(f"F{i + 1}", self)
+            btn = PushButton(parent=self, text=f"F{i + 1}")
             btn.setFixedSize(50, 40)
             btn.clicked.connect(lambda checked, idx=i: self._on_func_key(idx))
             self._func_buttons.append(btn)
@@ -517,7 +517,9 @@ class TimingControls(QWidget):
         # 其他功能按钮
         layout.addSpacing(20)
 
-        self.btn_clear = PushButton("清除当前行时间标签", self, icon=FIF.DELETE)
+        self.btn_clear = PushButton(
+            parent=self, text="清除当前行时间标签", icon=FIF.DELETE
+        )
         self.btn_clear.clicked.connect(self._on_clear_line)
         layout.addWidget(self.btn_clear)
 

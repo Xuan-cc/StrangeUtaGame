@@ -244,7 +244,7 @@ class SettingsDialog(QDialog):
         self.line_export_dir.setPlaceholderText("点击选择默认导出目录...")
         self.line_export_dir.setReadOnly(True)
 
-        btn_browse = PushButton("浏览...")
+        btn_browse = PushButton(parent=self, text="浏览...")
         btn_browse.clicked.connect(self._on_browse_export_dir)
 
         export_dir_layout = QHBoxLayout()
@@ -371,13 +371,13 @@ class SettingsInterface(QWidget):
         layout.addSpacing(20)
 
         # 打开设置对话框按钮
-        btn_open_settings = PrimaryPushButton("打开设置对话框", self)
+        btn_open_settings = PrimaryPushButton(parent=self, text="打开设置对话框")
         btn_open_settings.setIcon(FIF.SETTING)
         btn_open_settings.clicked.connect(self._open_settings_dialog)
         layout.addWidget(btn_open_settings)
 
         # 重置设置按钮
-        btn_reset = PushButton("重置为默认设置", self)
+        btn_reset = PushButton(parent=self, text="重置为默认设置")
         btn_reset.setIcon(FIF.DELETE)
         btn_reset.clicked.connect(self._reset_settings)
         layout.addWidget(btn_reset)

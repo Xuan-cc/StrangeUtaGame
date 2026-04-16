@@ -78,7 +78,7 @@ class SingerEditDialog(QDialog):
         self.lbl_color_preview.setFixedSize(40, 30)
         color_layout.addWidget(self.lbl_color_preview)
 
-        btn_color = PushButton("选择颜色...")
+        btn_color = PushButton(parent=self, text="选择颜色...")
         btn_color.clicked.connect(self._on_select_color)
         color_layout.addWidget(btn_color)
 
@@ -169,18 +169,18 @@ class SingerManagerInterface(QWidget):
         # 按钮区域
         button_layout = QHBoxLayout()
 
-        self.btn_add = PrimaryPushButton("添加", self)
+        self.btn_add = PrimaryPushButton(parent=self, text="添加")
         self.btn_add.setIcon(FIF.ADD)
         self.btn_add.clicked.connect(self._on_add_singer)
         button_layout.addWidget(self.btn_add)
 
-        self.btn_edit = PushButton("编辑", self)
+        self.btn_edit = PushButton(parent=self, text="编辑")
         self.btn_edit.setIcon(FIF.EDIT)
         self.btn_edit.clicked.connect(self._on_edit_singer)
         self.btn_edit.setEnabled(False)
         button_layout.addWidget(self.btn_edit)
 
-        self.btn_delete = PushButton("删除", self)
+        self.btn_delete = PushButton(parent=self, text="删除")
         self.btn_delete.setIcon(FIF.DELETE)
         self.btn_delete.clicked.connect(self._on_delete_singer)
         self.btn_delete.setEnabled(False)

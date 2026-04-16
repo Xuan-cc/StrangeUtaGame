@@ -197,12 +197,12 @@ class RubyInterface(QWidget):
         self.lbl_line_text.setWordWrap(True)
         line_layout.addWidget(self.lbl_line_text, stretch=1)
 
-        self.btn_prev = PushButton("← 上一行")
+        self.btn_prev = PushButton(parent=self, text="← 上一行")
         self.btn_prev.clicked.connect(self._on_prev_line)
         self.btn_prev.setEnabled(False)
         line_layout.addWidget(self.btn_prev)
 
-        self.btn_next = PushButton("下一行 →")
+        self.btn_next = PushButton(parent=self, text="下一行 →")
         self.btn_next.clicked.connect(self._on_next_line)
         self.btn_next.setEnabled(False)
         line_layout.addWidget(self.btn_next)
@@ -230,13 +230,13 @@ class RubyInterface(QWidget):
         # 按钮区域
         button_layout = QHBoxLayout()
 
-        self.btn_auto = PushButton("自动分析注音", self)
+        self.btn_auto = PushButton(parent=self, text="自动分析注音")
         self.btn_auto.setIcon(FIF.SYNC)
         self.btn_auto.clicked.connect(self._on_auto_analyze)
         self.btn_auto.setEnabled(False)
         button_layout.addWidget(self.btn_auto)
 
-        self.btn_add = PrimaryPushButton("添加注音", self)
+        self.btn_add = PrimaryPushButton(parent=self, text="添加注音")
         self.btn_add.setIcon(FIF.ADD)
         self.btn_add.clicked.connect(self._on_add_ruby)
         self.btn_add.setEnabled(False)
@@ -319,11 +319,11 @@ class RubyInterface(QWidget):
             btn_layout.setContentsMargins(5, 0, 5, 0)
             btn_layout.setSpacing(5)
 
-            btn_edit = PushButton("编辑")
+            btn_edit = PushButton(parent=btn_widget, text="编辑")
             btn_edit.clicked.connect(lambda checked, idx=i: self._on_edit_ruby(idx))
             btn_layout.addWidget(btn_edit)
 
-            btn_delete = PushButton("删除")
+            btn_delete = PushButton(parent=btn_widget, text="删除")
             btn_delete.clicked.connect(lambda checked, idx=i: self._on_delete_ruby(idx))
             btn_layout.addWidget(btn_delete)
 

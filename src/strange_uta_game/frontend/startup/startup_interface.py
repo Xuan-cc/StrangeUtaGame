@@ -93,13 +93,13 @@ class LyricInputPanel(QGroupBox):
         # 按钮区
         button_layout = QHBoxLayout()
 
-        self.btn_import = PushButton("导入文件", self, icon=FIF.FOLDER)
+        self.btn_import = PushButton(parent=self, text="导入文件", icon=FIF.FOLDER)
         self.btn_import.clicked.connect(self._on_import_file)
 
-        self.btn_paste = PushButton("从剪贴板粘贴", self, icon=FIF.PASTE)
+        self.btn_paste = PushButton(parent=self, text="从剪贴板粘贴", icon=FIF.PASTE)
         self.btn_paste.clicked.connect(self._on_paste)
 
-        self.btn_clear = PushButton("清空", self, icon=FIF.DELETE)
+        self.btn_clear = PushButton(parent=self, text="清空", icon=FIF.DELETE)
         self.btn_clear.clicked.connect(self._on_clear)
 
         button_layout.addWidget(self.btn_import)
@@ -205,7 +205,7 @@ class AudioSelectPanel(QGroupBox):
         self.line_path.dropEvent = self._drop_event
 
         # 浏览按钮
-        self.btn_browse = PushButton("浏览...", self, icon=FIF.FOLDER)
+        self.btn_browse = PushButton(parent=self, text="浏览...", icon=FIF.FOLDER)
         self.btn_browse.clicked.connect(self._on_browse)
 
         # 路径布局
@@ -445,14 +445,14 @@ class StartupInterface(QWidget):
         right_layout.addWidget(self.audio_panel)
 
         # 创建项目按钮
-        self.btn_create = PrimaryPushButton("创建项目", self)
+        self.btn_create = PrimaryPushButton(parent=self, text="创建项目")
         self.btn_create.setIcon(FIF.PLAY)
         self.btn_create.setMinimumHeight(50)
         self.btn_create.clicked.connect(self._on_create_project)
         right_layout.addWidget(self.btn_create)
 
         # 打开现有项目按钮
-        self.btn_open = PushButton("打开现有项目", self)
+        self.btn_open = PushButton(parent=self, text="打开现有项目")
         self.btn_open.setIcon(FIF.FOLDER)
         self.btn_open.clicked.connect(self._on_open_project)
         right_layout.addWidget(self.btn_open)
