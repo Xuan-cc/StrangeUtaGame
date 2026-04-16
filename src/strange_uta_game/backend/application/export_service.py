@@ -1,0 +1,205 @@
+"""导出服务。
+
+提供统一的项目导出功能。
+"""
+
+from typing import Optional, Callable, List
+from dataclasses import dataclass
+from pathlib import Path
+
+from strange_uta_game.backend.domain import Project
+from strange_uta_game.backend.infrastructure.exporters import (
+    IExporter,
+    ExportError,
+    get_exporter_by_name,
+    get_all_exporters,
+)
+
+
+@dataclass
+class ExportResult:
+    """导出结果"""
+
+    success: bool
+    file_path: Optional[str] = None
+    format_name: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class ExportService:
+    """导出服务
+
+    管理项目导出到各种格式。
+    """
+
+    def __init__(self, progress_callback: Callable[[int, str], None] = None):
+        """
+        Args:
+            progress_callback: 进度回调函数 (progress_pct, message)
+        """
+        self._progress_callback = progress_callback
+
+    def get_available_formats(self) -> List[dict]:
+        """获取可用的导出格式列表
+
+        Returns:
+            格式信息列表，每项包含：
+            - name: 格式名称
+            - description: 描述
+            - extension: 扩展名
+            - filter: 文件选择器过滤字符串
+        """
+        formats = []
+
+        for exporter in get_all_exporters():
+            formats.append(
+                {
+                    "name": exporter.name,
+                    "description": exporter.description,
+                    "extension": exporter.file_extension,
+                    "filter": exporter.file_filter,
+                }
+            )
+
+        return formats
+
+    def export(
+        self,
+        project: Project,
+        format_name: str,
+        file_path: str,
+    ) -> ExportResult:
+        """导出项目
+
+        Args:
+            project: 项目对象
+            format_name: 格式名称 ('LRC', 'KRA', 'TXT', 等)
+            file_path: 导出文件路径
+
+        Returns:
+            导出结果
+        """
+        try:
+            # 获取导出器
+            exporter = get_exporter_by_name(format_name)
+
+            # 报告进度
+            if self._progress_callback:
+                self._progress_callback(0, f"开始导出为 {exporter.name} 格式...")
+
+            # 执行导出
+            exporter.export(project, file_path)
+
+            # 报告完成
+            if self._progress_callback:
+                self._progress_callback(100, "导出完成")
+
+            return ExportResult(
+                success=True,
+                file_path=file_path,
+                format_name=exporter.name,
+            )
+
+        except ExportError as e:
+            if self._progress_callback:
+                self._progress_callback(0, f"导出失败: {e}")
+
+            return ExportResult(
+                success=False,
+                error_message=str(e),
+            )
+
+        except Exception as e:
+            if self._progress_callback:
+                self._progress_callback(0, f"导出失败: {e}")
+
+            return ExportResult(
+                success=False,
+                error_message=f"未知错误: {e}",
+            )
+
+    def batch_export(
+        self,
+        project: Project,
+        formats: List[str],
+        output_dir: str,
+        base_name: str,
+    ) -> List[ExportResult]:
+        """批量导出到多种格式
+
+        Args:
+            project: 项目对象
+            formats: 格式名称列表
+            output_dir: 输出目录
+            base_name: 基本文件名（不含扩展名）
+
+        Returns:
+            导出结果列表
+        """
+        results = []
+        total = len(formats)
+
+        for i, format_name in enumerate(formats):
+            # 获取导出器以确定扩展名
+            try:
+                exporter = get_exporter_by_name(format_name)
+                ext = exporter.file_extension
+            except ValueError:
+                results.append(
+                    ExportResult(
+                        success=False,
+                        error_message=f"未知的格式: {format_name}",
+                    )
+                )
+                continue
+
+            # 构建文件路径
+            file_path = Path(output_dir) / f"{base_name}{ext}"
+
+            # 报告进度
+            if self._progress_callback:
+                progress = int((i / total) * 100)
+                self._progress_callback(progress, f"正在导出 {format_name}...")
+
+            # 执行导出
+            result = self.export(project, format_name, str(file_path))
+            results.append(result)
+
+        # 报告完成
+        if self._progress_callback:
+            self._progress_callback(100, "批量导出完成")
+
+        return results
+
+    def validate_before_export(self, project: Project) -> List[str]:
+        """验证项目是否可以导出
+
+        Args:
+            project: 项目对象
+
+        Returns:
+            错误信息列表（为空表示可以导出）
+        """
+        errors = []
+
+        if not project:
+            errors.append("项目为空")
+            return errors
+
+        if not project.lines:
+            errors.append("项目没有歌词行")
+
+        # 检查是否有时间标签
+        lines_with_tags = sum(1 for line in project.lines if line.timetags)
+        if lines_with_tags == 0:
+            errors.append("没有时间标签，导出的歌词将没有时间信息")
+
+        # 统计信息
+        stats = project.get_timing_statistics()
+        total_lines = stats.get("total_lines", 0)
+        completed_lines = stats.get("completed_lines", 0)
+
+        if completed_lines < total_lines:
+            errors.append(f"只有 {completed_lines}/{total_lines} 行完成打轴")
+
+        return errors
