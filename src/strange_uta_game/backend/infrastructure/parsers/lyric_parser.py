@@ -80,7 +80,7 @@ class TXTParser(LyricParser):
     def parse(self, content: str) -> List[ParsedLine]:
         """解析 TXT 格式
 
-        支持换行符分割，自动过滤空行。
+        支持换行符分割，自动过滤空行和纯标点行。
         """
         lines = []
 
@@ -89,6 +89,24 @@ class TXTParser(LyricParser):
 
             # 跳过空行
             if not line_text:
+                continue
+
+            # 跳过纯数字行
+            if line_text.isdigit():
+                continue
+
+            # 跳过纯标点和特殊符号行
+            if re.match(
+                r"^[\[\]【】（）(){}<>" "''`~!@#$%^&*+=|\-:;,.?/\\s]+$", line_text
+            ):
+                continue
+
+            # 跳过 HTML/XML 标签行
+            if line_text.startswith("<") and line_text.endswith(">"):
+                continue
+
+            # 跳过纯时间戳行
+            if re.match(r"^\[\d{1,2}:\d{2}[.:]\d{2,3}\]$", line_text):
                 continue
 
             lines.append(ParsedLine(text=line_text, timetags=[]))
@@ -107,10 +125,14 @@ class LRCParser(LyricParser):
     """
 
     # 标准 LRC 时间标签正则: [mm:ss.xx] 或 [mm:ss.xxx]
-    TIME_TAG_PATTERN = re.compile(r"\[(\d{1,2}):(\d{2})\.(\d{2,3})\]")
+    # 支持 [mm:ss.xx] 和 [mm:ss.xxx] 格式
+    TIME_TAG_PATTERN = re.compile(r"\[(\d{1,2}):(\d{2})[:.](\d{2,3})\]")
 
     # 增强 LRC 逐字时间标签: <mm:ss.xx>
-    WORD_TIME_PATTERN = re.compile(r"<(\d{1,2}):(\d{2})\.(\d{2,3})>")
+    WORD_TIME_PATTERN = re.compile(r"<(\d{1,2}):(\d{2})[:.](\d{2,3})>")
+
+    # ID标签（元数据）: [xx:xx]
+    ID_TAG_PATTERN = re.compile(r"^\[([a-zA-Z]+):(.*)\]$")
 
     def parse(self, content: str) -> List[ParsedLine]:
         """解析 LRC 格式"""
@@ -122,36 +144,53 @@ class LRCParser(LyricParser):
             if not line_text:
                 continue
 
-            # 检查是否是元数据行（如 [ti:标题]）
-            if (
-                line_text.startswith("[ti:")
-                or line_text.startswith("[ar:")
-                or line_text.startswith("[al:")
-                or line_text.startswith("[by:")
-                or line_text.startswith("[offset:")
+            # 跳过纯数字行
+            if line_text.isdigit():
+                continue
+
+            # 跳过纯标点和特殊符号行
+            if re.match(
+                r"^[\[\]【】（）(){}<>" "''`~!@#$%^&*+=|\-:;,.?/\\s]+$", line_text
             ):
                 continue
 
-            # 提取所有时间标签
-            timetags = []
+            # 检查是否是纯 ID 标签行（如 [ti:标题] [ar:艺术家]）
+            if self.ID_TAG_PATTERN.match(line_text):
+                continue
 
-            # 查找所有时间标签 [mm:ss.xx]
+            # 检查是否是纯时间戳行（没有时间标签后接文本）
+            if re.match(r"^\[\d{1,2}:\d{2}[.:]\d{2,3}\]+$", line_text):
+                continue
+
+            # 提取所有时间标签 [mm:ss.xx]
             matches = list(self.TIME_TAG_PATTERN.finditer(line_text))
 
             if not matches:
-                # 没有时间标签，作为纯文本行
-                lines.append(ParsedLine(text=line_text, timetags=[]))
+                # 没有时间标签，但有其他内容
+                # 检查是否是纯歌词文本（没有时间标签）
+                # 如果是纯文本，可以作为无时间标签的歌词行
+                if len(line_text) > 0 and not line_text.startswith("["):
+                    lines.append(ParsedLine(text=line_text, timetags=[]))
                 continue
 
             # 提取最后一个时间标签后的文本作为歌词
             last_match = matches[-1]
             lyric_text = line_text[last_match.end() :].strip()
 
+            # 移除可能残留的增强LRC时间标签
+            lyric_text = self.WORD_TIME_PATTERN.sub("", lyric_text)
+
+            if not lyric_text:
+                # 没有时间标签后的文本，跳过
+                continue
+
             # 检查是否是增强 LRC 格式（包含逐字时间）
             if self.WORD_TIME_PATTERN.search(lyric_text):
                 # 解析增强 LRC 格式
-                word_timetags = self._parse_enhanced_lrc(lyric_text, last_match)
-                lines.append(ParsedLine(text=lyric_text, timetags=word_timetags))
+                word_timetags = self._parse_enhanced_lrc(lyric_text)
+                # 清理文本：移除所有逐字时间标签
+                clean_text = self.WORD_TIME_PATTERN.sub("", lyric_text)
+                lines.append(ParsedLine(text=clean_text, timetags=word_timetags))
             else:
                 # 标准 LRC 格式，只取第一个时间标签作为整行时间
                 first_match = matches[0]
@@ -170,29 +209,24 @@ class LRCParser(LyricParser):
         """从正则匹配解析时间戳（毫秒）"""
         minutes = int(match.group(1))
         seconds = int(match.group(2))
-        centis = int(match.group(3))
+        centis = match.group(3)
 
-        # 如果是 3 位（毫秒），直接使用；如果是 2 位（百分秒），乘以 10
-        if len(match.group(3)) == 2:
-            centis *= 10
+        # 统一转换为毫秒
+        if len(centis) == 2:
+            # 百分秒（0-99）
+            millis = int(centis) * 10
+        else:
+            # 毫秒（0-999）
+            millis = int(centis)
 
-        return (minutes * 60 + seconds) * 1000 + centis
+        return (minutes * 60 + seconds) * 1000 + millis
 
-    def _parse_enhanced_lrc(
-        self, text: str, base_match: re.Match
-    ) -> List[Tuple[int, int]]:
+    def _parse_enhanced_lrc(self, text: str) -> List[Tuple[int, int]]:
         """解析增强 LRC 格式（逐字时间标签）"""
         timetags = []
         char_idx = 0
 
-        # 基础时间
-        base_time = self._parse_timestamp(base_match)
-
-        # 移除所有时间标签，提取纯文本
-        clean_text = self.WORD_TIME_PATTERN.sub("", text)
-
         # 查找所有逐字时间标签
-        pos = 0
         for match in self.WORD_TIME_PATTERN.finditer(text):
             timestamp_ms = self._parse_timestamp(match)
             timetags.append((char_idx, timestamp_ms))
@@ -205,33 +239,26 @@ class KRAParser(LRCParser):
     """KRA 格式解析器
 
     KRA 格式与 LRC 完全相同，只是文件扩展名不同。
-    卡拉 OK 软件通常使用 .kra 扩展名。
     """
 
-    def parse(self, content: str) -> List[ParsedLine]:
-        """解析 KRA 格式（同 LRC）"""
-        # KRA 格式与 LRC 相同
-        return super().parse(content)
+    pass
 
 
 class LyricParserFactory:
-    """歌词解析器工厂"""
+    """歌词解析器工厂
 
-    _parsers = {
-        ".txt": TXTParser,
-        ".lrc": LRCParser,
-        ".kra": KRAParser,
-    }
+    根据文件扩展名自动选择合适的解析器。
+    """
 
-    @classmethod
-    def get_parser(cls, file_path: str) -> LyricParser:
-        """根据文件扩展名获取解析器
+    @staticmethod
+    def get_parser(file_path: str) -> LyricParser:
+        """根据文件路径获取合适的解析器
 
         Args:
-            file_path: 文件路径
+            file_path: 歌词文件路径
 
         Returns:
-            对应的解析器实例
+            对应的歌词解析器
 
         Raises:
             ParseError: 不支持的文件格式
@@ -239,22 +266,26 @@ class LyricParserFactory:
         path = Path(file_path)
         ext = path.suffix.lower()
 
-        if ext not in cls._parsers:
+        if ext == ".txt":
+            return TXTParser()
+        elif ext == ".lrc":
+            return LRCParser()
+        elif ext == ".kra":
+            return KRAParser()
+        else:
             raise ParseError(f"不支持的文件格式: {ext}")
 
-        return cls._parsers[ext]()
-
-    @classmethod
-    def parse_file(cls, file_path: str) -> List[ParsedLine]:
-        """自动根据文件扩展名解析文件
+    @staticmethod
+    def parse_file(file_path: str) -> List[ParsedLine]:
+        """自动选择解析器并解析文件
 
         Args:
-            file_path: 文件路径
+            file_path: 歌词文件路径
 
         Returns:
             解析后的行列表
         """
-        parser = cls.get_parser(file_path)
+        parser = LyricParserFactory.get_parser(file_path)
         return parser.parse_file(file_path)
 
 
@@ -265,26 +296,29 @@ def parse_to_lyric_lines(
 
     Args:
         parsed_lines: 解析后的行列表
-        singer_id: 演唱者ID
+        singer_id: 演唱者 ID
 
     Returns:
         LyricLine 对象列表
     """
+    from strange_uta_game.backend.domain import Singer
+
     lines = []
 
-    for parsed in parsed_lines:
-        line = LyricLine(singer_id=singer_id, text=parsed.text)
+    for i, parsed in enumerate(parsed_lines):
+        # 创建歌词行
+        line = LyricLine(
+            singer_id=singer_id,
+            text=parsed.text,
+        )
 
         # 添加时间标签
         for char_idx, timestamp_ms in parsed.timetags:
-            from strange_uta_game.backend.domain import TimeTag, TimeTagType
-
             tag = TimeTag(
                 timestamp_ms=timestamp_ms,
                 singer_id=singer_id,
                 char_idx=char_idx,
                 checkpoint_idx=0,
-                tag_type=TimeTagType.CHAR_START,
             )
             line.add_timetag(tag)
 

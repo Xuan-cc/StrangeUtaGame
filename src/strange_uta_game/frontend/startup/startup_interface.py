@@ -596,8 +596,13 @@ class StartupInterface(QWidget):
             # 创建项目
             project = self._project_service.create_project()
 
-            # 添加歌词行
+            # 获取项目的默认演唱者（确保 singer_id 一致）
+            default_singer = project.get_default_singer()
+
+            # 添加歌词行（使用项目的演唱者 ID）
             for line in self._current_lines:
+                # 更新歌词行的 singer_id 为项目的演唱者
+                line.singer_id = default_singer.id
                 project.add_line(line)
 
             # 注意：音频路径不存储在项目文件中，用户每次使用需重新选择
