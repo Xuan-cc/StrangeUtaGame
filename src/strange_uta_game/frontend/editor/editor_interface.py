@@ -246,6 +246,7 @@ class KaraokePreview(QWidget):
     checkpoint_clicked = pyqtSignal(int, int, int)  # line_idx, char_idx, checkpoint_idx
     char_edit_requested = pyqtSignal(int, int)  # line_idx, char_idx (F2 key)
     seek_to_char_requested = pyqtSignal(int, int)  # line_idx, char_idx (double-click)
+    char_selected = pyqtSignal(int, int)  # line_idx, char_idx
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -319,10 +320,10 @@ class KaraokePreview(QWidget):
                 self.checkpoint_clicked.emit(line_idx, char_idx, cp_idx)
                 return
 
-        # 检查字符文本点击 → 跳转到该字符的第一个 checkpoint
+        # 检查字符文本点击 → 选中该字符（不论是否有 checkpoint）
         for char_rect, line_idx, char_idx in self._char_hitboxes:
             if char_rect.contains(click_x, click_y):
-                self.checkpoint_clicked.emit(line_idx, char_idx, 0)
+                self.char_selected.emit(line_idx, char_idx)
                 return
 
         # 回退到行级别点击：根据 y 坐标反算行索引
@@ -969,6 +970,7 @@ class EditorInterface(QWidget):
         self.preview = KaraokePreview(self)
         self.preview.line_clicked.connect(self._on_line_clicked)
         self.preview.checkpoint_clicked.connect(self._on_checkpoint_clicked)
+        self.preview.char_selected.connect(self._on_char_selected)
         self.preview.char_edit_requested.connect(self._on_char_edit_requested)
         self.preview.seek_to_char_requested.connect(self._on_seek_to_char)
         layout.addWidget(self.preview, stretch=1)
@@ -1288,6 +1290,13 @@ class EditorInterface(QWidget):
             self._update_time_tags_display()
             self._update_status()
 
+    def _on_char_selected(self, line_idx: int, char_idx: int):
+        """点击字符选中（不论是否有 checkpoint），允许后续 F4 增加 checkpoint"""
+        self._current_line_idx = line_idx
+        self.preview.set_current_position(line_idx, char_idx)
+        self._update_line_info()
+        self._update_status()
+
     def _on_char_edit_requested(self, line_idx: int, char_idx: int):
         """F2 键弹出注音编辑对话框"""
         if not self._project or line_idx >= len(self._project.lines):
@@ -1305,7 +1314,7 @@ class EditorInterface(QWidget):
                 self._store.notify("lyrics")
 
     def _toggle_checkpoint(self, delta: int = 1):
-        """F4 增加轴点数 (+1)，Alt+F4 减少轴点数 (-1)，最小为 1。"""
+        """F4 增加轴点数 (+1)，Ctrl+F4 减少轴点数 (-1)，最小为 1。"""
         if not self._project:
             return
         line_idx = self._current_line_idx
@@ -1331,6 +1340,107 @@ class EditorInterface(QWidget):
         self._update_status()
         if hasattr(self, "_store") and self._store:
             self._store.notify("checkpoints")
+
+    def _toggle_word_join(self):
+        """F3 连词/取消连词 — 切换当前字符与下一个字符的 Ruby 合并状态。"""
+        if not self._project:
+            return
+        line_idx = self._current_line_idx
+        if line_idx >= len(self._project.lines):
+            return
+        line = self._project.lines[line_idx]
+        char_idx = self.preview._current_char_idx
+        if char_idx >= len(line.chars):
+            return
+
+        ruby = line.get_ruby_for_char(char_idx)
+        is_merged = ruby and (ruby.end_idx - ruby.start_idx) > 1
+
+        if is_merged and ruby:
+            # ── 取消连词：拆分 ──
+            from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+                split_ruby_for_checkpoints,
+            )
+
+            old_text = ruby.text
+            old_start = ruby.start_idx
+            old_end = ruby.end_idx
+            line.rubies.remove(ruby)
+            count = old_end - old_start
+            split_parts = split_ruby_for_checkpoints(old_text, count)
+            for i, part in enumerate(split_parts):
+                if part:
+                    try:
+                        line.add_ruby(
+                            Ruby(
+                                text=part,
+                                start_idx=old_start + i,
+                                end_idx=old_start + i + 1,
+                            )
+                        )
+                    except Exception:
+                        pass
+            InfoBar.success(
+                title="取消连词",
+                content=f"已拆分「{''.join(line.chars[old_start:old_end])}」",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self,
+            )
+        else:
+            # ── 连词：合并当前字符与下一个字符 ──
+            if char_idx + 1 >= len(line.chars):
+                InfoBar.warning(
+                    title="无法连词",
+                    content="已是最后一个字符",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                    parent=self,
+                )
+                return
+
+            new_start = char_idx
+            new_end = char_idx + 2
+
+            # 收集覆盖范围内的注音文本
+            parts = []
+            overlapping = [
+                r
+                for r in line.rubies
+                if r.start_idx < new_end and r.end_idx > new_start
+            ]
+            for r in overlapping:
+                if r.text:
+                    parts.append(r.text)
+                line.rubies.remove(r)
+
+            merged_text = "".join(parts) if parts else ""
+            if merged_text:
+                try:
+                    line.add_ruby(
+                        Ruby(text=merged_text, start_idx=new_start, end_idx=new_end)
+                    )
+                except Exception:
+                    pass
+
+            InfoBar.success(
+                title="连词",
+                content=f"已合并「{''.join(line.chars[new_start:new_end])}」",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self,
+            )
+
+        self.refresh_lyric_display()
+        self._update_status()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("rubies")
 
     def _on_nav_line(self, delta: int):
         """方向键导航：上一行 (delta=-1) 或下一行 (delta=+1)"""
@@ -1389,19 +1499,17 @@ class EditorInterface(QWidget):
                 self._on_bulk_change()
                 a0.accept()
                 return
+            elif key == Qt.Key.Key_F4:
+                if self._project:
+                    self._toggle_checkpoint(delta=-1)
+                a0.accept()
+                return
             else:
                 super().keyPressEvent(a0)
                 return
 
-        # Alt+F4 减少轴点
-        if modifiers & Qt.KeyboardModifier.AltModifier and key == Qt.Key.Key_F4:
-            if self._project:
-                self._toggle_checkpoint(delta=-1)
-            a0.accept()
-            return
-
         # Convert Qt key to string name for mapping lookup
-        key_name = self._qt_key_to_name(key)
+        key_name = self._qt_key_to_name(key, modifiers)
         if not key_name:
             super().keyPressEvent(a0)
             return
@@ -1409,7 +1517,7 @@ class EditorInterface(QWidget):
         action = self._key_map.get(key_name.upper())
         # Fallback to default key map if settings not loaded yet
         if action is None:
-            action = self._default_key_action(key)
+            action = self._default_key_action(key, modifiers)
 
         if action == "tag_now":
             if a0.isAutoRepeat():
@@ -1470,6 +1578,9 @@ class EditorInterface(QWidget):
         elif action == "toggle_checkpoint":
             if self._project:
                 self._toggle_checkpoint(delta=1)
+        elif action == "toggle_word_join":
+            if self._project:
+                self._toggle_word_join()
         else:
             super().keyPressEvent(a0)
 
@@ -1477,10 +1588,11 @@ class EditorInterface(QWidget):
         if a0 is None:
             return
         key = a0.key()
-        key_name = self._qt_key_to_name(key)
+        modifiers = a0.modifiers()
+        key_name = self._qt_key_to_name(key, modifiers)
         action = self._key_map.get(key_name.upper()) if key_name else None
         if action is None:
-            action = self._default_key_action(key)
+            action = self._default_key_action(key, modifiers)
         if action == "tag_now":
             if a0.isAutoRepeat():
                 a0.ignore()
@@ -1495,8 +1607,14 @@ class EditorInterface(QWidget):
             return
         super().keyReleaseEvent(a0)
 
-    def _qt_key_to_name(self, key) -> Optional[str]:
+    def _qt_key_to_name(
+        self, key, modifiers=Qt.KeyboardModifier.NoModifier
+    ) -> Optional[str]:
         """Convert Qt key enum to string name for shortcut mapping."""
+        if key == Qt.Key.Key_F4 and modifiers == Qt.KeyboardModifier.ControlModifier:
+            return "CTRL+F4"
+        if modifiers != Qt.KeyboardModifier.NoModifier:
+            return None
         _key_names = {
             Qt.Key.Key_Space: "SPACE",
             Qt.Key.Key_Escape: "ESCAPE",
@@ -1527,8 +1645,14 @@ class EditorInterface(QWidget):
             return chr(key)
         return None
 
-    def _default_key_action(self, key) -> Optional[str]:
+    def _default_key_action(
+        self, key, modifiers=Qt.KeyboardModifier.NoModifier
+    ) -> Optional[str]:
         """Fallback key mapping when settings not loaded."""
+        if key == Qt.Key.Key_F4 and modifiers == Qt.KeyboardModifier.ControlModifier:
+            return "toggle_checkpoint"
+        if modifiers != Qt.KeyboardModifier.NoModifier:
+            return None
         defaults = {
             Qt.Key.Key_Space: "tag_now",
             Qt.Key.Key_A: "play_pause",
@@ -1539,6 +1663,7 @@ class EditorInterface(QWidget):
             Qt.Key.Key_W: "speed_up",
             Qt.Key.Key_Escape: "clear_tags",
             Qt.Key.Key_F2: "edit_ruby",
+            Qt.Key.Key_F3: "toggle_word_join",
             Qt.Key.Key_F4: "toggle_checkpoint",
             Qt.Key.Key_Up: "volume_up",
             Qt.Key.Key_Down: "volume_down",

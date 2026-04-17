@@ -9,13 +9,14 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
+    QGroupBox,
     QFileDialog,
     QDialog,
     QTableWidget,
     QTableWidgetItem,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QKeyEvent
 from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,
@@ -36,6 +37,11 @@ from qfluentwidgets import (
 from typing import Optional, Dict, Any
 from pathlib import Path
 import json
+import threading
+
+import numpy as np
+import sounddevice as sd
+import time as _time
 
 
 class AppSettings:
@@ -392,7 +398,9 @@ class DictionaryEditDialog(QDialog):
 
         self._table = QTableWidget(0, 3, self)
         self._table.setHorizontalHeaderLabels(["启用", "词", "读音"])
-        self._table.horizontalHeader().setStretchLastSection(True)
+        header = self._table.horizontalHeader()
+        if header is not None:
+            header.setStretchLastSection(True)
         self._table.setColumnWidth(0, 50)
         self._table.setColumnWidth(1, 140)
         self._table.setAlternatingRowColors(True)
@@ -491,7 +499,7 @@ class NicokaraTagsDialog(QDialog):
         form_layout = QVBoxLayout()
         form_layout.setSpacing(8)
 
-        def _row(label_text: str) -> tuple:
+        def _row(label_text: str) -> LineEdit:
             row = QHBoxLayout()
             lbl = QLabel(label_text)
             lbl.setFont(QFont("Microsoft YaHei", 10))
@@ -596,7 +604,7 @@ class SettingsInterface(ScrollArea):
     分组结构：
     1. 演奏控制 — 快进/快退量、默认音量/速度
     2. 打轴设定 — 偏移量、速度补正、预览行数
-    3. 自动打勾 — 各字符类型的开关
+    3. Auto Check — 各字符类型的开关
     4. 界面设定 — 主题、字体大小
     5. 导出设定 — 默认格式、导出目录
     6. 快捷键
@@ -631,6 +639,7 @@ class SettingsInterface(ScrollArea):
 
         self._init_playback_group()
         self._init_timing_group()
+        self._init_calibration_group()
         self._init_auto_check_group()
         self._init_check_behavior_group()
         self._init_dictionary_group()
@@ -739,12 +748,200 @@ class SettingsInterface(ScrollArea):
         self.timing_group.addSettingCard(self.card_preview_lines)
         self.expandLayout.addWidget(self.timing_group)
 
-    # ── 自動打勾 ──
+    def _init_calibration_group(self):
+        """Offset 校准 — 通过节拍器 tap 校准耳机延迟。"""
+        self.calibration_group = SettingCardGroup("Offset 校准", self.scrollWidget)
+
+        cal_card = SettingCard(
+            FIF.SPEED_HIGH,
+            "节拍器校准",
+            "播放 120 BPM 节拍器，按空格键跟拍，自动计算耳机延迟",
+            self.calibration_group,
+        )
+
+        self.btn_cal_start = PushButton("开始校准", cal_card)
+        self.btn_cal_start.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_cal_start.clicked.connect(self._on_cal_start)
+
+        self.btn_cal_stop = PushButton("停止", cal_card)
+        self.btn_cal_stop.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_cal_stop.clicked.connect(self._on_cal_stop)
+        self.btn_cal_stop.setEnabled(False)
+
+        self.btn_cal_apply = PushButton("应用 Offset", cal_card)
+        self.btn_cal_apply.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_cal_apply.clicked.connect(self._on_cal_apply)
+        self.btn_cal_apply.setEnabled(False)
+
+        self.lbl_cal_result = QLabel("尚未校准")
+        self.lbl_cal_result.setFont(QFont("Microsoft YaHei", 10))
+
+        cal_card.hBoxLayout.addWidget(
+            self.lbl_cal_result, 0, Qt.AlignmentFlag.AlignRight
+        )
+        cal_card.hBoxLayout.addSpacing(8)
+        cal_card.hBoxLayout.addWidget(
+            self.btn_cal_start, 0, Qt.AlignmentFlag.AlignRight
+        )
+        cal_card.hBoxLayout.addWidget(self.btn_cal_stop, 0, Qt.AlignmentFlag.AlignRight)
+        cal_card.hBoxLayout.addWidget(
+            self.btn_cal_apply, 0, Qt.AlignmentFlag.AlignRight
+        )
+        cal_card.hBoxLayout.addSpacing(16)
+
+        self.calibration_group.addSettingCard(cal_card)
+        self.expandLayout.addWidget(self.calibration_group)
+
+        self._cal_stream = None
+        self._cal_thread = None
+        self._cal_bpm = 120
+        self._cal_beat_times = []
+        self._cal_tap_times = []
+        self._cal_start_time = 0.0
+        self._cal_offset_ms = 0
+
+    def _generate_click(self, sr=44100, duration_ms=30, freq=1000):
+        """生成一个短促的 click 音效。"""
+        n = int(sr * duration_ms / 1000)
+        t = np.arange(n) / sr
+        click = 0.5 * np.sin(2 * np.pi * freq * t)
+        fade = np.linspace(1.0, 0.0, n)
+        click *= fade
+        return click.astype(np.float32)
+
+    def _play_metronome(self, audio, sr):
+        try:
+            self._cal_stream = sd.OutputStream(
+                samplerate=sr, channels=1, dtype="float32"
+            )
+            self._cal_stream.start()
+            self._cal_stream.write(audio.reshape(-1, 1))
+        except Exception:
+            pass
+        finally:
+            from PyQt6.QtCore import QMetaObject
+
+            QMetaObject.invokeMethod(
+                self.btn_cal_stop, "click", Qt.ConnectionType.QueuedConnection
+            )
+
+    def _on_cal_start(self):
+        """开始节拍器校准。"""
+        self._cal_tap_times.clear()
+        self._cal_beat_times.clear()
+        self._cal_offset_ms = 0
+        self.btn_cal_start.setEnabled(False)
+        self.btn_cal_stop.setEnabled(True)
+        self.btn_cal_apply.setEnabled(False)
+        self.lbl_cal_result.setText("校准中... 请按空格键跟拍")
+
+        sr = 44100
+        click = self._generate_click(sr)
+        interval_samples = int(sr * 60 / self._cal_bpm)
+
+        total_beats = int(30 * self._cal_bpm / 60)
+        total_samples = interval_samples * total_beats
+        audio = np.zeros(total_samples, dtype=np.float32)
+        for b in range(total_beats):
+            start = b * interval_samples
+            end = min(start + len(click), total_samples)
+            audio[start:end] += click[: end - start]
+
+        self._cal_start_time = _time.monotonic()
+        for b in range(total_beats):
+            beat_time = self._cal_start_time + b * 60 / self._cal_bpm
+            self._cal_beat_times.append(beat_time)
+
+        try:
+            self._cal_thread = threading.Thread(
+                target=self._play_metronome, args=(audio, sr), daemon=True
+            )
+            self._cal_thread.start()
+        except Exception as e:
+            self.lbl_cal_result.setText(f"音频错误: {e}")
+            self._on_cal_stop()
+            return
+
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setFocus()
+
+    def _on_cal_stop(self):
+        """停止节拍器。"""
+        if self._cal_stream:
+            try:
+                self._cal_stream.stop()
+                self._cal_stream.close()
+            except Exception:
+                pass
+            self._cal_stream = None
+
+        self.btn_cal_start.setEnabled(True)
+        self.btn_cal_stop.setEnabled(False)
+
+        if len(self._cal_tap_times) >= 8:
+            self._calculate_offset()
+        else:
+            self.lbl_cal_result.setText(
+                f"采样不足（需要至少 8 次 tap，当前 {len(self._cal_tap_times)} 次）"
+            )
+
+    def _calculate_offset(self):
+        """计算平均 offset。"""
+        offsets = []
+        for tap_time in self._cal_tap_times:
+            diffs = [abs(tap_time - bt) for bt in self._cal_beat_times]
+            min_diff = min(diffs)
+            nearest_beat = self._cal_beat_times[diffs.index(min_diff)]
+            offset_ms = (tap_time - nearest_beat) * 1000
+            if abs(offset_ms) < 250:
+                offsets.append(offset_ms)
+
+        if len(offsets) >= 4:
+            avg = sum(offsets) / len(offsets)
+            self._cal_offset_ms = round(avg)
+            self.lbl_cal_result.setText(
+                f"Offset: {self._cal_offset_ms} ms（{len(offsets)} 次有效 tap）"
+            )
+            self.btn_cal_apply.setEnabled(True)
+        else:
+            self.lbl_cal_result.setText("有效 tap 不足，请重新校准")
+
+    def _on_cal_apply(self):
+        """将校准结果应用到设置。"""
+        self.card_offset.setValue(self._cal_offset_ms)
+
+        self.btn_cal_apply.setEnabled(False)
+        self.lbl_cal_result.setText(f"已应用 Offset: {self._cal_offset_ms} ms")
+
+        InfoBar.success(
+            title="校准完成",
+            content=f"Offset 已设置为 {self._cal_offset_ms} ms",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self,
+        )
+
+    def keyPressEvent(self, a0: QKeyEvent | None):
+        """捕获空格键 tap 用于校准。"""
+        if a0 is None:
+            return super().keyPressEvent(a0)
+        if self._cal_stream and a0.key() == Qt.Key.Key_Space and not a0.isAutoRepeat():
+            self._cal_tap_times.append(_time.monotonic())
+            count = len(self._cal_tap_times)
+            if count >= 8:
+                self._calculate_offset()
+            else:
+                self.lbl_cal_result.setText(f"校准中... 已记录 {count} 次 tap")
+            a0.accept()
+            return
+        super().keyPressEvent(a0)
+
+    # ── Auto Check ──
 
     def _init_auto_check_group(self):
-        self.auto_check_group = SettingCardGroup(
-            "自動打勾 — 打勾規則", self.scrollWidget
-        )
+        self.auto_check_group = SettingCardGroup("Auto Check", self.scrollWidget)
 
         self.card_check_hiragana = SwitchSettingCard(
             FIF.ACCEPT,
@@ -799,87 +996,84 @@ class SettingsInterface(ScrollArea):
         self.expandLayout.addWidget(self.auto_check_group)
 
     def _init_check_behavior_group(self):
-        self.check_behavior_group = SettingCardGroup("打勾方式", self.scrollWidget)
-
         self.card_auto_on_load = SwitchSettingCard(
             FIF.ACCEPT,
-            "读取时自动打勾",
-            "导入文本后自动执行打勾分析",
-            parent=self.check_behavior_group,
+            "读取时自动check",
+            "导入文本后自动执行check分析",
+            parent=self.auto_check_group,
         )
         self.card_check_n = SwitchSettingCard(
             FIF.ACCEPT,
-            "「ん」打勾",
+            "「ん」check",
             "对ん字符设置节奏点",
-            parent=self.check_behavior_group,
+            parent=self.auto_check_group,
         )
         self.card_check_sokuon = SwitchSettingCard(
             FIF.ACCEPT,
-            "促音打勾",
+            "促音check",
             "对っ/ッ促音设置节奏点",
-            parent=self.check_behavior_group,
+            parent=self.auto_check_group,
         )
         self.card_check_parentheses = SwitchSettingCard(
             FIF.ACCEPT,
-            "括号内文字打勾",
+            "括号内文字check",
             "对括号()内的文字设置节奏点",
-            parent=self.check_behavior_group,
+            parent=self.auto_check_group,
         )
         self.card_check_empty_lines = SwitchSettingCard(
             FIF.ACCEPT,
-            "空行打勾",
+            "空行check",
             "对空行设置节奏点",
-            parent=self.check_behavior_group,
+            parent=self.auto_check_group,
         )
         self.card_check_line_start = SwitchSettingCard(
             FIF.ACCEPT,
-            "行首打勾",
+            "行首check",
             "在每行开头增加一个节奏点",
-            parent=self.check_behavior_group,
+            parent=self.auto_check_group,
         )
         self.card_check_line_end = SwitchSettingCard(
             FIF.ACCEPT,
-            "行尾打勾",
+            "行尾check",
             "在每行末尾增加一个节奏点（用于记录行结束时间）",
-            parent=self.check_behavior_group,
+            parent=self.auto_check_group,
         )
         self.card_kanji_single = SwitchSettingCard(
             FIF.ACCEPT,
             "汉字节奏点限定为1",
             "每个汉字最多只设置1个节奏点",
-            parent=self.check_behavior_group,
+            parent=self.auto_check_group,
         )
         self.card_space_after_jp = SwitchSettingCard(
             FIF.ACCEPT,
-            "日语后空格打勾",
-            "日语字符后的空格设置节奏点",
-            parent=self.check_behavior_group,
+            "日语后空格check",
+            "日语字符后的空格设置check点",
+            parent=self.auto_check_group,
         )
         self.card_space_after_alpha = SwitchSettingCard(
             FIF.ACCEPT,
-            "字母后空格打勾",
-            "英文字母后的空格设置节奏点",
-            parent=self.check_behavior_group,
+            "字母后空格check",
+            "英文字母后的空格设置check点",
+            parent=self.auto_check_group,
         )
         self.card_space_after_symbol = SwitchSettingCard(
             FIF.ACCEPT,
-            "符号数字后空格打勾",
-            "符号或数字后的空格设置节奏点",
-            parent=self.check_behavior_group,
+            "符号数字后空格check",
+            "符号或数字后的空格设置check点",
+            parent=self.auto_check_group,
         )
 
-        self.check_behavior_group.addSettingCard(self.card_auto_on_load)
-        self.check_behavior_group.addSettingCard(self.card_check_n)
-        self.check_behavior_group.addSettingCard(self.card_check_sokuon)
-        self.check_behavior_group.addSettingCard(self.card_check_parentheses)
-        self.check_behavior_group.addSettingCard(self.card_check_empty_lines)
-        self.check_behavior_group.addSettingCard(self.card_check_line_start)
-        self.check_behavior_group.addSettingCard(self.card_check_line_end)
-        self.check_behavior_group.addSettingCard(self.card_kanji_single)
-        self.check_behavior_group.addSettingCard(self.card_space_after_jp)
-        self.check_behavior_group.addSettingCard(self.card_space_after_alpha)
-        self.check_behavior_group.addSettingCard(self.card_space_after_symbol)
-        self.expandLayout.addWidget(self.check_behavior_group)
+        self.auto_check_group.addSettingCard(self.card_auto_on_load)
+        self.auto_check_group.addSettingCard(self.card_check_n)
+        self.auto_check_group.addSettingCard(self.card_check_sokuon)
+        self.auto_check_group.addSettingCard(self.card_check_parentheses)
+        self.auto_check_group.addSettingCard(self.card_check_empty_lines)
+        self.auto_check_group.addSettingCard(self.card_check_line_start)
+        self.auto_check_group.addSettingCard(self.card_check_line_end)
+        self.auto_check_group.addSettingCard(self.card_kanji_single)
+        self.auto_check_group.addSettingCard(self.card_space_after_jp)
+        self.auto_check_group.addSettingCard(self.card_space_after_alpha)
+        self.auto_check_group.addSettingCard(self.card_space_after_symbol)
 
     # ── 读音词典 ──
 
@@ -1120,7 +1314,7 @@ class SettingsInterface(ScrollArea):
             self._settings.get("timing.show_preview_lines", 5)
         )
 
-        # 自動打勾
+        # Auto Check
         self.card_check_hiragana.setChecked(
             self._settings.get("auto_check.hiragana", True)
         )
@@ -1230,7 +1424,7 @@ class SettingsInterface(ScrollArea):
         )
         self._settings.set("timing.show_preview_lines", self.card_preview_lines.value())
 
-        # 自動打勾
+        # Auto Check
         self._settings.set("auto_check.hiragana", self.card_check_hiragana.isChecked())
         self._settings.set("auto_check.katakana", self.card_check_katakana.isChecked())
         self._settings.set("auto_check.kanji", self.card_check_kanji.isChecked())

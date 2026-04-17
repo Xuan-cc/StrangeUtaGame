@@ -10,6 +10,9 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
+    QDialog,
+    QCheckBox,
+    QMessageBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -22,13 +25,93 @@ from qfluentwidgets import (
 )
 
 from typing import Optional, List, Tuple
+from difflib import SequenceMatcher
 
-from strange_uta_game.backend.domain import Project, LyricLine, Ruby
+from strange_uta_game.backend.domain import (
+    Project,
+    LyricLine,
+    Ruby,
+    TimeTag,
+    CheckpointConfig,
+)
 from strange_uta_game.backend.application import AutoCheckService
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
-    get_char_type,
     CharType,
+    get_char_type,
 )
+
+
+def _rebuild_timetags_and_checkpoints(
+    line: LyricLine, old_chars: List[str], new_chars: List[str]
+) -> None:
+    """文本变更后重建 timetag 和 checkpoint 索引。
+
+    使用 SequenceMatcher 计算旧字符列表到新字符列表的映射，
+    将原有 timetag 的 char_idx 平移到新位置。新插入的字符无 timetag，
+    删除的字符的 timetag 被丢弃。Checkpoint 也做相应重建。
+    """
+    if old_chars == new_chars:
+        return
+
+    # 构建 old_idx → new_idx 映射
+    sm = SequenceMatcher(None, old_chars, new_chars)
+    old_to_new: dict[int, int] = {}
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for k in range(i2 - i1):
+                old_to_new[i1 + k] = j1 + k
+        # 'replace' / 'delete' / 'insert' 不映射（被删除/替换的字符无法保留 timetag）
+
+    # 重建 timetags：仅保留有映射的，更新 char_idx
+    new_timetags: List[TimeTag] = []
+    for tag in line.timetags:
+        new_idx = old_to_new.get(tag.char_idx)
+        if new_idx is not None:
+            new_timetags.append(
+                TimeTag(
+                    timestamp_ms=tag.timestamp_ms,
+                    singer_id=tag.singer_id,
+                    char_idx=new_idx,
+                    checkpoint_idx=tag.checkpoint_idx,
+                    tag_type=tag.tag_type,
+                )
+            )
+    line.timetags = sorted(new_timetags, key=lambda t: t.timestamp_ms)
+
+    # 重建 checkpoints：保留映射到的旧配置，新字符用默认值
+    old_cp_map: dict[int, CheckpointConfig] = {
+        cp.char_idx: cp for cp in line.checkpoints
+    }
+    new_checkpoints: List[CheckpointConfig] = []
+    for j in range(len(new_chars)):
+        # 查找是否有旧字符映射到这个新位置
+        mapped_old_idx = None
+        for old_idx, new_mapped in old_to_new.items():
+            if new_mapped == j:
+                mapped_old_idx = old_idx
+                break
+
+        if mapped_old_idx is not None and mapped_old_idx in old_cp_map:
+            old_cp = old_cp_map[mapped_old_idx]
+            new_checkpoints.append(
+                CheckpointConfig(
+                    char_idx=j,
+                    check_count=old_cp.check_count,
+                    is_line_end=(j == len(new_chars) - 1),
+                    is_rest=old_cp.is_rest,
+                )
+            )
+        else:
+            # 新字符：默认 check_count=1，末尾字符 check_count=2
+            is_last = j == len(new_chars) - 1
+            new_checkpoints.append(
+                CheckpointConfig(
+                    char_idx=j,
+                    check_count=2 if is_last else 1,
+                    is_line_end=is_last,
+                )
+            )
+    line.checkpoints = new_checkpoints
 
 
 def _is_kanji_char(char: str) -> bool:
@@ -41,25 +124,6 @@ def _is_kanji_char(char: str) -> bool:
         or (0x3400 <= code <= 0x4DBF)
         or (0xF900 <= code <= 0xFAFF)
     )
-
-
-def _is_kana_char(char: str) -> bool:
-    """判断是否为假名（平假名/片假名）"""
-    if len(char) != 1:
-        return False
-    code = ord(char)
-    return (0x3040 <= code <= 0x309F) or (0x30A0 <= code <= 0x30FF)
-
-
-def _is_symbol_char(char: str) -> bool:
-    """判断是否为符号/标点"""
-    if len(char) != 1:
-        return False
-    try:
-        ct = get_char_type(char)
-        return ct in (CharType.SYMBOL, CharType.SPACE, CharType.OTHER)
-    except ValueError:
-        return False
 
 
 def _parse_annotated_line(
@@ -128,6 +192,57 @@ def _parse_annotated_line(
     return raw_text, raw_chars, rubies
 
 
+class DeleteRubyByTypeDialog(QDialog):
+    """按字符类型选择要删除注音的对话框。"""
+
+    _TYPE_LABELS = [
+        (CharType.HIRAGANA, "ひらがな（平假名）"),
+        (CharType.KATAKANA, "カタカナ（片假名）"),
+        (CharType.KANJI, "漢字（汉字）"),
+        (CharType.ALPHABET, "アルファベット（英文字母）"),
+        (CharType.NUMBER, "数字"),
+        (CharType.SYMBOL, "記号（符号）"),
+        (CharType.SPACE, "空格"),
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("按类型删除注音")
+        self.resize(320, 300)
+        self.setFont(QFont("Microsoft YaHei", 10))
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        lbl = QLabel("选择要删除注音的字符类型：")
+        lbl.setStyleSheet("font-weight: bold;")
+        layout.addWidget(lbl)
+
+        self._checkboxes: list[tuple[CharType, QCheckBox]] = []
+        for char_type, label in self._TYPE_LABELS:
+            cb = QCheckBox(label, self)
+            if char_type in (CharType.HIRAGANA, CharType.KATAKANA):
+                cb.setChecked(True)
+            layout.addWidget(cb)
+            self._checkboxes.append((char_type, cb))
+
+        layout.addStretch()
+
+        btn_layout = QHBoxLayout()
+        btn_ok = PrimaryPushButton("删除选中类型", self)
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = PushButton("取消", self)
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+
+    def selected_types(self) -> list[CharType]:
+        """返回用户选中的字符类型列表。"""
+        return [ct for ct, cb in self._checkboxes if cb.isChecked()]
+
+
 class RubyInterface(QWidget):
     """注音编辑界面
 
@@ -157,7 +272,7 @@ class RubyInterface(QWidget):
         # 说明
         desc = QLabel(
             "全文本编辑：汉字注音用 {假名} 标注，如 赤{あか}い花{はな}\n"
-            "编辑后点击「应用修改」保存，或点击「更新节奏点」根据注音重算节奏点数量"
+            "支持增删行（换行/排版），编辑后点击「应用修改」保存"
         )
         desc.setStyleSheet("color: gray;")
         layout.addWidget(desc)
@@ -173,17 +288,11 @@ class RubyInterface(QWidget):
         self.btn_auto_all.setEnabled(False)
         batch_layout.addWidget(self.btn_auto_all)
 
-        self.btn_delete_kana = PushButton("删除假名注音", self)
-        self.btn_delete_kana.setIcon(FIF.DELETE)
-        self.btn_delete_kana.clicked.connect(self._on_delete_kana_rubies)
-        self.btn_delete_kana.setEnabled(False)
-        batch_layout.addWidget(self.btn_delete_kana)
-
-        self.btn_delete_symbol = PushButton("删除符号注音", self)
-        self.btn_delete_symbol.setIcon(FIF.DELETE)
-        self.btn_delete_symbol.clicked.connect(self._on_delete_symbol_rubies)
-        self.btn_delete_symbol.setEnabled(False)
-        batch_layout.addWidget(self.btn_delete_symbol)
+        self.btn_delete_by_type = PushButton("按类型删除注音", self)
+        self.btn_delete_by_type.setIcon(FIF.DELETE)
+        self.btn_delete_by_type.clicked.connect(self._on_delete_rubies_by_type)
+        self.btn_delete_by_type.setEnabled(False)
+        batch_layout.addWidget(self.btn_delete_by_type)
 
         self.btn_update_cp = PushButton("更新节奏点", self)
         self.btn_update_cp.setIcon(FIF.UPDATE)
@@ -256,8 +365,7 @@ class RubyInterface(QWidget):
 
         for btn in (
             self.btn_auto_all,
-            self.btn_delete_kana,
-            self.btn_delete_symbol,
+            self.btn_delete_by_type,
             self.btn_update_cp,
             self.btn_apply,
             self.btn_revert,
@@ -350,9 +458,17 @@ class RubyInterface(QWidget):
                 parent=self,
             )
 
-    def _on_delete_kana_rubies(self):
-        """删除所有假名上的注音（假名本身就是读音，不需要标注）"""
+    def _on_delete_rubies_by_type(self):
+        """打开对话框，按字符类型删除注音。"""
         if not self._project:
+            return
+
+        dlg = DeleteRubyByTypeDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        selected = dlg.selected_types()
+        if not selected:
             return
 
         removed = 0
@@ -362,7 +478,9 @@ class RubyInterface(QWidget):
                 chars_in_range = line.chars[
                     ruby.start_idx : min(ruby.end_idx, len(line.chars))
                 ]
-                if chars_in_range and all(_is_kana_char(c) for c in chars_in_range):
+                if chars_in_range and all(
+                    get_char_type(c) in selected for c in chars_in_range
+                ):
                     to_remove.append(ruby)
 
             for ruby in to_remove:
@@ -375,44 +493,11 @@ class RubyInterface(QWidget):
 
         InfoBar.success(
             title="删除完成",
-            content=f"已删除 {removed} 个假名注音",
+            content=f"已删除 {removed} 个注音（类型: {', '.join(label for ct, label in DeleteRubyByTypeDialog._TYPE_LABELS if ct in selected)}）",
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
-            duration=2000,
-            parent=self,
-        )
-
-    def _on_delete_symbol_rubies(self):
-        """删除所有符号上的注音"""
-        if not self._project:
-            return
-
-        removed = 0
-        for line in self._project.lines:
-            to_remove = []
-            for ruby in line.rubies:
-                chars_in_range = line.chars[
-                    ruby.start_idx : min(ruby.end_idx, len(line.chars))
-                ]
-                if chars_in_range and all(_is_symbol_char(c) for c in chars_in_range):
-                    to_remove.append(ruby)
-
-            for ruby in to_remove:
-                line.rubies.remove(ruby)
-                removed += 1
-
-        self._refresh_display()
-        if hasattr(self, "_store"):
-            self._store.notify("rubies")
-
-        InfoBar.success(
-            title="删除完成",
-            content=f"已删除 {removed} 个符号注音",
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=2000,
+            duration=3000,
             parent=self,
         )
 
@@ -450,46 +535,60 @@ class RubyInterface(QWidget):
     # ==================== 应用/还原 ====================
 
     def _on_apply_changes(self):
-        """将文本编辑器内容应用回项目"""
+        """将文本编辑器内容应用回项目（支持增删行）"""
         if not self._project:
             return
 
         text = self.text_edit.toPlainText()
         lines = text.split("\n")
 
-        # 过滤空行
-        lines = [l for l in lines if l.strip()]
-
         if len(lines) != len(self._project.lines):
-            InfoBar.warning(
-                title="行数不匹配",
-                content=(
-                    f"编辑器中有 {len(lines)} 行，"
-                    f"项目中有 {len(self._project.lines)} 行。\n"
-                    "请勿增删行，仅修改注音内容。"
-                ),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=5000,
-                parent=self,
+            reply = QMessageBox.question(
+                self,
+                "行数变更",
+                f"编辑器中有 {len(lines)} 行，项目中有 {len(self._project.lines)} 行。\n"
+                "是否应用更改？新增行将使用默认设置，删除行将丢失其时间标签。",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
-            return
+            if reply != QMessageBox.StandardButton.Yes:
+                return
 
         errors = []
-        for i, (line_text, proj_line) in enumerate(zip(lines, self._project.lines)):
+        default_singer = (
+            self._project.lines[0].singer_id if self._project.lines else "default"
+        )
+
+        while len(self._project.lines) > len(lines):
+            self._project.lines.pop()
+
+        for i, line_text in enumerate(lines):
             try:
                 raw_text, raw_chars, rubies = _parse_annotated_line(line_text)
 
-                if not raw_text.strip():
-                    continue
+                if not raw_text:
+                    raw_text = " "
+                    raw_chars = [" "]
+                    rubies = []
 
-                # 更新行数据
-                proj_line.text = raw_text
-                proj_line.chars = raw_chars
-                proj_line.rubies.clear()
-                for ruby in rubies:
-                    proj_line.add_ruby(ruby)
+                if i < len(self._project.lines):
+                    proj_line = self._project.lines[i]
+                    old_chars = list(proj_line.chars)
+                    proj_line.text = raw_text
+                    proj_line.chars = raw_chars
+                    proj_line.rubies.clear()
+                    for ruby in rubies:
+                        proj_line.add_ruby(ruby)
+                    _rebuild_timetags_and_checkpoints(proj_line, old_chars, raw_chars)
+                else:
+                    new_line = LyricLine(
+                        singer_id=default_singer,
+                        text=raw_text,
+                        chars=raw_chars,
+                    )
+                    for ruby in rubies:
+                        new_line.add_ruby(ruby)
+                    self._project.lines.append(new_line)
 
             except Exception as e:
                 errors.append(f"第 {i + 1} 行: {e}")
@@ -506,12 +605,13 @@ class RubyInterface(QWidget):
             )
         else:
             if hasattr(self, "_store"):
+                self._store.notify("lyrics")
                 self._store.notify("rubies")
             self._update_stats()
 
             InfoBar.success(
                 title="应用成功",
-                content=f"已更新 {len(lines)} 行的注音",
+                content=f"已更新 {len(lines)} 行",
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
