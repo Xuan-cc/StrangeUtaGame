@@ -180,6 +180,9 @@ class MainWindow(MSFluentWindow):
             settings = self.settingInterface.get_settings()
             offset_ms = settings.get("timing.tag_offset_ms", 0)
             self._timing_service.set_timing_offset(offset_ms)
+        elif change_type in ("lyrics", "checkpoints"):
+            # 歌词/轴点变更后重建全局 checkpoint 列表
+            self._timing_service._rebuild_global_checkpoints()
 
     # ==================== 窗口事件 ====================
 

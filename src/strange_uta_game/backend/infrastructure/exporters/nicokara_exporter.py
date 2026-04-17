@@ -16,17 +16,17 @@ from .base import BaseExporter, ExportError
 from strange_uta_game.backend.domain import Project, LyricLine
 
 
-def _format_nicokara_ts(timestamp_ms: int) -> str:
+def _format_nicokara_ts(timestamp_ms: int, offset_ms: int = 0) -> str:
     """格式化 Nicokara 时间戳 [MM:SS:CC]
 
     Args:
         timestamp_ms: 毫秒时间戳
+        offset_ms: 偏移量（毫秒）
 
     Returns:
         格式化后的字符串，如 [00:12:34]
     """
-    if timestamp_ms < 0:
-        timestamp_ms = 0
+    timestamp_ms = max(0, timestamp_ms + offset_ms)
     minutes = timestamp_ms // 60000
     seconds = (timestamp_ms % 60000) // 1000
     centiseconds = (timestamp_ms % 1000) // 10
@@ -97,7 +97,7 @@ class NicokaraExporter(BaseExporter):
         parts: List[str] = []
         for i, char in enumerate(line.chars):
             if i in char_start_times:
-                parts.append(_format_nicokara_ts(char_start_times[i]))
+                parts.append(_format_nicokara_ts(char_start_times[i], self._offset_ms))
             parts.append(char)
 
         # 行末结束时间戳（最后一个字符的 line-end checkpoint）
@@ -112,7 +112,9 @@ class NicokaraExporter(BaseExporter):
                     and t.checkpoint_idx == config.check_count - 1
                 ]
                 if end_tags:
-                    parts.append(_format_nicokara_ts(end_tags[0].timestamp_ms))
+                    parts.append(
+                        _format_nicokara_ts(end_tags[0].timestamp_ms, self._offset_ms)
+                    )
 
         return "".join(parts)
 
@@ -248,7 +250,9 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 else:
                     if occ_line.timetags:
                         line_start = min(t.timestamp_ms for t in occ_line.timetags)
-                        positions.append(_format_nicokara_ts(line_start))
+                        positions.append(
+                            _format_nicokara_ts(line_start, self._offset_ms)
+                        )
                     else:
                         positions.append("")
 

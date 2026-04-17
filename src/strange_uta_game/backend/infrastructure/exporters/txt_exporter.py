@@ -38,6 +38,7 @@ class TXTExporter(BaseExporter):
             include_checkpoints: 是否包含节奏点信息
             include_rubies: 是否包含注音
         """
+        super().__init__()
         self.include_checkpoints = include_checkpoints
         self.include_rubies = include_rubies
 

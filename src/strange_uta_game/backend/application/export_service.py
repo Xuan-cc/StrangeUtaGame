@@ -68,6 +68,7 @@ class ExportService:
         project: Project,
         format_name: str,
         file_path: str,
+        offset_ms: int = 0,
     ) -> ExportResult:
         """导出项目
 
@@ -75,6 +76,7 @@ class ExportService:
             project: 项目对象
             format_name: 格式名称 ('LRC', 'KRA', 'TXT', 等)
             file_path: 导出文件路径
+            offset_ms: 导出时间偏移（毫秒）
 
         Returns:
             导出结果
@@ -82,6 +84,10 @@ class ExportService:
         try:
             # 获取导出器
             exporter = get_exporter_by_name(format_name)
+
+            # 设置导出偏移
+            if hasattr(exporter, "_offset_ms"):
+                exporter._offset_ms = offset_ms
 
             # 报告进度
             if self._progress_callback:
@@ -124,6 +130,7 @@ class ExportService:
         formats: List[str],
         output_dir: str,
         base_name: str,
+        offset_ms: int = 0,
     ) -> List[ExportResult]:
         """批量导出到多种格式
 
@@ -162,7 +169,7 @@ class ExportService:
                 self._progress_callback(progress, f"正在导出 {format_name}...")
 
             # 执行导出
-            result = self.export(project, format_name, str(file_path))
+            result = self.export(project, format_name, str(file_path), offset_ms)
             results.append(result)
 
         # 报告完成

@@ -66,6 +66,9 @@ class BaseExporter(IExporter):
     提供通用的导出功能。
     """
 
+    def __init__(self):
+        self._offset_ms: int = 0
+
     def _validate_project(self, project: Project) -> None:
         """验证项目是否可导出"""
         if not project:
@@ -84,6 +87,7 @@ class BaseExporter(IExporter):
         Returns:
             格式化后的时间字符串
         """
+        timestamp_ms = max(0, timestamp_ms + self._offset_ms)
         total_seconds = timestamp_ms / 1000
         minutes = int(total_seconds // 60)
         seconds = int(total_seconds % 60)

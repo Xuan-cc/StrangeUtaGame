@@ -535,89 +535,129 @@ class RubyInterface(QWidget):
     # ==================== 应用/还原 ====================
 
     def _on_apply_changes(self):
-        """将文本编辑器内容应用回项目（支持增删行）"""
+        """将文本编辑器内容应用回项目（支持增删行，保留打轴数据）。
+
+        使用行级 SequenceMatcher 将旧行映射到新行，
+        匹配到的旧行保留 timetag/checkpoint 并做字符级 diff，
+        新插入行使用默认设置，删除行被丢弃。
+        """
         if not self._project:
             return
 
         text = self.text_edit.toPlainText()
-        lines = text.split("\n")
+        new_line_strs = text.split("\n")
 
-        if len(lines) != len(self._project.lines):
-            reply = QMessageBox.question(
-                self,
-                "行数变更",
-                f"编辑器中有 {len(lines)} 行，项目中有 {len(self._project.lines)} 行。\n"
-                "是否应用更改？新增行将使用默认设置，删除行将丢失其时间标签。",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-
-        errors = []
-        default_singer = (
-            self._project.lines[0].singer_id if self._project.lines else "default"
-        )
-
-        while len(self._project.lines) > len(lines):
-            self._project.lines.pop()
-
-        for i, line_text in enumerate(lines):
+        # 解析每行的带注音文本
+        parsed_new: List[Tuple[str, List[str], List[Ruby]]] = []
+        parse_errors = []
+        for i, ls in enumerate(new_line_strs):
             try:
-                raw_text, raw_chars, rubies = _parse_annotated_line(line_text)
-
+                raw_text, raw_chars, rubies = _parse_annotated_line(ls)
                 if not raw_text:
                     raw_text = " "
                     raw_chars = [" "]
                     rubies = []
-
-                if i < len(self._project.lines):
-                    proj_line = self._project.lines[i]
-                    old_chars = list(proj_line.chars)
-                    proj_line.text = raw_text
-                    proj_line.chars = raw_chars
-                    proj_line.rubies.clear()
-                    for ruby in rubies:
-                        proj_line.add_ruby(ruby)
-                    _rebuild_timetags_and_checkpoints(proj_line, old_chars, raw_chars)
-                else:
-                    new_line = LyricLine(
-                        singer_id=default_singer,
-                        text=raw_text,
-                        chars=raw_chars,
-                    )
-                    for ruby in rubies:
-                        new_line.add_ruby(ruby)
-                    self._project.lines.append(new_line)
-
+                parsed_new.append((raw_text, raw_chars, rubies))
             except Exception as e:
-                errors.append(f"第 {i + 1} 行: {e}")
+                parse_errors.append(f"第 {i + 1} 行: {e}")
+                parsed_new.append((" ", [" "], []))
 
-        if errors:
+        if parse_errors:
             InfoBar.warning(
-                title="部分行应用失败",
-                content="\n".join(errors[:3]),
+                title="部分行解析失败",
+                content="\n".join(parse_errors[:3]),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
                 duration=5000,
                 parent=self,
             )
-        else:
-            if hasattr(self, "_store"):
-                self._store.notify("lyrics")
-                self._store.notify("rubies")
-            self._update_stats()
 
-            InfoBar.success(
-                title="应用成功",
-                content=f"已更新 {len(lines)} 行",
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=2000,
-                parent=self,
-            )
+        old_lines = list(self._project.lines)
+        old_texts = [line.text for line in old_lines]
+        new_texts = [p[0] for p in parsed_new]
+
+        # 行级 diff：将旧行映射到新行
+        line_sm = SequenceMatcher(None, old_texts, new_texts)
+
+        default_singer = old_lines[0].singer_id if old_lines else "default"
+        result_lines: List[LyricLine] = [None] * len(parsed_new)  # type: ignore
+
+        for tag, i1, i2, j1, j2 in line_sm.get_opcodes():
+            if tag == "equal":
+                # 旧行 i1..i2 完全匹配新行 j1..j2
+                for k in range(i2 - i1):
+                    old_line = old_lines[i1 + k]
+                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
+                    old_chars = list(old_line.chars)
+                    old_line.text = raw_text
+                    old_line.chars = raw_chars
+                    old_line.rubies.clear()
+                    for r in rubies:
+                        old_line.add_ruby(r)
+                    _rebuild_timetags_and_checkpoints(old_line, old_chars, raw_chars)
+                    result_lines[j1 + k] = old_line
+
+            elif tag == "replace":
+                # 尝试 1:1 映射 — 如果旧段和新段长度相同，逐行做字符级 diff
+                old_count = i2 - i1
+                new_count = j2 - j1
+                matched = min(old_count, new_count)
+                for k in range(matched):
+                    old_line = old_lines[i1 + k]
+                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
+                    old_chars = list(old_line.chars)
+                    old_line.text = raw_text
+                    old_line.chars = raw_chars
+                    old_line.rubies.clear()
+                    for r in rubies:
+                        old_line.add_ruby(r)
+                    _rebuild_timetags_and_checkpoints(old_line, old_chars, raw_chars)
+                    result_lines[j1 + k] = old_line
+                # 多出的新行 → 创建
+                for k in range(matched, new_count):
+                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
+                    nl = LyricLine(
+                        singer_id=default_singer,
+                        text=raw_text,
+                        chars=raw_chars,
+                    )
+                    for r in rubies:
+                        nl.add_ruby(r)
+                    result_lines[j1 + k] = nl
+                # 多出的旧行 → 丢弃（tag == replace 中 old_count > new_count 部分）
+
+            elif tag == "insert":
+                # 新插入行
+                for k in range(j2 - j1):
+                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
+                    nl = LyricLine(
+                        singer_id=default_singer,
+                        text=raw_text,
+                        chars=raw_chars,
+                    )
+                    for r in rubies:
+                        nl.add_ruby(r)
+                    result_lines[j1 + k] = nl
+
+            # tag == "delete": 旧行被删除，不出现在 result_lines 中
+
+        self._project.lines = result_lines
+
+        if hasattr(self, "_store"):
+            self._store.notify("lyrics")
+            self._store.notify("rubies")
+        self._update_stats()
+
+        InfoBar.success(
+            title="应用成功",
+            content=f"已更新 {len(result_lines)} 行",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self,
+        )
 
     def _on_revert(self):
         """还原编辑器内容为项目当前状态"""

@@ -30,13 +30,15 @@ from PyQt6.QtGui import (
     QMouseEvent,
     QKeyEvent,
     QFontMetrics,
+    QDragEnterEvent,
+    QDropEvent,
 )
 
 from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,
     Slider,
-    DoubleSpinBox,
+    SpinBox,
     InfoBar,
     InfoBarPosition,
     FluentIcon as FIF,
@@ -116,18 +118,19 @@ class TransportBar(QFrame):
         self.slider_progress.sliderReleased.connect(self._on_seek)
         layout.addWidget(self.slider_progress, stretch=1)
 
-        # 速度
+        # 速度（百分比显示，内部转换为倍率）
         lbl_speed = QLabel("速度")
         lbl_speed.setStyleSheet("font-size: 11px; color: gray;")
         layout.addWidget(lbl_speed)
-        self.spin_speed = DoubleSpinBox(self)
-        self.spin_speed.setRange(0.5, 2.0)
-        self.spin_speed.setSingleStep(0.1)
-        self.spin_speed.setValue(1.0)
-        self.spin_speed.setDecimals(1)
-        self.spin_speed.setSuffix("x")
-        self.spin_speed.setFixedWidth(80)
-        self.spin_speed.valueChanged.connect(self.speed_changed.emit)
+        self.spin_speed = SpinBox(self)
+        self.spin_speed.setRange(50, 200)
+        self.spin_speed.setSingleStep(10)
+        self.spin_speed.setValue(100)
+        self.spin_speed.setSuffix("%")
+        self.spin_speed.setFixedWidth(90)
+        self.spin_speed.valueChanged.connect(
+            lambda v: self.speed_changed.emit(v / 100.0)
+        )
         layout.addWidget(self.spin_speed)
 
         # 音量
@@ -179,10 +182,11 @@ class TransportBar(QFrame):
 # 工具栏
 # ──────────────────────────────────────────────
 class EditorToolBar(QFrame):
-    """编辑器工具栏 - 保存/加载音频/撤销/重做"""
+    """编辑器工具栏 - 保存/加载音频/加载歌词/撤销/重做"""
 
     save_clicked = pyqtSignal()
     load_audio_clicked = pyqtSignal()
+    load_lyrics_clicked = pyqtSignal()
     undo_clicked = pyqtSignal()
     redo_clicked = pyqtSignal()
 
@@ -207,6 +211,12 @@ class EditorToolBar(QFrame):
         self.btn_load_audio.setFixedHeight(32)
         self.btn_load_audio.clicked.connect(self.load_audio_clicked.emit)
         layout.addWidget(self.btn_load_audio)
+
+        self.btn_load_lyrics = PushButton("加载歌词", self)
+        self.btn_load_lyrics.setIcon(FIF.DOCUMENT)
+        self.btn_load_lyrics.setFixedHeight(32)
+        self.btn_load_lyrics.clicked.connect(self.load_lyrics_clicked.emit)
+        layout.addWidget(self.btn_load_lyrics)
 
         layout.addSpacing(10)
 
@@ -386,7 +396,7 @@ class KaraokePreview(QWidget):
         fm_ruby = self._fm_ruby
         fm_checkpoint = self._fm_checkpoint
 
-        highlight_color = QColor("#FF6B6B")
+        default_highlight = QColor("#FF6B6B")
 
         # 计算可见行范围（留 1 行余量避免边缘裁切）
         half_visible = self._visible_lines / 2.0 + 1
@@ -404,6 +414,14 @@ class KaraokePreview(QWidget):
 
             line = self._project.lines[idx]
             is_current = idx == self._current_line_idx
+
+            # 根据演唱者获取高亮颜色
+            singer = (
+                self._project.get_singer(line.singer_id) if line.singer_id else None
+            )
+            highlight_color = (
+                QColor(singer.color) if singer and singer.color else default_highlight
+            )
 
             if is_current:
                 main_font = font_current
@@ -473,15 +491,69 @@ class KaraokePreview(QWidget):
                     ruby_chars_w = sum(char_widths[char_pos : ruby.end_idx])
                     ruby_text_w = fm_ruby.horizontalAdvance(ruby.text)
                     ruby_x = curr_x + (ruby_chars_w - ruby_text_w) // 2
+                    ruby_y = int(y_center - main_fm.ascent() - 4)
                     painter.setFont(font_ruby)
-                    painter.setPen(base_color)
-                    painter.drawText(
-                        int(ruby_x),
-                        int(y_center - main_fm.ascent() - 4),
-                        ruby.text,
-                    )
 
-                    # 连词Ruby标注 — 多字符合并时画边框
+                    # 第一遍：基色绘制 ruby 文本
+                    painter.setPen(base_color)
+                    painter.drawText(int(ruby_x), ruby_y, ruby.text)
+
+                    # Ruby 走字效果 — 与主字符同步 wipe
+                    ruby_st = char_start_times.get(ruby.start_idx)
+                    if ruby_st is not None:
+                        last_ci = ruby.end_idx - 1
+                        last_cp = cps_in_line.get(last_ci)
+                        if last_cp and last_cp.is_line_end:
+                            l_tags = tags_in_line.get(last_ci, [])
+                            rel = [
+                                t
+                                for t in l_tags
+                                if t.checkpoint_idx == last_cp.check_count - 1
+                            ]
+                            ruby_et = (
+                                rel[0].timestamp_ms
+                                if rel
+                                else char_start_times.get(last_ci, ruby_st) + 300
+                            )
+                        else:
+                            ruby_et = None
+                            for nci in range(ruby.end_idx, len(line.chars)):
+                                if nci in char_start_times:
+                                    ruby_et = char_start_times[nci]
+                                    break
+                            if ruby_et is None:
+                                ruby_et = char_start_times.get(last_ci, ruby_st) + 300
+
+                        if self._current_time_ms >= ruby_et:
+                            # 已唱完 → ruby 全高亮
+                            painter.setPen(highlight_color)
+                            painter.drawText(int(ruby_x), ruby_y, ruby.text)
+                        elif self._current_time_ms >= ruby_st:
+                            # 正在唱 → ruby wipe 渐变
+                            r_dur = ruby_et - ruby_st
+                            r_ratio = (
+                                min(
+                                    1.0,
+                                    (self._current_time_ms - ruby_st) / r_dur,
+                                )
+                                if r_dur > 0
+                                else 1.0
+                            )
+                            if r_ratio > 0:
+                                painter.save()
+                                r_wipe_w = int(ruby_text_w * r_ratio)
+                                r_clip = QRect(
+                                    int(ruby_x),
+                                    ruby_y - fm_ruby.ascent() - 2,
+                                    r_wipe_w,
+                                    fm_ruby.height() + 4,
+                                )
+                                painter.setClipRect(r_clip)
+                                painter.setPen(highlight_color)
+                                painter.drawText(int(ruby_x), ruby_y, ruby.text)
+                                painter.restore()
+
+                    # 連詞Ruby標注 — 多字符合併時畫邊框
                     if ruby.end_idx - ruby.start_idx > 1:
                         painter.save()
                         frame_color = QColor(base_color)
@@ -490,9 +562,8 @@ class KaraokePreview(QWidget):
                         pen.setStyle(Qt.PenStyle.SolidLine)
                         painter.setPen(pen)
                         painter.setBrush(Qt.BrushStyle.NoBrush)
-                        # Ruby text bounding rect with small padding
                         rx = int(ruby_x) - 2
-                        ry = int(y_center - main_fm.ascent() - 4 - fm_ruby.ascent()) - 1
+                        ry = ruby_y - fm_ruby.ascent() - 1
                         rw = int(ruby_text_w) + 4
                         rh = fm_ruby.height() + 2
                         painter.drawRoundedRect(rx, ry, rw, rh, 2, 2)
@@ -610,7 +681,7 @@ class KaraokePreview(QWidget):
                     marker_y = int(y_center + main_fm.descent() + 14)
 
                     for cp_idx, (marker_char, has_timed) in enumerate(markers):
-                        color = QColor("#FF6B6B") if has_timed else QColor("#ccc")
+                        color = highlight_color if has_timed else QColor("#ccc")
                         painter.setPen(color)
 
                         mw = fm_checkpoint.horizontalAdvance(marker_char)
@@ -928,6 +999,7 @@ class EditorInterface(QWidget):
         self._key_map = {}  # key_string -> action_name, populated by _apply_settings
         self._init_ui()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAcceptDrops(True)
         self._bind_callback_signals()
 
     def _bind_callback_signals(self):
@@ -947,6 +1019,7 @@ class EditorInterface(QWidget):
         self.toolbar = EditorToolBar(self)
         self.toolbar.save_clicked.connect(self._on_save)
         self.toolbar.load_audio_clicked.connect(self._on_load_audio)
+        self.toolbar.load_lyrics_clicked.connect(self._on_load_lyrics)
         self.toolbar.undo_clicked.connect(self._on_undo)
         self.toolbar.redo_clicked.connect(self._on_redo)
         layout.addWidget(self.toolbar)
@@ -998,7 +1071,9 @@ class EditorInterface(QWidget):
         bottom.addStretch()
 
         # 快捷键提示
-        shortcut_hint = QLabel("A播放 S停止 Z/X跳转 Q/W变速 F2注音")
+        shortcut_hint = QLabel(
+            "A播放 S停止 Z/X跳转 Q/W变速 F2注音 F3连词 F4节奏点 F5句尾 Ctrl+H批量"
+        )
         shortcut_hint.setStyleSheet("font-size: 11px; color: gray;")
         bottom.addWidget(shortcut_hint)
 
@@ -1061,6 +1136,7 @@ class EditorInterface(QWidget):
             "speed_up": settings.get("shortcuts.speed_up", "W"),
             "edit_ruby": settings.get("shortcuts.edit_ruby", "F2"),
             "toggle_checkpoint": settings.get("shortcuts.toggle_checkpoint", "F4"),
+            "toggle_line_end": settings.get("shortcuts.toggle_line_end", "F5"),
             "volume_up": settings.get("shortcuts.volume_up", "UP"),
             "volume_down": settings.get("shortcuts.volume_down", "DOWN"),
             "nav_prev_line": settings.get("shortcuts.nav_prev_line", "LEFT"),
@@ -1068,7 +1144,14 @@ class EditorInterface(QWidget):
             "clear_tags": settings.get("shortcuts.clear_tags", "ESCAPE"),
         }
         for action, key_str in shortcut_actions.items():
-            self._key_map[key_str.upper()] = action
+            # 支持双键位：值可能是 "Space,A" 格式
+            keys = [k.strip() for k in key_str.split(",") if k.strip()]
+            for k in keys:
+                self._key_map[k.upper()] = action
+        # 应用默认速度
+        default_speed = settings.get("audio.default_speed", 1.0)
+        speed_pct = int(default_speed * 100)
+        self.transport.spin_speed.setValue(max(50, min(200, speed_pct)))
 
     # ==================== 项目 ====================
 
@@ -1087,6 +1170,124 @@ class EditorInterface(QWidget):
         """释放音频资源"""
         if self._timing_service:
             self._timing_service.release()
+
+    # ==================== 拖拽加载 ====================
+
+    _AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a"}
+    _LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra"}
+    _PROJECT_EXTENSIONS = {".sug"}
+
+    def dragEnterEvent(self, a0: Optional[QDragEnterEvent]):
+        if a0 is None:
+            return
+        mime = a0.mimeData()
+        if mime is not None and mime.hasUrls():
+            for url in mime.urls():
+                file_path = url.toLocalFile()
+                ext = Path(file_path).suffix.lower()
+                if (
+                    ext
+                    in self._AUDIO_EXTENSIONS
+                    | self._LYRIC_EXTENSIONS
+                    | self._PROJECT_EXTENSIONS
+                ):
+                    a0.acceptProposedAction()
+                    return
+        a0.ignore()
+
+    def dropEvent(self, a0: Optional[QDropEvent]):
+        if a0 is None:
+            return
+        mime = a0.mimeData()
+        if mime is None or not mime.hasUrls():
+            a0.ignore()
+            return
+        for url in mime.urls():
+            file_path = url.toLocalFile()
+            ext = Path(file_path).suffix.lower()
+            if ext in self._AUDIO_EXTENSIONS:
+                self.load_audio(file_path)
+            elif ext in self._LYRIC_EXTENSIONS:
+                self._load_lyrics_from_path(file_path)
+            elif ext in self._PROJECT_EXTENSIONS:
+                # 项目文件交给主窗口处理
+                main_window = self.window()
+                open_fn = getattr(main_window, "_open_project_file", None)
+                if open_fn is not None:
+                    open_fn(file_path)
+        a0.acceptProposedAction()
+
+    def _load_lyrics_from_path(self, path: str):
+        """从文件路径加载歌词（拖拽或按钮均可调用）。"""
+        if not self._project:
+            InfoBar.warning(
+                title="无法加载",
+                content="请先创建或打开一个项目",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+        try:
+            from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
+                LyricParserFactory,
+                LRCParser,
+                parse_to_lyric_lines,
+            )
+            from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+                lines_from_inline_text,
+            )
+            import re
+
+            content = Path(path).read_text(encoding="utf-8")
+            default_singer = self._project.get_default_singer()
+
+            # 检测内联格式
+            if bool(re.search(r"\[\d+\|\d{2}:\d{2}:\d{2}\]", content)):
+                lyric_lines = lines_from_inline_text(content, default_singer.id)
+            else:
+                parsed_lines = LyricParserFactory.parse_file(path)
+                ext = Path(path).suffix.lower()
+                if ext == ".txt" and bool(
+                    re.search(r"\[\d{1,2}:\d{2}[.:]\d{2,3}\]", content)
+                ):
+                    lrc_parser = LRCParser()
+                    parsed_lines = lrc_parser.parse(content)
+                lyric_lines = parse_to_lyric_lines(parsed_lines, default_singer.id)
+
+            # 替换项目歌词
+            self._project.lines.clear()
+            for line in lyric_lines:
+                self._project.lines.append(line)
+
+            # 重建引擎状态
+            if self._timing_service:
+                self._timing_service.set_project(self._project)
+            if self._store:
+                self._store.notify("lyrics")
+
+            self.refresh_lyric_display()
+            InfoBar.success(
+                title="歌词已加载",
+                content=f"已加载 {len(lyric_lines)} 行歌词",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+        except Exception as e:
+            InfoBar.error(
+                title="加载失败",
+                content=str(e),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
 
     # ==================== 工具栏操作 ====================
 
@@ -1147,6 +1348,28 @@ class EditorInterface(QWidget):
         )
         if path:
             self.load_audio(path)
+
+    def _on_load_lyrics(self):
+        """加载歌词文件到当前项目（替换现有歌词）。"""
+        if not self._project:
+            InfoBar.warning(
+                title="无法加载",
+                content="请先创建或打开一个项目",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择歌词文件",
+            "",
+            "歌词文件 (*.lrc *.txt *.kra);;所有文件 (*.*)",
+        )
+        if path:
+            self._load_lyrics_from_path(path)
 
     def _on_undo(self):
         if self._timing_service and self._timing_service.can_undo():
@@ -1314,7 +1537,7 @@ class EditorInterface(QWidget):
                 self._store.notify("lyrics")
 
     def _toggle_checkpoint(self, delta: int = 1):
-        """F4 增加轴点数 (+1)，Ctrl+F4 减少轴点数 (-1)，最小为 1。"""
+        """F4 增加轴点数 (+1)，Ctrl+F4 减少轴点数 (-1)，最小为 0。"""
         if not self._project:
             return
         line_idx = self._current_line_idx
@@ -1326,7 +1549,7 @@ class EditorInterface(QWidget):
             return
 
         old_cp = line.checkpoints[char_idx]
-        new_count = max(1, old_cp.check_count + delta)
+        new_count = max(0, old_cp.check_count + delta)
         line.checkpoints[char_idx] = CheckpointConfig(
             char_idx=old_cp.char_idx,
             check_count=new_count,
@@ -1334,6 +1557,32 @@ class EditorInterface(QWidget):
             is_rest=old_cp.is_rest,
         )
         # 重建 timing_service 的全局 checkpoint 列表
+        if self._timing_service:
+            self._timing_service._rebuild_global_checkpoints()
+        self.refresh_lyric_display()
+        self._update_status()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("checkpoints")
+
+    def _toggle_line_end(self):
+        """F5 切换当前字符的句尾标记 (is_line_end)。"""
+        if not self._project:
+            return
+        line_idx = self._current_line_idx
+        if line_idx >= len(self._project.lines):
+            return
+        line = self._project.lines[line_idx]
+        char_idx = self.preview._current_char_idx
+        if char_idx >= len(line.chars) or char_idx >= len(line.checkpoints):
+            return
+
+        old_cp = line.checkpoints[char_idx]
+        line.checkpoints[char_idx] = CheckpointConfig(
+            char_idx=old_cp.char_idx,
+            check_count=old_cp.check_count,
+            is_line_end=not old_cp.is_line_end,
+            is_rest=old_cp.is_rest,
+        )
         if self._timing_service:
             self._timing_service._rebuild_global_checkpoints()
         self.refresh_lyric_display()
@@ -1481,7 +1730,7 @@ class EditorInterface(QWidget):
         key = a0.key()
         modifiers = a0.modifiers()
 
-        # Ctrl 快捷键（优先处理，不走动作映射）
+        # Ctrl 快捷键（系统级，优先处理）
         if modifiers & Qt.KeyboardModifier.ControlModifier:
             if key == Qt.Key.Key_Z:
                 self._on_undo()
@@ -1504,9 +1753,7 @@ class EditorInterface(QWidget):
                     self._toggle_checkpoint(delta=-1)
                 a0.accept()
                 return
-            else:
-                super().keyPressEvent(a0)
-                return
+            # 其他 Ctrl 组合键：不直接 return，继续走 key_map 查找
 
         # Convert Qt key to string name for mapping lookup
         key_name = self._qt_key_to_name(key, modifiers)
@@ -1550,10 +1797,10 @@ class EditorInterface(QWidget):
                 self._on_seek(min(dur, cur + self._fast_forward_ms))
         elif action == "speed_down":
             v = self.transport.spin_speed.value()
-            self.transport.spin_speed.setValue(max(0.5, v - 0.1))
+            self.transport.spin_speed.setValue(max(50, v - 10))
         elif action == "speed_up":
             v = self.transport.spin_speed.value()
-            self.transport.spin_speed.setValue(min(2.0, v + 0.1))
+            self.transport.spin_speed.setValue(min(200, v + 10))
         elif action == "volume_up":
             v = self.transport.slider_volume.value()
             self.transport.slider_volume.setValue(min(100, v + 5))
@@ -1581,6 +1828,9 @@ class EditorInterface(QWidget):
         elif action == "toggle_word_join":
             if self._project:
                 self._toggle_word_join()
+        elif action == "toggle_line_end":
+            if self._project:
+                self._toggle_line_end()
         else:
             super().keyPressEvent(a0)
 
@@ -1610,11 +1860,18 @@ class EditorInterface(QWidget):
     def _qt_key_to_name(
         self, key, modifiers=Qt.KeyboardModifier.NoModifier
     ) -> Optional[str]:
-        """Convert Qt key enum to string name for shortcut mapping."""
-        if key == Qt.Key.Key_F4 and modifiers == Qt.KeyboardModifier.ControlModifier:
-            return "CTRL+F4"
-        if modifiers != Qt.KeyboardModifier.NoModifier:
-            return None
+        """Convert Qt key enum to string name for shortcut mapping.
+
+        支持组合键，如 CTRL+F4、ALT+A、SHIFT+Z 等。
+        """
+        parts = []
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            parts.append("CTRL")
+        if modifiers & Qt.KeyboardModifier.AltModifier:
+            parts.append("ALT")
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            parts.append("SHIFT")
+
         _key_names = {
             Qt.Key.Key_Space: "SPACE",
             Qt.Key.Key_Escape: "ESCAPE",
@@ -1634,43 +1891,54 @@ class EditorInterface(QWidget):
             Qt.Key.Key_Down: "DOWN",
             Qt.Key.Key_Left: "LEFT",
             Qt.Key.Key_Right: "RIGHT",
+            Qt.Key.Key_Return: "ENTER",
+            Qt.Key.Key_Enter: "ENTER",
+            Qt.Key.Key_Tab: "TAB",
+            Qt.Key.Key_Backspace: "BACKSPACE",
+            Qt.Key.Key_Delete: "DELETE",
+            Qt.Key.Key_Home: "HOME",
+            Qt.Key.Key_End: "END",
+            Qt.Key.Key_PageUp: "PAGEUP",
+            Qt.Key.Key_PageDown: "PAGEDOWN",
+            Qt.Key.Key_Insert: "INSERT",
         }
         if key in _key_names:
-            return _key_names[key]
-        # For letter keys A-Z
-        if Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
-            return chr(key)
-        # For digit keys 0-9
-        if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
-            return chr(key)
-        return None
+            parts.append(_key_names[key])
+        elif Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
+            parts.append(chr(key))
+        elif Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
+            parts.append(chr(key))
+        else:
+            return None
+        return "+".join(parts) if parts else None
 
     def _default_key_action(
         self, key, modifiers=Qt.KeyboardModifier.NoModifier
     ) -> Optional[str]:
         """Fallback key mapping when settings not loaded."""
-        if key == Qt.Key.Key_F4 and modifiers == Qt.KeyboardModifier.ControlModifier:
-            return "toggle_checkpoint"
-        if modifiers != Qt.KeyboardModifier.NoModifier:
+        key_name = self._qt_key_to_name(key, modifiers)
+        if not key_name:
             return None
         defaults = {
-            Qt.Key.Key_Space: "tag_now",
-            Qt.Key.Key_A: "play_pause",
-            Qt.Key.Key_S: "stop",
-            Qt.Key.Key_Z: "seek_back",
-            Qt.Key.Key_X: "seek_forward",
-            Qt.Key.Key_Q: "speed_down",
-            Qt.Key.Key_W: "speed_up",
-            Qt.Key.Key_Escape: "clear_tags",
-            Qt.Key.Key_F2: "edit_ruby",
-            Qt.Key.Key_F3: "toggle_word_join",
-            Qt.Key.Key_F4: "toggle_checkpoint",
-            Qt.Key.Key_Up: "volume_up",
-            Qt.Key.Key_Down: "volume_down",
-            Qt.Key.Key_Left: "nav_prev_line",
-            Qt.Key.Key_Right: "nav_next_line",
+            "SPACE": "tag_now",
+            "A": "play_pause",
+            "S": "stop",
+            "Z": "seek_back",
+            "X": "seek_forward",
+            "Q": "speed_down",
+            "W": "speed_up",
+            "ESCAPE": "clear_tags",
+            "F2": "edit_ruby",
+            "F3": "toggle_word_join",
+            "F4": "toggle_checkpoint",
+            "CTRL+F4": "toggle_checkpoint",
+            "F5": "toggle_line_end",
+            "UP": "volume_up",
+            "DOWN": "volume_down",
+            "LEFT": "nav_prev_line",
+            "RIGHT": "nav_next_line",
         }
-        return defaults.get(key)
+        return defaults.get(key_name.upper())
 
     # ==================== TimingService 回调 ====================
 

@@ -160,6 +160,11 @@ class ExportInterface(QWidget):
     def set_project(self, project: Project):
         self._project = project
 
+    def _get_export_offset(self) -> int:
+        """从设置中获取导出时间偏移（毫秒）。"""
+        settings = AppSettings()
+        return settings.get("export.offset_ms", 0)
+
     def set_store(self, store):
         """接入 ProjectStore 统一数据中心。"""
         self._store = store
@@ -258,7 +263,9 @@ class ExportInterface(QWidget):
         filename = base_name + ext
         filepath = str(Path(output_dir) / filename)
 
-        result = self._export_service.export(self._project, name, filepath)
+        result = self._export_service.export(
+            self._project, name, filepath, offset_ms=self._get_export_offset()
+        )
         if result.success:
             InfoBar.success(
                 title="导出成功",
@@ -309,7 +316,11 @@ class ExportInterface(QWidget):
         )
 
         results = self._export_service.batch_export(
-            self._project, format_names, output_dir, base_name
+            self._project,
+            format_names,
+            output_dir,
+            base_name,
+            offset_ms=self._get_export_offset(),
         )
         success_count = sum(1 for r in results if r.success)
 

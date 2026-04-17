@@ -182,7 +182,7 @@ class BulkChangeDialog(QDialog):
                         for ci in range(pos, pos + word_len):
                             if ci < len(line.checkpoints):
                                 old_cp = line.checkpoints[ci]
-                                new_count = max(1, old_cp.check_count + delta)
+                                new_count = max(0, old_cp.check_count + delta)
                                 line.checkpoints[ci] = CheckpointConfig(
                                     char_idx=old_cp.char_idx,
                                     check_count=new_count,
