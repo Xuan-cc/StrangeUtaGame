@@ -5,7 +5,6 @@
 
 from .settings_interface import (
     SettingsInterface,
-    SettingsDialog,
     AppSettings,
 )
 from .singer_manager import SingerManagerInterface
@@ -13,7 +12,6 @@ from .ruby_editor import RubyInterface
 
 __all__ = [
     "SettingsInterface",
-    "SettingsDialog",
     "AppSettings",
     "SingerManagerInterface",
     "RubyInterface",

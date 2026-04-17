@@ -1,6 +1,7 @@
 """注音编辑界面。
 
-手动编辑歌词注音（ルビ）。
+全文本视图编辑歌词注音（ルビ），支持批量操作。
+格式: 漢字{かんじ} — 花括号内为注音。
 """
 
 from PyQt6.QtWidgets import (
@@ -8,154 +9,130 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QPushButton,
-    QLineEdit,
-    QTableWidget,
-    QTableWidgetItem,
-    QHeaderView,
-    QMessageBox,
-    QSpinBox,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
+    QPlainTextEdit,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFont
 from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,
-    LineEdit,
-    SpinBox,
-    TableWidget,
     InfoBar,
     InfoBarPosition,
     FluentIcon as FIF,
-    ComboBox,
 )
 
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 from strange_uta_game.backend.domain import Project, LyricLine, Ruby
 from strange_uta_game.backend.application import AutoCheckService
+from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
+    get_char_type,
+    CharType,
+)
 
 
-class RubyEditDialog(QDialog):
-    """注音编辑对话框"""
+def _is_kanji_char(char: str) -> bool:
+    """判断是否为汉字"""
+    if len(char) != 1:
+        return False
+    code = ord(char)
+    return (
+        (0x4E00 <= code <= 0x9FFF)
+        or (0x3400 <= code <= 0x4DBF)
+        or (0xF900 <= code <= 0xFAFF)
+    )
 
-    def __init__(
-        self,
-        text: str = "",
-        ruby_text: str = "",
-        start_idx: int = 0,
-        end_idx: int = 0,
-        parent=None,
-    ):
-        super().__init__(parent)
 
-        self.setWindowTitle("编辑注音")
-        self.resize(400, 250)
+def _is_kana_char(char: str) -> bool:
+    """判断是否为假名（平假名/片假名）"""
+    if len(char) != 1:
+        return False
+    code = ord(char)
+    return (0x3040 <= code <= 0x309F) or (0x30A0 <= code <= 0x30FF)
 
-        self._init_ui(text, ruby_text, start_idx, end_idx)
 
-    def _init_ui(self, text: str, ruby_text: str, start_idx: int, end_idx: int):
-        """初始化界面"""
-        layout = QFormLayout(self)
+def _is_symbol_char(char: str) -> bool:
+    """判断是否为符号/标点"""
+    if len(char) != 1:
+        return False
+    try:
+        ct = get_char_type(char)
+        return ct in (CharType.SYMBOL, CharType.SPACE, CharType.OTHER)
+    except ValueError:
+        return False
 
-        # 原文显示
-        self.lbl_original = QLabel(text)
-        self.lbl_original.setStyleSheet(
-            "font-size: 16px; padding: 5px; background: #f0f0f0;"
-        )
-        layout.addRow("原文:", self.lbl_original)
 
-        # 注音输入
-        self.line_ruby = LineEdit()
-        self.line_ruby.setText(ruby_text)
-        self.line_ruby.setPlaceholderText("输入注音（如：ふりがな）...")
-        layout.addRow("注音:", self.line_ruby)
+def _parse_annotated_line(
+    line_text: str,
+) -> Tuple[str, List[str], List[Ruby]]:
+    """解析带注音标注的文本行。
 
-        # 位置范围
-        pos_layout = QHBoxLayout()
+    格式: 漢字{かんじ} — 花括号标注前面连续汉字块的读音。
 
-        self.spin_start = SpinBox()
-        self.spin_start.setRange(0, 999)
-        self.spin_start.setValue(start_idx)
-        self.spin_start.valueChanged.connect(self._on_start_changed)
-        pos_layout.addWidget(QLabel("起始:"))
-        pos_layout.addWidget(self.spin_start)
+    Returns:
+        (原文, 字符列表, 注音列表)
+    """
+    raw_chars: List[str] = []
+    rubies: List[Ruby] = []
+    i = 0
+    n = len(line_text)
 
-        self.spin_end = SpinBox()
-        self.spin_end.setRange(0, 999)
-        self.spin_end.setValue(end_idx)
-        pos_layout.addWidget(QLabel("结束:"))
-        pos_layout.addWidget(self.spin_end)
+    while i < n:
+        if line_text[i] == "{":
+            close = line_text.find("}", i)
+            if close == -1:
+                # 无配对右括号，当普通字符处理
+                raw_chars.append(line_text[i])
+                i += 1
+                continue
 
-        pos_layout.addStretch()
+            ruby_text = line_text[i + 1 : close]
 
-        layout.addRow("字符范围:", pos_layout)
+            if ruby_text and raw_chars:
+                # 向前查找连续汉字块
+                end_idx = len(raw_chars)
+                start_idx = end_idx
+                while start_idx > 0 and _is_kanji_char(raw_chars[start_idx - 1]):
+                    start_idx -= 1
 
-        # 预览
-        self.lbl_preview = QLabel("")
-        self.lbl_preview.setStyleSheet(
-            "font-size: 14px; padding: 5px; background: #f9f9f9; color: #666;"
-        )
-        layout.addRow("预览:", self.lbl_preview)
+                # 若前面没有汉字，退一格（允许给任意字符标注）
+                if start_idx == end_idx and end_idx > 0:
+                    start_idx = end_idx - 1
 
-        self._update_preview()
+                if start_idx < end_idx:
+                    # 检查是否与已有注音重叠
+                    overlap = False
+                    for existing in rubies:
+                        if (
+                            start_idx < existing.end_idx
+                            and end_idx > existing.start_idx
+                        ):
+                            overlap = True
+                            break
 
-        # 按钮
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        button_box.accepted.connect(self._on_accept)
-        button_box.rejected.connect(self.reject)
-        layout.addRow("", button_box)
+                    if not overlap:
+                        rubies.append(
+                            Ruby(
+                                text=ruby_text,
+                                start_idx=start_idx,
+                                end_idx=end_idx,
+                            )
+                        )
 
-    def _on_start_changed(self):
-        """起始位置改变时，确保结束位置不小于起始位置"""
-        if self.spin_end.value() < self.spin_start.value():
-            self.spin_end.setValue(self.spin_start.value() + 1)
-        self._update_preview()
-
-    def _update_preview(self):
-        """更新预览"""
-        ruby = self.line_ruby.text().strip()
-        if ruby:
-            original = self.lbl_original.text()
-            start = self.spin_start.value()
-            end = min(self.spin_end.value(), len(original))
-
-            if start < len(original):
-                target_text = original[start:end]
-                self.lbl_preview.setText(f"{target_text} → {ruby}")
-            else:
-                self.lbl_preview.setText("位置超出范围")
+            i = close + 1
         else:
-            self.lbl_preview.setText("请输入注音")
+            raw_chars.append(line_text[i])
+            i += 1
 
-    def _on_accept(self):
-        """确认"""
-        ruby = self.line_ruby.text().strip()
-        if not ruby:
-            QMessageBox.warning(self, "警告", "请输入注音")
-            return
-
-        if self.spin_start.value() >= self.spin_end.value():
-            QMessageBox.warning(self, "警告", "结束位置必须大于起始位置")
-            return
-
-        self.accept()
-
-    def get_data(self) -> dict:
-        """获取编辑后的数据"""
-        return {
-            "ruby_text": self.line_ruby.text().strip(),
-            "start_idx": self.spin_start.value(),
-            "end_idx": self.spin_end.value(),
-        }
+    raw_text = "".join(raw_chars)
+    return raw_text, raw_chars, rubies
 
 
 class RubyInterface(QWidget):
-    """注音编辑界面"""
+    """注音编辑界面
+
+    全文本视图 + 批量操作。
+    """
 
     rubies_changed = pyqtSignal()
 
@@ -163,8 +140,6 @@ class RubyInterface(QWidget):
         super().__init__(parent)
 
         self._project: Optional[Project] = None
-        self._current_line_idx: int = 0
-        self._auto_check = AutoCheckService()
 
         self._init_ui()
 
@@ -180,196 +155,190 @@ class RubyInterface(QWidget):
         layout.addWidget(title)
 
         # 说明
-        desc = QLabel("为歌词中的汉字添加假名注音（ルビ）")
+        desc = QLabel(
+            "全文本编辑：汉字注音用 {假名} 标注，如 赤{あか}い花{はな}\n"
+            "编辑后点击「应用修改」保存，或点击「更新节奏点」根据注音重算节奏点数量"
+        )
         desc.setStyleSheet("color: gray;")
         layout.addWidget(desc)
 
-        layout.addSpacing(10)
+        layout.addSpacing(5)
 
-        # 行选择
-        line_layout = QHBoxLayout()
-        line_layout.addWidget(QLabel("当前行:"))
+        # 批量操作按钮
+        batch_layout = QHBoxLayout()
 
-        self.lbl_line_text = QLabel("未选择")
-        self.lbl_line_text.setStyleSheet(
-            "font-size: 16px; padding: 5px; background: #f0f0f0;"
+        self.btn_auto_all = PushButton("自动分析全部注音", self)
+        self.btn_auto_all.setIcon(FIF.SYNC)
+        self.btn_auto_all.clicked.connect(self._on_auto_analyze_all)
+        self.btn_auto_all.setEnabled(False)
+        batch_layout.addWidget(self.btn_auto_all)
+
+        self.btn_delete_kana = PushButton("删除假名注音", self)
+        self.btn_delete_kana.setIcon(FIF.DELETE)
+        self.btn_delete_kana.clicked.connect(self._on_delete_kana_rubies)
+        self.btn_delete_kana.setEnabled(False)
+        batch_layout.addWidget(self.btn_delete_kana)
+
+        self.btn_delete_symbol = PushButton("删除符号注音", self)
+        self.btn_delete_symbol.setIcon(FIF.DELETE)
+        self.btn_delete_symbol.clicked.connect(self._on_delete_symbol_rubies)
+        self.btn_delete_symbol.setEnabled(False)
+        batch_layout.addWidget(self.btn_delete_symbol)
+
+        self.btn_update_cp = PushButton("更新节奏点", self)
+        self.btn_update_cp.setIcon(FIF.UPDATE)
+        self.btn_update_cp.clicked.connect(self._on_update_checkpoints)
+        self.btn_update_cp.setEnabled(False)
+        batch_layout.addWidget(self.btn_update_cp)
+
+        batch_layout.addStretch()
+
+        layout.addLayout(batch_layout)
+
+        # 全文本编辑器
+        self.text_edit = QPlainTextEdit()
+        self.text_edit.setFont(QFont("Microsoft YaHei", 12))
+        self.text_edit.setPlaceholderText(
+            "加载项目后，歌词将以注音标注格式显示在此处...\n"
+            "示例: 赤{あか}い花{はな}が咲{さ}いた"
         )
-        self.lbl_line_text.setWordWrap(True)
-        line_layout.addWidget(self.lbl_line_text, stretch=1)
+        self.text_edit.setMinimumHeight(300)
+        layout.addWidget(self.text_edit, stretch=1)
 
-        self.btn_prev = PushButton(parent=self, text="← 上一行")
-        self.btn_prev.clicked.connect(self._on_prev_line)
-        self.btn_prev.setEnabled(False)
-        line_layout.addWidget(self.btn_prev)
+        # 应用/还原
+        action_layout = QHBoxLayout()
 
-        self.btn_next = PushButton(parent=self, text="下一行 →")
-        self.btn_next.clicked.connect(self._on_next_line)
-        self.btn_next.setEnabled(False)
-        line_layout.addWidget(self.btn_next)
+        self.btn_apply = PrimaryPushButton("应用修改", self)
+        self.btn_apply.setIcon(FIF.ACCEPT)
+        self.btn_apply.clicked.connect(self._on_apply_changes)
+        self.btn_apply.setEnabled(False)
+        action_layout.addWidget(self.btn_apply)
 
-        layout.addLayout(line_layout)
+        self.btn_revert = PushButton("还原", self)
+        self.btn_revert.setIcon(FIF.CANCEL)
+        self.btn_revert.clicked.connect(self._on_revert)
+        self.btn_revert.setEnabled(False)
+        action_layout.addWidget(self.btn_revert)
 
-        # 注音表格
-        self.table = TableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["原文", "注音", "范围", "操作"])
-        self.table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
-        self.table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Fixed
-        )
-        self.table.setColumnWidth(2, 80)
-        self.table.horizontalHeader().setSectionResizeMode(
-            3, QHeaderView.ResizeMode.Fixed
-        )
-        self.table.setColumnWidth(3, 100)
-        self.table.setMinimumHeight(200)
-        layout.addWidget(self.table)
+        action_layout.addStretch()
 
-        # 按钮区域
-        button_layout = QHBoxLayout()
-
-        self.btn_auto = PushButton(parent=self, text="自动分析注音")
-        self.btn_auto.setIcon(FIF.SYNC)
-        self.btn_auto.clicked.connect(self._on_auto_analyze)
-        self.btn_auto.setEnabled(False)
-        button_layout.addWidget(self.btn_auto)
-
-        self.btn_add = PrimaryPushButton(parent=self, text="添加注音")
-        self.btn_add.setIcon(FIF.ADD)
-        self.btn_add.clicked.connect(self._on_add_ruby)
-        self.btn_add.setEnabled(False)
-        button_layout.addWidget(self.btn_add)
-
-        button_layout.addStretch()
-
-        layout.addLayout(button_layout)
-
-        # 统计信息
-        self.lbl_stats = QLabel("共 0 个注音")
+        self.lbl_stats = QLabel("共 0 行，0 个注音")
         self.lbl_stats.setStyleSheet("color: gray;")
-        layout.addWidget(self.lbl_stats)
+        action_layout.addWidget(self.lbl_stats)
 
-        layout.addStretch()
+        layout.addLayout(action_layout)
+
+    # ==================== 公共接口 ====================
 
     def set_project(self, project: Project, line_idx: int = 0):
-        """设置项目和当前行"""
+        """设置项目"""
         self._project = project
-        self._current_line_idx = line_idx
         self._refresh_display()
 
+    def set_store(self, store):
+        """接入 ProjectStore 统一数据中心。"""
+        self._store = store
+        store.data_changed.connect(self._on_data_changed)
+
+    def _on_data_changed(self, change_type: str):
+        """响应 ProjectStore 的数据变更。"""
+        if change_type == "project":
+            self._project = self._store.project
+            self._refresh_display()
+        elif change_type in ("rubies", "lyrics"):
+            self._refresh_display()
+
+    # ==================== 内部方法 ====================
+
     def _refresh_display(self):
-        """刷新显示"""
-        if not self._project or not self._project.lines:
-            self.lbl_line_text.setText("未加载项目或没有歌词")
-            self.table.setRowCount(0)
-            self.lbl_stats.setText("共 0 个注音")
-            self.btn_auto.setEnabled(False)
-            self.btn_add.setEnabled(False)
-            self.btn_prev.setEnabled(False)
-            self.btn_next.setEnabled(False)
-            return
+        """刷新全部显示"""
+        has_project = self._project is not None and len(self._project.lines) > 0
 
-        # 更新行文本显示
-        if 0 <= self._current_line_idx < len(self._project.lines):
-            line = self._project.lines[self._current_line_idx]
-            self.lbl_line_text.setText(f"[{self._current_line_idx + 1}] {line.text}")
-
-            # 刷新表格
-            self._refresh_table(line)
-
-            # 更新按钮状态
-            self.btn_auto.setEnabled(True)
-            self.btn_add.setEnabled(True)
-            self.btn_prev.setEnabled(self._current_line_idx > 0)
-            self.btn_next.setEnabled(
-                self._current_line_idx < len(self._project.lines) - 1
-            )
-        else:
-            self.lbl_line_text.setText("无效的行索引")
-            self.table.setRowCount(0)
-
-    def _refresh_table(self, line: LyricLine):
-        """刷新注音表格"""
-        self.table.setRowCount(len(line.rubies))
-
-        for i, ruby in enumerate(line.rubies):
-            # 原文
-            original_text = ""
-            if line.chars and ruby.start_idx < len(line.chars):
-                end = min(ruby.end_idx, len(line.chars))
-                original_text = "".join(line.chars[ruby.start_idx : end])
-
-            item_original = QTableWidgetItem(original_text)
-            self.table.setItem(i, 0, item_original)
-
-            # 注音
-            item_ruby = QTableWidgetItem(ruby.text)
-            self.table.setItem(i, 1, item_ruby)
-
-            # 范围
-            item_range = QTableWidgetItem(f"{ruby.start_idx}-{ruby.end_idx}")
-            item_range.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.table.setItem(i, 2, item_range)
-
-            # 操作按钮容器
-            btn_widget = QWidget()
-            btn_layout = QHBoxLayout(btn_widget)
-            btn_layout.setContentsMargins(5, 0, 5, 0)
-            btn_layout.setSpacing(5)
-
-            btn_edit = PushButton(parent=btn_widget, text="编辑")
-            btn_edit.clicked.connect(lambda checked, idx=i: self._on_edit_ruby(idx))
-            btn_layout.addWidget(btn_edit)
-
-            btn_delete = PushButton(parent=btn_widget, text="删除")
-            btn_delete.clicked.connect(lambda checked, idx=i: self._on_delete_ruby(idx))
-            btn_layout.addWidget(btn_delete)
-
-            self.table.setCellWidget(i, 3, btn_widget)
-
-        # 更新统计
-        self.lbl_stats.setText(f"共 {len(line.rubies)} 个注音")
-
-    def _on_prev_line(self):
-        """上一行"""
-        if self._current_line_idx > 0:
-            self._current_line_idx -= 1
-            self._refresh_display()
-
-    def _on_next_line(self):
-        """下一行"""
-        if self._project and self._current_line_idx < len(self._project.lines) - 1:
-            self._current_line_idx += 1
-            self._refresh_display()
-
-    def _on_auto_analyze(self):
-        """自动分析注音"""
-        if not self._project or not (
-            0 <= self._current_line_idx < len(self._project.lines)
+        for btn in (
+            self.btn_auto_all,
+            self.btn_delete_kana,
+            self.btn_delete_symbol,
+            self.btn_update_cp,
+            self.btn_apply,
+            self.btn_revert,
         ):
+            btn.setEnabled(has_project)
+
+        if has_project:
+            self.text_edit.setPlainText(self._lines_to_text())
+            self._update_stats()
+        else:
+            self.text_edit.setPlainText("")
+            self.lbl_stats.setText("共 0 行，0 个注音")
+
+    def _lines_to_text(self) -> str:
+        """将项目歌词转为带注音标注的文本。
+
+        格式: 漢字{かんじ}
+        """
+        if not self._project:
+            return ""
+
+        result = []
+        for line in self._project.lines:
+            annotated = ""
+            i = 0
+            while i < len(line.chars):
+                ruby = line.get_ruby_for_char(i)
+                if ruby and ruby.start_idx == i:
+                    target = "".join(line.chars[ruby.start_idx : ruby.end_idx])
+                    annotated += f"{target}{{{ruby.text}}}"
+                    i = ruby.end_idx
+                else:
+                    annotated += line.chars[i]
+                    i += 1
+            result.append(annotated)
+        return "\n".join(result)
+
+    def _update_stats(self):
+        """更新统计标签"""
+        if not self._project:
+            self.lbl_stats.setText("共 0 行，0 个注音")
             return
 
-        line = self._project.lines[self._current_line_idx]
+        total = sum(len(line.rubies) for line in self._project.lines)
+        self.lbl_stats.setText(f"共 {len(self._project.lines)} 行，{total} 个注音")
+
+    def _create_auto_check_service(self):
+        """创建带设置的自动检查服务"""
+        from strange_uta_game.frontend.settings.settings_interface import AppSettings
+
+        app_settings = AppSettings()
+        all_settings = app_settings.get_all()
+        auto_check_flags = all_settings.get("auto_check", {})
+        user_dict = all_settings.get("ruby_dictionary", {}).get("entries", [])
+        return AutoCheckService(
+            auto_check_flags=auto_check_flags, user_dictionary=user_dict
+        )
+
+    # ==================== 批量操作 ====================
+
+    def _on_auto_analyze_all(self):
+        """自动分析全部注音（同时更新节奏点）"""
+        if not self._project:
+            return
 
         try:
-            # 应用自动分析
-            self._auto_check.apply_to_line(line)
-
-            self._refresh_table(line)
-            self.rubies_changed.emit()
+            auto_check = self._create_auto_check_service()
+            auto_check.apply_to_project(self._project)
+            self._refresh_display()
+            if hasattr(self, "_store"):
+                self._store.notify("rubies")
 
             InfoBar.success(
                 title="分析完成",
-                content=f"已为第 {self._current_line_idx + 1} 行自动分析注音",
+                content=f"已为 {len(self._project.lines)} 行自动分析注音并更新节奏点",
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
                 duration=2000,
                 parent=self,
             )
-
         except Exception as e:
             InfoBar.warning(
                 title="分析失败",
@@ -381,158 +350,185 @@ class RubyInterface(QWidget):
                 parent=self,
             )
 
-    def _on_add_ruby(self):
-        """添加注音"""
-        if not self._project or not (
-            0 <= self._current_line_idx < len(self._project.lines)
-        ):
+    def _on_delete_kana_rubies(self):
+        """删除所有假名上的注音（假名本身就是读音，不需要标注）"""
+        if not self._project:
             return
 
-        line = self._project.lines[self._current_line_idx]
+        removed = 0
+        for line in self._project.lines:
+            to_remove = []
+            for ruby in line.rubies:
+                chars_in_range = line.chars[
+                    ruby.start_idx : min(ruby.end_idx, len(line.chars))
+                ]
+                if chars_in_range and all(_is_kana_char(c) for c in chars_in_range):
+                    to_remove.append(ruby)
 
-        dialog = RubyEditDialog(
-            text=line.text,
-            ruby_text="",
-            start_idx=0,
-            end_idx=min(1, len(line.chars)) if line.chars else 1,
+            for ruby in to_remove:
+                line.rubies.remove(ruby)
+                removed += 1
+
+        self._refresh_display()
+        if hasattr(self, "_store"):
+            self._store.notify("rubies")
+
+        InfoBar.success(
+            title="删除完成",
+            content=f"已删除 {removed} 个假名注音",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
             parent=self,
         )
 
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            data = dialog.get_data()
-
-            try:
-                ruby = Ruby(
-                    text=data["ruby_text"],
-                    start_idx=data["start_idx"],
-                    end_idx=data["end_idx"],
-                )
-                line.add_ruby(ruby)
-
-                self._refresh_table(line)
-                self.rubies_changed.emit()
-
-                InfoBar.success(
-                    title="添加成功",
-                    content=f"已添加注音: {data['ruby_text']}",
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                    parent=self,
-                )
-
-            except Exception as e:
-                InfoBar.error(
-                    title="添加失败",
-                    content=str(e),
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=5000,
-                    parent=self,
-                )
-
-    def _on_edit_ruby(self, ruby_idx: int):
-        """编辑注音"""
-        if not self._project or not (
-            0 <= self._current_line_idx < len(self._project.lines)
-        ):
+    def _on_delete_symbol_rubies(self):
+        """删除所有符号上的注音"""
+        if not self._project:
             return
 
-        line = self._project.lines[self._current_line_idx]
+        removed = 0
+        for line in self._project.lines:
+            to_remove = []
+            for ruby in line.rubies:
+                chars_in_range = line.chars[
+                    ruby.start_idx : min(ruby.end_idx, len(line.chars))
+                ]
+                if chars_in_range and all(_is_symbol_char(c) for c in chars_in_range):
+                    to_remove.append(ruby)
 
-        if not (0 <= ruby_idx < len(line.rubies)):
-            return
+            for ruby in to_remove:
+                line.rubies.remove(ruby)
+                removed += 1
 
-        ruby = line.rubies[ruby_idx]
+        self._refresh_display()
+        if hasattr(self, "_store"):
+            self._store.notify("rubies")
 
-        dialog = RubyEditDialog(
-            text=line.text,
-            ruby_text=ruby.text,
-            start_idx=ruby.start_idx,
-            end_idx=ruby.end_idx,
+        InfoBar.success(
+            title="删除完成",
+            content=f"已删除 {removed} 个符号注音",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
             parent=self,
         )
 
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            data = dialog.get_data()
+    def _on_update_checkpoints(self):
+        """根据当前注音更新节奏点（不重新分析注音）"""
+        if not self._project:
+            return
 
+        try:
+            auto_check = self._create_auto_check_service()
+            auto_check.update_checkpoints_for_project(self._project)
+            if hasattr(self, "_store"):
+                self._store.notify("checkpoints")
+
+            InfoBar.success(
+                title="更新完成",
+                content=f"已根据注音更新 {len(self._project.lines)} 行的节奏点",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self,
+            )
+        except Exception as e:
+            InfoBar.warning(
+                title="更新失败",
+                content=str(e),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+
+    # ==================== 应用/还原 ====================
+
+    def _on_apply_changes(self):
+        """将文本编辑器内容应用回项目"""
+        if not self._project:
+            return
+
+        text = self.text_edit.toPlainText()
+        lines = text.split("\n")
+
+        # 过滤空行
+        lines = [l for l in lines if l.strip()]
+
+        if len(lines) != len(self._project.lines):
+            InfoBar.warning(
+                title="行数不匹配",
+                content=(
+                    f"编辑器中有 {len(lines)} 行，"
+                    f"项目中有 {len(self._project.lines)} 行。\n"
+                    "请勿增删行，仅修改注音内容。"
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            return
+
+        errors = []
+        for i, (line_text, proj_line) in enumerate(zip(lines, self._project.lines)):
             try:
-                # 更新注音
-                ruby.text = data["ruby_text"]
-                ruby.start_idx = data["start_idx"]
-                ruby.end_idx = data["end_idx"]
+                raw_text, raw_chars, rubies = _parse_annotated_line(line_text)
 
-                self._refresh_table(line)
-                self.rubies_changed.emit()
+                if not raw_text.strip():
+                    continue
 
-                InfoBar.success(
-                    title="修改成功",
-                    content=f"已更新注音: {data['ruby_text']}",
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                    parent=self,
-                )
+                # 更新行数据
+                proj_line.text = raw_text
+                proj_line.chars = raw_chars
+                proj_line.rubies.clear()
+                for ruby in rubies:
+                    proj_line.add_ruby(ruby)
 
             except Exception as e:
-                InfoBar.error(
-                    title="修改失败",
-                    content=str(e),
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=5000,
-                    parent=self,
-                )
+                errors.append(f"第 {i + 1} 行: {e}")
 
-    def _on_delete_ruby(self, ruby_idx: int):
-        """删除注音"""
-        if not self._project or not (
-            0 <= self._current_line_idx < len(self._project.lines)
-        ):
-            return
+        if errors:
+            InfoBar.warning(
+                title="部分行应用失败",
+                content="\n".join(errors[:3]),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+        else:
+            if hasattr(self, "_store"):
+                self._store.notify("rubies")
+            self._update_stats()
 
-        line = self._project.lines[self._current_line_idx]
+            InfoBar.success(
+                title="应用成功",
+                content=f"已更新 {len(lines)} 行的注音",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self,
+            )
 
-        if not (0 <= ruby_idx < len(line.rubies)):
-            return
+    def _on_revert(self):
+        """还原编辑器内容为项目当前状态"""
+        self._refresh_display()
 
-        ruby = line.rubies[ruby_idx]
-
-        reply = QMessageBox.question(
-            self,
-            "确认删除",
-            f'确定要删除注音 "{ruby.text}" 吗？',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        InfoBar.info(
+            title="已还原",
+            content="编辑器内容已还原为项目当前状态",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self,
         )
-
-        if reply == QMessageBox.StandardButton.Yes:
-            try:
-                line.rubies.pop(ruby_idx)
-
-                self._refresh_table(line)
-                self.rubies_changed.emit()
-
-                InfoBar.success(
-                    title="删除成功",
-                    content=f"已删除注音: {ruby.text}",
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                    parent=self,
-                )
-
-            except Exception as e:
-                InfoBar.error(
-                    title="删除失败",
-                    content=str(e),
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=5000,
-                    parent=self,
-                )

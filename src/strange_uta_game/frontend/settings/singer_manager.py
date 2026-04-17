@@ -60,13 +60,13 @@ class SingerEditDialog(QDialog):
         """初始化界面"""
         layout = QFormLayout(self)
 
-        # 名称输入
+        # 名称输入（留空将自动生成"未命名N"）
         self.line_name = LineEdit()
         if self._singer:
             self.line_name.setText(self._singer.name)
         else:
-            self.line_name.setPlaceholderText("输入演唱者名称...")
-        layout.addRow("名称:", self.line_name)
+            self.line_name.setPlaceholderText("输入演唱者名称（留空自动编号）...")
+        layout.addRow("显示名称:", self.line_name)
 
         # 颜色选择
         color_layout = QHBoxLayout()
@@ -78,7 +78,7 @@ class SingerEditDialog(QDialog):
         self.lbl_color_preview.setFixedSize(40, 30)
         color_layout.addWidget(self.lbl_color_preview)
 
-        btn_color = PushButton(parent=self, text="选择颜色...")
+        btn_color = PushButton("选择颜色...", self)
         btn_color.clicked.connect(self._on_select_color)
         color_layout.addWidget(btn_color)
 
@@ -113,10 +113,7 @@ class SingerEditDialog(QDialog):
     def _on_accept(self):
         """确认"""
         name = self.line_name.text().strip()
-        if not name:
-            QMessageBox.warning(self, "警告", "请输入演唱者名称")
-            return
-
+        # 允许空名称，将由后端自动生成 "未命名N"
         self.accept()
 
     def get_data(self) -> dict:
@@ -169,18 +166,18 @@ class SingerManagerInterface(QWidget):
         # 按钮区域
         button_layout = QHBoxLayout()
 
-        self.btn_add = PrimaryPushButton(parent=self, text="添加")
+        self.btn_add = PrimaryPushButton("添加", self)
         self.btn_add.setIcon(FIF.ADD)
         self.btn_add.clicked.connect(self._on_add_singer)
         button_layout.addWidget(self.btn_add)
 
-        self.btn_edit = PushButton(parent=self, text="编辑")
+        self.btn_edit = PushButton("编辑", self)
         self.btn_edit.setIcon(FIF.EDIT)
         self.btn_edit.clicked.connect(self._on_edit_singer)
         self.btn_edit.setEnabled(False)
         button_layout.addWidget(self.btn_edit)
 
-        self.btn_delete = PushButton(parent=self, text="删除")
+        self.btn_delete = PushButton("删除", self)
         self.btn_delete.setIcon(FIF.DELETE)
         self.btn_delete.clicked.connect(self._on_delete_singer)
         self.btn_delete.setEnabled(False)
@@ -203,6 +200,25 @@ class SingerManagerInterface(QWidget):
         self._singer_service = SingerService(project)
         self._refresh_list()
 
+    def set_store(self, store):
+        """接入 ProjectStore 统一数据中心。"""
+        self._store = store
+        store.data_changed.connect(self._on_data_changed)
+
+    def _on_data_changed(self, change_type: str):
+        """响应 ProjectStore 的数据变更。"""
+        if change_type == "project":
+            project = self._store.project
+            if project:
+                self._project = project
+                self._singer_service = SingerService(project)
+            else:
+                self._project = None
+                self._singer_service = None
+            self._refresh_list()
+        elif change_type == "singers":
+            self._refresh_list()
+
     def _refresh_list(self):
         """刷新演唱者列表"""
         self.list_singers.clear()
@@ -214,12 +230,16 @@ class SingerManagerInterface(QWidget):
         for singer in self._project.singers:
             item = QListWidgetItem()
 
-            # 显示格式: 名称 [默认] - 颜色方块
+            # 显示格式: [后台编号]名称 [默认] - 颜色方块
+            # 后台编号用于内部识别，显示名可由用户修改
             display_text = singer.name
             if singer.is_default:
                 display_text += " [默认]"
             if not singer.enabled:
                 display_text += " (已禁用)"
+            # 显示后台编号（仅用于用户参考，不改变）
+            if singer.backend_number > 0:
+                display_text = f"[{singer.backend_number}] {display_text}"
 
             item.setText(display_text)
 
@@ -283,22 +303,20 @@ class SingerManagerInterface(QWidget):
             data = dialog.get_data()
 
             try:
+                # 如果名称为空，将自动生成 "未命名N"
+                singer_name = data["name"] if data["name"] else None
                 singer = self._singer_service.add_singer(
-                    name=data["name"],
+                    name=singer_name,
                     color=data["color"],
                 )
 
                 # 如果设为默认
                 if data["is_default"]:
-                    # 设置为默认
-                    for s in self._project.singers:
-                        if s.id == singer.id:
-                            s.is_default = True
-                        else:
-                            s.is_default = False
+                    self._singer_service.set_default_singer(singer.id)
 
                 self._refresh_list()
-                self.singers_changed.emit()
+                if hasattr(self, "_store"):
+                    self._store.notify("singers")
 
                 InfoBar.success(
                     title="添加成功",
@@ -349,14 +367,11 @@ class SingerManagerInterface(QWidget):
 
                 # 设为默认
                 if data["is_default"] and not singer.is_default:
-                    for s in self._project.singers:
-                        if s.id == singer.id:
-                            s.is_default = True
-                        else:
-                            s.is_default = False
+                    self._singer_service.set_default_singer(singer.id)
 
                 self._refresh_list()
-                self.singers_changed.emit()
+                if hasattr(self, "_store"):
+                    self._store.notify("singers")
 
                 InfoBar.success(
                     title="修改成功",
@@ -424,7 +439,8 @@ class SingerManagerInterface(QWidget):
                 self._singer_service.remove_singer(singer_id, transfer_to)
 
                 self._refresh_list()
-                self.singers_changed.emit()
+                if hasattr(self, "_store"):
+                    self._store.notify("singers")
 
                 InfoBar.success(
                     title="删除成功",
