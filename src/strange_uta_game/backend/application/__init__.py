@@ -5,6 +5,7 @@ from .project_service import ProjectService, ProjectCallbacks, ProjectServiceErr
 from .auto_check_service import AutoCheckService, AutoCheckResult
 from .singer_service import SingerService, SingerCallbacks
 from .export_service import ExportService, ExportResult
+from .timing_service import TimingService, TimingCallbacks, CheckpointPosition
 from .commands import (
     Command,
     BatchCommand,
@@ -29,6 +30,9 @@ __all__ = [
     "SingerCallbacks",
     "ExportService",
     "ExportResult",
+    "TimingService",
+    "TimingCallbacks",
+    "CheckpointPosition",
     "Command",
     "BatchCommand",
     "AddTimeTagCommand",

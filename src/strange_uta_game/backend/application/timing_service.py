@@ -24,6 +24,8 @@ from strange_uta_game.backend.domain import (
 )
 from strange_uta_game.backend.infrastructure.audio import IAudioEngine
 
+from .command_manager import CommandManager
+
 
 class TimingError(Exception):
     """打轴相关错误"""
@@ -111,12 +113,17 @@ class TimingService:
     SHORT_PRESS_THRESHOLD_MS = 100  # 短按阈值（100ms）
     DEFAULT_TIMING_OFFSET_MS = 0  # 默认打轴偏移量
 
-    def __init__(self, audio_engine: IAudioEngine):
+    def __init__(
+        self,
+        audio_engine: IAudioEngine,
+        command_manager: Optional[CommandManager] = None,
+    ):
         """
         Args:
             audio_engine: 音频引擎实例
         """
         self._audio_engine = audio_engine
+        self._command_manager = command_manager
         self._project: Optional[Project] = None
         self._callbacks: Optional[TimingCallbacks] = None
 
@@ -155,6 +162,46 @@ class TimingService:
         """设置打轴偏移量（补偿反应延迟）"""
         self._timing_offset_ms = offset_ms
 
+    def load_audio(self, file_path: str) -> None:
+        """Load audio file. Raises AudioLoadError on failure."""
+        self._audio_engine.load(file_path)
+
+    def get_audio_info(self):
+        return self._audio_engine.get_audio_info()
+
+    def get_position_ms(self) -> int:
+        return self._audio_engine.get_position_ms()
+
+    def get_duration_ms(self) -> int:
+        return self._audio_engine.get_duration_ms()
+
+    def is_playing(self) -> bool:
+        return self._audio_engine.is_playing()
+
+    def set_volume(self, volume_percent: int) -> None:
+        """Set volume 0-100 (converts to 0.0-1.0 for engine)"""
+        self._audio_engine.set_volume(volume_percent / 100.0)
+
+    def can_undo(self) -> bool:
+        """是否可以撤销打轴命令"""
+        return self._command_manager.can_undo() if self._command_manager else False
+
+    def can_redo(self) -> bool:
+        """是否可以重做打轴命令"""
+        return self._command_manager.can_redo() if self._command_manager else False
+
+    def undo(self) -> Optional[str]:
+        """撤销上一个打轴命令"""
+        if not self._command_manager:
+            return None
+        return self._command_manager.undo()
+
+    def redo(self) -> Optional[str]:
+        """重做上一个打轴命令"""
+        if not self._command_manager:
+            return None
+        return self._command_manager.redo()
+
     # ==================== Checkpoint 管理 ====================
 
     def _rebuild_global_checkpoints(self) -> None:
@@ -166,15 +213,16 @@ class TimingService:
 
         # 遍历所有歌词行，构建全局 Checkpoint 序列
         for line_idx, line in enumerate(self._project.lines):
-            # 遍历该行的所有 checkpoint
+            # 遍历该行的所有 checkpoint 配置
             for checkpoint in line.checkpoints:
-                pos = CheckpointPosition(
-                    line_idx=line_idx,
-                    char_idx=checkpoint.char_idx,
-                    checkpoint_idx=checkpoint.checkpoint_idx,
-                    singer_id=line.singer_id,
-                )
-                self._global_checkpoints.append(pos)
+                for checkpoint_idx in range(checkpoint.check_count):
+                    pos = CheckpointPosition(
+                        line_idx=line_idx,
+                        char_idx=checkpoint.char_idx,
+                        checkpoint_idx=checkpoint_idx,
+                        singer_id=line.singer_id,
+                    )
+                    self._global_checkpoints.append(pos)
 
         # 按行、字符、checkpoint_idx 排序
         self._global_checkpoints.sort(
@@ -202,7 +250,7 @@ class TimingService:
 
         # 查找对应的 checkpoint
         for cp in line.checkpoints:
-            if cp.char_idx == pos.char_idx and cp.checkpoint_idx == pos.checkpoint_idx:
+            if cp.char_idx == pos.char_idx and pos.checkpoint_idx < cp.check_count:
                 return line, cp
 
         return line, None
@@ -273,6 +321,9 @@ class TimingService:
     ) -> bool:
         """移动到指定 checkpoint
 
+        如果目标字符的 check_count=0（无 checkpoint），自动跳到该位置之后
+        最近的有效 checkpoint。
+
         Args:
             line_idx: 行索引
             char_idx: 字符索引
@@ -284,23 +335,32 @@ class TimingService:
         if not self._global_checkpoints:
             return False
 
-        # 查找目标 checkpoint
+        target = (line_idx, char_idx, checkpoint_idx)
+
+        # 查找精确匹配或最近的下一个有效 checkpoint
+        best_idx: Optional[int] = None
         for i, pos in enumerate(self._global_checkpoints):
-            if (
-                pos.line_idx == line_idx
-                and pos.char_idx == char_idx
-                and pos.checkpoint_idx == checkpoint_idx
-            ):
-                prev_singer_id = self._current_position.singer_id
-                self._global_checkpoint_idx = i
-                self._current_position = pos
+            pos_key = (pos.line_idx, pos.char_idx, pos.checkpoint_idx)
+            if pos_key == target:
+                # 精确匹配
+                best_idx = i
+                break
+            if pos_key >= target and best_idx is None:
+                # 目标不存在（check_count=0）→ 取最近的下一个
+                best_idx = i
 
-                # 检查演唱者是否变化
-                if pos.singer_id != prev_singer_id:
-                    self._notify_singer_changed(pos.singer_id, prev_singer_id)
+        if best_idx is not None:
+            pos = self._global_checkpoints[best_idx]
+            prev_singer_id = self._current_position.singer_id
+            self._global_checkpoint_idx = best_idx
+            self._current_position = pos
 
-                self._notify_checkpoint_moved()
-                return True
+            # 检查演唱者是否变化
+            if pos.singer_id != prev_singer_id:
+                self._notify_singer_changed(pos.singer_id, prev_singer_id)
+
+            self._notify_checkpoint_moved()
+            return True
 
         return False
 
@@ -335,15 +395,26 @@ class TimingService:
         # 获取当前 checkpoint
         line, checkpoint = self._get_current_checkpoint_info()
         if not line or not checkpoint:
-            self._notify_error("NO_CHECKPOINT", "无效的 checkpoint 位置")
-            return
+            # 当前位置无效（如 check_count=0）→ 尝试跳到下一个有效 checkpoint
+            if self.move_to_next_checkpoint():
+                line, checkpoint = self._get_current_checkpoint_info()
+            if not line or not checkpoint:
+                self._notify_error("NO_CHECKPOINT", "无效的 checkpoint 位置")
+                return
 
-        # 检查是否为句尾字符
-        if checkpoint.is_line_end:
+        # 检查是否为句尾字符的倒数第二个节奏点（开始长按录制）
+        # 句尾字符的最后两个节奏点用于长按录制：
+        #   checkpoint_idx = check_count-2: 按下时间（开始）
+        #   checkpoint_idx = check_count-1: 抬起时间（结束）
+        # 之前的节奏点按普通打轴处理（用于多假名汉字的注音节奏点）
+        if (
+            checkpoint.is_line_end
+            and self._current_position.checkpoint_idx == checkpoint.check_count - 2
+        ):
             # 句尾长按处理 - 记录开始时间
             self._start_line_end_recording()
         else:
-            # 普通字符 - 立即打轴（在按键抬起时完成）
+            # 普通字符 / 句尾字符的注音节奏点 - 在按键抬起时完成
             pass
 
     def on_timing_key_released(self, key: str) -> None:
@@ -386,6 +457,19 @@ class TimingService:
     def _finish_line_end_recording(self, end_time_ms: int) -> None:
         """完成句尾长按录制
 
+        句尾字符的最后两个节奏点用于长按录制：
+        - 当前 checkpoint_idx (= check_count-2): 按下时间（start_time_ms）
+        - 下一个 checkpoint_idx (= check_count-1): 抬起时间（end_time_ms）
+        短按时两者均填 start_time_ms。
+
+        注意：对于有注音的汉字句尾（如「花」=はな，check_count=3），
+        前面的注音节奏点已在普通打轴流程中处理完毕，
+        此方法仅处理最后两个节奏点。
+
+        调用后 _current_position 停在最后一个 checkpoint_idx，
+        外层 on_timing_key_released 的 move_to_next_checkpoint() 会
+        将位置推进到下一行首字符。
+
         Args:
             end_time_ms: 结束时间（毫秒）
         """
@@ -396,50 +480,35 @@ class TimingService:
 
         # 检查是否超时
         if end_time_ms - start_time_ms > self.LINE_END_RECORDING_TIMEOUT_MS:
-            # 超时，使用超时时间点
             end_time_ms = start_time_ms + self.LINE_END_RECORDING_TIMEOUT_MS
 
-        # 检查是否为短按（视为普通打轴）
+        line, checkpoint = self._get_current_checkpoint_info()
+        if not line or not checkpoint:
+            self._line_end_recording = False
+            self._line_end_start_time_ms = None
+            return
+
+        char_idx = checkpoint.char_idx
+
         if end_time_ms - start_time_ms < self.SHORT_PRESS_THRESHOLD_MS:
-            # 短按 - 只记录开始时间
+            # 短按 - 两个 checkpoint 都记录 start_time
+            self._add_timetag_at_current_checkpoint(start_time_ms)
+            self.move_to_next_checkpoint()
             self._add_timetag_at_current_checkpoint(start_time_ms)
         else:
-            # 正常长按 - 记录开始和结束两个时间
-            line, checkpoint = self._get_current_checkpoint_info()
-            if line and checkpoint:
-                # 获取当前演唱者
-                singer_id = line.singer_id
-                char_idx = checkpoint.char_idx
+            # 长按 - checkpoint_idx=0 记录按下时间，idx=1 记录抬起时间
+            self._add_timetag_at_current_checkpoint(start_time_ms)
+            self.move_to_next_checkpoint()
+            self._add_timetag_at_current_checkpoint(end_time_ms)
 
-                # 添加开始时间标签
-                start_tag = TimeTag(
-                    timestamp_ms=start_time_ms,
-                    singer_id=singer_id,
-                    char_idx=char_idx,
-                    checkpoint_idx=checkpoint.checkpoint_idx,
-                )
-                line.add_timetag(start_tag)
-
-                # 查找或创建结束 checkpoint（通常是下一个字符或同一个字符的下一个 checkpoint）
-                # 这里简化处理：添加到当前 checkpoint
-                # 实际应该在下一个 checkpoint 添加结束时间
-
-                # 通知回调
-                if self._callbacks:
-                    self._callbacks.on_timetag_added(
-                        singer_id,
-                        self._current_position.line_idx,
-                        char_idx,
-                        checkpoint.checkpoint_idx,
-                        start_time_ms,
-                    )
-
-                    self._callbacks.on_line_end_recording_finished(
-                        self._current_position.line_idx,
-                        char_idx,
-                        start_time_ms,
-                        end_time_ms,
-                    )
+        # 通知回调
+        if self._callbacks:
+            self._callbacks.on_line_end_recording_finished(
+                self._current_position.line_idx,
+                char_idx,
+                start_time_ms,
+                end_time_ms,
+            )
 
         # 重置状态
         self._line_end_recording = False
@@ -470,11 +539,22 @@ class TimingService:
             timestamp_ms=timestamp_ms,
             singer_id=line.singer_id,
             char_idx=checkpoint.char_idx,
-            checkpoint_idx=checkpoint.checkpoint_idx,
+            checkpoint_idx=self._current_position.checkpoint_idx,
         )
 
-        # 添加到歌词行
-        line.add_timetag(tag)
+        if self._command_manager and self._project:
+            from strange_uta_game.backend.application.commands import AddTimeTagCommand
+
+            cmd = AddTimeTagCommand(
+                project=self._project,
+                line_id=line.id,
+                timestamp_ms=timestamp_ms,
+                char_idx=checkpoint.char_idx,
+                checkpoint_idx=self._current_position.checkpoint_idx,
+            )
+            self._command_manager.execute(cmd)
+        else:
+            line.add_timetag(tag)
 
         # 通知回调
         if self._callbacks:
@@ -482,7 +562,7 @@ class TimingService:
                 line.singer_id,
                 self._current_position.line_idx,
                 checkpoint.char_idx,
-                checkpoint.checkpoint_idx,
+                self._current_position.checkpoint_idx,
                 timestamp_ms,
             )
 
@@ -520,6 +600,10 @@ class TimingService:
         """设置播放速度"""
         self._audio_engine.set_speed(speed)
 
+    def release(self) -> None:
+        self.stop()
+        self._audio_engine.release()
+
     def _on_audio_position_changed(self, position_ms: int) -> None:
         """音频位置变化回调（由音频引擎调用）"""
         if not self._callbacks:
@@ -552,15 +636,20 @@ class TimingService:
             return 0
 
         # 获取该演唱者的所有歌词行
-        singer_lines = self._project.get_lines_by_singer(singer_id)
+        singer_lines = [
+            (idx, line)
+            for idx, line in enumerate(self._project.lines)
+            if line.singer_id == singer_id
+        ]
 
         if not singer_lines:
             return 0
 
-        # 找到当前时间对应的行
-        for i, line_idx in enumerate(singer_lines):
-            line = self._project.lines[line_idx]
+        first_timed_line_idx: Optional[int] = None
+        first_time_ms: Optional[int] = None
 
+        # 找到当前时间对应的行
+        for i, (line_idx, line) in enumerate(singer_lines):
             if not line.timetags:
                 continue
 
@@ -569,13 +658,17 @@ class TimingService:
             first_time = sorted_tags[0].timestamp_ms
             last_time = sorted_tags[-1].timestamp_ms
 
+            if first_timed_line_idx is None:
+                first_timed_line_idx = line_idx
+                first_time_ms = first_time
+
             # 检查是否在当前行的时间范围内
             if first_time <= time_ms <= last_time:
                 return line_idx
 
             # 检查是否在下一行之前
             if i + 1 < len(singer_lines):
-                next_line = self._project.lines[singer_lines[i + 1]]
+                _, next_line = singer_lines[i + 1]
                 if next_line.timetags:
                     next_first = min(t.timestamp_ms for t in next_line.timetags)
                     if last_time < time_ms < next_first:
@@ -583,10 +676,13 @@ class TimingService:
                         return line_idx
 
         # 默认显示第一行或最后一行
-        if time_ms < first_time:
-            return singer_lines[0] if singer_lines else 0
-        else:
-            return singer_lines[-1] if singer_lines else 0
+        if first_timed_line_idx is None or first_time_ms is None:
+            return singer_lines[0][0]
+
+        if time_ms < first_time_ms:
+            return first_timed_line_idx
+
+        return singer_lines[-1][0]
 
     # ==================== 批量打轴功能 ====================
 
@@ -620,17 +716,25 @@ class TimingService:
 
             # 找到第一个未打轴的 checkpoint
             for checkpoint in line.checkpoints:
-                existing = line.get_timetags_for_char(checkpoint.char_idx)
-                if not existing:
-                    tag = TimeTag(
-                        timestamp_ms=timestamp_ms,
-                        singer_id=line.singer_id,
-                        char_idx=checkpoint.char_idx,
-                        checkpoint_idx=checkpoint.checkpoint_idx,
-                    )
-                    line.add_timetag(tag)
-                    added_count += 1
-                    break
+                for checkpoint_idx in range(checkpoint.check_count):
+                    existing = [
+                        tag
+                        for tag in line.get_timetags_for_char(checkpoint.char_idx)
+                        if tag.checkpoint_idx == checkpoint_idx
+                    ]
+                    if not existing:
+                        tag = TimeTag(
+                            timestamp_ms=timestamp_ms,
+                            singer_id=line.singer_id,
+                            char_idx=checkpoint.char_idx,
+                            checkpoint_idx=checkpoint_idx,
+                        )
+                        line.add_timetag(tag)
+                        added_count += 1
+                        break
+                else:
+                    continue
+                break
 
         return added_count
 
@@ -649,6 +753,21 @@ class TimingService:
 
         line = self._project.lines[line_idx]
         count = len(line.timetags)
-        line.timetags.clear()
+
+        if self._command_manager and self._project:
+            from strange_uta_game.backend.application.commands import (
+                RemoveTimeTagCommand,
+            )
+
+            for tag in list(line.timetags):
+                self._command_manager.execute(
+                    RemoveTimeTagCommand(
+                        project=self._project,
+                        line_id=line.id,
+                        tag=tag,
+                    )
+                )
+        else:
+            line.timetags.clear()
 
         return count
