@@ -8,6 +8,7 @@ from .lrc_exporter import LRCExporter, KRAExporter
 from .txt_exporter import TXTExporter
 from .txt2ass_exporter import Txt2AssExporter, ASSDirectExporter
 from .nicokara_exporter import NicokaraExporter, NicokaraWithRubyExporter
+from .inline_exporter import InlineExporter
 
 # 所有可用的导出器
 ALL_EXPORTERS = [
@@ -18,6 +19,7 @@ ALL_EXPORTERS = [
     ASSDirectExporter,
     NicokaraExporter,
     NicokaraWithRubyExporter,
+    InlineExporter,
 ]
 
 
@@ -79,6 +81,7 @@ __all__ = [
     "ASSDirectExporter",
     "NicokaraExporter",
     "NicokaraWithRubyExporter",
+    "InlineExporter",
     "ALL_EXPORTERS",
     "get_exporter_by_name",
     "get_exporter_by_extension",

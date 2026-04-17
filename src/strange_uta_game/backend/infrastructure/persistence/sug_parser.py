@@ -117,7 +117,10 @@ class SugProjectParser:
         if version != SugMigrator.CURRENT_VERSION:
             data = SugMigrator.migrate(data, version)
 
-        return SugProjectParser._dict_to_project(data)
+        try:
+            return SugProjectParser._dict_to_project(data)
+        except (ValueError, KeyError, TypeError) as e:
+            raise SugParseError(f"项目数据解析失败: {e}") from e
 
     @staticmethod
     def _project_to_dict(project: Project) -> Dict[str, Any]:
@@ -190,30 +193,35 @@ class SugProjectParser:
     @staticmethod
     def _dict_to_project(data: Dict[str, Any]) -> Project:
         """将字典转换为 Project 对象"""
-        # 解析元数据
+        # 解析元数据（安全 datetime 解析）
         metadata_data = data.get("metadata", {})
+
+        def _safe_datetime(value: Optional[str]) -> datetime:
+            if value:
+                try:
+                    return datetime.fromisoformat(value)
+                except (ValueError, TypeError):
+                    pass
+            return datetime.now()
+
         metadata = ProjectMetadata(
             title=metadata_data.get("title", ""),
             artist=metadata_data.get("artist", ""),
             album=metadata_data.get("album", ""),
             language=metadata_data.get("language", "ja"),
-            created_at=datetime.fromisoformat(
-                metadata_data.get("created_at", datetime.now().isoformat())
-            ),
-            updated_at=datetime.fromisoformat(
-                metadata_data.get("updated_at", datetime.now().isoformat())
-            ),
+            created_at=_safe_datetime(metadata_data.get("created_at")),
+            updated_at=_safe_datetime(metadata_data.get("updated_at")),
         )
 
         # 解析演唱者
         singers = []
         for singer_data in data.get("singers", []):
             singer = Singer(
-                id=singer_data["id"],
-                name=singer_data["name"],
-                color=singer_data["color"],
+                id=singer_data.get("id", str(__import__("uuid").uuid4())),
+                name=singer_data.get("name", "未命名"),
+                color=singer_data.get("color", "#FF6B6B"),
                 is_default=singer_data.get("is_default", False),
-                display_priority=singer_data.get("display_priority", 0),
+                display_priority=int(singer_data.get("display_priority", 0)),
                 enabled=singer_data.get("enabled", True),
             )
             singers.append(singer)
@@ -226,11 +234,11 @@ class SugProjectParser:
 
         # 创建项目
         project = Project(
-            id=data.get("id"),
+            id=data.get("id") or str(__import__("uuid").uuid4()),
             singers=singers,
             lines=lines,
             metadata=metadata,
-            audio_duration_ms=data.get("audio_duration_ms", 0),
+            audio_duration_ms=int(data.get("audio_duration_ms", 0)),
         )
 
         return project
@@ -247,10 +255,10 @@ class SugProjectParser:
                 tag_type = TimeTagType.CHAR_START
 
             tag = TimeTag(
-                timestamp_ms=tag_data["timestamp_ms"],
-                singer_id=tag_data["singer_id"],
-                char_idx=tag_data["char_idx"],
-                checkpoint_idx=tag_data.get("checkpoint_idx", 0),
+                timestamp_ms=int(tag_data.get("timestamp_ms", 0)),
+                singer_id=tag_data.get("singer_id", ""),
+                char_idx=int(tag_data.get("char_idx", 0)),
+                checkpoint_idx=int(tag_data.get("checkpoint_idx", 0)),
                 tag_type=tag_type,
             )
             timetags.append(tag)
@@ -259,8 +267,8 @@ class SugProjectParser:
         checkpoints = []
         for cp_data in data.get("checkpoints", []):
             cp = CheckpointConfig(
-                char_idx=cp_data["char_idx"],
-                check_count=cp_data["check_count"],
+                char_idx=int(cp_data.get("char_idx", 0)),
+                check_count=int(cp_data.get("check_count", 1)),
                 is_line_end=cp_data.get("is_line_end", False),
                 is_rest=cp_data.get("is_rest", False),
             )
@@ -270,18 +278,26 @@ class SugProjectParser:
         rubies = []
         for ruby_data in data.get("rubies", []):
             ruby = Ruby(
-                text=ruby_data["text"],
-                start_idx=ruby_data["start_idx"],
-                end_idx=ruby_data["end_idx"],
+                text=ruby_data.get("text", ""),
+                start_idx=int(ruby_data.get("start_idx", 0)),
+                end_idx=int(ruby_data.get("end_idx", 1)),
             )
             rubies.append(ruby)
 
+        # 安全读取文本和字符列表
+        text = data.get("text", "")
+        chars = data.get("chars", list(text) if text else [])
+
+        # 修复 chars/text 不一致（可能因手动编辑或旧版本导致）
+        if text and "".join(chars) != text:
+            chars = list(text)
+
         # 创建歌词行
         line = LyricLine(
-            id=data.get("id"),
-            singer_id=data["singer_id"],
-            text=data["text"],
-            chars=data.get("chars", list(data["text"])),
+            id=data.get("id", str(__import__("uuid").uuid4())),
+            singer_id=data.get("singer_id", ""),
+            text=text,
+            chars=chars,
             timetags=timetags,
             checkpoints=checkpoints,
             rubies=rubies,

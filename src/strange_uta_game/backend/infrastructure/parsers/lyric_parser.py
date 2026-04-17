@@ -120,16 +120,13 @@ class LRCParser(LyricParser):
     LRC 格式: [mm:ss.xx]歌词文本
     示例: [00:12.34]歌词内容
 
-    也支持增强 LRC 格式（逐字时间标签）:
-    [00:12.34]<00:13.00>字<00:14.00>字
+    支持逐行格式和逐字格式：
+    - 逐行: [00:12.34]这是一整行歌词
+    - 逐字: [00:12.34]这[00:13.00]是[00:14.00]逐[00:15.00]字
     """
 
     # 标准 LRC 时间标签正则: [mm:ss.xx] 或 [mm:ss.xxx]
-    # 支持 [mm:ss.xx] 和 [mm:ss.xxx] 格式
     TIME_TAG_PATTERN = re.compile(r"\[(\d{1,2}):(\d{2})[:.](\d{2,3})\]")
-
-    # 增强 LRC 逐字时间标签: <mm:ss.xx>
-    WORD_TIME_PATTERN = re.compile(r"<(\d{1,2}):(\d{2})[:.](\d{2,3})>")
 
     # ID标签（元数据）: [xx:xx]
     ID_TAG_PATTERN = re.compile(r"^\[([a-zA-Z]+):(.*)\]$")
@@ -162,7 +159,7 @@ class LRCParser(LyricParser):
             if re.match(r"^\[\d{1,2}:\d{2}[.:]\d{2,3}\]+$", line_text):
                 continue
 
-            # 提取所有时间标签 [mm:ss.xx]
+            # 查找所有时间标签 [mm:ss.xx]
             matches = list(self.TIME_TAG_PATTERN.finditer(line_text))
 
             if not matches:
@@ -173,25 +170,32 @@ class LRCParser(LyricParser):
                     lines.append(ParsedLine(text=line_text, timetags=[]))
                 continue
 
-            # 提取最后一个时间标签后的文本作为歌词
-            last_match = matches[-1]
-            lyric_text = line_text[last_match.end() :].strip()
+            # 判断是逐行格式还是逐字格式
+            # 逐字格式特征：时间标签后面紧跟字符，然后又是时间标签
+            # 例如：[00:00.000]春[00:01.086]日[00:01.629]影
 
-            # 移除可能残留的增强LRC时间标签
-            lyric_text = self.WORD_TIME_PATTERN.sub("", lyric_text)
+            # 检查时间标签分布
+            is_word_by_word = self._is_word_by_word_format(line_text, matches)
 
-            if not lyric_text:
-                # 没有时间标签后的文本，跳过
-                continue
-
-            # 检查是否是增强 LRC 格式（包含逐字时间）
-            if self.WORD_TIME_PATTERN.search(lyric_text):
-                # 解析增强 LRC 格式
-                word_timetags = self._parse_enhanced_lrc(lyric_text)
-                # 清理文本：移除所有逐字时间标签
-                clean_text = self.WORD_TIME_PATTERN.sub("", lyric_text)
-                lines.append(ParsedLine(text=clean_text, timetags=word_timetags))
+            if is_word_by_word:
+                # 逐字格式：提取所有字符和时间标签
+                lyric_text, timetags = self._parse_word_by_word(line_text, matches)
+                if lyric_text:
+                    lines.append(ParsedLine(text=lyric_text, timetags=timetags))
             else:
+                # 逐行格式：提取最后一个时间标签后的文本作为歌词
+                last_match = matches[-1]
+                lyric_text = line_text[last_match.end() :].strip()
+
+                if not lyric_text:
+                    # 尝试提取时间标签之间的文本: [start]歌词[end]
+                    if len(matches) >= 2:
+                        first_end = matches[0].end()
+                        last_start = matches[-1].start()
+                        lyric_text = line_text[first_end:last_start].strip()
+                    if not lyric_text:
+                        continue
+
                 # 标准 LRC 格式，只取第一个时间标签作为整行时间
                 first_match = matches[0]
                 timestamp_ms = self._parse_timestamp(first_match)
@@ -204,6 +208,79 @@ class LRCParser(LyricParser):
                 )
 
         return lines
+
+    def _is_word_by_word_format(self, line_text: str, matches: List[re.Match]) -> bool:
+        """判断是否是逐字格式
+
+        逐字格式特征：
+        1. 时间标签之间间隔很短（通常是1-3个字符）
+        2. 时间标签数量较多（超过2个）
+        3. 第一个时间标签在开头或紧跟很少字符
+        """
+        if len(matches) < 3:
+            return False
+
+        # 检查第一个时间标签位置
+        first_match = matches[0]
+        if first_match.start() > 0:
+            # 如果第一个时间标签前有内容，检查内容长度
+            prefix = line_text[: first_match.start()].strip()
+            if len(prefix) > 0:
+                return False
+
+        # 检查时间标签密度
+        # 逐字格式通常每个字符都有一个时间标签
+        # 简单判断：如果时间标签数量 > 2 且文本中包含多个时间标签，认为是逐字格式
+        text_without_tags = self.TIME_TAG_PATTERN.sub("", line_text)
+        # 移除空白后的纯文本长度
+        clean_text = text_without_tags.strip()
+
+        # 如果时间标签数量接近或大于文本长度，认为是逐字格式
+        return len(matches) >= 3
+
+    def _parse_word_by_word(
+        self, line_text: str, matches: List[re.Match]
+    ) -> Tuple[str, List[Tuple[int, int]]]:
+        """解析逐字格式
+
+        格式：[00:00.000]春[00:01.086]日[00:01.629]影
+
+        Returns:
+            (歌词文本, 时间标签列表)
+        """
+        lyric_chars = []
+        timetags = []
+        char_idx = 0
+
+        # 遍历所有时间标签
+        for i, match in enumerate(matches):
+            timestamp_ms = self._parse_timestamp(match)
+
+            # 获取时间标签后的字符（直到下一个时间标签或行尾）
+            start_pos = match.end()
+            if i + 1 < len(matches):
+                end_pos = matches[i + 1].start()
+            else:
+                end_pos = len(line_text)
+
+            # 提取字符
+            chars = line_text[start_pos:end_pos]
+
+            # 为每个字符添加时间标签
+            for char in chars:
+                if char.strip():  # 只处理非空白字符
+                    lyric_chars.append(char)
+                    timetags.append((char_idx, timestamp_ms))
+                    char_idx += 1
+                    # 每个字符后的时间戳递增一个很小的值（10ms）
+                    timestamp_ms += 10
+                else:
+                    # 空白字符也添加到歌词，但不添加时间标签
+                    lyric_chars.append(char)
+                    char_idx += 1
+
+        lyric_text = "".join(lyric_chars).strip()
+        return lyric_text, timetags
 
     def _parse_timestamp(self, match: re.Match) -> int:
         """从正则匹配解析时间戳（毫秒）"""
@@ -220,19 +297,6 @@ class LRCParser(LyricParser):
             millis = int(centis)
 
         return (minutes * 60 + seconds) * 1000 + millis
-
-    def _parse_enhanced_lrc(self, text: str) -> List[Tuple[int, int]]:
-        """解析增强 LRC 格式（逐字时间标签）"""
-        timetags = []
-        char_idx = 0
-
-        # 查找所有逐字时间标签
-        for match in self.WORD_TIME_PATTERN.finditer(text):
-            timestamp_ms = self._parse_timestamp(match)
-            timetags.append((char_idx, timestamp_ms))
-            char_idx += 1
-
-        return timetags
 
 
 class KRAParser(LRCParser):

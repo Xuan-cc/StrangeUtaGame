@@ -230,7 +230,7 @@ class SoundDeviceEngine(IAudioEngine):
             block_size = int(self._sample_rate * 0.1)
 
             def callback(outdata, frames, time_info, status):
-                """音频回调函数"""
+                """音频回调函数（np.interp 变速重采样）"""
                 if status:
                     print(f"Audio callback status: {status}")
 
@@ -250,37 +250,54 @@ class SoundDeviceEngine(IAudioEngine):
 
                 # 计算采样位置
                 position_samples = int(position_ms / 1000 * self._sample_rate)
+                speed = self._speed
 
-                # 计算需要读取的采样数（考虑变速）
-                samples_to_read = int(frames * self._speed)
+                # 变速：读取 source_frames 个源样本，重采样到 frames 个输出样本
+                source_frames = max(2, int(frames * speed))
 
-                # 提取音频数据
-                end_sample = min(position_samples + samples_to_read, len(self._data))
+                end_sample = min(position_samples + source_frames, len(self._data))
                 data_chunk = self._data[position_samples:end_sample]
+                actual_read = len(data_chunk)
+
+                if actual_read < 2:
+                    # 数据不足，播放结束
+                    outdata.fill(0)
+                    self._state = PlaybackState.STOPPED
+                    self._stop_event.set()
+                    raise sd.CallbackStop
+
+                # 计算实际可输出的帧数
+                if actual_read < source_frames:
+                    # 接近文件末尾，按比例缩减输出帧数
+                    out_frames = max(1, int(actual_read / speed))
+                    out_frames = min(out_frames, frames)
+                else:
+                    out_frames = frames
+
+                # np.interp 线性插值重采样
+                x_source = np.arange(actual_read)
+                x_target = np.linspace(0, actual_read - 1, out_frames)
+                for ch in range(self._channels):
+                    outdata[:out_frames, ch] = np.interp(
+                        x_target, x_source, data_chunk[:, ch]
+                    )
+
+                # 零填充剩余输出
+                if out_frames < frames:
+                    outdata[out_frames:].fill(0)
 
                 # 应用音量
-                data_chunk = data_chunk * self._volume
+                outdata *= self._volume
 
-                # 填充输出缓冲区
-                if len(data_chunk) < frames:
-                    # 到达文件末尾
-                    outdata[: len(data_chunk)] = data_chunk
-                    outdata[len(data_chunk) :].fill(0)
-
-                    # 播放结束
-                    if end_sample >= len(self._data):
-                        self._state = PlaybackState.STOPPED
-                        self._stop_event.set()
-                        raise sd.CallbackStop
-                else:
-                    outdata[:] = data_chunk[:frames]
-
-                # 更新位置
-                actual_samples_played = len(data_chunk) / self._speed
+                # 更新位置（基于实际消耗的源帧数）
                 with self._position_lock:
-                    self._position_ms += int(
-                        actual_samples_played / self._sample_rate * 1000
-                    )
+                    self._position_ms += int(actual_read / self._sample_rate * 1000)
+
+                # 检查是否到达文件末尾
+                if end_sample >= len(self._data):
+                    self._state = PlaybackState.STOPPED
+                    self._stop_event.set()
+                    raise sd.CallbackStop
 
             # 创建输出流
             self._stream = sd.OutputStream(
