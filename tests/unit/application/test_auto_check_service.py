@@ -73,3 +73,35 @@ class TestAutoCheckService:
 
         # 验证时间标签被清除
         assert len(line.timetags) == 0
+
+    def test_flags_disable_hiragana(self):
+        """测试关闭平假名打勾"""
+        flags = {"hiragana": False, "kanji": True}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        line = LyricLine(singer_id="s1", text="赤い花")
+
+        results = service.analyze_line(line)
+
+        assert results[1].check_count == 0
+
+    def test_flags_kanji_single_check(self):
+        """测试汉字节奏点限定为1"""
+        flags = {"kanji_single_check": True}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        line = LyricLine(singer_id="s1", text="赤い花")
+
+        results = service.analyze_line(line)
+
+        for result in results:
+            if result.char in ("赤", "花"):
+                assert result.check_count <= 1
+
+    def test_flags_check_line_end_disabled(self):
+        """测试关闭行尾打勾"""
+        flags = {"check_line_end": False}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        line = LyricLine(singer_id="s1", text="赤い花")
+
+        service.apply_to_line(line)
+
+        assert not line.checkpoints[-1].is_line_end

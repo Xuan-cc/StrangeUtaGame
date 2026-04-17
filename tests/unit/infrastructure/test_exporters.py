@@ -225,8 +225,8 @@ class TestASSDirectExporter:
 class TestNicokaraExporter:
     """测试 Nicokara 导出器"""
 
-    def test_export(self):
-        """测试 Nicokara 导出"""
+    def test_export_basic(self):
+        """测试基本导出：单字符时间戳使用 [MM:SS:CC] 冒号格式"""
         project = Project()
         singer = project.singers[0]
         line = LyricLine(singer_id=singer.id, text="测试歌词")
@@ -236,7 +236,7 @@ class TestNicokaraExporter:
         exporter = NicokaraExporter()
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False, encoding="utf-8"
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
         ) as f:
             temp_path = f.name
 
@@ -246,9 +246,210 @@ class TestNicokaraExporter:
             with open(temp_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            assert "# Nicokara Lyrics Format" in content
-            assert "# Singers:" in content
-            assert "[00:12.34]" in content
+            # 冒号分隔的厘秒格式 [00:12:34]
+            assert "[00:12:34]" in content
+            assert "测" in content
+            # 不应包含旧格式的头部或 ASS 标签
+            assert "# Nicokara" not in content
+            assert "\\k" not in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_export_per_char_timestamps(self):
+        """测试逐字时间戳：每个字符前有 [MM:SS:CC]"""
+        project = Project()
+        singer = project.singers[0]
+        line = LyricLine(singer_id=singer.id, text="宝箱")
+        # 为两个字符分别打轴
+        line.add_timetag(TimeTag(timestamp_ms=10330, singer_id=singer.id, char_idx=0))
+        line.add_timetag(TimeTag(timestamp_ms=10780, singer_id=singer.id, char_idx=1))
+        project.add_line(line)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(project, temp_path)
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # 逐字格式: [00:10:33]宝[00:10:78]箱
+            assert "[00:10:33]宝" in content
+            assert "[00:10:78]箱" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_export_line_end_timestamp(self):
+        """测试行末结束时间戳"""
+        project = Project()
+        singer = project.singers[0]
+        line = LyricLine(singer_id=singer.id, text="あ")
+        # 默认 checkpoints: char_idx=0, check_count=2, is_line_end=True
+        # checkpoint_idx=0 → 字符开始，checkpoint_idx=1 → 行结束
+        line.add_timetag(
+            TimeTag(
+                timestamp_ms=1000, singer_id=singer.id, char_idx=0, checkpoint_idx=0
+            )
+        )
+        line.add_timetag(
+            TimeTag(
+                timestamp_ms=2000, singer_id=singer.id, char_idx=0, checkpoint_idx=1
+            )
+        )
+        project.add_line(line)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(project, temp_path)
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # [00:01:00]あ[00:02:00]  （字符 + 行末时间戳）
+            assert "[00:01:00]あ[00:02:00]" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_export_file_extension(self):
+        """测试文件扩展名为 .lrc"""
+        exporter = NicokaraExporter()
+        assert exporter.file_extension == ".lrc"
+
+    def test_export_paragraph_separation(self):
+        """测试段落间距 >5 秒时插入空行"""
+        project = Project()
+        singer = project.singers[0]
+
+        line1 = LyricLine(singer_id=singer.id, text="第一行")
+        line1.add_timetag(TimeTag(timestamp_ms=1000, singer_id=singer.id, char_idx=0))
+        project.add_line(line1)
+
+        line2 = LyricLine(singer_id=singer.id, text="第二行")
+        line2.add_timetag(TimeTag(timestamp_ms=10000, singer_id=singer.id, char_idx=0))
+        project.add_line(line2)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(project, temp_path)
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # 两行之间应有空行（间隔 9 秒 > 5 秒阈值）
+            assert "\n\n" in content
+        finally:
+            os.unlink(temp_path)
+
+
+class TestNicokaraWithRubyExporter:
+    """测试带注音的 Nicokara 导出器"""
+
+    def test_export_with_ruby(self):
+        """测试 @Ruby 注音标签生成"""
+        from strange_uta_game.backend.domain import Ruby
+        from strange_uta_game.backend.infrastructure.exporters import (
+            NicokaraWithRubyExporter,
+        )
+
+        project = Project()
+        singer = project.singers[0]
+
+        line = LyricLine(singer_id=singer.id, text="赤い")
+        line.add_ruby(Ruby(text="あか", start_idx=0, end_idx=1))
+        line.add_timetag(TimeTag(timestamp_ms=5000, singer_id=singer.id, char_idx=0))
+        line.add_timetag(TimeTag(timestamp_ms=6000, singer_id=singer.id, char_idx=1))
+        project.add_line(line)
+
+        exporter = NicokaraWithRubyExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(project, temp_path)
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # 应包含 @Offset
+            assert "@Offset=+0" in content
+            # 应包含 @Ruby 标签
+            assert "@Ruby1=赤,あか," in content
+            # 歌词部分仍为逐字时间戳
+            assert "[00:05:00]赤" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_export_ruby_relative_timestamps(self):
+        """测试 @Ruby 读音中的相对时间戳"""
+        from strange_uta_game.backend.domain import Ruby, CheckpointConfig
+        from strange_uta_game.backend.infrastructure.exporters import (
+            NicokaraWithRubyExporter,
+        )
+
+        project = Project()
+        singer = project.singers[0]
+
+        line = LyricLine(singer_id=singer.id, text="赤い")
+        # 设置「赤」的 checkpoint 为 2（对应读音 あか）
+        line.checkpoints[0] = CheckpointConfig(char_idx=0, check_count=2)
+        line.add_ruby(Ruby(text="あか", start_idx=0, end_idx=1))
+
+        # checkpoint_idx=0 → あ, checkpoint_idx=1 → か
+        line.add_timetag(
+            TimeTag(
+                timestamp_ms=5000,
+                singer_id=singer.id,
+                char_idx=0,
+                checkpoint_idx=0,
+            )
+        )
+        line.add_timetag(
+            TimeTag(
+                timestamp_ms=5150,
+                singer_id=singer.id,
+                char_idx=0,
+                checkpoint_idx=1,
+            )
+        )
+        line.add_timetag(TimeTag(timestamp_ms=6000, singer_id=singer.id, char_idx=1))
+        project.add_line(line)
+
+        exporter = NicokaraWithRubyExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(project, temp_path)
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # @Ruby 读音应包含相对时间戳
+            # あ (offset 0) + [00:00:15] (150ms) + か
+            assert "あ[00:00:15]か" in content
         finally:
             os.unlink(temp_path)
 

@@ -70,6 +70,44 @@ class TestLRCParser:
 
         assert result[0].timetags == [(0, 10123)]
 
+    def test_parse_start_end_timestamps(self):
+        """测试 [start]歌词[end] 格式 — 增强LRC常见格式"""
+        parser = LRCParser()
+        content = "[00:06.540]一闪一闪亮晶晶[00:09.300]"
+        result = parser.parse(content)
+
+        assert len(result) == 1
+        assert result[0].text == "一闪一闪亮晶晶"
+        assert result[0].timetags == [(0, 6540)]
+
+    def test_parse_start_end_multi_lines(self):
+        """测试多行 [start]歌词[end] 格式"""
+        parser = LRCParser()
+        content = (
+            "[00:06.540]一闪一闪亮晶晶[00:09.300]\n"
+            "[00:09.300]满天都是小星星[00:12.120]\n"
+            "[00:12.120]挂在天上放光明[00:15.060]"
+        )
+        result = parser.parse(content)
+
+        assert len(result) == 3
+        assert result[0].text == "一闪一闪亮晶晶"
+        assert result[0].timetags == [(0, 6540)]
+        assert result[1].text == "满天都是小星星"
+        assert result[1].timetags == [(0, 9300)]
+        assert result[2].text == "挂在天上放光明"
+        assert result[2].timetags == [(0, 12120)]
+
+    def test_parse_colon_separator(self):
+        """测试冒号分隔的时间标签 [mm:ss:cc]"""
+        parser = LRCParser()
+        content = "[00:06:54]一闪一闪[00:09:30]"
+        result = parser.parse(content)
+
+        assert len(result) == 1
+        assert result[0].text == "一闪一闪"
+        assert result[0].timetags == [(0, 6540)]
+
 
 class TestLyricParserFactory:
     """测试解析器工厂"""
