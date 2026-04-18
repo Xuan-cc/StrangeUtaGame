@@ -81,13 +81,18 @@ class BulkChangeDialog(QDialog):
         lbl2.setFont(QFont("Microsoft YaHei", 10))
         lbl2.setFixedWidth(100)
         self.edit_reading = LineEdit()
-        self.edit_reading.setPlaceholderText("留空则不修改注音（假名，逗号分隔多段）")
+        self.edit_reading.setPlaceholderText("留空将删除注音（假名，逗号分隔多段）")
         self.edit_reading.setFont(QFont("Microsoft YaHei", 10))
         if initial_reading:
             self.edit_reading.setText(initial_reading)
         row2.addWidget(lbl2)
         row2.addWidget(self.edit_reading)
         layout.addLayout(row2)
+
+        # 不修改注音复选框
+        self.chk_skip_ruby = QCheckBox("不修改注音（勾选后忽略上方注音栏）")
+        self.chk_skip_ruby.setFont(QFont("Microsoft YaHei", 10))
+        layout.addWidget(self.chk_skip_ruby)
 
         # 节奏点数量设置
         row3 = QHBoxLayout()
@@ -163,6 +168,7 @@ class BulkChangeDialog(QDialog):
             return
 
         reading = self.edit_reading.text().strip()
+        skip_ruby = self.chk_skip_ruby.isChecked()
         checkpoint_str = self.edit_delta.text().strip() or "-1"
         # 支持逗号分隔的per-char节奏点值（如 "1,2,1"）
         checkpoint_vals = []
@@ -179,33 +185,44 @@ class BulkChangeDialog(QDialog):
             pos = 0
             while pos <= len(text) - word_len:
                 if text[pos : pos + word_len] == word:
-                    # 修改注音（留空则不修改）
-                    if reading:
-                        if "," in reading and word_len > 1:
-                            # 逗号分隔 → per-char Ruby
-                            parts = reading.split(",")
-                            for k in range(word_len):
-                                ci = pos + k
-                                if ci < len(sentence.characters):
-                                    part = parts[k].strip() if k < len(parts) else ""
-                                    if part:
-                                        sentence.characters[ci].set_ruby(
-                                            Ruby(text=part)
+                    # 修改注音
+                    if not skip_ruby:
+                        if reading:
+                            if "," in reading and word_len > 1:
+                                # 逗号分隔 → per-char Ruby
+                                parts = reading.split(",")
+                                for k in range(word_len):
+                                    ci = pos + k
+                                    if ci < len(sentence.characters):
+                                        part = (
+                                            parts[k].strip() if k < len(parts) else ""
                                         )
-                                    else:
-                                        sentence.characters[ci].set_ruby(None)
+                                        if part:
+                                            sentence.characters[ci].set_ruby(
+                                                Ruby(text=part)
+                                            )
+                                        else:
+                                            sentence.characters[ci].set_ruby(None)
+                            else:
+                                # 整词 Ruby：按字符数拆分
+                                split_parts = split_ruby_for_checkpoints(
+                                    reading, word_len
+                                )
+                                for k in range(word_len):
+                                    ci = pos + k
+                                    if ci < len(sentence.characters):
+                                        if k < len(split_parts) and split_parts[k]:
+                                            sentence.characters[ci].set_ruby(
+                                                Ruby(text=split_parts[k])
+                                            )
+                                        else:
+                                            sentence.characters[ci].set_ruby(None)
                         else:
-                            # 整词 Ruby：按字符数拆分
-                            split_parts = split_ruby_for_checkpoints(reading, word_len)
+                            # 留空 = 删除注音
                             for k in range(word_len):
                                 ci = pos + k
                                 if ci < len(sentence.characters):
-                                    if k < len(split_parts) and split_parts[k]:
-                                        sentence.characters[ci].set_ruby(
-                                            Ruby(text=split_parts[k])
-                                        )
-                                    else:
-                                        sentence.characters[ci].set_ruby(None)
+                                    sentence.characters[ci].set_ruby(None)
 
                     # 设置节奏点（-1=不修改，0=设为0，>0=设为指定值）
                     for ci_offset in range(word_len):

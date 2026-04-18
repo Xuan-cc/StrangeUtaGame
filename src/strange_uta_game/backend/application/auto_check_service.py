@@ -315,10 +315,24 @@ class AutoCheckService:
 
         # 构建新的 Character 对象列表
         add_line_end = self._flags.get("check_line_end", True)
+        check_space_as_line_end = self._flags.get("check_space_as_line_end", True)
         new_characters: List[Character] = []
         for i, result in enumerate(results):
             is_last = i == len(results) - 1
-            check_count = result.check_count + (1 if is_last and add_line_end else 0)
+            # 空格视为句尾：当前字符后面紧跟空格时额外+1
+            is_before_space = (
+                not is_last
+                and check_space_as_line_end
+                and i + 1 < len(results)
+                and len(results[i + 1].char) == 1
+                and results[i + 1].char.isspace()
+            )
+            extra = 0
+            if is_last and add_line_end:
+                extra += 1
+            if is_before_space and result.check_count > 0:
+                extra += 1
+            check_count = result.check_count + extra
 
             # 每个字符直接携带自己的 Ruby（无需跨字符合并）
             ruby_obj = Ruby(text=result.ruby) if result.ruby else None
@@ -500,9 +514,23 @@ class AutoCheckService:
 
         # 更新字符属性
         add_line_end = self._flags.get("check_line_end", True)
+        check_space_as_line_end = self._flags.get("check_space_as_line_end", True)
         for i, char in enumerate(sentence.characters):
             is_last = i == len(sentence.characters) - 1
-            char.check_count = check_counts[i] + (1 if is_last and add_line_end else 0)
+            # 空格视为句尾：当前字符后面紧跟空格时额外+1
+            is_before_space = (
+                not is_last
+                and check_space_as_line_end
+                and i + 1 < len(sentence.characters)
+                and len(chars[i + 1]) == 1
+                and chars[i + 1].isspace()
+            )
+            extra = 0
+            if is_last and add_line_end:
+                extra += 1
+            if is_before_space and check_counts[i] > 0:
+                extra += 1
+            char.check_count = check_counts[i] + extra
             char.is_line_end = is_last and add_line_end
 
         # 重置并设置 linked_to_next

@@ -196,13 +196,15 @@ class DeleteRubyByTypeDialog(QDialog):
         (CharType.ALPHABET, "アルファベット（英文字母）"),
         (CharType.NUMBER, "数字"),
         (CharType.SYMBOL, "記号（符号）"),
+        (CharType.LONG_VOWEL, "長音符号（ー、～等）"),
+        (CharType.OTHER, "その他（♪等特殊符号）"),
         (CharType.SPACE, "空格"),
     ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("按类型删除注音")
-        self.resize(320, 300)
+        self.resize(320, 370)
         self.setFont(QFont("Microsoft YaHei", 10))
 
         layout = QVBoxLayout(self)

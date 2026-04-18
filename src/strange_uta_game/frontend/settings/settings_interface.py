@@ -83,6 +83,7 @@ class AppSettings:
             "space_after_alphabet": True,
             "space_after_symbol": True,
             "small_kana": False,
+            "check_space_as_line_end": True,
         },
         "ui": {
             "theme": "light",
@@ -792,7 +793,7 @@ class CalibrationCanvas(QWidget):
         painter.drawLine(int(center_x), 24, int(center_x), height - 24)
 
         painter.setPen(Qt.PenStyle.NoPen)
-        for index in range(5):
+        for index in range(2):
             phase = self._dialog.block_phase(index)
             x = ((phase + 0.5) % 1.0) * width
             proximity = 1.0 - min(abs(x - center_x) / max(center_x, 1.0), 1.0)
@@ -935,10 +936,14 @@ class CalibrationDialog(QDialog):
         super().keyPressEvent(a0)
 
     def block_phase(self, index: int) -> float:
+        num_blocks = 2
         with self._state_lock:
             start_time = self._start_time
             beat_interval = self._beat_interval
-        return ((_time.monotonic() - start_time) / beat_interval + index / 5) % 1.0
+        cycle_duration = beat_interval * num_blocks
+        return (
+            (_time.monotonic() - start_time) / cycle_duration + index / num_blocks
+        ) % 1.0
 
     def _generate_click(self, sr=44100, duration_ms=30, freq=1000):
         n = int(sr * duration_ms / 1000)
@@ -993,7 +998,7 @@ class CalibrationDialog(QDialog):
 
             beat_time = next_beat_time
             try:
-                sd.play(self._click_audio, self._sample_rate, blocking=True)
+                sd.play(self._click_audio, self._sample_rate, blocking=False)
             except Exception:
                 _time.sleep(0.05)
 
@@ -1013,11 +1018,12 @@ class CalibrationDialog(QDialog):
         now = _time.monotonic()
         new_interval = 60.0 / max(60, min(240, value))
         with self._state_lock:
-            current_cycles = (now - self._start_time) / self._beat_interval
-            phase = current_cycles - int(current_cycles)
+            old_interval = self._beat_interval
+            current_beats = (now - self._start_time) / old_interval
+            phase = current_beats - int(current_beats)
             self._bpm = value
-            self._start_time = now - current_cycles * new_interval
             self._beat_interval = new_interval
+            self._start_time = now - phase * new_interval
             remaining_phase = 1.0 if phase < 0.000001 else 1.0 - phase
             self._next_beat_time = now + remaining_phase * new_interval
             self._schedule_version += 1
@@ -1450,6 +1456,12 @@ class SettingsInterface(ScrollArea):
             "对小写假名（ぁ、ぃ、ゃ、ゅ、ょ等）设置节奏点",
             parent=self.auto_check_group,
         )
+        self.card_space_as_line_end = SwitchSettingCard(
+            FIF.ACCEPT,
+            "空格视为句尾",
+            "字符后跟空格时视为句尾，额外增加一个节奏点",
+            parent=self.auto_check_group,
+        )
 
         self.auto_check_group.addSettingCard(self.card_auto_on_load)
         self.auto_check_group.addSettingCard(self.card_check_n)
@@ -1463,6 +1475,7 @@ class SettingsInterface(ScrollArea):
         self.auto_check_group.addSettingCard(self.card_space_after_jp)
         self.auto_check_group.addSettingCard(self.card_space_after_alpha)
         self.auto_check_group.addSettingCard(self.card_space_after_symbol)
+        self.auto_check_group.addSettingCard(self.card_space_as_line_end)
 
     # ── 读音词典 ──
 
@@ -1804,6 +1817,9 @@ class SettingsInterface(ScrollArea):
         self.card_small_kana.setChecked(
             self._settings.get("auto_check.small_kana", False)
         )
+        self.card_space_as_line_end.setChecked(
+            self._settings.get("auto_check.check_space_as_line_end", True)
+        )
 
         # 界面设定
         theme = self._settings.get("ui.theme", "light")
@@ -1913,6 +1929,10 @@ class SettingsInterface(ScrollArea):
             "auto_check.space_after_symbol", self.card_space_after_symbol.isChecked()
         )
         self._settings.set("auto_check.small_kana", self.card_small_kana.isChecked())
+        self._settings.set(
+            "auto_check.check_space_as_line_end",
+            self.card_space_as_line_end.isChecked(),
+        )
 
         # 界面设定
         theme_map = {0: "light", 1: "dark", 2: "auto"}

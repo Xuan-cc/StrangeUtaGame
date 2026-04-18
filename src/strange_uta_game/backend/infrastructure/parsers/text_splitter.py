@@ -37,7 +37,7 @@ def get_char_type(char: str) -> CharType:
         raise ValueError(f"必须是单个字符: {char}")
 
     # 长音
-    if char == "ー" or char == "－":
+    if char in ("ー", "－", "～", "〜"):
         return CharType.LONG_VOWEL
 
     # 促音
