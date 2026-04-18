@@ -299,9 +299,14 @@ class KaraokePreview(QWidget):
         self._fm_ruby = QFontMetrics(self._font_ruby)
         self._fm_checkpoint = QFontMetrics(self._font_checkpoint)
 
+        # 逐句渲染数据缓存（避免每帧重复计算）
+        self._sentence_cache: dict = {}
+        self._cache_version: int = 0
+
     def set_project(self, project: Project):
         self._project = project
         self._scroll_center_line = 0.0
+        self._sentence_cache.clear()
         self._update_display()
 
     def set_current_position(self, line_idx: int, char_idx: int = 0):
@@ -320,6 +325,7 @@ class KaraokePreview(QWidget):
         self._render_offset_ms = offset_ms
 
     def _update_display(self):
+        self._cache_version += 1
         self.update()
 
     # ---- 滚动 ----
@@ -432,6 +438,103 @@ class KaraokePreview(QWidget):
 
         menu.exec(global_pos)
 
+    def _get_sentence_render_data(
+        self, idx: int, sentence, main_fm, font_key: str
+    ) -> dict:
+        """返回缓存的逐句渲染数据，过期时重新计算。"""
+        entry = self._sentence_cache.get(idx)
+        if entry and entry["v"] == self._cache_version and entry["fk"] == font_key:
+            return entry
+
+        chars = sentence.chars
+        characters = sentence.characters
+        n_chars = len(chars)
+
+        # 字符宽度
+        char_widths = [main_fm.horizontalAdvance(ch) for ch in chars]
+
+        # 字符组（linked_to_next 分组）
+        char_groups: list = []
+        cur_grp = None
+        for ci in range(n_chars):
+            if cur_grp is None:
+                cur_grp = [ci]
+                char_groups.append(cur_grp)
+            elif ci > 0 and characters[ci - 1].linked_to_next:
+                cur_grp.append(ci)
+            else:
+                cur_grp = [ci]
+                char_groups.append(cur_grp)
+
+        # 字符起始时间
+        char_start_times: dict = {}
+        for ci, ch in enumerate(characters):
+            if ch.timestamps:
+                char_start_times[ci] = ch.timestamps[0]
+
+        # 字符 wipe 时间区间
+        char_wipe_times: dict = {}
+        for group in char_groups:
+            leader = group[0]
+            group_start = char_start_times.get(leader)
+            if group_start is None:
+                for ci in group:
+                    if ci in char_start_times:
+                        group_start = char_start_times[ci]
+                        break
+            if group_start is None:
+                for pci in range(leader - 1, -1, -1):
+                    if pci in char_wipe_times:
+                        group_start = char_wipe_times[pci][1]
+                        break
+            if group_start is None:
+                continue
+            leader_ch = characters[leader]
+            if leader_ch.is_line_end:
+                release_idx = leader_ch.check_count - 1
+                if 0 <= release_idx < len(leader_ch.timestamps):
+                    group_end = leader_ch.timestamps[release_idx]
+                else:
+                    group_end = group_start + 300
+            else:
+                group_end = None
+                last_in_group = group[-1]
+                for nci in range(last_in_group + 1, n_chars):
+                    if nci in char_start_times:
+                        group_end = char_start_times[nci]
+                        break
+                if group_end is None:
+                    group_end = group_start + 300
+
+            n = len(group)
+            dur = group_end - group_start
+            for i, ci in enumerate(group):
+                char_wipe_times[ci] = (
+                    group_start + dur * i / n,
+                    group_start + dur * (i + 1) / n,
+                )
+
+        # 连词组信息
+        linked_leader_groups: dict = {}
+        linked_non_leader: set = set()
+        for group in char_groups:
+            if len(group) > 1:
+                linked_leader_groups[group[0]] = group
+                for _ci in group[1:]:
+                    linked_non_leader.add(_ci)
+
+        entry = {
+            "v": self._cache_version,
+            "fk": font_key,
+            "char_widths": char_widths,
+            "total_text_width": sum(char_widths),
+            "char_wipe_times": char_wipe_times,
+            "linked_leader_groups": linked_leader_groups,
+            "linked_non_leader": linked_non_leader,
+        }
+        self._sentence_cache[idx] = entry
+        return entry
+
     def mouseDoubleClickEvent(self, a0: Optional[QMouseEvent]):
         """双击字符 → 跳转到该字符 checkpoint 前 3 秒"""
         if not a0 or not self._project or not self._project.sentences:
@@ -532,89 +635,18 @@ class KaraokePreview(QWidget):
                 main_fm = fm_context
                 base_color = QColor("#666")
 
-            char_widths = []
-            for ch in line.chars:
-                char_widths.append(main_fm.horizontalAdvance(ch))
+            # 使用缓存的渲染数据（字符宽度/分组/wipe时间/连词信息）
+            _rd = self._get_sentence_render_data(
+                idx, line, main_fm, "cur" if is_current else "ctx"
+            )
+            char_widths = _rd["char_widths"]
+            total_text_width = _rd["total_text_width"]
+            char_wipe_times = _rd["char_wipe_times"]
+            _linked_leader_groups = _rd["linked_leader_groups"]
+            _linked_non_leader = _rd["linked_non_leader"]
 
-            total_text_width = sum(char_widths)
             start_x = (w - total_text_width) // 2
             curr_x = start_x
-
-            # 预计算每个字符的起始时间（第一个 timestamp）
-            char_start_times: dict = {}
-            for ci, ch in enumerate(line.characters):
-                if ch.timestamps:
-                    char_start_times[ci] = ch.timestamps[0]
-
-            # 构建字符组：使用 linked_to_next 标记
-            char_groups: list = []
-            current_group = None
-            for ci in range(len(line.chars)):
-                if current_group is None:
-                    current_group = [ci]
-                    char_groups.append(current_group)
-                elif ci > 0:
-                    prev_ch = line.characters[ci - 1]
-                    if prev_ch.linked_to_next:
-                        current_group.append(ci)
-                    else:
-                        current_group = [ci]
-                        char_groups.append(current_group)
-
-            # 预计算每个字符的wipe时间区间（支持0-checkpoint字符连读均分）
-            char_wipe_times: dict = {}  # ci -> (start_ms, end_ms)
-            for group in char_groups:
-                leader = group[0]
-                group_start = char_start_times.get(leader)
-                # 组首无时间戳时，搜索组内任意已打轴成员
-                if group_start is None:
-                    for ci in group:
-                        if ci in char_start_times:
-                            group_start = char_start_times[ci]
-                            break
-                # 仍无时间戳：连读处理——取前方最近已渲染组的结束时间
-                if group_start is None:
-                    for pci in range(leader - 1, -1, -1):
-                        if pci in char_wipe_times:
-                            group_start = char_wipe_times[pci][1]
-                            break
-                if group_start is None:
-                    continue
-                leader_ch = line.characters[leader]
-                # 句尾字符：end = release tag
-                if leader_ch.is_line_end:
-                    release_idx = leader_ch.check_count - 1
-                    if release_idx >= 0 and release_idx < len(leader_ch.timestamps):
-                        group_end = leader_ch.timestamps[release_idx]
-                    else:
-                        group_end = group_start + 300
-                else:
-                    # 非句尾：end = 下一个有timetag字符的起始时间
-                    group_end = None
-                    last_in_group = group[-1]
-                    for nci in range(last_in_group + 1, len(line.chars)):
-                        if nci in char_start_times:
-                            group_end = char_start_times[nci]
-                            break
-                    if group_end is None:
-                        group_end = group_start + 300
-
-                n = len(group)
-                dur = group_end - group_start
-                for i, ci in enumerate(group):
-                    char_wipe_times[ci] = (
-                        group_start + dur * i / n,
-                        group_start + dur * (i + 1) / n,
-                    )
-
-            # Build linked group info for ruby rendering
-            _linked_leader_groups: dict[int, list[int]] = {}
-            _linked_non_leader: set[int] = set()
-            for group in char_groups:
-                if len(group) > 1:
-                    _linked_leader_groups[group[0]] = group
-                    for _ci in group[1:]:
-                        _linked_non_leader.add(_ci)
 
             for char_pos, ch in enumerate(line.chars):
                 char_w = char_widths[char_pos]
@@ -1410,6 +1442,34 @@ class EditorInterface(QWidget):
             )
             return
 
+        store = getattr(self, "_store", None)
+
+        # 已有保存路径 → 直接保存
+        if store and store.save_path:
+            if store.save():
+                InfoBar.success(
+                    title="保存成功",
+                    content=store.save_path,
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                    parent=self,
+                )
+                self.project_saved.emit()
+            else:
+                InfoBar.error(
+                    title="保存失败",
+                    content="无法保存到 " + (store.save_path or ""),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
+            return
+
+        # 无保存路径 → 弹出另存为对话框
         path, _ = QFileDialog.getSaveFileName(
             self, "保存项目", "", "StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)"
         )
@@ -1419,21 +1479,37 @@ class EditorInterface(QWidget):
             path += ".sug"
 
         try:
-            from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
-                SugProjectParser,
-            )
+            if store:
+                success = store.save(path)
+            else:
+                from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
+                    SugProjectParser,
+                )
 
-            SugProjectParser.save(self._project, path)
-            InfoBar.success(
-                title="保存成功",
-                content=path,
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=3000,
-                parent=self,
-            )
-            self.project_saved.emit()
+                SugProjectParser.save(self._project, path)
+                success = True
+
+            if success:
+                InfoBar.success(
+                    title="保存成功",
+                    content=path,
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
+                self.project_saved.emit()
+            else:
+                InfoBar.error(
+                    title="保存失败",
+                    content="无法保存到 " + path,
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
         except Exception as e:
             InfoBar.error(
                 title="保存失败",

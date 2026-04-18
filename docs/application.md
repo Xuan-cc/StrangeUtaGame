@@ -21,7 +21,7 @@
     - `apply_to_sentence`：将分析结果应用到 Sentence 实体，设置 check_count 和 Ruby。
     - `update_checkpoints_from_rubies`：根据用户调整后的注音数据和 auto_check_flags 规则重新计算节奏点，不重新分析注音。
     - **小写假名 check flag**：提供 `small_kana` 开关，控制是否自动为小写假名分配节奏点，默认为 OFF。
-    - **空格视为句尾**：提供 `check_space_as_line_end` 开关（默认 ON），当字符后面紧跟空格时视为句尾，额外增加一个节奏点。
+    - **空格视为句尾**：提供 `check_space_as_line_end` 开关（默认 ON），当字符后面紧跟空格时视为句尾，额外增加一个节奏点。空格字符本身不参与 linked_to_next 连词判定。
     - **全类型 auto_check_flags**：支持按字符类型过滤节奏点（hiragana、katakana、kanji、alphabet、digit、symbol、space 等）。
 
 ### ProjectService (项目服务)

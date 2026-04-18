@@ -1040,28 +1040,25 @@ class CalibrationDialog(QDialog):
         self.canvas.setFocus()
 
     def _calculate_tap_offset_ms(self, tap_time: float) -> Optional[float]:
-        with self._state_lock:
-            beat_times = list(self._beat_times)
+        """计算 tap 偏移量（毫秒）。
 
-        if not beat_times:
+        基于视觉中心穿越时间计算：perfect_time = start_time + n * beat_interval
+        正值 = 按早了（实际 tap 在完美时间之前），负值 = 按晚了。
+        """
+        with self._state_lock:
+            start_time = self._start_time
+            beat_interval = self._beat_interval
+            if not self._running:
+                return None
+
+        elapsed = tap_time - start_time
+        if elapsed < 0:
             return None
 
-        if len(beat_times) == 1:
-            return (tap_time - beat_times[0]) * 1000.0
-
-        for index, beat_time in enumerate(beat_times):
-            left = (
-                float("-inf") if index == 0 else (beat_times[index - 1] + beat_time) / 2
-            )
-            right = (
-                float("inf")
-                if index == len(beat_times) - 1
-                else (beat_time + beat_times[index + 1]) / 2
-            )
-            if left <= tap_time < right:
-                return (tap_time - beat_time) * 1000.0
-
-        return (tap_time - beat_times[-1]) * 1000.0
+        # 找到最近的视觉中心穿越时间点
+        n = round(elapsed / beat_interval)
+        perfect_time = start_time + n * beat_interval
+        return (perfect_time - tap_time) * 1000.0
 
     def _filtered_average_offset_ms(self) -> Optional[float]:
         if not self._tap_offsets_ms:

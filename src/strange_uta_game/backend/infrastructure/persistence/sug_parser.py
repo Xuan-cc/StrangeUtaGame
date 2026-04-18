@@ -140,9 +140,13 @@ class SugMigrator:
             cp_map[idx] = dict(cp)  # 浅拷贝，避免修改原数据
 
         # ── 2. linked_to_next 迁移: check_count==0 → 前一字符 linked_to_next ──
+        # 空格字符不应触发连词（空格 check_count==0 是过滤规则的结果，不代表连读）
         sorted_indices = sorted(cp_map.keys())
         for i, idx in enumerate(sorted_indices):
             cp = cp_map[idx]
+            ch_char = chars[idx] if idx < len(chars) else ""
+            if ch_char and ch_char.isspace():
+                continue
             if int(cp.get("check_count", 1)) == 0 and i > 0:
                 prev_idx = sorted_indices[i - 1]
                 cp_map[prev_idx]["linked_to_next"] = True

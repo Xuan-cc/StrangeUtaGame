@@ -5,7 +5,7 @@
 """
 
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon, QAction, QKeySequence
+from PyQt6.QtGui import QIcon, QAction, QKeySequence, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from qfluentwidgets import (
@@ -44,6 +44,13 @@ class MainWindow(MSFluentWindow):
 
         # 中央响应：store 的 project 变更 → 同步 timing_service 等
         self._store.data_changed.connect(self._on_data_changed)
+
+        # 全局 Ctrl+S 保存快捷键
+        self._save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        self._save_shortcut.activated.connect(self._on_global_save)
+
+        # 跟踪当前界面（用于 switchTo 自动应用修改）
+        self._current_interface = None
 
     def _init_window(self):
         """初始化窗口属性"""
@@ -130,6 +137,20 @@ class MainWindow(MSFluentWindow):
         # 默认主页
         self.switchTo(self.homeInterface)
 
+    # ==================== 标签页切换 ====================
+
+    def switchTo(self, interface):
+        """切换标签页，离开全文本编辑界面时自动应用修改"""
+        if (
+            hasattr(self, "rubyInterface")
+            and self._current_interface is self.rubyInterface
+            and interface is not self.rubyInterface
+            and self.rubyInterface.is_dirty()
+        ):
+            self.rubyInterface._on_apply_changes()
+        self._current_interface = interface
+        super().switchTo(interface)
+
     # ==================== 项目操作 ====================
 
     def _on_project_created(self, project: Project, audio_path: str = ""):
@@ -196,7 +217,76 @@ class MainWindow(MSFluentWindow):
 
     def _on_save_project(self):
         """从任意页面触发保存"""
-        self.editorInterface._on_save()
+        self._on_global_save()
+
+    def _on_global_save(self):
+        """全局 Ctrl+S 保存"""
+        if not self._store.project:
+            InfoBar.warning(
+                title="无项目",
+                content="请先创建或打开项目",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        if self._store.save_path:
+            success = self._store.save()
+            if success:
+                InfoBar.success(
+                    title="保存成功",
+                    content=self._store.save_path,
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                    parent=self,
+                )
+            else:
+                InfoBar.error(
+                    title="保存失败",
+                    content="无法保存到 " + (self._store.save_path or ""),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
+        else:
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "保存项目",
+                "",
+                "StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)",
+            )
+            if not path:
+                return
+            if not path.endswith(".sug"):
+                path += ".sug"
+
+            if self._store.save(path):
+                InfoBar.success(
+                    title="保存成功",
+                    content=path,
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                    parent=self,
+                )
+            else:
+                InfoBar.error(
+                    title="保存失败",
+                    content="无法保存到 " + path,
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
 
     def closeEvent(self, e):
         """关闭窗口时检查未保存变更并退出"""

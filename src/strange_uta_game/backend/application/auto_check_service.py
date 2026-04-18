@@ -347,8 +347,12 @@ class AutoCheckService:
             new_characters.append(character)
 
         # 设置 linked_to_next: 当下一个字符 check_count==0 时，当前字符连词到下一个
+        # 空格字符不应触发连词（空格 check_count==0 是过滤规则的结果，不代表连读）
         for i in range(len(new_characters) - 1):
-            if new_characters[i + 1].check_count == 0:
+            next_ch = new_characters[i + 1]
+            if next_ch.char and next_ch.char.isspace():
+                continue
+            if next_ch.check_count == 0:
                 new_characters[i].linked_to_next = True
 
         # 恢复时间标签
@@ -534,10 +538,14 @@ class AutoCheckService:
             char.is_line_end = is_last and add_line_end
 
         # 重置并设置 linked_to_next
+        # 空格字符不应触发连词（空格 check_count==0 是过滤规则的结果，不代表连读）
         for char in sentence.characters:
             char.linked_to_next = False
         for i in range(len(sentence.characters) - 1):
-            if sentence.characters[i + 1].check_count == 0:
+            next_ch = sentence.characters[i + 1]
+            if next_ch.char and next_ch.char.isspace():
+                continue
+            if next_ch.check_count == 0:
                 sentence.characters[i].linked_to_next = True
 
     def update_checkpoints_for_project(

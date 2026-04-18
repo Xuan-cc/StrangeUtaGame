@@ -62,8 +62,6 @@ def _rebuild_characters(
             for i, ch in enumerate(old_sentence.characters):
                 if i in ruby_map:
                     ch.set_ruby(Ruby(text=ruby_map[i]))
-                else:
-                    ch.set_ruby(None)
         # ruby_map 为空时保留现有 ruby 不变
         return old_sentence.characters
 
@@ -91,6 +89,9 @@ def _rebuild_characters(
                 is_rest=old_ch.is_rest,
                 singer_id=old_ch.singer_id,
             )
+            # 保留原字符的注音（后续 ruby_map 覆盖优先）
+            if old_ch.ruby:
+                ch.set_ruby(Ruby(text=old_ch.ruby.text))
         else:
             # 新字符：默认 check_count=1，末尾字符 check_count=2
             ch = Character(
@@ -268,7 +269,7 @@ class RubyInterface(QWidget):
         # 说明
         desc = QLabel(
             "全文本编辑：汉字注音用 {假名} 标注，如 赤{あか}い花{はな}\n"
-            "支持增删行（换行/排版），编辑后点击「应用修改」保存"
+            "支持增删行（换行/排版），切换标签页时自动保存修改"
         )
         desc.setStyleSheet("color: gray;")
         layout.addWidget(desc)
@@ -310,14 +311,8 @@ class RubyInterface(QWidget):
         self.text_edit.setMinimumHeight(300)
         layout.addWidget(self.text_edit, stretch=1)
 
-        # 应用/还原
+        # 还原
         action_layout = QHBoxLayout()
-
-        self.btn_apply = PrimaryPushButton("应用修改", self)
-        self.btn_apply.setIcon(FIF.ACCEPT)
-        self.btn_apply.clicked.connect(self._on_apply_changes)
-        self.btn_apply.setEnabled(False)
-        action_layout.addWidget(self.btn_apply)
 
         self.btn_revert = PushButton("还原", self)
         self.btn_revert.setIcon(FIF.CANCEL)
@@ -353,6 +348,12 @@ class RubyInterface(QWidget):
         elif change_type in ("rubies", "lyrics"):
             self._refresh_display()
 
+    def is_dirty(self) -> bool:
+        """检查文本编辑器内容是否与项目数据不同"""
+        if not self._project or not self._project.sentences:
+            return False
+        return self.text_edit.toPlainText() != self._lines_to_text()
+
     # ==================== 内部方法 ====================
 
     def _refresh_display(self):
@@ -363,7 +364,6 @@ class RubyInterface(QWidget):
             self.btn_auto_all,
             self.btn_delete_by_type,
             self.btn_update_cp,
-            self.btn_apply,
             self.btn_revert,
         ):
             btn.setEnabled(has_project)
