@@ -17,9 +17,11 @@
 基于文本和节奏规则自动配置节奏点。
 
 - **职责**：
-    - `analyze_sentence`：分析句子结构，识别汉字等需要多节奏点的字符。
-    - `apply_to_sentence`：将分析结果应用到 Sentence 实体，设置 check_count。
+    - `analyze_sentence`：分析句子结构，为所有字符类型生成注音（包括汉字、平假名、片假名、英文、数字、符号、空格）。
+    - `apply_to_sentence`：将分析结果应用到 Sentence 实体，设置 check_count 和 Ruby。
+    - `update_checkpoints_from_rubies`：根据用户调整后的注音数据和 auto_check_flags 规则重新计算节奏点，不重新分析注音。
     - **小写假名 check flag**：提供 `small_kana` 开关，控制是否自动为小写假名分配节奏点，默认为 OFF。
+    - **全类型 auto_check_flags**：支持按字符类型过滤节奏点（hiragana、katakana、kanji、alphabet、digit、symbol、space 等）。
 
 ### ProjectService (项目服务)
 管理项目的生命周期和持久化逻辑。

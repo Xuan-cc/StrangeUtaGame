@@ -1,4 +1,4 @@
-"""注音编辑界面。
+"""全文本编辑界面。
 
 全文本视图编辑歌词注音（ルビ），支持批量操作。
 格式: 漢字{かんじ} — 花括号内为注音。
@@ -58,11 +58,13 @@ def _rebuild_characters(
 
     if old_chars_str == new_chars:
         # 文本未变，仅更新 ruby
-        for i, ch in enumerate(old_sentence.characters):
-            if i in ruby_map:
-                ch.set_ruby(Ruby(text=ruby_map[i]))
-            else:
-                ch.set_ruby(None)
+        if ruby_map:
+            for i, ch in enumerate(old_sentence.characters):
+                if i in ruby_map:
+                    ch.set_ruby(Ruby(text=ruby_map[i]))
+                else:
+                    ch.set_ruby(None)
+        # ruby_map 为空时保留现有 ruby 不变
         return old_sentence.characters
 
     # 构建 old_idx → new_idx 映射
@@ -257,7 +259,7 @@ class RubyInterface(QWidget):
         layout.setSpacing(15)
 
         # 标题
-        title = QLabel("注音编辑")
+        title = QLabel("全文本编辑")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         layout.addWidget(title)
 
@@ -374,8 +376,7 @@ class RubyInterface(QWidget):
     def _lines_to_text(self) -> str:
         """将项目歌词转为带注音标注的文本。
 
-        格式: 漢字{かんじ}
-        连词且都有 ruby 的字符合并为一个注音组。
+        格式: 漢字{かんじ} — 每个字符独立输出注音，避免合并组导致解析丢失。
         """
         if not self._project:
             return ""
@@ -383,27 +384,11 @@ class RubyInterface(QWidget):
         result = []
         for sentence in self._project.sentences:
             annotated = ""
-            i = 0
-            characters = sentence.characters
-            while i < len(characters):
-                ch = characters[i]
+            for ch in sentence.characters:
                 if ch.ruby:
-                    # 找连词 + ruby 组
-                    group = [ch]
-                    while (
-                        ch.linked_to_next
-                        and i + 1 < len(characters)
-                        and characters[i + 1].ruby
-                    ):
-                        i += 1
-                        ch = characters[i]
-                        group.append(ch)
-                    target = "".join(c.char for c in group)
-                    combined_ruby = "".join(c.ruby.text for c in group)
-                    annotated += f"{target}{{{combined_ruby}}}"
+                    annotated += f"{ch.char}{{{ch.ruby.text}}}"
                 else:
                     annotated += ch.char
-                i += 1
             result.append(annotated)
         return "\n".join(result)
 

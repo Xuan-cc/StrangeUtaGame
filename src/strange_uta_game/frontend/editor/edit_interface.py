@@ -5,12 +5,12 @@ from PyQt6.QtWidgets import (
     QLabel,
     QDialog,
     QHeaderView,
-    QDialogButtonBox,
     QTableWidgetItem,
-    QComboBox,
+    QAbstractItemView,
+    QMessageBox,
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import Qt, QEvent
+from PyQt6.QtGui import QFont, QColor, QKeyEvent, QKeySequence
 from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,
@@ -51,6 +51,58 @@ def _parse_time(text: str) -> Optional[int]:
     return (minutes * 60 + seconds) * 1000 + centis * 10
 
 
+def _clone_ruby(ruby: Optional[Ruby]) -> Optional[Ruby]:
+    if ruby is None:
+        return None
+    return Ruby(
+        text=ruby.text, timestamps=list(ruby.timestamps), singer_id=ruby.singer_id
+    )
+
+
+def _clone_character(character: Character) -> Character:
+    cloned = Character(
+        char=character.char,
+        ruby=_clone_ruby(character.ruby),
+        check_count=character.check_count,
+        timestamps=list(character.timestamps),
+        linked_to_next=character.linked_to_next,
+        is_line_end=character.is_line_end,
+        is_rest=character.is_rest,
+        singer_id=character.singer_id,
+    )
+    cloned.push_to_ruby()
+    return cloned
+
+
+def _clone_sentence(sentence: Sentence) -> Sentence:
+    return Sentence(
+        singer_id=sentence.singer_id,
+        characters=[_clone_character(character) for character in sentence.characters],
+    )
+
+
+def _fix_sentence_character_invariants(sentence: Sentence):
+    if not sentence.characters:
+        return
+
+    last_index = len(sentence.characters) - 1
+    for index, character in enumerate(sentence.characters):
+        if index == last_index:
+            continue
+        if character.is_line_end:
+            character.is_line_end = False
+            character.check_count = max(0, character.check_count - 1)
+
+    last_character = sentence.characters[-1]
+    if not last_character.is_line_end:
+        last_character.is_line_end = True
+        last_character.check_count += 1
+    if last_character.check_count < 1:
+        last_character.check_count = 1
+    last_character.linked_to_next = False
+    last_character.push_to_ruby()
+
+
 class LineDetailDialog(QDialog):
     """行详情对话框 - 允许编辑时间标签，连词合并显示，per-char 演唱者"""
 
@@ -60,6 +112,7 @@ class LineDetailDialog(QDialog):
         self._project = project
         self._modified = False
         self._row_groups: List[List[int]] = []  # 每行对应的 char 索引列表
+        self._char_clipboard: List[Character] = []
 
         title_text = self.sentence.text[:30] + (
             "..." if len(self.sentence.text) > 30 else ""
@@ -79,15 +132,34 @@ class LineDetailDialog(QDialog):
         self.vbox.addWidget(hint)
 
         # Table
+        char_toolbar = QHBoxLayout()
+        self.btn_add_char = PushButton("添加字符", self)
+        self.btn_add_char.clicked.connect(self._add_character)
+        char_toolbar.addWidget(self.btn_add_char)
+        self.btn_delete_char = PushButton("删除字符", self)
+        self.btn_delete_char.clicked.connect(self._delete_characters)
+        char_toolbar.addWidget(self.btn_delete_char)
+        self.btn_copy_char = PushButton("复制字符", self)
+        self.btn_copy_char.clicked.connect(self._copy_characters)
+        char_toolbar.addWidget(self.btn_copy_char)
+        self.btn_insert_char = PushButton("插入字符", self)
+        self.btn_insert_char.clicked.connect(self._insert_characters)
+        char_toolbar.addWidget(self.btn_insert_char)
+        char_toolbar.addStretch()
+        self.vbox.addLayout(char_toolbar)
+
         self.table = TableWidget(self)
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
             ["字符", "注音", "Checkpoint数", "句尾", "时间标签", "演唱者"]
         )
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         header = self.table.horizontalHeader()
         if header:
             header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.vbox.addWidget(self.table)
+        self.table.installEventFilter(self)
 
         self._populate_table()
 
@@ -191,6 +263,134 @@ class LineDetailDialog(QDialog):
     def _on_cell_changed(self, row: int, col: int):
         if col in (0, 1, 2, 4, 5):
             self._modified = True
+
+    def _selected_detail_rows(self) -> List[int]:
+        selection_model = self.table.selectionModel()
+        if not selection_model:
+            return []
+        return sorted(index.row() for index in selection_model.selectedRows())
+
+    def _selected_character_indices(self) -> List[int]:
+        char_indices: List[int] = []
+        for row in self._selected_detail_rows():
+            if 0 <= row < len(self._row_groups):
+                char_indices.extend(self._row_groups[row])
+        return char_indices
+
+    def _clone_selected_characters(self) -> List[Character]:
+        return [
+            _clone_character(self.sentence.characters[index])
+            for index in self._selected_character_indices()
+        ]
+
+    def _notify_no_detail_selection(self, content: str):
+        InfoBar.warning(
+            title="未选择字符",
+            content=content,
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self,
+        )
+
+    def _apply_character_change(self):
+        _fix_sentence_character_invariants(self.sentence)
+        self._populate_table()
+        self._modified = True
+
+    def _add_character(self):
+        insert_index = len(self.sentence.characters)
+        selected_rows = self._selected_detail_rows()
+        if selected_rows:
+            insert_index = self._row_groups[selected_rows[-1]][-1] + 1
+
+        new_character = Character(
+            char="　",
+            check_count=1,
+            singer_id=self.sentence.singer_id,
+        )
+        self.sentence.characters.insert(insert_index, new_character)
+        self._apply_character_change()
+
+    def _delete_characters(self):
+        selected_indices = self._selected_character_indices()
+        if not selected_indices:
+            self._notify_no_detail_selection("请先选择要删除的字符")
+            return
+        if len(selected_indices) >= len(self.sentence.characters):
+            InfoBar.warning(
+                title="无法删除",
+                content="每行至少需要保留 1 个字符",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2500,
+                parent=self,
+            )
+            return
+
+        selected_set = set(selected_indices)
+        self.sentence.characters = [
+            character
+            for index, character in enumerate(self.sentence.characters)
+            if index not in selected_set
+        ]
+        self._apply_character_change()
+
+    def _copy_characters(self):
+        cloned_characters = self._clone_selected_characters()
+        if not cloned_characters:
+            self._notify_no_detail_selection("请先选择要复制的字符")
+            return
+        self._char_clipboard = cloned_characters
+
+    def _insert_characters(self):
+        if not self._char_clipboard:
+            InfoBar.warning(
+                title="剪贴板为空",
+                content="请先复制字符",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self,
+            )
+            return
+
+        insert_index = len(self.sentence.characters)
+        selected_rows = self._selected_detail_rows()
+        if selected_rows:
+            insert_index = self._row_groups[selected_rows[-1]][-1] + 1
+
+        clones = [_clone_character(character) for character in self._char_clipboard]
+        self.sentence.characters[insert_index:insert_index] = clones
+        self._apply_character_change()
+
+    def _handle_shortcut(self, event: QKeyEvent) -> bool:
+        if event.matches(QKeySequence.StandardKey.Copy):
+            self._copy_characters()
+            return True
+        if event.matches(QKeySequence.StandardKey.Paste):
+            self._insert_characters()
+            return True
+        if event.key() == Qt.Key.Key_Delete:
+            self._delete_characters()
+            return True
+        return False
+
+    def eventFilter(self, a0, a1):
+        if a0 is self.table and a1 is not None and a1.type() == QEvent.Type.KeyPress:
+            key_event = a1 if isinstance(a1, QKeyEvent) else None
+            if key_event and self._handle_shortcut(key_event):
+                return True
+        return super().eventFilter(a0, a1)
+
+    def keyPressEvent(self, a0: Optional[QKeyEvent]):
+        if a0 is not None and self._handle_shortcut(a0):
+            a0.accept()
+            return
+        super().keyPressEvent(a0)
 
     def _on_save(self):
         """Save edited data back to the Sentence (supports grouped linked chars)."""
@@ -337,6 +537,7 @@ class LineDetailDialog(QDialog):
                 parent=self,
             )
 
+        _fix_sentence_character_invariants(self.sentence)
         self._modified = True
         # Refresh the table to show saved state
         self._populate_table()
@@ -360,13 +561,14 @@ class EditInterface(QWidget):
         super().__init__(parent)
         self.setObjectName("editInterface")
         self.project: Optional[Project] = None
+        self._row_clipboard: List[Sentence] = []
 
         self.vbox = QVBoxLayout(self)
         self.vbox.setContentsMargins(20, 20, 20, 20)
         self.vbox.setSpacing(10)
 
         # Top Area
-        self.title_label = QLabel("编辑视图", self)
+        self.title_label = QLabel("行编辑视图", self)
         self.title_label.setFont(QFont("Microsoft YaHei", 24, QFont.Weight.Bold))
         self.vbox.addWidget(self.title_label)
 
@@ -386,6 +588,18 @@ class EditInterface(QWidget):
         self.btn_refresh.setIcon(FIF.SYNC)
         self.btn_refresh.clicked.connect(self._update_table)
         toolbar.addWidget(self.btn_refresh)
+        self.btn_add_row = PushButton("添加行", self)
+        self.btn_add_row.clicked.connect(self._add_row)
+        toolbar.addWidget(self.btn_add_row)
+        self.btn_delete_row = PushButton("删除行", self)
+        self.btn_delete_row.clicked.connect(self._delete_rows)
+        toolbar.addWidget(self.btn_delete_row)
+        self.btn_copy_row = PushButton("复制行", self)
+        self.btn_copy_row.clicked.connect(self._copy_rows)
+        toolbar.addWidget(self.btn_copy_row)
+        self.btn_insert_row = PushButton("插入行", self)
+        self.btn_insert_row.clicked.connect(self._insert_rows)
+        toolbar.addWidget(self.btn_insert_row)
         toolbar.addStretch()
         self.vbox.addLayout(toolbar)
 
@@ -404,6 +618,8 @@ class EditInterface(QWidget):
                 "操作",
             ]
         )
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
         # Column Resizing
         header = self.table.horizontalHeader()
@@ -411,6 +627,7 @@ class EditInterface(QWidget):
             header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.vbox.addWidget(self.table)
+        self.table.installEventFilter(self)
 
     def set_project(self, project: Project):
         self.project = project
@@ -514,9 +731,14 @@ class EditInterface(QWidget):
 
             # 7. 时间范围
             if sentence.has_timetags:
-                first_time = _fmt_time(sentence.timing_start_ms)
-                last_time = _fmt_time(sentence.timing_end_ms)
-                time_range = f"{first_time} ~ {last_time}"
+                start_ms = sentence.timing_start_ms
+                end_ms = sentence.timing_end_ms
+                if start_ms is not None and end_ms is not None:
+                    first_time = _fmt_time(start_ms)
+                    last_time = _fmt_time(end_ms)
+                    time_range = f"{first_time} ~ {last_time}"
+                else:
+                    time_range = "未打轴"
             else:
                 time_range = "未打轴"
 
@@ -532,6 +754,133 @@ class EditInterface(QWidget):
                 )
             )
             self.table.setCellWidget(i, 7, btn)
+
+    def _selected_row_indices(self) -> List[int]:
+        selection_model = self.table.selectionModel()
+        if not selection_model:
+            return []
+        return sorted(index.row() for index in selection_model.selectedRows())
+
+    def _selected_sentences(self) -> List[Sentence]:
+        if not self.project:
+            return []
+        return [
+            self.project.sentences[row]
+            for row in self._selected_row_indices()
+            if 0 <= row < len(self.project.sentences)
+        ]
+
+    def _default_singer_id(self) -> str:
+        if self.project and self.project.singers:
+            return self.project.singers[0].id
+        return "default"
+
+    def _notify_row_warning(self, title: str, content: str):
+        InfoBar.warning(
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self,
+        )
+
+    def _after_row_operation(self):
+        self._update_table()
+        if hasattr(self, "_store"):
+            self._store.notify("lyrics")
+
+    def _add_row(self):
+        if not self.project:
+            return
+
+        selected_rows = self._selected_row_indices()
+        after_sentence_id = None
+        if selected_rows:
+            after_sentence_id = self.project.sentences[selected_rows[-1]].id
+
+        new_sentence = Sentence.from_text(" ", self._default_singer_id())
+        self.project.add_sentence(new_sentence, after_sentence_id=after_sentence_id)
+        self._after_row_operation()
+
+    def _delete_rows(self):
+        if not self.project:
+            return
+
+        selected_sentences = self._selected_sentences()
+        if not selected_sentences:
+            self._notify_row_warning("未选择行", "请先选择要删除的行")
+            return
+
+        if len(selected_sentences) > 1:
+            result = QMessageBox.question(
+                self,
+                "确认删除",
+                f"确定要删除选中的 {len(selected_sentences)} 行吗？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if result != QMessageBox.StandardButton.Yes:
+                return
+
+        for sentence in selected_sentences:
+            self.project.remove_sentence(sentence.id)
+        self._after_row_operation()
+
+    def _copy_rows(self):
+        selected_sentences = self._selected_sentences()
+        if not selected_sentences:
+            self._notify_row_warning("未选择行", "请先选择要复制的行")
+            return
+
+        self._row_clipboard = [
+            _clone_sentence(sentence) for sentence in selected_sentences
+        ]
+        self._after_row_operation()
+
+    def _insert_rows(self):
+        if not self.project:
+            return
+        if not self._row_clipboard:
+            self._notify_row_warning("剪贴板为空", "请先复制行")
+            return
+
+        selected_rows = self._selected_row_indices()
+        after_sentence_id = None
+        if selected_rows:
+            after_sentence_id = self.project.sentences[selected_rows[-1]].id
+
+        for sentence in self._row_clipboard:
+            new_sentence = _clone_sentence(sentence)
+            self.project.add_sentence(new_sentence, after_sentence_id=after_sentence_id)
+            after_sentence_id = new_sentence.id
+        self._after_row_operation()
+
+    def _handle_shortcut(self, event: QKeyEvent) -> bool:
+        if event.matches(QKeySequence.StandardKey.Copy):
+            self._copy_rows()
+            return True
+        if event.matches(QKeySequence.StandardKey.Paste):
+            self._insert_rows()
+            return True
+        if event.key() == Qt.Key.Key_Delete:
+            self._delete_rows()
+            return True
+        return False
+
+    def eventFilter(self, a0, a1):
+        if a0 is self.table and a1 is not None and a1.type() == QEvent.Type.KeyPress:
+            key_event = a1 if isinstance(a1, QKeyEvent) else None
+            if key_event and self._handle_shortcut(key_event):
+                return True
+        return super().eventFilter(a0, a1)
+
+    def keyPressEvent(self, a0: Optional[QKeyEvent]):
+        if a0 is not None and self._handle_shortcut(a0):
+            a0.accept()
+            return
+        super().keyPressEvent(a0)
 
     def _show_detail(self, sentence: Sentence):
         dialog = LineDetailDialog(sentence, project=self.project, parent=self)

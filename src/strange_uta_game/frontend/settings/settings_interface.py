@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont, QKeyEvent
+from PyQt6.QtGui import QFont, QKeyEvent, QPainter, QColor, QPen, QBrush, QPaintEvent
 from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,
@@ -768,6 +768,352 @@ class NicokaraTagsDialog(QDialog):
         }
 
 
+class CalibrationCanvas(QWidget):
+    """Offset 校准动画画布。"""
+
+    def __init__(self, dialog: "CalibrationDialog", parent=None):
+        super().__init__(parent)
+        self._dialog = dialog
+        self.setMinimumHeight(260)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def paintEvent(self, a0: QPaintEvent | None):
+        _ = a0
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(self.rect(), QColor(18, 18, 22))
+
+        width = max(1, self.width())
+        height = max(1, self.height())
+        center_x = width / 2
+        center_y = height / 2
+
+        painter.setPen(QPen(QColor(235, 70, 70), 3))
+        painter.drawLine(int(center_x), 24, int(center_x), height - 24)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        for index in range(5):
+            phase = self._dialog.block_phase(index)
+            x = ((phase + 0.5) % 1.0) * width
+            proximity = 1.0 - min(abs(x - center_x) / max(center_x, 1.0), 1.0)
+            scale = 0.55 + proximity * 0.85
+            block_width = 18 + 22 * scale
+            block_height = 44 + 44 * scale
+            alpha = int(110 + 145 * proximity)
+
+            painter.setBrush(QBrush(QColor(255, 255, 255, alpha)))
+            rect_x = int(round(x - block_width / 2))
+            rect_y = int(round(center_y - block_height / 2))
+            rect_w = int(round(block_width))
+            rect_h = int(round(block_height))
+            painter.drawRoundedRect(
+                rect_x,
+                rect_y,
+                rect_w,
+                rect_h,
+                10,
+                10,
+            )
+
+
+class CalibrationDialog(QDialog):
+    """Offset 校准弹窗。"""
+
+    def __init__(self, parent: "SettingsInterface"):
+        super().__init__(parent)
+        self._settings_interface = parent
+        self._sample_rate = 44100
+        self._bpm = 120
+        self._beat_interval = 60.0 / self._bpm
+        self._start_time = _time.monotonic()
+        self._next_beat_time = self._start_time
+        self._schedule_version = 0
+        self._running = False
+        self._state_lock = threading.Lock()
+        self._metronome_thread: Optional[threading.Thread] = None
+        self._beat_times: list[float] = []
+        self._tap_offsets_ms: list[float] = []
+        self._latest_offset_ms: Optional[float] = None
+        self._click_audio = self._generate_click()
+
+        self.setWindowTitle("Offset 校准")
+        self.setModal(True)
+        self.resize(880, 420)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 20, 20, 20)
+        root.setSpacing(16)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(12)
+
+        left_layout = QVBoxLayout()
+        left_layout.setSpacing(4)
+        self.lbl_latest = QLabel("最近偏移: -- ms", self)
+        self.lbl_latest.setFont(QFont("Microsoft YaHei", 10))
+        self.lbl_average = QLabel("平均偏移: -- ms", self)
+        self.lbl_average.setFont(QFont("Microsoft YaHei", 10))
+        left_layout.addWidget(self.lbl_latest)
+        left_layout.addWidget(self.lbl_average)
+        top_row.addLayout(left_layout)
+        top_row.addStretch(1)
+
+        right_layout = QHBoxLayout()
+        right_layout.setSpacing(8)
+        self.lbl_bpm = QLabel("节拍 BPM", self)
+        self.lbl_bpm.setFont(QFont("Microsoft YaHei", 10))
+        self.spin_bpm = SpinBox(self)
+        self.spin_bpm.setRange(60, 240)
+        self.spin_bpm.setValue(self._bpm)
+        self.spin_bpm.setSuffix(" BPM")
+        self.spin_bpm.setFixedWidth(130)
+        self.spin_bpm.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_reset = PushButton("重置", self)
+        self.btn_reset.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_apply = PushButton("应用", self)
+        self.btn_apply.setFont(QFont("Microsoft YaHei", 10))
+
+        right_layout.addWidget(self.lbl_bpm)
+        right_layout.addWidget(self.spin_bpm)
+        right_layout.addWidget(self.btn_reset)
+        right_layout.addWidget(self.btn_apply)
+        top_row.addLayout(right_layout)
+        root.addLayout(top_row)
+
+        self.canvas = CalibrationCanvas(self, self)
+        root.addWidget(self.canvas)
+
+        self.lbl_hint = QLabel(
+            "按空格键跟拍，可持续任意次数，关闭窗口前都会保持运行", self
+        )
+        self.lbl_hint.setFont(QFont("Microsoft YaHei", 9))
+        root.addWidget(self.lbl_hint)
+
+        self.animation_timer = QTimer(self)
+        self.animation_timer.setInterval(16)
+        self.animation_timer.timeout.connect(self.canvas.update)
+
+        self.spin_bpm.valueChanged.connect(self._on_bpm_changed)
+        self.btn_reset.clicked.connect(self._on_reset)
+        self.btn_apply.clicked.connect(self._on_apply)
+
+        self.spin_bpm.installEventFilter(self)
+        self.btn_reset.installEventFilter(self)
+        self.btn_apply.installEventFilter(self)
+        self.canvas.installEventFilter(self)
+
+    def showEvent(self, a0):
+        super().showEvent(a0)
+        self._start_metronome()
+        self.animation_timer.start()
+        QTimer.singleShot(0, self.canvas.setFocus)
+
+    def closeEvent(self, a0):
+        self.animation_timer.stop()
+        self._stop_metronome()
+        super().closeEvent(a0)
+
+    def eventFilter(self, a0, a1):
+        if (
+            a1 is not None
+            and a1.type() == a1.Type.KeyPress
+            and isinstance(a1, QKeyEvent)
+            and a1.key() == Qt.Key.Key_Space
+            and not a1.isAutoRepeat()
+        ):
+            self._handle_tap()
+            a1.accept()
+            return True
+        return super().eventFilter(a0, a1)
+
+    def keyPressEvent(self, a0: QKeyEvent | None):
+        if a0 is not None and a0.key() == Qt.Key.Key_Space and not a0.isAutoRepeat():
+            self._handle_tap()
+            a0.accept()
+            return
+        super().keyPressEvent(a0)
+
+    def block_phase(self, index: int) -> float:
+        with self._state_lock:
+            start_time = self._start_time
+            beat_interval = self._beat_interval
+        return ((_time.monotonic() - start_time) / beat_interval + index / 5) % 1.0
+
+    def _generate_click(self, sr=44100, duration_ms=30, freq=1000):
+        n = int(sr * duration_ms / 1000)
+        t = np.arange(n) / sr
+        click = 0.5 * np.sin(2 * np.pi * freq * t)
+        fade = np.linspace(1.0, 0.0, n)
+        click *= fade
+        return click.astype(np.float32)
+
+    def _start_metronome(self):
+        with self._state_lock:
+            if self._running:
+                return
+            now = _time.monotonic()
+            self._start_time = now
+            self._next_beat_time = now
+            self._beat_times.clear()
+            self._schedule_version += 1
+            self._running = True
+
+        self._metronome_thread = threading.Thread(
+            target=self._play_metronome_loop, daemon=True
+        )
+        self._metronome_thread.start()
+
+    def _stop_metronome(self):
+        with self._state_lock:
+            self._running = False
+            self._schedule_version += 1
+        try:
+            sd.stop()
+        except Exception:
+            pass
+        if self._metronome_thread and self._metronome_thread.is_alive():
+            self._metronome_thread.join(timeout=1.0)
+        self._metronome_thread = None
+
+    def _play_metronome_loop(self):
+        while True:
+            with self._state_lock:
+                if not self._running:
+                    return
+                next_beat_time = self._next_beat_time
+                version = self._schedule_version
+
+            wait_time = next_beat_time - _time.monotonic()
+            if wait_time > 0.01:
+                _time.sleep(min(wait_time / 2, 0.01))
+                continue
+            if wait_time > 0:
+                _time.sleep(wait_time)
+
+            beat_time = next_beat_time
+            try:
+                sd.play(self._click_audio, self._sample_rate, blocking=True)
+            except Exception:
+                _time.sleep(0.05)
+
+            with self._state_lock:
+                if not self._running:
+                    return
+                self._beat_times.append(beat_time)
+                if len(self._beat_times) > 256:
+                    self._beat_times = self._beat_times[-256:]
+                if (
+                    version == self._schedule_version
+                    and abs(self._next_beat_time - beat_time) < 0.02
+                ):
+                    self._next_beat_time = beat_time + self._beat_interval
+
+    def _on_bpm_changed(self, value: int):
+        now = _time.monotonic()
+        new_interval = 60.0 / max(60, min(240, value))
+        with self._state_lock:
+            current_cycles = (now - self._start_time) / self._beat_interval
+            phase = current_cycles - int(current_cycles)
+            self._bpm = value
+            self._start_time = now - current_cycles * new_interval
+            self._beat_interval = new_interval
+            remaining_phase = 1.0 if phase < 0.000001 else 1.0 - phase
+            self._next_beat_time = now + remaining_phase * new_interval
+            self._schedule_version += 1
+        self.canvas.setFocus()
+
+    def _handle_tap(self):
+        tap_time = _time.monotonic()
+        offset_ms = self._calculate_tap_offset_ms(tap_time)
+        if offset_ms is None:
+            return
+        self._latest_offset_ms = offset_ms
+        self._tap_offsets_ms.append(offset_ms)
+        self._update_offset_labels()
+        self.canvas.setFocus()
+
+    def _calculate_tap_offset_ms(self, tap_time: float) -> Optional[float]:
+        with self._state_lock:
+            beat_times = list(self._beat_times)
+
+        if not beat_times:
+            return None
+
+        if len(beat_times) == 1:
+            return (tap_time - beat_times[0]) * 1000.0
+
+        for index, beat_time in enumerate(beat_times):
+            left = (
+                float("-inf") if index == 0 else (beat_times[index - 1] + beat_time) / 2
+            )
+            right = (
+                float("inf")
+                if index == len(beat_times) - 1
+                else (beat_time + beat_times[index + 1]) / 2
+            )
+            if left <= tap_time < right:
+                return (tap_time - beat_time) * 1000.0
+
+        return (tap_time - beat_times[-1]) * 1000.0
+
+    def _filtered_average_offset_ms(self) -> Optional[float]:
+        if not self._tap_offsets_ms:
+            return None
+
+        values = sorted(self._tap_offsets_ms)
+        filtered = values
+        if len(values) >= 4:
+            q1 = values[len(values) // 4]
+            q3 = values[len(values) * 3 // 4]
+            iqr = q3 - q1
+            lower = q1 - 1.5 * iqr
+            upper = q3 + 1.5 * iqr
+            filtered = [value for value in values if lower <= value <= upper]
+            if not filtered:
+                filtered = values
+
+        trim_count = len(filtered) // 10
+        trimmed = filtered
+        if trim_count > 0 and len(filtered) - trim_count * 2 > 0:
+            trimmed = filtered[trim_count : len(filtered) - trim_count]
+
+        return sum(trimmed) / len(trimmed)
+
+    def _format_offset_text(self, value: Optional[float]) -> str:
+        if value is None:
+            return "-- ms"
+        return f"{round(value):+d} ms"
+
+    def _update_offset_labels(self):
+        average = self._filtered_average_offset_ms()
+        self.lbl_latest.setText(
+            f"最近偏移: {self._format_offset_text(self._latest_offset_ms)}"
+        )
+        self.lbl_average.setText(f"平均偏移: {self._format_offset_text(average)}")
+
+    def _on_reset(self):
+        self._tap_offsets_ms.clear()
+        self._latest_offset_ms = None
+        self._update_offset_labels()
+        self.canvas.setFocus()
+
+    def _on_apply(self):
+        average = self._filtered_average_offset_ms()
+        applied_offset = round(average) if average is not None else 0
+        self._settings_interface.card_offset.setValue(applied_offset)
+        InfoBar.success(
+            title="校准完成",
+            content=f"已应用 Offset：{applied_offset:+d} ms",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self._settings_interface,
+        )
+        self.accept()
+
+
 # ──────────────────────────────────────────────
 # 设置界面
 # ──────────────────────────────────────────────
@@ -946,317 +1292,32 @@ class SettingsInterface(ScrollArea):
         self.expandLayout.addWidget(self.timing_group)
 
     def _init_calibration_group(self):
-        """Offset 校准 — 倒数 + 节拍器 tap + 暴力对齐算法。"""
+        """Offset 校准。"""
         self.calibration_group = SettingCardGroup("Offset 校准", self.scrollWidget)
 
         cal_card = SettingCard(
             FIF.SPEED_HIGH,
             "节拍器校准",
-            "倒数后播放节拍器，按空格跟拍，自动对齐计算延迟",
+            "打开校准弹窗，跟随节拍器按空格键测量 Offset",
             self.calibration_group,
         )
 
-        self.spin_cal_bpm = SpinBox(cal_card)
-        self.spin_cal_bpm.setRange(60, 240)
-        self.spin_cal_bpm.setValue(120)
-        self.spin_cal_bpm.setSuffix(" BPM")
-        self.spin_cal_bpm.setFixedWidth(120)
+        self.btn_cal_open = PushButton("开始校准", cal_card)
+        self.btn_cal_open.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_cal_open.clicked.connect(self._open_calibration_dialog)
 
-        self.btn_cal_start = PushButton("开始校准", cal_card)
-        self.btn_cal_start.setFont(QFont("Microsoft YaHei", 10))
-        self.btn_cal_start.clicked.connect(self._on_cal_start)
-
-        self.btn_cal_stop = PushButton("停止", cal_card)
-        self.btn_cal_stop.setFont(QFont("Microsoft YaHei", 10))
-        self.btn_cal_stop.clicked.connect(self._on_cal_stop)
-        self.btn_cal_stop.setEnabled(False)
-
-        self.btn_cal_apply = PushButton("应用 Offset", cal_card)
-        self.btn_cal_apply.setFont(QFont("Microsoft YaHei", 10))
-        self.btn_cal_apply.clicked.connect(self._on_cal_apply)
-        self.btn_cal_apply.setEnabled(False)
-
-        self.lbl_cal_result = QLabel("尚未校准")
-        self.lbl_cal_result.setFont(QFont("Microsoft YaHei", 10))
-
-        cal_card.hBoxLayout.addWidget(
-            self.lbl_cal_result, 0, Qt.AlignmentFlag.AlignRight
-        )
-        cal_card.hBoxLayout.addSpacing(8)
-        cal_card.hBoxLayout.addWidget(self.spin_cal_bpm, 0, Qt.AlignmentFlag.AlignRight)
-        cal_card.hBoxLayout.addSpacing(4)
-        cal_card.hBoxLayout.addWidget(
-            self.btn_cal_start, 0, Qt.AlignmentFlag.AlignRight
-        )
-        cal_card.hBoxLayout.addWidget(self.btn_cal_stop, 0, Qt.AlignmentFlag.AlignRight)
-        cal_card.hBoxLayout.addWidget(
-            self.btn_cal_apply, 0, Qt.AlignmentFlag.AlignRight
-        )
+        cal_card.hBoxLayout.addWidget(self.btn_cal_open, 0, Qt.AlignmentFlag.AlignRight)
         cal_card.hBoxLayout.addSpacing(16)
 
         self.calibration_group.addSettingCard(cal_card)
         self.expandLayout.addWidget(self.calibration_group)
 
-        self._cal_stream = None
-        self._cal_thread = None
-        self._cal_running = False
-        self._cal_countdown_active = False
-        self._cal_countdown_remaining = 0
-        self._cal_countdown_timer: Optional[QTimer] = None
-        self._cal_bpm = 120
-        self._cal_beat_times: list = []
-        self._cal_tap_times: list = []
-        self._cal_start_time = 0.0
-        self._cal_offset_ms = 0
-
-    def _generate_click(self, sr=44100, duration_ms=30, freq=1000):
-        """生成一个短促的 click 音效。"""
-        n = int(sr * duration_ms / 1000)
-        t = np.arange(n) / sr
-        click = 0.5 * np.sin(2 * np.pi * freq * t)
-        fade = np.linspace(1.0, 0.0, n)
-        click *= fade
-        return click.astype(np.float32)
-
-    def _play_metronome(self, audio, sr):
-        try:
-            self._cal_stream = sd.OutputStream(
-                samplerate=sr, channels=1, dtype="float32"
-            )
-            self._cal_stream.start()
-            chunk_size = int(sr * 0.1)
-            reshaped = audio.reshape(-1, 1)
-            offset = 0
-            while offset < len(reshaped) and self._cal_running:
-                end = min(offset + chunk_size, len(reshaped))
-                try:
-                    self._cal_stream.write(reshaped[offset:end])
-                except Exception:
-                    break
-                offset = end
-        except Exception:
-            pass
-        finally:
-            from PyQt6.QtCore import QMetaObject
-
-            QMetaObject.invokeMethod(
-                self.btn_cal_stop, "click", Qt.ConnectionType.QueuedConnection
-            )
-
-    def _on_cal_start(self):
-        """开始校准：先进入倒数阶段，再播放节拍器。"""
-        self._cal_tap_times.clear()
-        self._cal_beat_times.clear()
-        self._cal_offset_ms = 0
-        self._cal_bpm = self.spin_cal_bpm.value()
-
-        self._cal_saved_offset = self.card_offset.value()
-        self.card_offset.setValue(0)
-
-        self.btn_cal_start.setEnabled(False)
-        self.btn_cal_stop.setEnabled(True)
-        self.btn_cal_apply.setEnabled(False)
-        self.spin_cal_bpm.setEnabled(False)
-
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setFocus()
-
-        # 启动倒数 5, 4, 3, 2, 1
-        self._cal_countdown_active = True
-        self._cal_countdown_remaining = 5
-        self.lbl_cal_result.setText(f"准备... {self._cal_countdown_remaining}")
-        self._cal_countdown_timer = QTimer(self)
-        self._cal_countdown_timer.setInterval(1000)
-        self._cal_countdown_timer.timeout.connect(self._on_countdown_tick)
-        self._cal_countdown_timer.start()
-
-    def _on_countdown_tick(self):
-        """倒数计时回调。"""
-        self._cal_countdown_remaining -= 1
-        if self._cal_countdown_remaining > 0:
-            self.lbl_cal_result.setText(f"准备... {self._cal_countdown_remaining}")
-        else:
-            # 倒数结束，启动节拍器
-            if self._cal_countdown_timer:
-                self._cal_countdown_timer.stop()
-                self._cal_countdown_timer.deleteLater()
-                self._cal_countdown_timer = None
-            self._cal_countdown_active = False
-            self._start_metronome()
-
-    def _start_metronome(self):
-        """倒数结束后实际启动节拍器播放。"""
-        self.lbl_cal_result.setText("校准中... 请按空格键跟拍")
-
-        sr = 44100
-        click = self._generate_click(sr)
-        interval_samples = int(sr * 60 / self._cal_bpm)
-
-        total_beats = int(30 * self._cal_bpm / 60)
-        total_samples = interval_samples * total_beats
-        audio = np.zeros(total_samples, dtype=np.float32)
-        for b in range(total_beats):
-            start = b * interval_samples
-            end = min(start + len(click), total_samples)
-            audio[start:end] += click[: end - start]
-
-        self._cal_start_time = _time.monotonic()
-        for b in range(total_beats):
-            beat_time = self._cal_start_time + b * 60 / self._cal_bpm
-            self._cal_beat_times.append(beat_time)
-
-        try:
-            self._cal_running = True
-            self._cal_thread = threading.Thread(
-                target=self._play_metronome, args=(audio, sr), daemon=True
-            )
-            self._cal_thread.start()
-        except Exception as e:
-            self.lbl_cal_result.setText(f"音频错误: {e}")
-            self._on_cal_stop()
-
-    def _on_cal_stop(self):
-        """停止节拍器。"""
-        # 如果仍在倒数阶段则取消倒数
-        if self._cal_countdown_timer:
-            self._cal_countdown_timer.stop()
-            self._cal_countdown_timer.deleteLater()
-            self._cal_countdown_timer = None
-        self._cal_countdown_active = False
-
-        self._cal_running = False
-        if self._cal_thread and self._cal_thread.is_alive():
-            self._cal_thread.join(timeout=1.0)
-        self._cal_thread = None
-        if self._cal_stream:
-            try:
-                self._cal_stream.stop()
-                self._cal_stream.close()
-            except Exception:
-                pass
-            self._cal_stream = None
-
-        saved = getattr(self, "_cal_saved_offset", 0)
-        self.card_offset.setValue(saved)
-
-        self.btn_cal_start.setEnabled(True)
-        self.btn_cal_stop.setEnabled(False)
-        self.spin_cal_bpm.setEnabled(True)
-
-        if len(self._cal_tap_times) >= 8:
-            self._calculate_offset()
-        else:
-            self.lbl_cal_result.setText(
-                f"采样不足（需要至少 8 次 tap，当前 {len(self._cal_tap_times)} 次）"
-            )
-
-    def _calculate_offset(self):
-        """暴力对齐 + IQR 剔除 + 截尾均值算法。
-
-        用户可能从任意拍次开始跟拍（例如第 6 拍），因此暴力搜索最优对齐位置，
-        使得 tap 序列与拍序列之间的总平方误差最小。
-        """
-        taps = self._cal_tap_times
-        beats = self._cal_beat_times
-        n_taps = len(taps)
-        n_beats = len(beats)
-
-        if n_taps < 8 or n_beats == 0:
-            self.lbl_cal_result.setText("有效数据不足，请重新校准")
-            return
-
-        # 暴力搜索最优起始拍：逐个尝试 tap[0] 对齐到 beats[k]
-        best_offset_start = 0
-        best_error = float("inf")
-
-        for k in range(n_beats):
-            if k + n_taps > n_beats:
-                break
-            total_err = 0.0
-            for j in range(n_taps):
-                diff = taps[j] - beats[k + j]
-                total_err += diff * diff
-            if total_err < best_error:
-                best_error = total_err
-                best_offset_start = k
-
-        # 计算最优对齐下的各 tap offset（毫秒）
-        raw_offsets = []
-        for j in range(n_taps):
-            bi = best_offset_start + j
-            if bi < n_beats:
-                raw_offsets.append((taps[j] - beats[bi]) * 1000)
-
-        if len(raw_offsets) < 4:
-            self.lbl_cal_result.setText("有效 tap 不足，请重新校准")
-            return
-
-        # IQR 剔除异常值
-        sorted_offs = sorted(raw_offsets)
-        q1_idx = len(sorted_offs) // 4
-        q3_idx = len(sorted_offs) * 3 // 4
-        q1 = sorted_offs[q1_idx]
-        q3 = sorted_offs[q3_idx]
-        iqr = q3 - q1
-        lower = q1 - 1.5 * iqr
-        upper = q3 + 1.5 * iqr
-        filtered = [o for o in sorted_offs if lower <= o <= upper]
-
-        if len(filtered) < 4:
-            self.lbl_cal_result.setText("有效 tap 不足（异常值过多），请重新校准")
-            return
-
-        # 截尾均值：去掉首尾各 10%
-        trim_count = max(1, len(filtered) // 10)
-        trimmed = filtered[trim_count : len(filtered) - trim_count]
-        if not trimmed:
-            trimmed = filtered
-
-        avg = sum(trimmed) / len(trimmed)
-        self._cal_offset_ms = round(avg)
-        self.lbl_cal_result.setText(
-            f"Offset: {self._cal_offset_ms} ms"
-            f"（{len(filtered)}/{len(raw_offsets)} 次有效 tap，"
-            f"对齐起始拍: {best_offset_start + 1}）"
-        )
-        self.btn_cal_apply.setEnabled(True)
-
-    def _on_cal_apply(self):
-        """将校准结果应用到设置。"""
-        self.card_offset.setValue(self._cal_offset_ms)
-
-        self.btn_cal_apply.setEnabled(False)
-        self.lbl_cal_result.setText(f"已应用 Offset: {self._cal_offset_ms} ms")
-
-        InfoBar.success(
-            title="校准完成",
-            content=f"Offset 已设置为 {self._cal_offset_ms} ms",
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=3000,
-            parent=self,
-        )
+    def _open_calibration_dialog(self):
+        dialog = CalibrationDialog(self)
+        dialog.exec()
 
     def keyPressEvent(self, a0: QKeyEvent | None):
-        """捕获空格键 tap 用于校准（倒数阶段忽略 tap）。"""
-        if a0 is None:
-            return super().keyPressEvent(a0)
-        if a0.key() == Qt.Key.Key_Space and not a0.isAutoRepeat():
-            # 倒数阶段忽略
-            if self._cal_countdown_active:
-                a0.accept()
-                return
-            # 节拍器播放阶段记录 tap
-            if self._cal_stream and self._cal_running:
-                self._cal_tap_times.append(_time.monotonic())
-                count = len(self._cal_tap_times)
-                if count >= 8:
-                    self._calculate_offset()
-                else:
-                    self.lbl_cal_result.setText(f"校准中... 已记录 {count} 次 tap")
-                a0.accept()
-                return
+        """设置界面按键事件。"""
         super().keyPressEvent(a0)
 
     # ── Auto Check ──

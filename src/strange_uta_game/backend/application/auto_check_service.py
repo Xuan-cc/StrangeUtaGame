@@ -162,13 +162,7 @@ class AutoCheckService:
         char_to_block: Dict[int, int] = {}
         for block_id, result in enumerate(ruby_results):
             block_len = result.end_idx - result.start_idx
-            if result.text == result.reading:
-                # 假名/符号：不设 ruby，只标记 block
-                for idx in range(result.start_idx, result.end_idx):
-                    if idx < len(chars):
-                        char_to_block[idx] = block_id
-                continue
-            # 汉字块：按 mora 分割 reading
+            # 按 mora 分割 reading，为每个字符分配 ruby（包括自注音字符）
             split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
                 if idx < len(chars):
@@ -176,6 +170,11 @@ class AutoCheckService:
                     if pos < len(split_parts) and split_parts[pos]:
                         char_to_ruby[idx] = split_parts[pos]
                     char_to_block[idx] = block_id
+
+        # 未被分析器覆盖的字符使用自注音（保证所有字符都有 ruby）
+        for idx, char in enumerate(chars):
+            if idx not in char_to_ruby:
+                char_to_ruby[idx] = char
 
         # 根据注音更新 check_count（汉字按 mora 数分配节奏点）
         for result in ruby_results:
@@ -418,9 +417,86 @@ class AutoCheckService:
             if not char.ruby:
                 continue
             if char.char == char.ruby.text:
-                continue  # 假名注音，不更新
-            # 直接计算该字符 Ruby 的 mora 数
+                continue  # 自注音（假名等），保留默认 check_count
+            # 汉字等：按 Ruby 的 mora 数分配节奏点
             check_counts[i] = len(split_into_moras(char.ruby.text))
+
+        # 应用自动打勾过滤规则（与 analyze_sentence 相同逻辑）
+        chars = [c.char for c in sentence.characters]
+        if self._flags:
+            for i, ch in enumerate(chars):
+                if i >= len(check_counts):
+                    break
+
+                ct = get_char_type(ch) if len(ch) == 1 else CharType.OTHER
+
+                type_flag_map = {
+                    CharType.HIRAGANA: "hiragana",
+                    CharType.KATAKANA: "katakana",
+                    CharType.KANJI: "kanji",
+                    CharType.ALPHABET: "alphabet",
+                    CharType.NUMBER: "digit",
+                    CharType.SYMBOL: "symbol",
+                    CharType.SPACE: "space",
+                }
+                flag_key = type_flag_map.get(ct)
+                if flag_key and not self._flags.get(flag_key, True):
+                    check_counts[i] = 0
+                    continue
+
+                if ch == "ん" and not self._flags.get("check_n", False):
+                    check_counts[i] = 0
+                    continue
+
+                if ct == CharType.SOKUON and not self._flags.get("check_sokuon", False):
+                    check_counts[i] = 0
+                    continue
+
+                _SMALL_KANA = set("ぁぃぅぇぉゃゅょゎァィゥェォャュョヮゕゖ")
+                if ch in _SMALL_KANA and not self._flags.get("small_kana", False):
+                    check_counts[i] = 0
+                    continue
+
+                if ct == CharType.KANJI and self._flags.get(
+                    "kanji_single_check", False
+                ):
+                    check_counts[i] = min(check_counts[i], 1)
+
+                if ct == CharType.SPACE and i > 0:
+                    prev_char = chars[i - 1]
+                    prev_ct = (
+                        get_char_type(prev_char)
+                        if len(prev_char) == 1
+                        else CharType.OTHER
+                    )
+                    if prev_ct in (
+                        CharType.HIRAGANA,
+                        CharType.KATAKANA,
+                        CharType.KANJI,
+                        CharType.SOKUON,
+                        CharType.LONG_VOWEL,
+                    ):
+                        if not self._flags.get("space_after_japanese", True):
+                            check_counts[i] = 0
+                    elif prev_ct == CharType.ALPHABET:
+                        if not self._flags.get("space_after_alphabet", True):
+                            check_counts[i] = 0
+                    elif prev_ct in (CharType.SYMBOL, CharType.NUMBER):
+                        if not self._flags.get("space_after_symbol", True):
+                            check_counts[i] = 0
+
+            if not self._flags.get("check_parentheses", True):
+                in_paren = False
+                for i, ch in enumerate(chars):
+                    if ch in ("(", "（"):
+                        in_paren = True
+                    elif ch in (")", "）"):
+                        in_paren = False
+                    elif in_paren and i < len(check_counts):
+                        check_counts[i] = 0
+
+            if self._flags.get("check_line_start", False) and check_counts:
+                check_counts[0] = max(check_counts[0], 1)
 
         # 更新字符属性
         add_line_end = self._flags.get("check_line_end", True)

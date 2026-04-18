@@ -114,10 +114,10 @@ class MainWindow(MSFluentWindow):
         """初始化侧边栏导航"""
         self.addSubInterface(self.homeInterface, FIF.HOME, "主页")
         self.addSubInterface(self.editorInterface, FIF.PLAY, "打轴")
-        self.addSubInterface(self.editViewInterface, FIF.EDIT, "编辑")
+        self.addSubInterface(self.editViewInterface, FIF.EDIT, "行编辑")
         self.addSubInterface(self.exportInterface, FIF.SHARE, "导出")
         self.addSubInterface(self.singerInterface, FIF.PEOPLE, "演唱者")
-        self.addSubInterface(self.rubyInterface, FIF.FONT, "注音")
+        self.addSubInterface(self.rubyInterface, FIF.FONT, "全文本编辑")
 
         # 底部
         self.addSubInterface(
