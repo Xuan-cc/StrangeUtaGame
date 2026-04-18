@@ -119,6 +119,33 @@
 
 ---
 
+## 第二批 BUG 修复与功能增强（2026-04-18）
+
+### 修复的 BUG
+
+| # | BUG | 修改文件 | 说明 |
+|---|-----|---------|------|
+| 1 | 设置启动时不自动加载 | main_window.py | 在 _init_interfaces 结尾添加 notify("settings") 广播 |
+| 2 | 批量编辑注音弹窗节奏点被箭头遮挡 | bulk_change_dialog.py | SpinBox 改为 LineEdit 输入 |
+| 3 | 校准时打轴偏移干扰 | settings_interface.py | 校准开始时保存并置零 timing_offset，结束时恢复 |
+| 4 | NicokaraWithRubyExporter 方法签名不兼容 | nicokara_exporter.py | 重排参数顺序以匹配父类 |
+| 5 | home_interface.py 缺少 TimeTag 导入 | home_interface.py | 添加 TimeTag 到 import |
+| 6 | lyric_parser.py 正则转义警告 | lyric_parser.py | 修正无效转义序列 |
+
+### 新增功能
+
+| # | 功能 | 修改文件 | 说明 |
+|---|------|---------|------|
+| 1 | 默认导出偏移 -100ms | settings_interface.py | DEFAULT_SETTINGS 新增 offset_ms: -100 |
+| 2 | 打轴界面批量编辑按钮 | editor_interface.py | EditorToolBar 新增"批量変更(Ctrl+H)"按钮 |
+| 3 | 批量编辑弹窗自动填充 | bulk_change_dialog.py, editor_interface.py | 自动获取焦点字符及连词信息 |
+| 4 | 演唱者预设持久化 | singer_manager.py, settings_interface.py | 保存为软件预设/从软件预设加载，跨启动保持 |
+| 5 | 划词选择演唱者 | editor_interface.py | KaraokePreview 支持拖拽选中 + 右键菜单设置 per-char 演唱者 |
+| 6 | Nicokara 导出演唱者过滤 | nicokara_exporter.py, export_service.py, export_interface.py | 按演唱者筛选输出 + 插入演唱者切换标签 |
+| 7 | Nicokara 导入 | lyric_parser.py, home_interface.py | 解析【svN】+ @Ruby + @Emoji，自动创建演唱者 |
+
+---
+
 ## 关键设计决策确认
 
 ### 1. 数据一致性

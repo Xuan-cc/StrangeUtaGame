@@ -1,15 +1,16 @@
 """歌词文件解析器
 
-支持 TXT、LRC、KRA 格式的解析。
+支持 TXT、LRC、KRA、Nicokara 格式的解析。
 """
 
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple, Dict
 from pathlib import Path
 
 from strange_uta_game.backend.domain import LyricLine, TimeTag
+from strange_uta_game.backend.domain.models import Ruby
 
 
 class ParseError(Exception):
@@ -24,6 +25,37 @@ class ParsedLine:
 
     text: str
     timetags: List[Tuple[int, int]]  # (char_idx, timestamp_ms) 列表
+
+
+@dataclass
+class NicokaraParsedLine:
+    """Nicokara 解析后的歌词行数据（含演唱者信息）"""
+
+    text: str
+    timetags: List[Tuple[int, int]]  # (char_idx, timestamp_ms) 列表
+    # char_idx → singer_key 映射（singer_key 如 "sv1"、"sv9"）
+    char_singer_map: Dict[int, str] = field(default_factory=dict)
+    line_singer_key: str = ""  # 行级别默认演唱者 key
+
+
+@dataclass
+class NicokaraRubyEntry:
+    """Nicokara @Ruby 条目"""
+
+    kanji: str  # 漢字原文
+    reading: str  # 読み（可能含相对时间戳）
+    positions: List[str] = field(default_factory=list)  # 出现位置时间戳
+
+
+@dataclass
+class NicokaraParseResult:
+    """Nicokara 文件完整解析结果"""
+
+    lines: List[NicokaraParsedLine]
+    ruby_entries: List[NicokaraRubyEntry]
+    # singer_key → singer 显示名 映射（从 @Emoji 解析）
+    singer_definitions: Dict[str, str]
+    metadata: Dict[str, str] = field(default_factory=dict)
 
 
 class LyricParser(ABC):
@@ -97,7 +129,8 @@ class TXTParser(LyricParser):
 
             # 跳过纯标点和特殊符号行
             if re.match(
-                r"^[\[\]【】（）(){}<>" "''`~!@#$%^&*+=|\-:;,.?/\\s]+$", line_text
+                r"^[\[\]【】（）(){}<>\"\u2018\u2019`~!@#$%^&*+=|\\:;,.?/\\s\-]+$",
+                line_text,
             ):
                 continue
 
@@ -147,7 +180,8 @@ class LRCParser(LyricParser):
 
             # 跳过纯标点和特殊符号行
             if re.match(
-                r"^[\[\]【】（）(){}<>" "''`~!@#$%^&*+=|\-:;,.?/\\s]+$", line_text
+                r"^[\[\]【】（）(){}<>\"\u2018\u2019`~!@#$%^&*+=|\\:;,.?/\\s\-]+$",
+                line_text,
             ):
                 continue
 
@@ -308,6 +342,365 @@ class KRAParser(LRCParser):
     pass
 
 
+class NicokaraParser:
+    """Nicokara LRC 格式解析器
+
+    解析 RhythmicaLyrics 风格的 Nicokara 逐字 LRC 格式，包括：
+    - 【svN】演唱者标签（行首和行内切换）
+    - [MM:SS:CC] 时间戳（冒号分隔的厘秒格式）
+    - @Ruby 注音元数据
+    - @Emoji 演唱者定义
+
+    Nicokara 样例格式:
+        [00:02:50]【sv1】この色...       # 头部：singer 声明行
+        【sv1】[00:18:74]♪[00:19:74]押...  # 正文：【svN】开头，per-char timestamp
+        【sv1】[00:29:78]Fight [00:30:08]【sv9】[00:30:23]fight  # 行内 singer 切换
+        @Emoji=【sv1】,透明画像1x1.png,...   # 尾部：singer 定义
+        @Ruby1=押,お                       # @Ruby: 汉字→假名映射
+    """
+
+    # Nicokara 时间戳: [MM:SS:CC] 冒号分隔
+    NICOKARA_TS_PATTERN = re.compile(r"\[(\d{1,2}):(\d{2}):(\d{2})\]")
+    # 标准 LRC 时间戳: [MM:SS.CC] 或 [MM:SS:CC]
+    FLEXIBLE_TS_PATTERN = re.compile(r"\[(\d{1,2}):(\d{2})[:.](\d{2,3})\]")
+    # 演唱者标签: 【svN】或【演唱者名】
+    SINGER_TAG_PATTERN = re.compile(r"【([^】]+)】")
+    # @Ruby 条目
+    RUBY_PATTERN = re.compile(r"^@Ruby(\d+)=(.+)$")
+    # @Emoji 条目（演唱者定义）
+    EMOJI_PATTERN = re.compile(r"^@Emoji=(.+)$")
+    # 元数据标签
+    META_PATTERN = re.compile(r"^@(\w+)=(.*)$")
+
+    @staticmethod
+    def is_nicokara_format(content: str) -> bool:
+        """检测内容是否为 Nicokara 格式
+
+        特征：含有 【svN】 标签 或 @Ruby/@Emoji 元数据
+        """
+        # 检查 【svN】 模式
+        if re.search(r"【sv\d+】", content):
+            return True
+        # 检查 @Ruby 或 @Emoji 元数据
+        if re.search(r"^@(Ruby\d+|Emoji)=", content, re.MULTILINE):
+            return True
+        # 检查 [MM:SS:CC] 冒号分隔的时间戳（Nicokara 特有）
+        if re.search(r"\[\d{1,2}:\d{2}:\d{2}\]", content):
+            # 排除内联格式 [N|MM:SS:CC]
+            if not re.search(r"\[\d+\|\d{2}:\d{2}:\d{2}\]", content):
+                return True
+        return False
+
+    def parse(self, content: str) -> NicokaraParseResult:
+        """解析 Nicokara 格式文件内容
+
+        Returns:
+            NicokaraParseResult 含歌词行、ruby 条目和演唱者定义
+        """
+        raw_lines = content.split("\n")
+        body_lines: List[str] = []
+        ruby_entries: List[NicokaraRubyEntry] = []
+        singer_definitions: Dict[str, str] = {}
+        metadata: Dict[str, str] = {}
+
+        for raw_line in raw_lines:
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
+
+            # 解析 @Ruby 元数据
+            ruby_match = self.RUBY_PATTERN.match(raw_line)
+            if ruby_match:
+                entry = self._parse_ruby_entry(ruby_match.group(2))
+                if entry:
+                    ruby_entries.append(entry)
+                continue
+
+            # 解析 @Emoji 元数据（演唱者定义）
+            emoji_match = self.EMOJI_PATTERN.match(raw_line)
+            if emoji_match:
+                defs = self._parse_emoji_line(emoji_match.group(1))
+                singer_definitions.update(defs)
+                continue
+
+            # 解析其他 @ 元数据
+            meta_match = self.META_PATTERN.match(raw_line)
+            if meta_match:
+                key = meta_match.group(1)
+                value = meta_match.group(2)
+                if key not in ("Ruby", "Emoji"):
+                    metadata[key] = value
+                continue
+
+            # 正文歌词行
+            body_lines.append(raw_line)
+
+        # 解析正文行
+        parsed_lines = []
+        for line_text in body_lines:
+            parsed = self._parse_body_line(line_text)
+            if parsed and parsed.text.strip():
+                parsed_lines.append(parsed)
+
+        return NicokaraParseResult(
+            lines=parsed_lines,
+            ruby_entries=ruby_entries,
+            singer_definitions=singer_definitions,
+            metadata=metadata,
+        )
+
+    def parse_file(self, file_path: str) -> NicokaraParseResult:
+        """从文件解析 Nicokara 格式"""
+        path = Path(file_path)
+        if not path.exists():
+            raise ParseError(f"文件不存在: {file_path}")
+
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            try:
+                content = path.read_text(encoding="shift_jis")
+            except Exception as e:
+                raise ParseError(f"无法解码文件: {e}")
+        except Exception as e:
+            raise ParseError(f"读取文件失败: {e}")
+
+        return self.parse(content)
+
+    def _parse_body_line(self, line_text: str) -> Optional[NicokaraParsedLine]:
+        """解析一行正文歌词
+
+        处理 【svN】 演唱者标签和 [MM:SS:CC] 时间戳
+        """
+        # 查找所有 token（时间戳和演唱者标签）
+        tokens: List[Tuple[int, int, str, str]] = []
+        # (start, end, type, value)  type: 'ts' or 'singer'
+
+        for m in self.FLEXIBLE_TS_PATTERN.finditer(line_text):
+            ts_ms = self._parse_nicokara_timestamp(m)
+            tokens.append((m.start(), m.end(), "ts", str(ts_ms)))
+
+        for m in self.SINGER_TAG_PATTERN.finditer(line_text):
+            tokens.append((m.start(), m.end(), "singer", m.group(1)))
+
+        # 按位置排序
+        tokens.sort(key=lambda t: t[0])
+
+        # 提取纯文本字符和对应的时间戳/演唱者
+        lyric_chars: List[str] = []
+        timetags: List[Tuple[int, int]] = []
+        char_singer_map: Dict[int, str] = {}
+        line_singer_key = ""
+        current_singer = ""
+        char_idx = 0
+
+        # 分段处理文本
+        prev_end = 0
+        pending_ts: Optional[int] = None
+
+        for start, end, token_type, value in tokens:
+            # 处理 token 之前的纯文本字符
+            text_between = line_text[prev_end:start]
+            for ch in text_between:
+                lyric_chars.append(ch)
+                if pending_ts is not None:
+                    timetags.append((char_idx, pending_ts))
+                    pending_ts = None
+                if current_singer:
+                    char_singer_map[char_idx] = current_singer
+                char_idx += 1
+
+            if token_type == "ts":
+                pending_ts = int(value)
+            elif token_type == "singer":
+                current_singer = value
+                if not line_singer_key:
+                    line_singer_key = value
+
+            prev_end = end
+
+        # 处理最后一段文本
+        remaining = line_text[prev_end:]
+        for ch in remaining:
+            lyric_chars.append(ch)
+            if pending_ts is not None:
+                timetags.append((char_idx, pending_ts))
+                pending_ts = None
+            if current_singer:
+                char_singer_map[char_idx] = current_singer
+            char_idx += 1
+
+        # 如果最后有未消费的时间戳（行末时间戳），添加为最后一个字符的附加 tag
+        if pending_ts is not None and lyric_chars:
+            timetags.append((len(lyric_chars) - 1, pending_ts))
+
+        text = "".join(lyric_chars).strip()
+        if not text:
+            return None
+
+        # 重新计算索引（去除前导空白）
+        leading_spaces = len("".join(lyric_chars)) - len("".join(lyric_chars).lstrip())
+        if leading_spaces > 0:
+            timetags = [
+                (ci - leading_spaces, ts) for ci, ts in timetags if ci >= leading_spaces
+            ]
+            new_singer_map: Dict[int, str] = {}
+            for ci, sk in char_singer_map.items():
+                if ci >= leading_spaces:
+                    new_singer_map[ci - leading_spaces] = sk
+            char_singer_map = new_singer_map
+
+        return NicokaraParsedLine(
+            text=text,
+            timetags=timetags,
+            char_singer_map=char_singer_map,
+            line_singer_key=line_singer_key,
+        )
+
+    def _parse_nicokara_timestamp(self, match: re.Match) -> int:
+        """从正则匹配解析 Nicokara 时间戳（毫秒）
+
+        支持 [MM:SS:CC]（厘秒）和 [MM:SS.xxx]（毫秒）
+        """
+        minutes = int(match.group(1))
+        seconds = int(match.group(2))
+        sub = match.group(3)
+
+        if len(sub) == 2:
+            millis = int(sub) * 10  # 厘秒 → 毫秒
+        else:
+            millis = int(sub)  # 已经是毫秒
+
+        return (minutes * 60 + seconds) * 1000 + millis
+
+    def _parse_ruby_entry(self, entry_text: str) -> Optional[NicokaraRubyEntry]:
+        """解析 @Ruby 条目
+
+        格式: 漢字,読み[相対時間],位置1,位置2,...
+        例:   押,お
+              奪,う[00:00:22]ば
+              者,しゃ,,[00:27:01]
+        """
+        parts = entry_text.split(",")
+        if len(parts) < 2:
+            return None
+
+        kanji = parts[0]
+        reading = parts[1]
+        positions = parts[2:] if len(parts) > 2 else []
+
+        return NicokaraRubyEntry(
+            kanji=kanji,
+            reading=reading,
+            positions=positions,
+        )
+
+    def _parse_emoji_line(self, emoji_text: str) -> Dict[str, str]:
+        """解析 @Emoji 行提取演唱者定义
+
+        格式: @Emoji=【sv1】,透明画像1x1.png,...
+        提取 【svN】 标签作为 singer_key
+        """
+        defs: Dict[str, str] = {}
+        parts = emoji_text.split(",")
+        for part in parts:
+            part = part.strip()
+            m = self.SINGER_TAG_PATTERN.match(part)
+            if m:
+                singer_key = m.group(1)
+                # 默认用 singer_key 作为显示名
+                defs[singer_key] = singer_key
+        return defs
+
+
+def nicokara_result_to_lyric_lines(
+    result: NicokaraParseResult,
+    singer_key_to_id: Dict[str, str],
+    default_singer_id: str,
+) -> List[LyricLine]:
+    """将 NicokaraParseResult 转换为 LyricLine 对象列表
+
+    Args:
+        result: Nicokara 解析结果
+        singer_key_to_id: singer_key (如 "sv1") → Singer.id 的映射
+        default_singer_id: 默认演唱者 ID（无 singer 标签的行/字符使用）
+
+    Returns:
+        LyricLine 对象列表
+    """
+    lines: List[LyricLine] = []
+
+    for parsed in result.lines:
+        # 确定行级别演唱者
+        line_singer_id = default_singer_id
+        if parsed.line_singer_key and parsed.line_singer_key in singer_key_to_id:
+            line_singer_id = singer_key_to_id[parsed.line_singer_key]
+
+        line = LyricLine(
+            singer_id=line_singer_id,
+            text=parsed.text,
+        )
+
+        # 添加时间标签（含 per-char 演唱者）
+        for char_idx, timestamp_ms in parsed.timetags:
+            if char_idx < 0 or char_idx >= len(parsed.text):
+                continue
+            # 获取该字符的演唱者
+            char_singer_key = parsed.char_singer_map.get(char_idx, "")
+            if char_singer_key and char_singer_key in singer_key_to_id:
+                tag_singer_id = singer_key_to_id[char_singer_key]
+            else:
+                tag_singer_id = line_singer_id
+
+            tag = TimeTag(
+                timestamp_ms=timestamp_ms,
+                singer_id=tag_singer_id,
+                char_idx=char_idx,
+                checkpoint_idx=0,
+            )
+            line.add_timetag(tag)
+
+        # 应用 @Ruby 注音（基于文本匹配）
+        _apply_ruby_entries(line, result.ruby_entries)
+
+        lines.append(line)
+
+    return lines
+
+
+def _apply_ruby_entries(line: LyricLine, ruby_entries: List[NicokaraRubyEntry]):
+    """将 @Ruby 注音条目应用到歌词行
+
+    通过文本匹配找到漢字在行中的位置并添加 Ruby 注音。
+    """
+    text = line.text
+    for entry in ruby_entries:
+        # 清除读音中的时间戳（[MM:SS:CC] 格式）
+        clean_reading = re.sub(r"\[\d{1,2}:\d{2}[:.]?\d{2,3}\]", "", entry.reading)
+
+        # 在文本中查找漢字位置
+        start = 0
+        while True:
+            pos = text.find(entry.kanji, start)
+            if pos == -1:
+                break
+            end_pos = pos + len(entry.kanji)
+            # 检查是否已有 ruby 覆盖该范围
+            has_existing = any(
+                r.start_idx <= pos < r.end_idx or r.start_idx < end_pos <= r.end_idx
+                for r in line.rubies
+            )
+            if not has_existing:
+                ruby = Ruby(
+                    text=clean_reading,
+                    start_idx=pos,
+                    end_idx=end_pos,
+                )
+                line.add_ruby(ruby)
+                break  # 每个 entry 只匹配第一个未标注的出现
+            start = end_pos
+
+
 class LyricParserFactory:
     """歌词解析器工厂
 
@@ -338,6 +731,30 @@ class LyricParserFactory:
             return KRAParser()
         else:
             raise ParseError(f"不支持的文件格式: {ext}")
+
+    @staticmethod
+    def detect_nicokara(file_path: str) -> bool:
+        """检测文件是否为 Nicokara 格式
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            是否为 Nicokara 格式
+        """
+        path = Path(file_path)
+        if not path.exists():
+            return False
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            try:
+                content = path.read_text(encoding="shift_jis")
+            except Exception:
+                return False
+        except Exception:
+            return False
+        return NicokaraParser.is_nicokara_format(content)
 
     @staticmethod
     def parse_file(file_path: str) -> List[ParsedLine]:

@@ -182,13 +182,14 @@ class TransportBar(QFrame):
 # 工具栏
 # ──────────────────────────────────────────────
 class EditorToolBar(QFrame):
-    """编辑器工具栏 - 保存/加载音频/加载歌词/撤销/重做"""
+    """编辑器工具栏 - 保存/加载音频/加载歌词/撤销/重做/批量变更"""
 
     save_clicked = pyqtSignal()
     load_audio_clicked = pyqtSignal()
     load_lyrics_clicked = pyqtSignal()
     undo_clicked = pyqtSignal()
     redo_clicked = pyqtSignal()
+    bulk_change_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -232,6 +233,14 @@ class EditorToolBar(QFrame):
         self.btn_redo.clicked.connect(self.redo_clicked.emit)
         layout.addWidget(self.btn_redo)
 
+        layout.addSpacing(10)
+
+        self.btn_bulk_change = PushButton("批量变更 (Ctrl+H)", self)
+        self.btn_bulk_change.setIcon(FIF.EDIT)
+        self.btn_bulk_change.setFixedHeight(32)
+        self.btn_bulk_change.clicked.connect(self.bulk_change_clicked.emit)
+        layout.addWidget(self.btn_bulk_change)
+
         layout.addStretch()
 
         # 状态标签
@@ -257,6 +266,9 @@ class KaraokePreview(QWidget):
     char_edit_requested = pyqtSignal(int, int)  # line_idx, char_idx (F2 key)
     seek_to_char_requested = pyqtSignal(int, int)  # line_idx, char_idx (double-click)
     char_selected = pyqtSignal(int, int)  # line_idx, char_idx
+    singer_change_requested = pyqtSignal(
+        int, int, int, str
+    )  # line_idx, start_char, end_char, singer_id
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -270,6 +282,12 @@ class KaraokePreview(QWidget):
         self._char_hitboxes: list = []  # [(QRect, line_idx, char_idx)]
         self.setMinimumHeight(400)
         self.setMouseTracking(True)
+
+        # 划词选中状态
+        self._sel_line_idx: int = -1
+        self._sel_start_char: int = -1
+        self._sel_end_char: int = -1
+        self._sel_dragging: bool = False
 
         # 缓存字体和 QFontMetrics，避免每帧重建
         self._font_current = QFont("Microsoft YaHei", 22, QFont.Weight.Bold)
@@ -324,19 +342,35 @@ class KaraokePreview(QWidget):
         click_x = int(a0.position().x())
         click_y = int(a0.position().y())
 
+        # 右键点击 → 打开演唱者选择菜单（如果有选中范围）
+        if a0.button() == Qt.MouseButton.RightButton:
+            if self._sel_line_idx >= 0 and self._sel_start_char >= 0:
+                self._show_singer_context_menu(a0.globalPosition().toPoint())
+            return
+
         # 优先检查 checkpoint 标记的点击
         for marker_rect, line_idx, char_idx, cp_idx in self._checkpoint_hitboxes:
             if marker_rect.contains(click_x, click_y):
                 self.checkpoint_clicked.emit(line_idx, char_idx, cp_idx)
                 return
 
-        # 检查字符文本点击 → 选中该字符（不论是否有 checkpoint）
+        # 检查字符文本点击 → 开始划词选择
         for char_rect, line_idx, char_idx in self._char_hitboxes:
             if char_rect.contains(click_x, click_y):
+                self._sel_line_idx = line_idx
+                self._sel_start_char = char_idx
+                self._sel_end_char = char_idx
+                self._sel_dragging = True
                 self.char_selected.emit(line_idx, char_idx)
+                self.update()
                 return
 
         # 回退到行级别点击：根据 y 坐标反算行索引
+        # 清除选中状态
+        self._sel_line_idx = -1
+        self._sel_start_char = -1
+        self._sel_end_char = -1
+
         h = self.height()
         line_height = h / self._visible_lines
         center_y = h / 2.0
@@ -346,6 +380,53 @@ class KaraokePreview(QWidget):
         total = len(self._project.lines)
         if 0 <= target_idx < total:
             self.line_clicked.emit(target_idx)
+        self.update()
+
+    def mouseMoveEvent(self, a0: Optional[QMouseEvent]):
+        """鼠标拖拽 → 扩展划词选择范围"""
+        if not a0 or not self._sel_dragging:
+            return
+
+        move_x = int(a0.position().x())
+        move_y = int(a0.position().y())
+
+        for char_rect, line_idx, char_idx in self._char_hitboxes:
+            if char_rect.contains(move_x, move_y) and line_idx == self._sel_line_idx:
+                self._sel_end_char = char_idx
+                self.update()
+                return
+
+    def mouseReleaseEvent(self, a0: Optional[QMouseEvent]):
+        """鼠标释放 → 结束划词"""
+        if a0 and a0.button() == Qt.MouseButton.LeftButton:
+            self._sel_dragging = False
+
+    def _show_singer_context_menu(self, global_pos):
+        """显示演唱者选择右键菜单"""
+        if not self._project or not self._project.singers:
+            return
+
+        from qfluentwidgets import RoundMenu, Action
+
+        menu = RoundMenu(parent=self)
+        menu.addAction(Action("设置选中字符的演唱者：", menu))
+        menu.addSeparator()
+
+        start = min(self._sel_start_char, self._sel_end_char)
+        end = max(self._sel_start_char, self._sel_end_char)
+        line_idx = self._sel_line_idx
+
+        for singer in self._project.singers:
+            action = Action(f"{singer.name}", menu)
+            action.setData(singer.id)
+            action.triggered.connect(
+                lambda checked, sid=singer.id: self.singer_change_requested.emit(
+                    line_idx, start, end, sid
+                )
+            )
+            menu.addAction(action)
+
+        menu.exec(global_pos)
 
     def mouseDoubleClickEvent(self, a0: Optional[QMouseEvent]):
         """双击字符 → 跳转到该字符 checkpoint 前 3 秒"""
@@ -415,13 +496,23 @@ class KaraokePreview(QWidget):
             line = self._project.lines[idx]
             is_current = idx == self._current_line_idx
 
-            # 根据演唱者获取高亮颜色
+            # 根据演唱者获取行级别默认高亮颜色
             singer = (
                 self._project.get_singer(line.singer_id) if line.singer_id else None
             )
             highlight_color = (
                 QColor(singer.color) if singer and singer.color else default_highlight
             )
+
+            # 预计算每个字符的 per-tag singer 颜色（优先使用 tag 的 singer_id）
+            _char_singer_colors: dict = {}  # char_idx -> QColor
+            for t in line.timetags:
+                if t.char_idx not in _char_singer_colors and t.singer_id != (
+                    line.singer_id or ""
+                ):
+                    tag_singer = self._project.get_singer(t.singer_id)
+                    if tag_singer and tag_singer.color:
+                        _char_singer_colors[t.char_idx] = QColor(tag_singer.color)
 
             if is_current:
                 main_font = font_current
@@ -527,6 +618,20 @@ class KaraokePreview(QWidget):
                     )
                     painter.fillRect(bg_rect, highlight_bg)
 
+                # 划词选中高亮背景
+                if idx == self._sel_line_idx and self._sel_start_char >= 0:
+                    sel_lo = min(self._sel_start_char, self._sel_end_char)
+                    sel_hi = max(self._sel_start_char, self._sel_end_char)
+                    if sel_lo <= char_pos <= sel_hi:
+                        sel_bg = QColor("#BDE0FE")
+                        sel_rect = QRect(
+                            int(curr_x) - 1,
+                            int(y_center - main_fm.ascent()) - 2,
+                            int(char_w) + 2,
+                            main_fm.height() + 4,
+                        )
+                        painter.fillRect(sel_rect, sel_bg)
+
                 # 存储字符 hitbox 用于点击检测
                 char_rect = QRect(
                     int(curr_x),
@@ -552,6 +657,10 @@ class KaraokePreview(QWidget):
                     # Ruby 走字效果 — 与主字符wipe时间同步
                     ruby_wipe_st = char_wipe_times.get(ruby.start_idx)
                     ruby_st = ruby_wipe_st[0] if ruby_wipe_st else None
+                    # Ruby 高亮色跟随起始字符的演唱者颜色
+                    ruby_highlight = _char_singer_colors.get(
+                        ruby.start_idx, highlight_color
+                    )
                     if ruby_st is not None:
                         last_ci = ruby.end_idx - 1
                         ruby_wipe_et = char_wipe_times.get(last_ci)
@@ -559,7 +668,7 @@ class KaraokePreview(QWidget):
 
                         if self._current_time_ms >= ruby_et:
                             # 已唱完 → ruby 全高亮
-                            painter.setPen(highlight_color)
+                            painter.setPen(ruby_highlight)
                             painter.drawText(int(ruby_x), ruby_y, ruby.text)
                         elif self._current_time_ms >= ruby_st:
                             # 正在唱 → ruby wipe 渐变
@@ -582,7 +691,7 @@ class KaraokePreview(QWidget):
                                     fm_ruby.height() + 4,
                                 )
                                 painter.setClipRect(r_clip)
-                                painter.setPen(highlight_color)
+                                painter.setPen(ruby_highlight)
                                 painter.drawText(int(ruby_x), ruby_y, ruby.text)
                                 painter.restore()
 
@@ -604,13 +713,15 @@ class KaraokePreview(QWidget):
 
                 # 主文字 — 基于 checkpoint 的逐字 wipe
                 painter.setFont(main_font)
+                # 使用 per-char singer 颜色（如果该字符有不同的演唱者）
+                char_highlight = _char_singer_colors.get(char_pos, highlight_color)
 
                 if char_pos in char_wipe_times:
                     char_time, next_time = char_wipe_times[char_pos]
 
                     if self._current_time_ms >= next_time:
                         # 已唱完 → 全高亮
-                        painter.setPen(highlight_color)
+                        painter.setPen(char_highlight)
                         painter.drawText(int(curr_x), int(y_center), ch)
                     elif self._current_time_ms >= char_time:
                         # 正在唱 → wipe 渐变
@@ -636,7 +747,7 @@ class KaraokePreview(QWidget):
                                 main_fm.height() + 10,
                             )
                             painter.setClipRect(clip_rect)
-                            painter.setPen(highlight_color)
+                            painter.setPen(char_highlight)
                             painter.drawText(int(curr_x), int(y_center), ch)
                             painter.restore()
                     else:
@@ -1028,6 +1139,7 @@ class EditorInterface(QWidget):
         self.toolbar.load_lyrics_clicked.connect(self._on_load_lyrics)
         self.toolbar.undo_clicked.connect(self._on_undo)
         self.toolbar.redo_clicked.connect(self._on_redo)
+        self.toolbar.bulk_change_clicked.connect(self._on_bulk_change)
         layout.addWidget(self.toolbar)
 
         # 2) 播放控制栏
@@ -1052,6 +1164,7 @@ class EditorInterface(QWidget):
         self.preview.char_selected.connect(self._on_char_selected)
         self.preview.char_edit_requested.connect(self._on_char_edit_requested)
         self.preview.seek_to_char_requested.connect(self._on_seek_to_char)
+        self.preview.singer_change_requested.connect(self._on_singer_change_selection)
         layout.addWidget(self.preview, stretch=1)
 
         # 5) 底部打轴操作栏
@@ -1392,13 +1505,81 @@ class EditorInterface(QWidget):
             self._update_status()
 
     def _on_bulk_change(self):
-        """Ctrl+H — 打开批量変更对话框"""
+        """Ctrl+H — 打开批量変更对话框，自动填充当前焦点字符的连词"""
         from strange_uta_game.frontend.editor.bulk_change_dialog import BulkChangeDialog
 
-        dialog = BulkChangeDialog(self._project, self)
+        initial_word = ""
+        if self._project:
+            line_idx = self.preview._current_line_idx
+            char_idx = self.preview._current_char_idx
+            if 0 <= line_idx < len(self._project.lines):
+                line = self._project.lines[line_idx]
+                text = line.text
+                cps = line.checkpoints
+                if 0 <= char_idx < len(text):
+                    # 向前查找连词起点（check_count == 0 的字符属于前一个词）
+                    start = char_idx
+                    while (
+                        start > 0 and start < len(cps) and cps[start].check_count == 0
+                    ):
+                        start -= 1
+                    # 向后查找连词终点
+                    end = char_idx + 1
+                    while (
+                        end < len(text) and end < len(cps) and cps[end].check_count == 0
+                    ):
+                        end += 1
+                    initial_word = text[start:end]
+
+        dialog = BulkChangeDialog(self._project, self, initial_word=initial_word)
         dialog.exec()
 
     # ==================== 音频 ====================
+
+    def _on_singer_change_selection(
+        self, line_idx: int, start_char: int, end_char: int, singer_id: str
+    ):
+        """划词选中后，修改选中范围内所有 TimeTag 的 singer_id"""
+        if not self._project or line_idx < 0 or line_idx >= len(self._project.lines):
+            return
+
+        from strange_uta_game.backend.domain.models import TimeTag
+
+        line = self._project.lines[line_idx]
+        new_tags = []
+        for tag in line.timetags:
+            if start_char <= tag.char_idx <= end_char:
+                # 替换 singer_id（frozen dataclass，需重建）
+                new_tags.append(
+                    TimeTag(
+                        timestamp_ms=tag.timestamp_ms,
+                        singer_id=singer_id,
+                        char_idx=tag.char_idx,
+                        checkpoint_idx=tag.checkpoint_idx,
+                        tag_type=tag.tag_type,
+                    )
+                )
+            else:
+                new_tags.append(tag)
+        line.timetags = sorted(new_tags, key=lambda t: t.timestamp_ms)
+
+        # 如果选中了整行，也更新 line.singer_id
+        if start_char == 0 and end_char >= len(line.chars) - 1:
+            line.singer_id = singer_id
+
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("lyrics")
+        self.preview.update()
+
+        InfoBar.success(
+            title="演唱者已更新",
+            content=f"已将第 {line_idx + 1} 行第 {start_char + 1}~{end_char + 1} 字的演唱者更改",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self,
+        )
 
     def load_audio(self, file_path: str) -> bool:
         if not self._timing_service:

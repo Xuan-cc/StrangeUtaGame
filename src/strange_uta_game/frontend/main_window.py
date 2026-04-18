@@ -107,6 +107,9 @@ class MainWindow(MSFluentWindow):
         self.rubyInterface.set_store(self._store)
         self.settingInterface.set_store(self._store)
 
+        # 初始广播设置，确保 EditorInterface 等在启动时就能读取设置值
+        self._store.notify("settings")
+
     def _init_navigation(self):
         """初始化侧边栏导航"""
         self.addSubInterface(self.homeInterface, FIF.HOME, "主页")

@@ -187,6 +187,27 @@ class SingerManagerInterface(QWidget):
 
         layout.addLayout(button_layout)
 
+        # 演唱者预设按钮区域
+        preset_layout = QHBoxLayout()
+
+        self.btn_save_preset = PushButton("保存为软件预设", self)
+        self.btn_save_preset.setIcon(FIF.SAVE)
+        self.btn_save_preset.setToolTip(
+            "将当前演唱者列表保存到软件设置，每次启动自动加载"
+        )
+        self.btn_save_preset.clicked.connect(self._on_save_preset)
+        preset_layout.addWidget(self.btn_save_preset)
+
+        self.btn_load_preset = PushButton("从软件预设加载", self)
+        self.btn_load_preset.setIcon(FIF.DOWNLOAD)
+        self.btn_load_preset.setToolTip("从软件设置中加载已保存的演唱者预设到当前项目")
+        self.btn_load_preset.clicked.connect(self._on_load_preset)
+        preset_layout.addWidget(self.btn_load_preset)
+
+        preset_layout.addStretch()
+
+        layout.addLayout(preset_layout)
+
         # 统计信息
         self.lbl_stats = QLabel("共 0 位演唱者")
         self.lbl_stats.setStyleSheet("color: gray;")
@@ -462,3 +483,120 @@ class SingerManagerInterface(QWidget):
                     duration=5000,
                     parent=self,
                 )
+
+    # ==================== 演唱者预设 ====================
+
+    def _on_save_preset(self):
+        """将当前项目的演唱者保存到软件全局设置"""
+        if not self._project or not self._project.singers:
+            InfoBar.warning(
+                title="无法保存",
+                content="当前没有演唱者可保存",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        from strange_uta_game.frontend.settings.settings_interface import AppSettings
+
+        app_settings = AppSettings()
+        presets = []
+        for s in self._project.singers:
+            presets.append(
+                {
+                    "name": s.name,
+                    "color": s.color,
+                    "is_default": s.is_default,
+                    "backend_number": s.backend_number,
+                }
+            )
+        app_settings.set("singer_presets", presets)
+        app_settings.save()
+
+        InfoBar.success(
+            title="保存成功",
+            content=f"已保存 {len(presets)} 位演唱者预设到软件设置",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self,
+        )
+
+    def _on_load_preset(self):
+        """从软件全局设置加载演唱者预设到当前项目"""
+        if not self._project or not self._singer_service:
+            InfoBar.warning(
+                title="未加载项目",
+                content="请先打开或创建一个项目",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        from strange_uta_game.frontend.settings.settings_interface import AppSettings
+
+        app_settings = AppSettings()
+        presets = app_settings.get("singer_presets") or []
+
+        if not presets:
+            InfoBar.warning(
+                title="无预设",
+                content="软件中没有保存的演唱者预设，请先保存",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        # 检查是否已有同名演唱者，避免重复添加
+        existing_names = {s.name for s in self._project.singers}
+        added = 0
+        for preset in presets:
+            name = preset.get("name", "")
+            if name in existing_names:
+                continue
+            try:
+                singer = self._singer_service.add_singer(
+                    name=name,
+                    color=preset.get("color", "#FF6B6B"),
+                )
+                if preset.get("is_default", False):
+                    self._singer_service.set_default_singer(singer.id)
+                added += 1
+                existing_names.add(name)
+            except Exception:
+                pass
+
+        self._refresh_list()
+        if hasattr(self, "_store"):
+            self._store.notify("singers")
+
+        if added > 0:
+            InfoBar.success(
+                title="加载成功",
+                content=f"已从预设加载 {added} 位新演唱者",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+        else:
+            InfoBar.info(
+                title="无需加载",
+                content="所有预设演唱者已存在于当前项目中",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )

@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from qfluentwidgets import (
     LineEdit,
-    SpinBox,
     PushButton,
     PrimaryPushButton,
     InfoBar,
@@ -34,7 +33,7 @@ class BulkChangeDialog(QDialog):
     - 可选注册到用户读音词典
     """
 
-    def __init__(self, project: Optional[Project], parent=None):
+    def __init__(self, project: Optional[Project], parent=None, initial_word: str = ""):
         super().__init__(parent)
         self._project = project
         self.setWindowTitle("批量变更 (Ctrl+H)")
@@ -61,6 +60,8 @@ class BulkChangeDialog(QDialog):
         self.edit_word = LineEdit()
         self.edit_word.setPlaceholderText("输入要替换的词汇...")
         self.edit_word.setFont(QFont("Microsoft YaHei", 10))
+        if initial_word:
+            self.edit_word.setText(initial_word)
         row1.addWidget(lbl1)
         row1.addWidget(self.edit_word)
         layout.addLayout(row1)
@@ -82,15 +83,15 @@ class BulkChangeDialog(QDialog):
         lbl3 = QLabel("节奏点变更：")
         lbl3.setFont(QFont("Microsoft YaHei", 10))
         lbl3.setFixedWidth(100)
-        self.spin_delta = SpinBox()
-        self.spin_delta.setRange(-9, 9)
-        self.spin_delta.setValue(0)
-        self.spin_delta.setFont(QFont("Microsoft YaHei", 10))
-        self.spin_delta.setFixedWidth(100)
+        self.edit_delta = LineEdit()
+        self.edit_delta.setText("0")
+        self.edit_delta.setPlaceholderText("整数，如 -1、0、2")
+        self.edit_delta.setFont(QFont("Microsoft YaHei", 10))
+        self.edit_delta.setFixedWidth(120)
         hint = QLabel("（每个匹配字符的节奏点数±，0=不变）")
         hint.setFont(QFont("Microsoft YaHei", 9))
         row3.addWidget(lbl3)
-        row3.addWidget(self.spin_delta)
+        row3.addWidget(self.edit_delta)
         row3.addWidget(hint)
         row3.addStretch()
         layout.addLayout(row3)
@@ -151,7 +152,10 @@ class BulkChangeDialog(QDialog):
             return
 
         reading = self.edit_reading.text().strip()
-        delta = self.spin_delta.value()
+        try:
+            delta = int(self.edit_delta.text().strip() or "0")
+        except ValueError:
+            delta = 0
         word_len = len(word)
         changed = 0
 

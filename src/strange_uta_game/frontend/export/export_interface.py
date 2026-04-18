@@ -1,6 +1,7 @@
 """导出界面。
 
 提供多格式导出功能，支持 LRC/KRA/TXT/ASS/Nicokara。
+Nicokara 格式支持演唱者过滤和演唱者标签插入。
 """
 
 from PyQt6.QtWidgets import (
@@ -11,6 +12,8 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QListWidget,
     QListWidgetItem,
+    QCheckBox,
+    QGroupBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from qfluentwidgets import (
@@ -21,9 +24,10 @@ from qfluentwidgets import (
     InfoBarPosition,
     FluentIcon as FIF,
     SimpleCardWidget,
+    CheckBox,
 )
 
-from typing import Optional
+from typing import Optional, Set, Dict
 from pathlib import Path
 
 from strange_uta_game.backend.domain import Project
@@ -121,6 +125,28 @@ class ExportInterface(QWidget):
         self.btn_tags.hide()
         right_layout.addWidget(self.btn_tags)
 
+        # 演唱者选择区域（仅 Nicokara 格式显示）
+        self._singer_group = QGroupBox("演唱者过滤")
+        singer_group_layout = QVBoxLayout(self._singer_group)
+        singer_group_layout.setSpacing(6)
+
+        singer_hint = QLabel("勾选要导出的演唱者（不勾选则导出全部）")
+        singer_hint.setStyleSheet("font-size: 12px; color: #888;")
+        singer_group_layout.addWidget(singer_hint)
+
+        self._singer_checkboxes: list[CheckBox] = []
+        self._singer_checkbox_container = QVBoxLayout()
+        singer_group_layout.addLayout(self._singer_checkbox_container)
+
+        self._chk_insert_singer_tags = CheckBox("在演唱者切换处插入【演唱者名】标签")
+        self._chk_insert_singer_tags.setToolTip(
+            "导出时，当演唱者发生变化，在字符前自动插入演唱者名称标签"
+        )
+        singer_group_layout.addWidget(self._chk_insert_singer_tags)
+
+        self._singer_group.hide()
+        right_layout.addWidget(self._singer_group)
+
         right_layout.addStretch()
 
         # 导出按钮
@@ -152,10 +178,14 @@ class ExportInterface(QWidget):
         self.format_list.currentItemChanged.connect(self._on_format_selected)
 
     def _on_format_selected(self, current, _previous):
-        """根据所选格式显示/隐藏 Nicokara 标签按钮"""
+        """根据所选格式显示/隐藏 Nicokara 专用控件"""
         if current:
             name = current.data(Qt.ItemDataRole.UserRole)
-            self.btn_tags.setVisible("nicokara" in name.lower())
+            is_nicokara = "nicokara" in name.lower()
+            self.btn_tags.setVisible(is_nicokara)
+            self._singer_group.setVisible(is_nicokara)
+            if is_nicokara:
+                self._refresh_singer_checkboxes()
 
     def set_project(self, project: Project):
         self._project = project
@@ -183,6 +213,43 @@ class ExportInterface(QWidget):
             else:
                 default_name = ""
             self.line_filename.setText(default_name)
+            self._refresh_singer_checkboxes()
+        elif change_type == "singers":
+            self._refresh_singer_checkboxes()
+
+    def _refresh_singer_checkboxes(self):
+        """刷新演唱者 checkbox 列表"""
+        # 清除现有 checkbox
+        for chk in self._singer_checkboxes:
+            self._singer_checkbox_container.removeWidget(chk)
+            chk.deleteLater()
+        self._singer_checkboxes.clear()
+
+        if not self._project:
+            return
+
+        for singer in self._project.singers:
+            chk = CheckBox(f"{singer.name}")
+            chk.setProperty("singer_id", singer.id)
+            chk.setStyleSheet(
+                f"QCheckBox {{ color: {singer.color}; font-weight: bold; }}"
+            )
+            self._singer_checkbox_container.addWidget(chk)
+            self._singer_checkboxes.append(chk)
+
+    def _get_selected_singer_ids(self) -> Optional[Set[str]]:
+        """获取勾选的演唱者 ID 集合，如果没有勾选任何则返回 None（表示全部）"""
+        selected = set()
+        for chk in self._singer_checkboxes:
+            if chk.isChecked():
+                selected.add(chk.property("singer_id"))
+        return selected if selected else None
+
+    def _get_singer_map(self) -> Dict[str, str]:
+        """获取 singer_id → 显示名 的映射"""
+        if not self._project:
+            return {}
+        return {s.id: s.name for s in self._project.singers}
 
     def _on_browse(self):
         path = QFileDialog.getExistingDirectory(self, "选择导出目录", "")
@@ -264,7 +331,13 @@ class ExportInterface(QWidget):
         filepath = str(Path(output_dir) / filename)
 
         result = self._export_service.export(
-            self._project, name, filepath, offset_ms=self._get_export_offset()
+            self._project,
+            name,
+            filepath,
+            offset_ms=self._get_export_offset(),
+            singer_ids=self._get_selected_singer_ids(),
+            insert_singer_tags=self._chk_insert_singer_tags.isChecked(),
+            singer_map=self._get_singer_map(),
         )
         if result.success:
             InfoBar.success(

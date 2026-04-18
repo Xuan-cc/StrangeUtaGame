@@ -27,13 +27,15 @@ from qfluentwidgets import (
 from typing import Optional, List
 from pathlib import Path
 
-from strange_uta_game.backend.domain import Project, LyricLine, Singer
+from strange_uta_game.backend.domain import Project, LyricLine, Singer, TimeTag
 from strange_uta_game.backend.application import ProjectService, AutoCheckService
 from strange_uta_game.backend.infrastructure import SugProjectParser
 from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
     LyricParserFactory,
     LRCParser,
+    NicokaraParser,
     parse_to_lyric_lines,
+    nicokara_result_to_lyric_lines,
 )
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     lines_from_inline_text,
@@ -61,6 +63,8 @@ class HomeInterface(QWidget):
         self._project_service = ProjectService()
         self._audio_path: Optional[str] = None
         self._lyric_lines: List[LyricLine] = []
+        self._nicokara_singers: List[Singer] = []
+        self._nicokara_singer_key_to_id: dict = {}
 
         self.setAcceptDrops(True)
         self._init_ui()
@@ -366,15 +370,58 @@ class HomeInterface(QWidget):
             project = self._project_service.create_project()
             default_singer = project.get_default_singer()
 
+            # 如果有 Nicokara 导入的演唱者，添加到项目中
+            if self._nicokara_singers:
+                # 建立临时 singer_id → 项目 singer_id 的映射
+                nicokara_id_map: dict = {}
+                for nico_singer in self._nicokara_singers:
+                    # 检查是否已有同名演唱者
+                    existing = None
+                    for s in project.singers:
+                        if s.name == nico_singer.name:
+                            existing = s
+                            break
+                    if existing:
+                        nicokara_id_map[nico_singer.id] = existing.id
+                    else:
+                        new_singer = Singer(
+                            name=nico_singer.name,
+                            color=nico_singer.color,
+                            is_default=False,
+                        )
+                        project.add_singer(new_singer)
+                        nicokara_id_map[nico_singer.id] = new_singer.id
+
+                # 更新歌词行中的 singer_id 映射
+                for line in self._lyric_lines:
+                    # 映射行级 singer_id
+                    if line.singer_id in nicokara_id_map:
+                        line.singer_id = nicokara_id_map[line.singer_id]
+                    else:
+                        line.singer_id = default_singer.id
+                    # 映射 per-tag singer_id（需要替换 frozen TimeTag）
+                    new_tags = []
+                    for tag in line.timetags:
+                        new_singer_id = nicokara_id_map.get(
+                            tag.singer_id, default_singer.id
+                        )
+                        new_tags.append(
+                            TimeTag(
+                                timestamp_ms=tag.timestamp_ms,
+                                singer_id=new_singer_id,
+                                char_idx=tag.char_idx,
+                                checkpoint_idx=tag.checkpoint_idx,
+                                tag_type=tag.tag_type,
+                            )
+                        )
+                    line.timetags = new_tags
+
             if self._lyric_lines:
                 # 使用已导入的歌词行（可能包含注音、时间标签等富数据）
                 for line in self._lyric_lines:
-                    # 将演唱者 ID 替换为项目的默认演唱者
-                    line.singer_id = default_singer.id
-                    for tag in line.timetags:
-                        # TimeTag 是 frozen dataclass，需要重建
-                        pass  # timetag.singer_id 在 domain 中是只读的，
-                        # 但 LyricLine 会在 add_line 时被项目采用
+                    if not self._nicokara_singers:
+                        # 非 Nicokara 导入：将演唱者 ID 替换为项目的默认演唱者
+                        line.singer_id = default_singer.id
                     project.add_line(line)
             else:
                 # 从文本框手动输入的纯文本
@@ -503,6 +550,12 @@ class HomeInterface(QWidget):
             text_content = "\n".join(line.text for line in lyric_lines)
             return lyric_lines, text_content, True
 
+        # 检测是否为 Nicokara 格式（含 【svN】 标签或 @Ruby/@Emoji 元数据）
+        if NicokaraParser.is_nicokara_format(content):
+            lyric_lines = self._parse_nicokara_content(content)
+            text_content = "\n".join(line.text for line in lyric_lines)
+            return lyric_lines, text_content, True
+
         parsed_lines = LyricParserFactory.parse_file(file_path)
 
         # 如果是 .txt 文件但内容含 LRC 时间标签，自动用 LRC 解析器重新解析
@@ -516,6 +569,72 @@ class HomeInterface(QWidget):
         text_content = "\n".join(line.text for line in lyric_lines)
         parsed_with_tags = any(parsed_line.timetags for parsed_line in parsed_lines)
         return lyric_lines, text_content, parsed_with_tags
+
+    def _parse_nicokara_content(self, content: str) -> List[LyricLine]:
+        """解析 Nicokara 格式内容，自动创建不存在的演唱者
+
+        Returns:
+            LyricLine 列表（含 per-tag singer_id）
+        """
+        parser = NicokaraParser()
+        result = parser.parse(content)
+
+        # 收集所有出现的 singer_key
+        all_singer_keys: set = set()
+        for singer_key in result.singer_definitions:
+            all_singer_keys.add(singer_key)
+        for line in result.lines:
+            if line.line_singer_key:
+                all_singer_keys.add(line.line_singer_key)
+            for _, sk in line.char_singer_map.items():
+                all_singer_keys.add(sk)
+
+        # 为每个 singer_key 创建 Singer 对象
+        # 使用预定义颜色循环
+        singer_colors = [
+            "#FF6B6B",
+            "#4ECDC4",
+            "#45B7D1",
+            "#FFA07A",
+            "#98D8C8",
+            "#C9B1FF",
+            "#F7DC6F",
+            "#82E0AA",
+            "#F1948A",
+            "#85C1E9",
+        ]
+        singer_key_to_id: dict = {}
+        temp_singers: list = []
+        for idx, singer_key in enumerate(sorted(all_singer_keys)):
+            # 使用 singer_definitions 中的显示名，否则用 singer_key
+            display_name = (
+                result.singer_definitions.get(singer_key, singer_key) or singer_key
+            )
+            color = singer_colors[idx % len(singer_colors)]
+            singer = Singer(
+                name=display_name,
+                color=color,
+                is_default=(idx == 0),
+            )
+            singer_key_to_id[singer_key] = singer.id
+            temp_singers.append(singer)
+
+        # 如果没有任何演唱者定义，使用临时默认演唱者
+        if not singer_key_to_id:
+            temp_singer = Singer(name="临时", is_default=True)
+            default_singer_id = temp_singer.id
+        else:
+            # 使用第一个演唱者作为默认
+            default_singer_id = list(singer_key_to_id.values())[0]
+
+        # 保存解析出的演唱者信息到实例变量，供 _on_create_project 使用
+        self._nicokara_singers = temp_singers
+        self._nicokara_singer_key_to_id = singer_key_to_id
+
+        lyric_lines = nicokara_result_to_lyric_lines(
+            result, singer_key_to_id, default_singer_id
+        )
+        return lyric_lines
 
     @staticmethod
     def _has_lrc_timestamps(content: str) -> bool:
@@ -568,6 +687,8 @@ class HomeInterface(QWidget):
         self.line_audio_path.clear()
         self._audio_path = None
         self._lyric_lines = []
+        self._nicokara_singers = []
+        self._nicokara_singer_key_to_id = {}
 
     def _open_project_file(self, file_path: str) -> None:
         try:

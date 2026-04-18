@@ -7,13 +7,15 @@
 - @Ruby 注音标签（含字内相对时间和多次出现位置）
 - @Offset 全局偏移
 - @Title/@Artist/@Album/@TaggingBy/@SilencemSec 元数据标签（可选）
+- 演唱者过滤：可按选定的演唱者筛选输出行/字符
+- 演唱者标签：在演唱者切换处自动插入【演唱者名】标签
 """
 
 from collections import OrderedDict
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 
 from .base import BaseExporter, ExportError
-from strange_uta_game.backend.domain import Project, LyricLine
+from strange_uta_game.backend.domain import Project, LyricLine, Singer
 
 
 def _format_nicokara_ts(timestamp_ms: int, offset_ms: int = 0) -> str:
@@ -37,6 +39,7 @@ class NicokaraExporter(BaseExporter):
     """Nicokara 逐字 LRC 格式导出器
 
     每个字符前有独立 [MM:SS:CC] 时间戳，行末附加结束时间戳。
+    支持演唱者过滤和演唱者标签插入。
     """
 
     @property
@@ -55,21 +58,45 @@ class NicokaraExporter(BaseExporter):
     def file_filter(self) -> str:
         return "Nicokara LRC 文件 (*.lrc)"
 
-    def export(self, project: Project, file_path: str) -> None:
-        """导出为 Nicokara 逐字 LRC 格式"""
+    def export(
+        self,
+        project: Project,
+        file_path: str,
+        singer_ids: Optional[Set[str]] = None,
+        insert_singer_tags: bool = False,
+        singer_map: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """导出为 Nicokara 逐字 LRC 格式
+
+        Args:
+            project: 项目数据
+            file_path: 输出文件路径
+            singer_ids: 要输出的演唱者 ID 集合（None 表示全部）
+            insert_singer_tags: 是否在演唱者切换处插入【演唱者名】标签
+            singer_map: singer_id → 演唱者显示名的映射（insert_singer_tags 时使用）
+        """
         self._validate_project(project)
 
         output_lines: List[str] = []
         prev_end_ms = 0
 
         for i, line in enumerate(project.lines):
+            # 演唱者过滤：检查行内是否有选中的演唱者字符
+            if singer_ids is not None:
+                if not self._line_has_singer(line, singer_ids):
+                    continue
+
             # 段落间距 >5 秒时插入空行
             if i > 0 and line.timetags:
                 line_start = min(t.timestamp_ms for t in line.timetags)
                 if line_start - prev_end_ms > 5000:
                     output_lines.append("")
 
-            output_lines.append(self._export_line(line))
+            output_lines.append(
+                self._export_line_with_singer(
+                    line, singer_ids, insert_singer_tags, singer_map
+                )
+            )
 
             if line.timetags:
                 prev_end_ms = max(t.timestamp_ms for t in line.timetags)
@@ -80,8 +107,32 @@ class NicokaraExporter(BaseExporter):
         except Exception as e:
             raise ExportError(f"写入文件失败: {e}")
 
-    def _export_line(self, line: LyricLine) -> str:
-        """导出一行: [ts]字[ts]字...[ts_end]"""
+    def _line_has_singer(self, line: LyricLine, singer_ids: Set[str]) -> bool:
+        """检查行内是否有属于指定演唱者的字符"""
+        # 行级别演唱者
+        if line.singer_id in singer_ids:
+            return True
+        # per-tag 级别检查
+        for tag in line.timetags:
+            if tag.singer_id in singer_ids:
+                return True
+        return False
+
+    def _get_char_singer_id(self, line: LyricLine, char_idx: int) -> str:
+        """获取指定字符的实际演唱者 ID（per-tag 优先，否则行级别）"""
+        for tag in line.timetags:
+            if tag.char_idx == char_idx and tag.checkpoint_idx == 0:
+                return tag.singer_id
+        return line.singer_id
+
+    def _export_line_with_singer(
+        self,
+        line: LyricLine,
+        singer_ids: Optional[Set[str]],
+        insert_singer_tags: bool,
+        singer_map: Optional[Dict[str, str]],
+    ) -> str:
+        """导出一行，支持演唱者过滤和标签插入"""
         if not line.timetags or not line.chars:
             return line.text
 
@@ -95,7 +146,22 @@ class NicokaraExporter(BaseExporter):
             return line.text
 
         parts: List[str] = []
+        prev_singer_id: Optional[str] = None
+
         for i, char in enumerate(line.chars):
+            char_singer = self._get_char_singer_id(line, i)
+
+            # 演唱者过滤：跳过不属于选定演唱者的字符
+            if singer_ids is not None and char_singer not in singer_ids:
+                continue
+
+            # 演唱者标签插入：在演唱者发生变化时插入标签
+            if insert_singer_tags and singer_map and char_singer != prev_singer_id:
+                singer_name = singer_map.get(char_singer, "")
+                if singer_name:
+                    parts.append(f"【{singer_name}】")
+                prev_singer_id = char_singer
+
             if i in char_start_times:
                 parts.append(_format_nicokara_ts(char_start_times[i], self._offset_ms))
             parts.append(char)
@@ -105,18 +171,27 @@ class NicokaraExporter(BaseExporter):
         if last_idx < len(line.checkpoints):
             config = line.checkpoints[last_idx]
             if config.is_line_end and config.check_count >= 2:
-                end_tags = [
-                    t
-                    for t in line.timetags
-                    if t.char_idx == last_idx
-                    and t.checkpoint_idx == config.check_count - 1
-                ]
-                if end_tags:
-                    parts.append(
-                        _format_nicokara_ts(end_tags[0].timestamp_ms, self._offset_ms)
-                    )
+                # 演唱者过滤：只有该字符属于选定演唱者时才输出
+                last_char_singer = self._get_char_singer_id(line, last_idx)
+                if singer_ids is None or last_char_singer in singer_ids:
+                    end_tags = [
+                        t
+                        for t in line.timetags
+                        if t.char_idx == last_idx
+                        and t.checkpoint_idx == config.check_count - 1
+                    ]
+                    if end_tags:
+                        parts.append(
+                            _format_nicokara_ts(
+                                end_tags[0].timestamp_ms, self._offset_ms
+                            )
+                        )
 
         return "".join(parts)
+
+    def _export_line(self, line: LyricLine) -> str:
+        """导出一行（向后兼容，不带演唱者过滤）"""
+        return self._export_line_with_singer(line, None, False, None)
 
 
 class NicokaraWithRubyExporter(NicokaraExporter):
@@ -139,6 +214,9 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         self,
         project: Project,
         file_path: str,
+        singer_ids: Optional[Set[str]] = None,
+        insert_singer_tags: bool = False,
+        singer_map: Optional[Dict[str, str]] = None,
         tag_data: Optional[Dict[str, Any]] = None,
     ) -> None:
         """导出为带 @Ruby 注音标签的 Nicokara LRC 格式
@@ -146,6 +224,9 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         Args:
             project: 项目数据
             file_path: 输出文件路径
+            singer_ids: 要输出的演唱者 ID 集合（None 表示全部）
+            insert_singer_tags: 是否在演唱者切换处插入【演唱者名】标签
+            singer_map: singer_id → 演唱者显示名的映射
             tag_data: Nicokara 元数据标签，格式与 AppSettings["nicokara_tags"] 相同
         """
         self._validate_project(project)
@@ -154,12 +235,21 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         prev_end_ms = 0
 
         for i, line in enumerate(project.lines):
+            # 演唱者过滤
+            if singer_ids is not None:
+                if not self._line_has_singer(line, singer_ids):
+                    continue
+
             if i > 0 and line.timetags:
                 line_start = min(t.timestamp_ms for t in line.timetags)
                 if line_start - prev_end_ms > 5000:
                     output_lines.append("")
 
-            output_lines.append(self._export_line(line))
+            output_lines.append(
+                self._export_line_with_singer(
+                    line, singer_ids, insert_singer_tags, singer_map
+                )
+            )
 
             if line.timetags:
                 prev_end_ms = max(t.timestamp_ms for t in line.timetags)
@@ -195,8 +285,8 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         # @Offset
         output_lines.append("@Offset=+0")
 
-        # @Ruby 注音标签
-        ruby_entries = self._collect_ruby_entries(project)
+        # @Ruby 注音标签（也按演唱者过滤）
+        ruby_entries = self._collect_ruby_entries(project, singer_ids)
         for idx, entry in enumerate(ruby_entries, 1):
             output_lines.append(f"@Ruby{idx}={entry}")
 
@@ -210,10 +300,17 @@ class NicokaraWithRubyExporter(NicokaraExporter):
     # @Ruby 生成
     # ------------------------------------------------------------------
 
-    def _collect_ruby_entries(self, project: Project) -> List[str]:
+    def _collect_ruby_entries(
+        self, project: Project, singer_ids: Optional[Set[str]] = None
+    ) -> List[str]:
         """收集所有注音并生成 @Ruby 条目列表
 
         按 (汉字原文, 读音) 分组，合并多次出现的位置。
+        如果指定了 singer_ids，只收集属于指定演唱者的注音。
+
+        Args:
+            project: 项目数据
+            singer_ids: 要输出的演唱者 ID 集合（None 表示全部）
 
         Returns:
             格式: ["漢字,読み[ts],pos1,pos2", ...]
@@ -223,6 +320,10 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         )
 
         for line in project.lines:
+            # 演唱者过滤：跳过不含选定演唱者的行
+            if singer_ids is not None:
+                if not self._line_has_singer(line, singer_ids):
+                    continue
             for ruby in line.rubies:
                 kanji = "".join(line.chars[ruby.start_idx : ruby.end_idx])
                 key = (kanji, ruby.text)

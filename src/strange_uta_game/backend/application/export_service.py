@@ -3,7 +3,7 @@
 提供统一的项目导出功能。
 """
 
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Set, Dict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,7 +32,7 @@ class ExportService:
     管理项目导出到各种格式。
     """
 
-    def __init__(self, progress_callback: Callable[[int, str], None] = None):
+    def __init__(self, progress_callback: Optional[Callable[[int, str], None]] = None):
         """
         Args:
             progress_callback: 进度回调函数 (progress_pct, message)
@@ -69,6 +69,9 @@ class ExportService:
         format_name: str,
         file_path: str,
         offset_ms: int = 0,
+        singer_ids: Optional[Set[str]] = None,
+        insert_singer_tags: bool = False,
+        singer_map: Optional[Dict[str, str]] = None,
     ) -> ExportResult:
         """导出项目
 
@@ -77,6 +80,9 @@ class ExportService:
             format_name: 格式名称 ('LRC', 'KRA', 'TXT', 等)
             file_path: 导出文件路径
             offset_ms: 导出时间偏移（毫秒）
+            singer_ids: 要输出的演唱者 ID 集合（None=全部，仅 Nicokara 格式有效）
+            insert_singer_tags: 是否在演唱者切换处插入【演唱者名】标签
+            singer_map: singer_id → 演唱者显示名的映射
 
         Returns:
             导出结果
@@ -93,8 +99,30 @@ class ExportService:
             if self._progress_callback:
                 self._progress_callback(0, f"开始导出为 {exporter.name} 格式...")
 
-            # 执行导出
-            exporter.export(project, file_path)
+            # 执行导出（Nicokara 格式传递演唱者参数）
+            from strange_uta_game.backend.infrastructure.exporters.nicokara_exporter import (
+                NicokaraExporter,
+                NicokaraWithRubyExporter,
+            )
+
+            if isinstance(exporter, NicokaraWithRubyExporter):
+                exporter.export(
+                    project,
+                    file_path,
+                    singer_ids=singer_ids,
+                    insert_singer_tags=insert_singer_tags,
+                    singer_map=singer_map,
+                )
+            elif isinstance(exporter, NicokaraExporter):
+                exporter.export(
+                    project,
+                    file_path,
+                    singer_ids=singer_ids,
+                    insert_singer_tags=insert_singer_tags,
+                    singer_map=singer_map,
+                )
+            else:
+                exporter.export(project, file_path)
 
             # 报告完成
             if self._progress_callback:

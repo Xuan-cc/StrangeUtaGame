@@ -91,6 +91,7 @@ class AppSettings:
             "default_format": "LRC",
             "auto_add_extension": True,
             "last_export_dir": "",
+            "offset_ms": -100,
         },
         "ruby_dictionary": {
             "enabled": True,
@@ -104,6 +105,7 @@ class AppSettings:
             "silence_ms": 0,
             "custom": [],
         },
+        "singer_presets": [],
         "shortcuts": {
             "play_pause": "A",
             "stop": "S",
@@ -1012,6 +1014,11 @@ class SettingsInterface(ScrollArea):
         self._cal_tap_times.clear()
         self._cal_beat_times.clear()
         self._cal_offset_ms = 0
+
+        # 防御性：校准期间临时置零打轴偏移，避免补偿干扰
+        self._cal_saved_offset = self.card_offset.value()
+        self.card_offset.setValue(0)
+
         self.btn_cal_start.setEnabled(False)
         self.btn_cal_stop.setEnabled(True)
         self.btn_cal_apply.setEnabled(False)
@@ -1062,6 +1069,10 @@ class SettingsInterface(ScrollArea):
             except Exception:
                 pass
             self._cal_stream = None
+
+        # 恢复校准前保存的打轴偏移值
+        saved = getattr(self, "_cal_saved_offset", 0)
+        self.card_offset.setValue(saved)
 
         self.btn_cal_start.setEnabled(True)
         self.btn_cal_stop.setEnabled(False)
