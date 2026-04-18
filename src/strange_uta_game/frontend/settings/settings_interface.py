@@ -343,13 +343,14 @@ class _KeyCaptureButton(PushButton):
 
     key_captured = pyqtSignal(str)  # 捕获到的按键名称
 
-    def __init__(self, default_text: str = "", parent=None):  # type: ignore[override]
-        super().__init__(default_text or "点击设置", parent)  # type: ignore[call-overload]
-        self._captured_key = default_text
+    _init_key: str = ""
+
+    def _postInit(self):
+        super()._postInit()
+        self._captured_key = ""
         self._listening = False
         self.setFixedWidth(120)
         self.setFont(QFont("Microsoft YaHei", 9))
-        self._update_display()
         self.clicked.connect(self._start_listening)
 
     def _start_listening(self):
@@ -474,8 +475,10 @@ class ShortcutSettingCard(SettingCard):
         key1 = keys[0] if len(keys) >= 1 else default_key
         key2 = keys[1] if len(keys) >= 2 else ""
 
-        self.btn_key1 = _KeyCaptureButton(key1, self)
-        self.btn_key2 = _KeyCaptureButton(key2, self)
+        self.btn_key1 = _KeyCaptureButton("点击设置", self)
+        self.btn_key1.set_key(key1)
+        self.btn_key2 = _KeyCaptureButton("点击设置", self)
+        self.btn_key2.set_key(key2)
 
         lbl_or = QLabel("或", self)
         lbl_or.setFont(QFont("Microsoft YaHei", 9))
