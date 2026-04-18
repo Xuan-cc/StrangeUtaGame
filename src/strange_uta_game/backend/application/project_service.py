@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Callable, List
 from dataclasses import dataclass
 
-from strange_uta_game.backend.domain import Project, Singer, LyricLine
+from strange_uta_game.backend.domain import Project, Singer, Sentence
 from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
     SugProjectParser,
     SugParseError,
@@ -15,7 +15,7 @@ from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
 from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
     LyricParserFactory,
     ParsedLine,
-    parse_to_lyric_lines,
+    parse_to_sentences,
 )
 
 
@@ -127,7 +127,7 @@ class ProjectService:
                 self._callbacks.on_error(f"未知错误: {e}")
             return False
 
-    def import_lyrics(self, file_path: str, singer_id: str = None) -> List[LyricLine]:
+    def import_lyrics(self, file_path: str, singer_id: str = None) -> List[Sentence]:
         """导入歌词文件
 
         支持 TXT, LRC, KRA 格式。
@@ -137,7 +137,7 @@ class ProjectService:
             singer_id: 演唱者ID（如果为 None 使用默认演唱者）
 
         Returns:
-            导入的歌词行列表
+            导入的句子列表
         """
         if not self._current_project:
             if self._callbacks.on_error:
@@ -153,14 +153,14 @@ class ProjectService:
             # 解析文件
             parsed_lines = LyricParserFactory.parse_file(file_path)
 
-            # 转换为 LyricLine
-            lines = parse_to_lyric_lines(parsed_lines, singer_id)
+            # 转换为 Sentence
+            sentences = parse_to_sentences(parsed_lines, singer_id)
 
             # 添加到项目
-            for line in lines:
-                self._current_project.add_line(line)
+            for sentence in sentences:
+                self._current_project.add_sentence(sentence)
 
-            return lines
+            return sentences
 
         except Exception as e:
             if self._callbacks.on_error:

@@ -74,7 +74,7 @@ class BaseExporter(IExporter):
         if not project:
             raise ExportError("项目为空")
 
-        if not project.lines:
+        if not project.sentences:
             raise ExportError("项目没有歌词行")
 
     def _format_timestamp(self, timestamp_ms: int, format_type: str = "lrc") -> str:

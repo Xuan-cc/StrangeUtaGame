@@ -2,12 +2,11 @@
 
 import pytest
 from strange_uta_game.backend.domain.models import (
-    CheckpointConfig,
-    TimeTag,
-    TimeTagType,
+    Character,
     Ruby,
+    TimeTagType,
 )
-from strange_uta_game.backend.domain.entities import LyricLine
+from strange_uta_game.backend.domain.entities import Sentence
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     format_timestamp,
     parse_timestamp,
@@ -17,8 +16,8 @@ from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     split_ruby_for_checkpoints,
     to_inline_text,
     from_inline_text,
-    lines_to_inline_text,
-    lines_from_inline_text,
+    sentences_to_inline_text,
+    sentences_from_inline_text,
 )
 
 
@@ -133,107 +132,94 @@ class TestSplitRubyForCheckpoints:
 # ──────────────────────────────────────────────
 
 
-def _make_line(text, singer_id="s1", checkpoints=None, timetags=None, rubies=None):
-    """辅助函数: 创建测试用 LyricLine。"""
-    chars = list(text)
-    if checkpoints is None:
-        checkpoints = [
-            CheckpointConfig(char_idx=i, check_count=1) for i in range(len(chars))
+def _make_sentence(text, singer_id="s1", characters=None):
+    """辅助函数: 创建测试用 Sentence。"""
+    if characters is None:
+        characters = [
+            Character(char=ch, check_count=1, singer_id=singer_id) for ch in text
         ]
-    return LyricLine(
-        singer_id=singer_id,
-        text=text,
-        chars=chars,
-        checkpoints=checkpoints,
-        timetags=timetags or [],
-        rubies=rubies or [],
-    )
+    return Sentence(singer_id=singer_id, characters=characters)
 
 
 class TestToInlineText:
     def test_simple_chars_no_timetags(self):
-        line = _make_line("abc")
-        result = to_inline_text(line)
+        sentence = _make_sentence("abc")
+        result = to_inline_text(sentence)
         # 无 timetag → 时间戳默认 00:00:00
         assert "[1|00:00:00]a" in result
         assert "[1|00:00:00]b" in result
         assert "[1|00:00:00]c" in result
 
     def test_char_with_timetag(self):
-        line = _make_line(
+        sentence = _make_sentence(
             "な",
-            checkpoints=[CheckpointConfig(char_idx=0, check_count=1)],
-            timetags=[
-                TimeTag(
-                    timestamp_ms=15760, singer_id="s1", char_idx=0, checkpoint_idx=0
-                )
+            characters=[
+                Character(char="な", check_count=1, timestamps=[15760], singer_id="s1")
             ],
         )
-        result = to_inline_text(line)
+        result = to_inline_text(sentence)
         assert result == "[1|00:15:76]な"
 
     def test_line_end_char(self):
-        line = _make_line(
+        sentence = _make_sentence(
             "x",
-            checkpoints=[CheckpointConfig(char_idx=0, check_count=1, is_line_end=True)],
-            timetags=[
-                TimeTag(
-                    timestamp_ms=10000, singer_id="s1", char_idx=0, checkpoint_idx=0
+            characters=[
+                Character(
+                    char="x",
+                    check_count=1,
+                    timestamps=[10000],
+                    is_line_end=True,
+                    singer_id="s1",
                 )
             ],
         )
-        result = to_inline_text(line)
+        result = to_inline_text(sentence)
         assert result == "[10|00:10:00]x"
 
     def test_multi_checkpoint_char(self):
-        line = _make_line(
+        sentence = _make_sentence(
             "x",
-            checkpoints=[CheckpointConfig(char_idx=0, check_count=2)],
-            timetags=[
-                TimeTag(
-                    timestamp_ms=1000, singer_id="s1", char_idx=0, checkpoint_idx=0
-                ),
-                TimeTag(
-                    timestamp_ms=2000, singer_id="s1", char_idx=0, checkpoint_idx=1
-                ),
+            characters=[
+                Character(
+                    char="x", check_count=2, timestamps=[1000, 2000], singer_id="s1"
+                )
             ],
         )
-        result = to_inline_text(line)
+        result = to_inline_text(sentence)
         assert "[2|00:01:00]" in result
         assert "[00:02:00]" in result
 
     def test_ruby_single_char(self):
-        line = _make_line(
+        sentence = _make_sentence(
             "柔",
-            checkpoints=[CheckpointConfig(char_idx=0, check_count=2)],
-            timetags=[
-                TimeTag(
-                    timestamp_ms=14640, singer_id="s1", char_idx=0, checkpoint_idx=0
-                ),
-                TimeTag(
-                    timestamp_ms=15610, singer_id="s1", char_idx=0, checkpoint_idx=1
-                ),
+            characters=[
+                Character(
+                    char="柔",
+                    check_count=2,
+                    timestamps=[14640, 15610],
+                    ruby=Ruby(text="やわ"),
+                    singer_id="s1",
+                )
             ],
-            rubies=[Ruby(text="やわ", start_idx=0, end_idx=1)],
         )
-        result = to_inline_text(line)
+        result = to_inline_text(sentence)
         assert result == "{柔|[2|00:14:64]や[00:15:61]わ}"
 
     def test_rest_char(self):
-        line = _make_line(
+        sentence = _make_sentence(
             "▨",
-            checkpoints=[
-                CheckpointConfig(
-                    char_idx=0, check_count=1, is_line_end=True, is_rest=True
-                )
-            ],
-            timetags=[
-                TimeTag(
-                    timestamp_ms=16500, singer_id="s1", char_idx=0, checkpoint_idx=0
+            characters=[
+                Character(
+                    char="▨",
+                    check_count=1,
+                    timestamps=[16500],
+                    is_line_end=True,
+                    is_rest=True,
+                    singer_id="s1",
                 )
             ],
         )
-        result = to_inline_text(line)
+        result = to_inline_text(sentence)
         assert result == "[10|00:16:50]▨"
 
 
@@ -244,53 +230,53 @@ class TestToInlineText:
 
 class TestFromInlineText:
     def test_simple_char(self):
-        line = from_inline_text("[1|00:15:76]な", singer_id="s1")
-        assert line.chars == ["な"]
-        assert line.text == "な"
-        assert len(line.checkpoints) == 1
-        assert line.checkpoints[0].check_count == 1
-        assert line.checkpoints[0].is_line_end is False
-        assert len(line.timetags) == 1
-        assert line.timetags[0].timestamp_ms == 15760
+        sentence = from_inline_text("[1|00:15:76]な", singer_id="s1")
+        assert sentence.chars == ["な"]
+        assert sentence.text == "な"
+        assert len(sentence.characters) == 1
+        assert sentence.characters[0].check_count == 1
+        assert sentence.characters[0].is_line_end is False
+        assert len(sentence.characters[0].timestamps) == 1
+        assert sentence.characters[0].timestamps[0] == 15760
 
     def test_line_end(self):
-        line = from_inline_text("[10|00:10:00]x", singer_id="s1")
-        assert line.checkpoints[0].is_line_end is True
-        assert line.checkpoints[0].check_count == 1
+        sentence = from_inline_text("[10|00:10:00]x", singer_id="s1")
+        assert sentence.characters[0].is_line_end is True
+        assert sentence.characters[0].check_count == 1
 
     def test_rest_char(self):
-        line = from_inline_text("[10|00:16:50]▨", singer_id="s1")
-        assert line.chars == ["▨"]
-        assert line.checkpoints[0].is_rest is True
-        assert line.checkpoints[0].is_line_end is True
+        sentence = from_inline_text("[10|00:16:50]▨", singer_id="s1")
+        assert sentence.chars == ["▨"]
+        assert sentence.characters[0].is_rest is True
+        assert sentence.characters[0].is_line_end is True
 
     def test_ruby_group(self):
-        line = from_inline_text("{柔|[2|00:14:64]や[00:15:61]わ}", singer_id="s1")
-        assert line.chars == ["柔"]
-        assert line.text == "柔"
-        assert len(line.rubies) == 1
-        assert line.rubies[0].text == "やわ"
-        assert line.rubies[0].start_idx == 0
-        assert line.rubies[0].end_idx == 1
-        assert line.checkpoints[0].check_count == 2
-        assert len(line.timetags) == 2
-        assert line.timetags[0].timestamp_ms == 14640
-        assert line.timetags[1].timestamp_ms == 15610
+        sentence = from_inline_text("{柔|[2|00:14:64]や[00:15:61]わ}", singer_id="s1")
+        assert sentence.chars == ["柔"]
+        assert sentence.text == "柔"
+        assert len(sentence.rubies) == 1
+        assert sentence.rubies[0].text == "やわ"
+        # sentence.rubies is computed from characters, so we check text and presence
+        assert sentence.characters[0].ruby.text == "やわ"
+        assert sentence.characters[0].check_count == 2
+        assert len(sentence.characters[0].timestamps) == 2
+        assert sentence.characters[0].timestamps[0] == 14640
+        assert sentence.characters[0].timestamps[1] == 15610
 
     def test_multi_char_ruby(self):
         text = "{射程|[1|00:16:76]しゃ＋[2|00:16:89]て[00:17:19]い}"
-        line = from_inline_text(text, singer_id="s1")
-        assert line.chars == ["射", "程"]
-        assert line.text == "射程"
-        assert len(line.rubies) == 1
-        assert line.rubies[0].text == "しゃてい"
-        assert line.rubies[0].start_idx == 0
-        assert line.rubies[0].end_idx == 2
+        sentence = from_inline_text(text, singer_id="s1")
+        assert sentence.chars == ["射", "程"]
+        assert sentence.text == "射程"
+        # 逐字模型中，"{射程|...}" 组会被拆分为逐字的 Ruby
+        assert len(sentence.rubies) == 2
+        assert sentence.rubies[0].text == "しゃ"
+        assert sentence.rubies[1].text == "てい"
         # 射: 1 cp, 程: 2 cps
-        assert line.checkpoints[0].check_count == 1
-        assert line.checkpoints[1].check_count == 2
-        # 3 timetags total
-        assert len(line.timetags) == 3
+        assert sentence.characters[0].check_count == 1
+        assert sentence.characters[1].check_count == 2
+        # 3 timestamps total
+        assert sum(len(c.timestamps) for c in sentence.characters) == 3
 
     def test_mixed_line(self):
         """测试用户给出的完整示例格式。"""
@@ -300,17 +286,19 @@ class TestFromInlineText:
             "[10|00:16:50]▨"
             "{射程|[1|00:16:76]しゃ＋[2|00:16:89]て[00:17:19]い}"
         )
-        line = from_inline_text(text, singer_id="s1")
-        assert line.chars == ["柔", "な", "▨", "射", "程"]
-        assert len(line.rubies) == 2
-        assert line.rubies[0].text == "やわ"
-        assert line.rubies[1].text == "しゃてい"
-        # checkpoints: 柔(2), な(1), ▨(1,le), 射(1), 程(2)
-        assert [cp.check_count for cp in line.checkpoints] == [2, 1, 1, 1, 2]
-        assert line.checkpoints[2].is_line_end is True
-        assert line.checkpoints[2].is_rest is True
-        # 7 timetags total
-        assert len(line.timetags) == 7
+        sentence = from_inline_text(text, singer_id="s1")
+        assert sentence.chars == ["柔", "な", "▨", "射", "程"]
+        # 柔(1), 射(1), 程(1) -> 3 rubies total
+        assert len(sentence.rubies) == 3
+        assert sentence.rubies[0].text == "やわ"
+        assert sentence.rubies[1].text == "しゃ"
+        assert sentence.rubies[2].text == "てい"
+        # check_counts: 柔(2), な(1), ▨(1,le), 射(1), 程(2)
+        assert [c.check_count for c in sentence.characters] == [2, 1, 1, 1, 2]
+        assert sentence.characters[2].is_line_end is True
+        assert sentence.characters[2].is_rest is True
+        # 7 timestamps total
+        assert sum(len(c.timestamps) for c in sentence.characters) == 7
 
 
 # ──────────────────────────────────────────────
@@ -320,82 +308,76 @@ class TestFromInlineText:
 
 class TestRoundtrip:
     def test_simple_roundtrip(self):
-        original = _make_line(
+        original = _make_sentence(
             "なは",
-            checkpoints=[
-                CheckpointConfig(char_idx=0, check_count=1),
-                CheckpointConfig(char_idx=1, check_count=1, is_line_end=True),
-            ],
-            timetags=[
-                TimeTag(
-                    timestamp_ms=1000, singer_id="s1", char_idx=0, checkpoint_idx=0
-                ),
-                TimeTag(
-                    timestamp_ms=2000, singer_id="s1", char_idx=1, checkpoint_idx=0
+            characters=[
+                Character(char="な", check_count=1, timestamps=[1000], singer_id="s1"),
+                Character(
+                    char="は",
+                    check_count=1,
+                    timestamps=[2000],
+                    is_line_end=True,
+                    singer_id="s1",
                 ),
             ],
         )
         text = to_inline_text(original)
         restored = from_inline_text(text, singer_id="s1")
         assert restored.chars == original.chars
-        assert len(restored.checkpoints) == len(original.checkpoints)
-        for r, o in zip(restored.checkpoints, original.checkpoints):
+        assert len(restored.characters) == len(original.characters)
+        for r, o in zip(restored.characters, original.characters):
             assert r.check_count == o.check_count
             assert r.is_line_end == o.is_line_end
-        assert len(restored.timetags) == len(original.timetags)
-        for rt, ot in zip(restored.timetags, original.timetags):
-            assert rt.timestamp_ms == ot.timestamp_ms
+            assert r.timestamps == o.timestamps
 
     def test_ruby_roundtrip(self):
-        original = _make_line(
+        original = _make_sentence(
             "柔な",
-            checkpoints=[
-                CheckpointConfig(char_idx=0, check_count=2),
-                CheckpointConfig(char_idx=1, check_count=1, is_line_end=True),
+            characters=[
+                Character(
+                    char="柔",
+                    check_count=2,
+                    timestamps=[14640, 15610],
+                    ruby=Ruby(text="やわ"),
+                    singer_id="s1",
+                ),
+                Character(
+                    char="な",
+                    check_count=1,
+                    timestamps=[15760],
+                    is_line_end=True,
+                    singer_id="s1",
+                ),
             ],
-            timetags=[
-                TimeTag(
-                    timestamp_ms=14640, singer_id="s1", char_idx=0, checkpoint_idx=0
-                ),
-                TimeTag(
-                    timestamp_ms=15610, singer_id="s1", char_idx=0, checkpoint_idx=1
-                ),
-                TimeTag(
-                    timestamp_ms=15760, singer_id="s1", char_idx=1, checkpoint_idx=0
-                ),
-            ],
-            rubies=[Ruby(text="やわ", start_idx=0, end_idx=1)],
         )
         text = to_inline_text(original)
         restored = from_inline_text(text, singer_id="s1")
         assert restored.chars == original.chars
         assert len(restored.rubies) == 1
         assert restored.rubies[0].text == "やわ"
-        assert len(restored.timetags) == 3
+        assert sum(len(c.timestamps) for c in restored.characters) == 3
 
     def test_multiline_roundtrip(self):
-        lines = [
-            _make_line(
+        sentences = [
+            _make_sentence(
                 "あ",
-                checkpoints=[CheckpointConfig(char_idx=0, check_count=1)],
-                timetags=[
-                    TimeTag(
-                        timestamp_ms=1000, singer_id="s1", char_idx=0, checkpoint_idx=0
+                characters=[
+                    Character(
+                        char="あ", check_count=1, timestamps=[1000], singer_id="s1"
                     )
                 ],
             ),
-            _make_line(
+            _make_sentence(
                 "い",
-                checkpoints=[CheckpointConfig(char_idx=0, check_count=1)],
-                timetags=[
-                    TimeTag(
-                        timestamp_ms=2000, singer_id="s1", char_idx=0, checkpoint_idx=0
+                characters=[
+                    Character(
+                        char="い", check_count=1, timestamps=[2000], singer_id="s1"
                     )
                 ],
             ),
         ]
-        text = lines_to_inline_text(lines)
-        restored = lines_from_inline_text(text, singer_id="s1")
+        text = sentences_to_inline_text(sentences)
+        restored = sentences_from_inline_text(text, singer_id="s1")
         assert len(restored) == 2
         assert restored[0].chars == ["あ"]
         assert restored[1].chars == ["い"]

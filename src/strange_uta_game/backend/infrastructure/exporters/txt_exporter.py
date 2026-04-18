@@ -7,7 +7,7 @@
 
 from typing import List, Optional
 from .base import BaseExporter, ExportError
-from strange_uta_game.backend.domain import Project, LyricLine
+from strange_uta_game.backend.domain import Project, Sentence
 
 
 class TXTExporter(BaseExporter):
@@ -66,8 +66,8 @@ class TXTExporter(BaseExporter):
         lines.append("")
 
         # 导出行
-        for i, line in enumerate(project.lines):
-            line_text = self._export_line(line, i + 1)
+        for i, sentence in enumerate(project.sentences):
+            line_text = self._export_sentence(sentence, i + 1)
             if line_text:
                 lines.append(line_text)
 
@@ -78,7 +78,7 @@ class TXTExporter(BaseExporter):
         except Exception as e:
             raise ExportError(f"写入文件失败: {e}")
 
-    def _export_line(self, line: LyricLine, line_number: int) -> str:
+    def _export_sentence(self, sentence: Sentence, line_number: int) -> str:
         """导出一行歌词"""
         parts = []
 
@@ -86,25 +86,24 @@ class TXTExporter(BaseExporter):
         parts.append(f"[{line_number:03d}]")
 
         # 时间标签
-        if line.timetags:
-            # 使用第一个时间标签
-            first_tag = min(line.timetags, key=lambda t: t.timestamp_ms)
-            time_str = self._format_timestamp(first_tag.timestamp_ms, "lrc")
+        if sentence.has_timetags:
+            start_ms = sentence.timing_start_ms
+            time_str = self._format_timestamp(start_ms, "lrc")
             parts.append(time_str)
         else:
             parts.append("[--:--.--]")
 
         # 歌词文本
-        parts.append(line.text)
+        parts.append(sentence.text)
 
         # 节奏点信息（可选）
-        if self.include_checkpoints and line.checkpoints:
-            total_checks = sum(c.check_count for c in line.checkpoints)
+        if self.include_checkpoints and sentence.characters:
+            total_checks = sum(c.check_count for c in sentence.characters)
             parts.append(f"  [节奏点: {total_checks}]")
 
         # 注音（可选）
-        if self.include_rubies and line.rubies:
-            ruby_texts = [r.text for r in line.rubies[:3]]
+        if self.include_rubies and sentence.rubies:
+            ruby_texts = [r.text for r in sentence.rubies[:3]]
             if ruby_texts:
                 parts.append(f"  (注音: {', '.join(ruby_texts)}...)")
 

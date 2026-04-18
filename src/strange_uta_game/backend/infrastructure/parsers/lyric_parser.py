@@ -9,8 +9,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
 from pathlib import Path
 
-from strange_uta_game.backend.domain import LyricLine, TimeTag
-from strange_uta_game.backend.domain.models import Ruby
+from strange_uta_game.backend.domain import Sentence, Character, Ruby
 
 
 class ParseError(Exception):
@@ -613,12 +612,12 @@ class NicokaraParser:
         return defs
 
 
-def nicokara_result_to_lyric_lines(
+def nicokara_result_to_sentences(
     result: NicokaraParseResult,
     singer_key_to_id: Dict[str, str],
     default_singer_id: str,
-) -> List[LyricLine]:
-    """将 NicokaraParseResult 转换为 LyricLine 对象列表
+) -> List[Sentence]:
+    """将 NicokaraParseResult 转换为 Sentence 对象列表
 
     Args:
         result: Nicokara 解析结果
@@ -626,9 +625,9 @@ def nicokara_result_to_lyric_lines(
         default_singer_id: 默认演唱者 ID（无 singer 标签的行/字符使用）
 
     Returns:
-        LyricLine 对象列表
+        Sentence 对象列表
     """
-    lines: List[LyricLine] = []
+    sentences: List[Sentence] = []
 
     for parsed in result.lines:
         # 确定行级别演唱者
@@ -636,14 +635,15 @@ def nicokara_result_to_lyric_lines(
         if parsed.line_singer_key and parsed.line_singer_key in singer_key_to_id:
             line_singer_id = singer_key_to_id[parsed.line_singer_key]
 
-        line = LyricLine(
-            singer_id=line_singer_id,
+        # 创建句子（from_text 设置默认 checkpoint 配置）
+        sentence = Sentence.from_text(
             text=parsed.text,
+            singer_id=line_singer_id,
         )
 
         # 添加时间标签（含 per-char 演唱者）
         for char_idx, timestamp_ms in parsed.timetags:
-            if char_idx < 0 or char_idx >= len(parsed.text):
+            if char_idx < 0 or char_idx >= len(sentence.characters):
                 continue
             # 获取该字符的演唱者
             char_singer_key = parsed.char_singer_map.get(char_idx, "")
@@ -652,28 +652,33 @@ def nicokara_result_to_lyric_lines(
             else:
                 tag_singer_id = line_singer_id
 
-            tag = TimeTag(
-                timestamp_ms=timestamp_ms,
-                singer_id=tag_singer_id,
-                char_idx=char_idx,
-                checkpoint_idx=0,
-            )
-            line.add_timetag(tag)
+            char = sentence.characters[char_idx]
+            char.singer_id = tag_singer_id
+            char.add_timestamp(timestamp_ms)
 
         # 应用 @Ruby 注音（基于文本匹配）
-        _apply_ruby_entries(line, result.ruby_entries)
+        _apply_ruby_entries(sentence, result.ruby_entries)
 
-        lines.append(line)
+        sentences.append(sentence)
 
-    return lines
+    return sentences
 
 
-def _apply_ruby_entries(line: LyricLine, ruby_entries: List[NicokaraRubyEntry]):
-    """将 @Ruby 注音条目应用到歌词行
+# 兼容别名
+nicokara_result_to_lyric_lines = nicokara_result_to_sentences
+
+
+def _apply_ruby_entries(sentence: Sentence, ruby_entries: List[NicokaraRubyEntry]):
+    """将 @Ruby 注音条目应用到句子
 
     通过文本匹配找到漢字在行中的位置并添加 Ruby 注音。
+    在新模型中，多字符漢字的 ruby 按字拆分为 per-char Ruby。
     """
-    text = line.text
+    from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+        split_ruby_for_checkpoints,
+    )
+
+    text = sentence.text
     for entry in ruby_entries:
         # 清除读音中的时间戳（[MM:SS:CC] 格式）
         clean_reading = re.sub(r"\[\d{1,2}:\d{2}[:.]?\d{2,3}\]", "", entry.reading)
@@ -687,16 +692,19 @@ def _apply_ruby_entries(line: LyricLine, ruby_entries: List[NicokaraRubyEntry]):
             end_pos = pos + len(entry.kanji)
             # 检查是否已有 ruby 覆盖该范围
             has_existing = any(
-                r.start_idx <= pos < r.end_idx or r.start_idx < end_pos <= r.end_idx
-                for r in line.rubies
+                sentence.characters[ci].ruby is not None
+                for ci in range(pos, min(end_pos, len(sentence.characters)))
             )
             if not has_existing:
-                ruby = Ruby(
-                    text=clean_reading,
-                    start_idx=pos,
-                    end_idx=end_pos,
-                )
-                line.add_ruby(ruby)
+                # 按字拆分 ruby 到各字符
+                block_len = end_pos - pos
+                split_parts = split_ruby_for_checkpoints(clean_reading, block_len)
+                for ci in range(pos, min(end_pos, len(sentence.characters))):
+                    part_idx = ci - pos
+                    if part_idx < len(split_parts) and split_parts[part_idx]:
+                        sentence.characters[ci].set_ruby(
+                            Ruby(text=split_parts[part_idx])
+                        )
                 break  # 每个 entry 只匹配第一个未标注的出现
             start = end_pos
 
@@ -770,39 +778,36 @@ class LyricParserFactory:
         return parser.parse_file(file_path)
 
 
-def parse_to_lyric_lines(
+def parse_to_sentences(
     parsed_lines: List[ParsedLine], singer_id: str
-) -> List[LyricLine]:
-    """将解析结果转换为 LyricLine 对象
+) -> List[Sentence]:
+    """将解析结果转换为 Sentence 对象
 
     Args:
         parsed_lines: 解析后的行列表
         singer_id: 演唱者 ID
 
     Returns:
-        LyricLine 对象列表
+        Sentence 对象列表
     """
-    from strange_uta_game.backend.domain import Singer
+    sentences = []
 
-    lines = []
-
-    for i, parsed in enumerate(parsed_lines):
-        # 创建歌词行
-        line = LyricLine(
-            singer_id=singer_id,
+    for parsed in parsed_lines:
+        # 创建句子（from_text 设置默认 checkpoint 配置）
+        sentence = Sentence.from_text(
             text=parsed.text,
+            singer_id=singer_id,
         )
 
         # 添加时间标签
         for char_idx, timestamp_ms in parsed.timetags:
-            tag = TimeTag(
-                timestamp_ms=timestamp_ms,
-                singer_id=singer_id,
-                char_idx=char_idx,
-                checkpoint_idx=0,
-            )
-            line.add_timetag(tag)
+            if 0 <= char_idx < len(sentence.characters):
+                sentence.characters[char_idx].add_timestamp(timestamp_ms)
 
-        lines.append(line)
+        sentences.append(sentence)
 
-    return lines
+    return sentences
+
+
+# 兼容别名
+parse_to_lyric_lines = parse_to_sentences

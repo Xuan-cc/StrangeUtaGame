@@ -8,7 +8,8 @@ from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
     KRAParser,
     LyricParserFactory,
     ParseError,
-    parse_to_lyric_lines,
+    parse_to_sentences,
+    ParsedLine,
 )
 
 
@@ -129,21 +130,18 @@ class TestLyricParserFactory:
             LyricParserFactory.get_parser("test.mp3")
 
 
-class TestParseToLyricLines:
-    """测试转换为 LyricLine"""
+class TestParseToSentences:
+    """测试转换为 Sentence"""
 
     def test_convert_with_timetags(self):
-        from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
-            ParsedLine,
-        )
-
         parsed_lines = [
             ParsedLine(text="测试", timetags=[(0, 1000)]),
         ]
 
-        lines = parse_to_lyric_lines(parsed_lines, "singer_1")
+        sentences = parse_to_sentences(parsed_lines, "singer_1")
 
-        assert len(lines) == 1
-        assert lines[0].text == "测试"
-        assert len(lines[0].timetags) == 1
-        assert lines[0].timetags[0].timestamp_ms == 1000
+        assert len(sentences) == 1
+        assert sentences[0].text == "测试"
+        # 逐字模型中，(0, 1000) 对应第0个字符的第0个时间戳
+        assert len(sentences[0].characters[0].timestamps) == 1
+        assert sentences[0].characters[0].timestamps[0] == 1000

@@ -15,7 +15,7 @@ from collections import OrderedDict
 from typing import List, Optional, Dict, Any, Set
 
 from .base import BaseExporter, ExportError
-from strange_uta_game.backend.domain import Project, LyricLine, Singer
+from strange_uta_game.backend.domain import Project, Sentence, Singer
 
 
 def _format_nicokara_ts(timestamp_ms: int, offset_ms: int = 0) -> str:
@@ -80,26 +80,26 @@ class NicokaraExporter(BaseExporter):
         output_lines: List[str] = []
         prev_end_ms = 0
 
-        for i, line in enumerate(project.lines):
+        for i, sentence in enumerate(project.sentences):
             # 演唱者过滤：检查行内是否有选中的演唱者字符
             if singer_ids is not None:
-                if not self._line_has_singer(line, singer_ids):
+                if not self._sentence_has_singer(sentence, singer_ids):
                     continue
 
             # 段落间距 >5 秒时插入空行
-            if i > 0 and line.timetags:
-                line_start = min(t.timestamp_ms for t in line.timetags)
+            if i > 0 and sentence.has_timetags:
+                line_start = sentence.timing_start_ms
                 if line_start - prev_end_ms > 5000:
                     output_lines.append("")
 
             output_lines.append(
-                self._export_line_with_singer(
-                    line, singer_ids, insert_singer_tags, singer_map
+                self._export_sentence_with_singer(
+                    sentence, singer_ids, insert_singer_tags, singer_map
                 )
             )
 
-            if line.timetags:
-                prev_end_ms = max(t.timestamp_ms for t in line.timetags)
+            if sentence.has_timetags:
+                prev_end_ms = sentence.timing_end_ms
 
         try:
             with open(file_path, "w", encoding="utf-8") as f:
@@ -107,49 +107,33 @@ class NicokaraExporter(BaseExporter):
         except Exception as e:
             raise ExportError(f"写入文件失败: {e}")
 
-    def _line_has_singer(self, line: LyricLine, singer_ids: Set[str]) -> bool:
+    def _sentence_has_singer(self, sentence: Sentence, singer_ids: Set[str]) -> bool:
         """检查行内是否有属于指定演唱者的字符"""
         # 行级别演唱者
-        if line.singer_id in singer_ids:
+        if sentence.singer_id in singer_ids:
             return True
-        # per-tag 级别检查
-        for tag in line.timetags:
-            if tag.singer_id in singer_ids:
+        # per-char 级别检查
+        for ch in sentence.characters:
+            if ch.singer_id in singer_ids:
                 return True
         return False
 
-    def _get_char_singer_id(self, line: LyricLine, char_idx: int) -> str:
-        """获取指定字符的实际演唱者 ID（per-tag 优先，否则行级别）"""
-        for tag in line.timetags:
-            if tag.char_idx == char_idx and tag.checkpoint_idx == 0:
-                return tag.singer_id
-        return line.singer_id
-
-    def _export_line_with_singer(
+    def _export_sentence_with_singer(
         self,
-        line: LyricLine,
+        sentence: Sentence,
         singer_ids: Optional[Set[str]],
         insert_singer_tags: bool,
         singer_map: Optional[Dict[str, str]],
     ) -> str:
         """导出一行，支持演唱者过滤和标签插入"""
-        if not line.timetags or not line.chars:
-            return line.text
-
-        # char_idx → 首个 checkpoint (checkpoint_idx=0) 的时间戳
-        char_start_times: dict[int, int] = {}
-        for tag in line.timetags:
-            if tag.checkpoint_idx == 0 and tag.char_idx not in char_start_times:
-                char_start_times[tag.char_idx] = tag.timestamp_ms
-
-        if not char_start_times:
-            return line.text
+        if not sentence.has_timetags or not sentence.characters:
+            return sentence.text
 
         parts: List[str] = []
         prev_singer_id: Optional[str] = None
 
-        for i, char in enumerate(line.chars):
-            char_singer = self._get_char_singer_id(line, i)
+        for i, ch in enumerate(sentence.characters):
+            char_singer = ch.singer_id
 
             # 演唱者过滤：跳过不属于选定演唱者的字符
             if singer_ids is not None and char_singer not in singer_ids:
@@ -162,36 +146,30 @@ class NicokaraExporter(BaseExporter):
                     parts.append(f"【{singer_name}】")
                 prev_singer_id = char_singer
 
-            if i in char_start_times:
-                parts.append(_format_nicokara_ts(char_start_times[i], self._offset_ms))
-            parts.append(char)
+            # 字符起始时间戳（第一个 checkpoint）
+            if ch.timestamps:
+                parts.append(_format_nicokara_ts(ch.timestamps[0], self._offset_ms))
+            parts.append(ch.char)
 
         # 行末结束时间戳（最后一个字符的 line-end checkpoint）
-        last_idx = len(line.chars) - 1
-        if last_idx < len(line.checkpoints):
-            config = line.checkpoints[last_idx]
-            if config.is_line_end and config.check_count >= 2:
+        if sentence.characters:
+            last_char = sentence.characters[-1]
+            if last_char.is_line_end and last_char.check_count >= 2:
                 # 演唱者过滤：只有该字符属于选定演唱者时才输出
-                last_char_singer = self._get_char_singer_id(line, last_idx)
-                if singer_ids is None or last_char_singer in singer_ids:
-                    end_tags = [
-                        t
-                        for t in line.timetags
-                        if t.char_idx == last_idx
-                        and t.checkpoint_idx == config.check_count - 1
-                    ]
-                    if end_tags:
+                if singer_ids is None or last_char.singer_id in singer_ids:
+                    end_cp_idx = last_char.check_count - 1
+                    if end_cp_idx < len(last_char.timestamps):
                         parts.append(
                             _format_nicokara_ts(
-                                end_tags[0].timestamp_ms, self._offset_ms
+                                last_char.timestamps[end_cp_idx], self._offset_ms
                             )
                         )
 
         return "".join(parts)
 
-    def _export_line(self, line: LyricLine) -> str:
+    def _export_sentence(self, sentence: Sentence) -> str:
         """导出一行（向后兼容，不带演唱者过滤）"""
-        return self._export_line_with_singer(line, None, False, None)
+        return self._export_sentence_with_singer(sentence, None, False, None)
 
 
 class NicokaraWithRubyExporter(NicokaraExporter):
@@ -234,25 +212,25 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         output_lines: List[str] = []
         prev_end_ms = 0
 
-        for i, line in enumerate(project.lines):
+        for i, sentence in enumerate(project.sentences):
             # 演唱者过滤
             if singer_ids is not None:
-                if not self._line_has_singer(line, singer_ids):
+                if not self._sentence_has_singer(sentence, singer_ids):
                     continue
 
-            if i > 0 and line.timetags:
-                line_start = min(t.timestamp_ms for t in line.timetags)
+            if i > 0 and sentence.has_timetags:
+                line_start = sentence.timing_start_ms
                 if line_start - prev_end_ms > 5000:
                     output_lines.append("")
 
             output_lines.append(
-                self._export_line_with_singer(
-                    line, singer_ids, insert_singer_tags, singer_map
+                self._export_sentence_with_singer(
+                    sentence, singer_ids, insert_singer_tags, singer_map
                 )
             )
 
-            if line.timetags:
-                prev_end_ms = max(t.timestamp_ms for t in line.timetags)
+            if sentence.has_timetags:
+                prev_end_ms = sentence.timing_end_ms
 
         # 元数据标签（从 AppSettings 或传入的 tag_data 读取）
         tags = tag_data or {}
@@ -308,6 +286,9 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         按 (汉字原文, 读音) 分组，合并多次出现的位置。
         如果指定了 singer_ids，只收集属于指定演唱者的注音。
 
+        通过 Word 分组来收集 ruby：连词字符组成的词语中，
+        各字符的 Ruby 文本连接起来作为完整读音。
+
         Args:
             project: 项目数据
             singer_ids: 要输出的演唱者 ID 集合（None 表示全部）
@@ -315,29 +296,38 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         Returns:
             格式: ["漢字,読み[ts],pos1,pos2", ...]
         """
-        ruby_groups: OrderedDict[tuple[str, str], list[tuple[LyricLine, int, int]]] = (
+        # key: (kanji, reading) → List[(sentence, start_idx, end_idx)]
+        ruby_groups: OrderedDict[tuple[str, str], list[tuple[Sentence, int, int]]] = (
             OrderedDict()
         )
 
-        for line in project.lines:
+        for sentence in project.sentences:
             # 演唱者过滤：跳过不含选定演唱者的行
             if singer_ids is not None:
-                if not self._line_has_singer(line, singer_ids):
+                if not self._sentence_has_singer(sentence, singer_ids):
                     continue
-            for ruby in line.rubies:
-                kanji = "".join(line.chars[ruby.start_idx : ruby.end_idx])
-                key = (kanji, ruby.text)
-                if key not in ruby_groups:
-                    ruby_groups[key] = []
-                ruby_groups[key].append((line, ruby.start_idx, ruby.end_idx))
+
+            # 通过 Word 分组收集 ruby
+            char_offset = 0
+            for word in sentence.words:
+                if word.has_ruby:
+                    kanji = word.text
+                    reading = word.ruby_text
+                    start_idx = char_offset
+                    end_idx = char_offset + word.char_count
+                    key = (kanji, reading)
+                    if key not in ruby_groups:
+                        ruby_groups[key] = []
+                    ruby_groups[key].append((sentence, start_idx, end_idx))
+                char_offset += word.char_count
 
         entries: List[str] = []
         for (kanji, reading), occurrences in ruby_groups.items():
             # 用第一个有时间数据的出现来计算读音内相对时间戳
             reading_with_ts = reading
-            for occ_line, start, end in occurrences:
+            for occ_sentence, start, end in occurrences:
                 built = self._build_reading_with_timestamps(
-                    occ_line, start, end, reading
+                    occ_sentence, start, end, reading
                 )
                 if built != reading:
                     reading_with_ts = built
@@ -345,15 +335,13 @@ class NicokaraWithRubyExporter(NicokaraExporter):
 
             # 出现位置列表
             positions: List[str] = []
-            for j, (occ_line, _start, _end) in enumerate(occurrences):
+            for j, (occ_sentence, _start, _end) in enumerate(occurrences):
                 if j == 0:
                     positions.append("")  # 首次出现，位置留空
                 else:
-                    if occ_line.timetags:
-                        line_start = min(t.timestamp_ms for t in occ_line.timetags)
-                        positions.append(
-                            _format_nicokara_ts(line_start, self._offset_ms)
-                        )
+                    start_ms = occ_sentence.timing_start_ms
+                    if start_ms is not None:
+                        positions.append(_format_nicokara_ts(start_ms, self._offset_ms))
                     else:
                         positions.append("")
 
@@ -364,7 +352,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
 
     def _build_reading_with_timestamps(
         self,
-        line: LyricLine,
+        sentence: Sentence,
         start_idx: int,
         end_idx: int,
         reading: str,
@@ -375,7 +363,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         相对时间基于 ruby 组第一个字符的首个 checkpoint。
 
         Args:
-            line:      歌词行
+            sentence:  句子
             start_idx: ruby 起始字符索引
             end_idx:   ruby 结束字符索引
             reading:   读音文本
@@ -388,12 +376,12 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         reading_pos = 0
 
         for char_idx in range(start_idx, end_idx):
-            if char_idx >= len(line.checkpoints):
+            if char_idx >= len(sentence.characters):
                 break
-            config = line.checkpoints[char_idx]
-            effective_count = config.check_count
+            ch = sentence.characters[char_idx]
+            effective_count = ch.check_count
             # 行末字符的最后一个 checkpoint 是 line-end，不计入读音
-            if config.is_line_end and effective_count > 1:
+            if ch.is_line_end and effective_count > 1:
                 effective_count -= 1
 
             for cp_idx in range(effective_count):
@@ -409,12 +397,15 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         if not mapping:
             return reading
 
-        # 获取组起始时间
-        first_tags = line.get_timetags_for_char(start_idx)
-        first_tags_cp0 = [t for t in first_tags if t.checkpoint_idx == 0]
-        if not first_tags_cp0:
+        # 获取组起始时间（第一个字符的首个 checkpoint）
+        first_char = (
+            sentence.characters[start_idx]
+            if start_idx < len(sentence.characters)
+            else None
+        )
+        if not first_char or not first_char.timestamps:
             return reading
-        group_start_ms = first_tags_cp0[0].timestamp_ms
+        group_start_ms = first_char.timestamps[0]
 
         # 拼装读音字符 + 相对时间戳
         result: List[str] = []
@@ -425,13 +416,9 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 continue
 
             if char_idx >= 0 and cp_idx >= 0:
-                tags = [
-                    t
-                    for t in line.timetags
-                    if t.char_idx == char_idx and t.checkpoint_idx == cp_idx
-                ]
-                if tags:
-                    relative_ms = tags[0].timestamp_ms - group_start_ms
+                ch = sentence.characters[char_idx]
+                if cp_idx < len(ch.timestamps):
+                    relative_ms = ch.timestamps[cp_idx] - group_start_ms
                     result.append(_format_nicokara_ts(relative_ms))
 
             result.append(kana)

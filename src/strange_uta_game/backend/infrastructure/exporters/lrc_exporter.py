@@ -6,7 +6,7 @@ LRC 格式是通用歌词格式：
 
 from typing import List
 from .base import BaseExporter, ExportError
-from strange_uta_game.backend.domain import Project, LyricLine, TimeTag
+from strange_uta_game.backend.domain import Project, Sentence
 
 
 class LRCExporter(BaseExporter):
@@ -50,14 +50,11 @@ class LRCExporter(BaseExporter):
             # 工具信息
             lines.append(f"[by:StrangeUtaGame]")
 
-            # 偏移量（如果有）
-            # lines.append(f"[offset:0]")
-
         lines.append("")  # 空行分隔
 
         # 导出行
-        for line in project.lines:
-            line_text = self._export_line(line)
+        for sentence in project.sentences:
+            line_text = self._export_sentence(sentence)
             if line_text:
                 lines.append(line_text)
 
@@ -68,42 +65,49 @@ class LRCExporter(BaseExporter):
         except Exception as e:
             raise ExportError(f"写入文件失败: {e}")
 
-    def _export_line(self, line: LyricLine) -> str:
+    def _export_sentence(self, sentence: Sentence) -> str:
         """导出一行歌词
 
         如果该行有时间标签，使用第一个时间标签作为整行时间。
         如果有多个时间标签，尝试生成增强 LRC 格式。
         """
-        if not line.timetags:
+        if not sentence.has_timetags:
             # 没有时间标签，只输出文本
-            return line.text
+            return sentence.text
 
-        # 按时间排序的时间标签
-        sorted_tags = sorted(line.timetags, key=lambda t: t.timestamp_ms)
+        # 收集所有 (timestamp_ms, char_idx, checkpoint_idx) 并排序
+        all_tags: List[tuple[int, int, int]] = []
+        for i, ch in enumerate(sentence.characters):
+            for cp_idx, ts in enumerate(ch.timestamps):
+                all_tags.append((ts, i, cp_idx))
 
-        if len(sorted_tags) == 1:
+        if not all_tags:
+            return sentence.text
+
+        all_tags.sort(key=lambda t: t[0])
+
+        if len(all_tags) == 1:
             # 只有一个时间标签，标准 LRC 格式
-            timestamp = self._format_timestamp(sorted_tags[0].timestamp_ms)
-            return f"{timestamp}{line.text}"
+            timestamp = self._format_timestamp(all_tags[0][0])
+            return f"{timestamp}{sentence.text}"
 
         # 多个时间标签，生成增强 LRC 格式
         # [mm:ss.xx]<mm:ss.xx>字<mm:ss.xx>字...
         result = []
 
         # 行起始时间
-        first_time = sorted_tags[0].timestamp_ms
+        first_time = all_tags[0][0]
         result.append(self._format_timestamp(first_time))
 
         # 逐字时间标签
-        for tag in sorted_tags:
-            time_str = self._format_timestamp(tag.timestamp_ms)
+        for ts, char_idx, _cp_idx in all_tags:
+            time_str = self._format_timestamp(ts)
             # 去掉方括号，使用尖括号
             time_str = time_str.replace("[", "<").replace("]", ">")
 
             # 获取对应的字符
-            char_idx = min(tag.char_idx, len(line.chars) - 1)
-            if char_idx < len(line.chars):
-                char = line.chars[char_idx]
+            if char_idx < len(sentence.characters):
+                char = sentence.characters[char_idx].char
                 result.append(time_str)
                 result.append(char)
 

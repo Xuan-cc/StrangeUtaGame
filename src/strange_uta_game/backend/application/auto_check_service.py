@@ -8,9 +8,9 @@ from dataclasses import dataclass
 
 from strange_uta_game.backend.domain import (
     Project,
-    LyricLine,
+    Sentence,
+    Character,
     Ruby,
-    CheckpointConfig,
 )
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
     split_text,
@@ -48,7 +48,7 @@ class AutoCheckService:
     1. 拆分字符
     2. 分析注音
     3. 计算节奏点数量
-    4. 生成 CheckpointConfig
+    4. 构建 Character 对象
     """
 
     def __init__(
@@ -84,7 +84,6 @@ class AutoCheckService:
 
         遍历文本，尝试将词典词条匹配到文本位置，匹配成功时替换同位置的 ruby_results。
         """
-        # 构建 char_idx → RubyResult 的原始映射（只保留首 char_idx 的条目）
         covered: set[int] = set()
         overrides: List[RubyResult] = []
 
@@ -93,7 +92,6 @@ class AutoCheckService:
             pos = 0
             while pos <= len(text) - wlen:
                 if text[pos : pos + wlen] == word:
-                    # 确认该区间未被更长的词典条目占用
                     span = set(range(pos, pos + wlen))
                     if not span & covered:
                         overrides.append(
@@ -112,7 +110,6 @@ class AutoCheckService:
         if not overrides:
             return ruby_results
 
-        # 将覆盖区间内的原始 ruby_results 剔除，加入词典匹配结果
         filtered = [
             r
             for r in ruby_results
@@ -122,19 +119,20 @@ class AutoCheckService:
         merged.sort(key=lambda r: r.start_idx)
         return merged
 
-    def analyze_line(
-        self, line: LyricLine, split_config: Optional[SplitConfig] = None
+    def analyze_sentence(
+        self, sentence: Sentence, split_config: Optional[SplitConfig] = None
     ) -> List[AutoCheckResult]:
-        """分析单行歌词
+        """分析句子歌词
 
         Args:
-            line: 歌词行
+            sentence: 句子
             split_config: 拆分配置
 
         Returns:
             分析结果列表
         """
-        if not line.text:
+        text = sentence.text
+        if not text:
             if self._flags.get("check_empty_lines", False):
                 return [
                     AutoCheckResult(
@@ -150,18 +148,18 @@ class AutoCheckService:
         split_config = split_config or SplitConfig()
 
         # 拆分文本
-        chars, check_counts = split_text(line.text, split_config)
+        chars, check_counts = split_text(text, split_config)
 
         # 分析注音
-        ruby_results = self._analyzer.analyze(line.text)
+        ruby_results = self._analyzer.analyze(text)
 
         # 应用用户词典覆盖（最长优先匹配）
         if self._dict:
-            ruby_results = self._apply_dictionary(line.text, ruby_results)
+            ruby_results = self._apply_dictionary(text, ruby_results)
 
         # 创建字符到注音的映射（按 mora 分割到每个字符）
-        char_to_ruby = {}
-        char_to_block = {}  # char_idx → block_id
+        char_to_ruby: Dict[int, str] = {}
+        char_to_block: Dict[int, int] = {}
         for block_id, result in enumerate(ruby_results):
             block_len = result.end_idx - result.start_idx
             if result.text == result.reading:
@@ -270,7 +268,7 @@ class AutoCheckService:
         for i, (char, count) in enumerate(zip(chars, check_counts)):
             results.append(
                 AutoCheckResult(
-                    line_idx=0,  # 将在 apply_to_line 中设置
+                    line_idx=0,  # 将在 analyze_project 中设置
                     char_idx=i,
                     char=char,
                     check_count=count,
@@ -281,99 +279,67 @@ class AutoCheckService:
 
         return results
 
-    def apply_to_line(
+    def apply_to_sentence(
         self,
-        line: LyricLine,
+        sentence: Sentence,
         split_config: Optional[SplitConfig] = None,
         keep_existing_timetags: bool = True,
     ) -> None:
-        """分析并应用自动检查结果到歌词行
+        """分析并应用自动检查结果到句子
+
+        构建新的 Character 对象列表，每个字符直接携带自己的 Ruby。
+        相比旧的多字符 Ruby 合并方式更简洁。
 
         Args:
-            line: 歌词行
+            sentence: 句子
             split_config: 拆分配置
             keep_existing_timetags: 是否保留现有时间标签
         """
-        results = self.analyze_line(line, split_config)
+        results = self.analyze_sentence(sentence, split_config)
 
         if not results:
             return
 
-        # 更新 chars
-        line.chars = [r.char for r in results]
+        # 保留现有时间标签和演唱者映射
+        old_timestamps: Dict[int, List[int]] = {}
+        old_singer_map: Dict[int, str] = {}
+        for i, char in enumerate(sentence.characters):
+            if char.timestamps:
+                old_timestamps[i] = list(char.timestamps)
+            old_singer_map[i] = char.singer_id
 
-        # 重建注音（使用 origin_block_id 防止跨块合并）
-        line.rubies.clear()
-        current_ruby_parts: list = []
-        current_block_id = -1
-        current_start = 0
-
-        for i, result in enumerate(results):
-            if result.ruby:
-                if not current_ruby_parts:
-                    current_ruby_parts = [result.ruby]
-                    current_block_id = result.origin_block_id
-                    current_start = i
-                elif (
-                    result.origin_block_id == current_block_id and current_block_id >= 0
-                ):
-                    current_ruby_parts.append(result.ruby)
-                else:
-                    # 跨块：先保存当前块的 Ruby
-                    merged = "".join(current_ruby_parts)
-                    line.add_ruby(Ruby(text=merged, start_idx=current_start, end_idx=i))
-                    current_ruby_parts = [result.ruby]
-                    current_block_id = result.origin_block_id
-                    current_start = i
-            else:
-                if current_ruby_parts:
-                    merged = "".join(current_ruby_parts)
-                    line.add_ruby(Ruby(text=merged, start_idx=current_start, end_idx=i))
-                    current_ruby_parts = []
-
-        # 处理最后一个注音块
-        if current_ruby_parts:
-            merged = "".join(current_ruby_parts)
-            line.add_ruby(
-                Ruby(text=merged, start_idx=current_start, end_idx=len(results))
-            )
-
-        # 重建 checkpoint 配置
-        # 句尾字符额外 +1 节奏点用于记录行结束时间（长按释放）
+        # 构建新的 Character 对象列表
         add_line_end = self._flags.get("check_line_end", True)
-        old_singer_map = {cp.char_idx: cp.singer_id for cp in line.checkpoints}
-        line.checkpoints = [
-            CheckpointConfig(
-                char_idx=i,
-                check_count=(
-                    result.check_count
-                    + (1 if i == len(results) - 1 and add_line_end else 0)
-                ),
-                is_line_end=(i == len(results) - 1 and add_line_end),
-                singer_id=old_singer_map.get(i, line.singer_id),
+        new_characters: List[Character] = []
+        for i, result in enumerate(results):
+            is_last = i == len(results) - 1
+            check_count = result.check_count + (1 if is_last and add_line_end else 0)
+
+            # 每个字符直接携带自己的 Ruby（无需跨字符合并）
+            ruby_obj = Ruby(text=result.ruby) if result.ruby else None
+
+            character = Character(
+                char=result.char,
+                ruby=ruby_obj,
+                check_count=check_count,
+                is_line_end=(is_last and add_line_end),
+                singer_id=old_singer_map.get(i, sentence.singer_id),
             )
-            for i, result in enumerate(results)
-        ]
+            new_characters.append(character)
 
         # 设置 linked_to_next: 当下一个字符 check_count==0 时，当前字符连词到下一个
-        for i in range(len(line.checkpoints) - 1):
-            if (
-                line.checkpoints[i + 1].check_count == 0
-                and not line.checkpoints[i].linked_to_next
-            ):
-                cp = line.checkpoints[i]
-                line.checkpoints[i] = CheckpointConfig(
-                    char_idx=cp.char_idx,
-                    check_count=cp.check_count,
-                    is_line_end=cp.is_line_end,
-                    is_rest=cp.is_rest,
-                    linked_to_next=True,
-                    singer_id=cp.singer_id,
-                )
+        for i in range(len(new_characters) - 1):
+            if new_characters[i + 1].check_count == 0:
+                new_characters[i].linked_to_next = True
 
-        # 如果不保留时间标签，清空
-        if not keep_existing_timetags:
-            line.timetags.clear()
+        # 恢复时间标签
+        if keep_existing_timetags:
+            for i, char in enumerate(new_characters):
+                if i in old_timestamps:
+                    char.timestamps = old_timestamps[i]
+                    char.push_to_ruby()
+
+        sentence.characters = new_characters
 
     def analyze_project(
         self, project: Project, split_config: Optional[SplitConfig] = None
@@ -389,12 +355,12 @@ class AutoCheckService:
         """
         results = []
 
-        for i, line in enumerate(project.lines):
-            line_results = self.analyze_line(line, split_config)
+        for i, sentence in enumerate(project.sentences):
+            sent_results = self.analyze_sentence(sentence, split_config)
             # 更新行索引
-            for r in line_results:
+            for r in sent_results:
                 r.line_idx = i
-            results.append((i, line_results))
+            results.append((i, sent_results))
 
         return results
 
@@ -411,79 +377,58 @@ class AutoCheckService:
             split_config: 拆分配置
             keep_existing_timetags: 是否保留现有时间标签
         """
-        for line in project.lines:
-            self.apply_to_line(line, split_config, keep_existing_timetags)
+        for sentence in project.sentences:
+            self.apply_to_sentence(sentence, split_config, keep_existing_timetags)
 
     def update_checkpoints_from_rubies(
         self,
-        line: LyricLine,
+        sentence: Sentence,
         split_config: Optional[SplitConfig] = None,
     ) -> None:
         """根据现有注音更新节奏点配置（不重新分析注音）
 
-        仅更新 checkpoint 的 check_count，保留现有的 rubies 不变。
+        仅更新 checkpoint 的 check_count，保留现有的 Ruby 不变。
+        在新模型中，每个字符直接持有自己的 Ruby，无需跨字符拆分。
 
         Args:
-            line: 歌词行
+            sentence: 句子
             split_config: 拆分配置
         """
-        if not line.chars:
+        if not sentence.characters:
             return
 
         split_config = split_config or SplitConfig()
 
         # 使用 text_splitter 获取默认节奏点数
-        _, check_counts = split_text(line.text, split_config)
+        _, check_counts = split_text(sentence.text, split_config)
 
         # 确保长度匹配
-        while len(check_counts) < len(line.chars):
+        while len(check_counts) < len(sentence.characters):
             check_counts.append(1)
-        check_counts = check_counts[: len(line.chars)]
+        check_counts = check_counts[: len(sentence.characters)]
 
-        # 根据现有注音更新 check_count（按 mora 分割）
-        for ruby in line.rubies:
-            target_text = "".join(line.chars[ruby.start_idx : ruby.end_idx])
-            if target_text == ruby.text:
+        # 根据现有 per-char 注音更新 check_count
+        for i, char in enumerate(sentence.characters):
+            if not char.ruby:
+                continue
+            if char.char == char.ruby.text:
                 continue  # 假名注音，不更新
+            # 直接计算该字符 Ruby 的 mora 数
+            check_counts[i] = len(split_into_moras(char.ruby.text))
 
-            block_len = ruby.end_idx - ruby.start_idx
-            split_parts = split_ruby_for_checkpoints(ruby.text, block_len)
-            for idx in range(ruby.start_idx, min(ruby.end_idx, len(check_counts))):
-                pos = idx - ruby.start_idx
-                if pos < len(split_parts) and split_parts[pos]:
-                    check_counts[idx] = len(split_into_moras(split_parts[pos]))
-                else:
-                    check_counts[idx] = 0
-
-        # 重建 checkpoint 配置
+        # 更新字符属性
         add_line_end = self._flags.get("check_line_end", True)
-        old_singer_map2 = {cp.char_idx: cp.singer_id for cp in line.checkpoints}
-        line.checkpoints = [
-            CheckpointConfig(
-                char_idx=i,
-                check_count=count
-                + (1 if i == len(check_counts) - 1 and add_line_end else 0),
-                is_line_end=(i == len(check_counts) - 1 and add_line_end),
-                singer_id=old_singer_map2.get(i, line.singer_id),
-            )
-            for i, count in enumerate(check_counts)
-        ]
+        for i, char in enumerate(sentence.characters):
+            is_last = i == len(sentence.characters) - 1
+            char.check_count = check_counts[i] + (1 if is_last and add_line_end else 0)
+            char.is_line_end = is_last and add_line_end
 
-        # 设置 linked_to_next: 当下一个字符 check_count==0 时，当前字符连词到下一个
-        for i in range(len(line.checkpoints) - 1):
-            if (
-                line.checkpoints[i + 1].check_count == 0
-                and not line.checkpoints[i].linked_to_next
-            ):
-                cp = line.checkpoints[i]
-                line.checkpoints[i] = CheckpointConfig(
-                    char_idx=cp.char_idx,
-                    check_count=cp.check_count,
-                    is_line_end=cp.is_line_end,
-                    is_rest=cp.is_rest,
-                    linked_to_next=True,
-                    singer_id=cp.singer_id,
-                )
+        # 重置并设置 linked_to_next
+        for char in sentence.characters:
+            char.linked_to_next = False
+        for i in range(len(sentence.characters) - 1):
+            if sentence.characters[i + 1].check_count == 0:
+                sentence.characters[i].linked_to_next = True
 
     def update_checkpoints_for_project(
         self,
@@ -496,8 +441,8 @@ class AutoCheckService:
             project: 项目
             split_config: 拆分配置
         """
-        for line in project.lines:
-            self.update_checkpoints_from_rubies(line, split_config)
+        for sentence in project.sentences:
+            self.update_checkpoints_from_rubies(sentence, split_config)
 
     def estimate_check_count(self, text: str) -> int:
         """估算文本的节奏点数量

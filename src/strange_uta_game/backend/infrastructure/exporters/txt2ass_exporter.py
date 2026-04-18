@@ -12,7 +12,7 @@ txt2ass 是一种用于生成 ASS 字幕的歌词格式。
 
 from typing import List
 from .base import BaseExporter, ExportError
-from strange_uta_game.backend.domain import Project, LyricLine
+from strange_uta_game.backend.domain import Project, Sentence
 
 
 class Txt2AssExporter(BaseExporter):
@@ -56,8 +56,8 @@ class Txt2AssExporter(BaseExporter):
         lines.append("")
 
         # 导出行
-        for line in project.lines:
-            line_text = self._export_line(line)
+        for sentence in project.sentences:
+            line_text = self._export_sentence(sentence)
             if line_text:
                 lines.append(line_text)
 
@@ -68,17 +68,17 @@ class Txt2AssExporter(BaseExporter):
         except Exception as e:
             raise ExportError(f"写入文件失败: {e}")
 
-    def _export_line(self, line: LyricLine) -> str:
+    def _export_sentence(self, sentence: Sentence) -> str:
         """导出一行歌词"""
-        if not line.timetags:
+        if not sentence.has_timetags:
             # 没有时间标签，使用占位符
-            return f"[00:00.00]{line.text}"
+            return f"[00:00.00]{sentence.text}"
 
-        # 使用第一个时间标签
-        first_tag = min(line.timetags, key=lambda t: t.timestamp_ms)
-        time_str = self._format_timestamp(first_tag.timestamp_ms, "lrc")
+        # 使用最早的时间标签
+        start_ms = sentence.timing_start_ms
+        time_str = self._format_timestamp(start_ms, "lrc")
 
-        return f"{time_str}{line.text}"
+        return f"{time_str}{sentence.text}"
 
 
 class ASSDirectExporter(BaseExporter):
@@ -160,19 +160,19 @@ class ASSDirectExporter(BaseExporter):
             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
         ]
 
-        for i, line in enumerate(project.lines):
-            if not line.timetags:
+        sentences = project.sentences
+        for i, sentence in enumerate(sentences):
+            if not sentence.has_timetags:
                 continue
 
             # 获取时间范围
-            sorted_tags = sorted(line.timetags, key=lambda t: t.timestamp_ms)
-            start_time = sorted_tags[0].timestamp_ms
+            start_time = sentence.timing_start_ms
 
             # 结束时间：下一行的开始时间，或当前行 + 5 秒
-            if i + 1 < len(project.lines):
-                next_line = project.lines[i + 1]
-                if next_line.timetags:
-                    end_time = min(t.timestamp_ms for t in next_line.timetags)
+            if i + 1 < len(sentences):
+                next_sentence = sentences[i + 1]
+                if next_sentence.has_timetags:
+                    end_time = next_sentence.timing_start_ms
                 else:
                     end_time = start_time + 5000
             else:
@@ -182,30 +182,35 @@ class ASSDirectExporter(BaseExporter):
             end_str = self._format_timestamp(end_time, "ass")
 
             # 生成卡拉OK效果文本
-            text = self._generate_karaoke_text(line)
+            text = self._generate_karaoke_text(sentence)
 
             event_line = f"Dialogue: 0,{start_str},{end_str},Karaoke,,0,0,0,,{text}"
             lines.append(event_line)
 
         return lines
 
-    def _generate_karaoke_text(self, line: LyricLine) -> str:
+    def _generate_karaoke_text(self, sentence: Sentence) -> str:
         """生成带卡拉OK效果的文本"""
-        if not line.timetags or not line.chars:
-            return line.text
+        if not sentence.has_timetags or not sentence.characters:
+            return sentence.text
 
-        # 按时间排序的时间标签
-        sorted_tags = sorted(line.timetags, key=lambda t: t.timestamp_ms)
+        # 收集所有 (timestamp_ms, char) 并按时间排序
+        all_tags: List[tuple[int, str]] = []
+        for ch in sentence.characters:
+            for ts in ch.timestamps:
+                all_tags.append((ts, ch.char))
+
+        if not all_tags:
+            return sentence.text
+
+        all_tags.sort(key=lambda t: t[0])
 
         result = []
 
-        for i, tag in enumerate(sorted_tags):
-            char_idx = min(tag.char_idx, len(line.chars) - 1)
-            char = line.chars[char_idx]
-
+        for i, (ts, char) in enumerate(all_tags):
             # 计算持续时间
-            if i + 1 < len(sorted_tags):
-                duration_ms = sorted_tags[i + 1].timestamp_ms - tag.timestamp_ms
+            if i + 1 < len(all_tags):
+                duration_ms = all_tags[i + 1][0] - ts
             else:
                 duration_ms = 500  # 默认 500ms
 

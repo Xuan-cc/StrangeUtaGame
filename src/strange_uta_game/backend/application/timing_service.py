@@ -17,9 +17,8 @@ import time
 
 from strange_uta_game.backend.domain import (
     Project,
-    LyricLine,
-    TimeTag,
-    Checkpoint,
+    Sentence,
+    Character,
     Singer,
 )
 from strange_uta_game.backend.infrastructure.audio import IAudioEngine
@@ -209,22 +208,24 @@ class TimingService:
     # ==================== Checkpoint 管理 ====================
 
     def _rebuild_global_checkpoints(self) -> None:
-        """重建全局 Checkpoint 序列"""
+        """重建全局 Checkpoint 序列
+
+        遍历所有句子的所有字符，为每个 check_count > 0 的字符
+        生成对应数量的 CheckpointPosition。
+        """
         self._global_checkpoints = []
 
         if not self._project:
             return
 
-        # 遍历所有歌词行，构建全局 Checkpoint 序列
-        for line_idx, line in enumerate(self._project.lines):
-            # 遍历该行的所有 checkpoint 配置
-            for checkpoint in line.checkpoints:
-                for checkpoint_idx in range(checkpoint.check_count):
+        for line_idx, sentence in enumerate(self._project.sentences):
+            for char_idx, char in enumerate(sentence.characters):
+                for cp_idx in range(char.check_count):
                     pos = CheckpointPosition(
                         line_idx=line_idx,
-                        char_idx=checkpoint.char_idx,
-                        checkpoint_idx=checkpoint_idx,
-                        singer_id=line.singer_id,
+                        char_idx=char_idx,
+                        checkpoint_idx=cp_idx,
+                        singer_id=char.singer_id,
                     )
                     self._global_checkpoints.append(pos)
 
@@ -237,7 +238,7 @@ class TimingService:
         """获取当前 checkpoint 的详细信息
 
         Returns:
-            (LyricLine, Checkpoint) 或 (None, None)
+            (Sentence, Character) 或 (None, None)
         """
         if not self._project or not self._global_checkpoints:
             return None, None
@@ -247,17 +248,16 @@ class TimingService:
 
         pos = self._global_checkpoints[self._global_checkpoint_idx]
 
-        if pos.line_idx >= len(self._project.lines):
+        if pos.line_idx >= len(self._project.sentences):
             return None, None
 
-        line = self._project.lines[pos.line_idx]
+        sentence = self._project.sentences[pos.line_idx]
+        char = sentence.get_character(pos.char_idx)
 
-        # 查找对应的 checkpoint
-        for cp in line.checkpoints:
-            if cp.char_idx == pos.char_idx and pos.checkpoint_idx < cp.check_count:
-                return line, cp
+        if char and pos.checkpoint_idx < char.check_count:
+            return sentence, char
 
-        return line, None
+        return sentence, None
 
     def _notify_checkpoint_moved(self) -> None:
         """通知 checkpoint 移动"""
@@ -397,12 +397,12 @@ class TimingService:
             self._audio_engine.play()
 
         # 获取当前 checkpoint
-        line, checkpoint = self._get_current_checkpoint_info()
-        if not line or not checkpoint:
+        sentence, char = self._get_current_checkpoint_info()
+        if not sentence or not char:
             # 当前位置无效（如 check_count=0）→ 尝试跳到下一个有效 checkpoint
             if self.move_to_next_checkpoint():
-                line, checkpoint = self._get_current_checkpoint_info()
-            if not line or not checkpoint:
+                sentence, char = self._get_current_checkpoint_info()
+            if not sentence or not char:
                 self._notify_error("NO_CHECKPOINT", "无效的 checkpoint 位置")
                 return
 
@@ -412,8 +412,8 @@ class TimingService:
         #   checkpoint_idx = check_count-1: 抬起时间（结束）
         # 之前的节奏点按普通打轴处理（用于多假名汉字的注音节奏点）
         if (
-            checkpoint.is_line_end
-            and self._current_position.checkpoint_idx == checkpoint.check_count - 2
+            char.is_line_end
+            and self._current_position.checkpoint_idx == char.check_count - 2
         ):
             # 句尾长按处理 - 记录开始时间
             self._start_line_end_recording()
@@ -486,13 +486,13 @@ class TimingService:
         if end_time_ms - start_time_ms > self.LINE_END_RECORDING_TIMEOUT_MS:
             end_time_ms = start_time_ms + self.LINE_END_RECORDING_TIMEOUT_MS
 
-        line, checkpoint = self._get_current_checkpoint_info()
-        if not line or not checkpoint:
+        sentence, char = self._get_current_checkpoint_info()
+        if not sentence or not char:
             self._line_end_recording = False
             self._line_end_start_time_ms = None
             return
 
-        char_idx = checkpoint.char_idx
+        char_idx = self._current_position.char_idx
 
         if end_time_ms - start_time_ms < self.SHORT_PRESS_THRESHOLD_MS:
             # 短按 - 两个 checkpoint 都记录 start_time
@@ -524,48 +524,39 @@ class TimingService:
         Args:
             timestamp_ms: 时间戳（毫秒）
         """
-        line, checkpoint = self._get_current_checkpoint_info()
-        if not line or not checkpoint:
+        sentence, char = self._get_current_checkpoint_info()
+        if not sentence or not char:
             return
 
         # 检查时间倒退
-        existing_tags = line.get_timetags_for_char(checkpoint.char_idx)
-        for tag in existing_tags:
-            if tag.timestamp_ms > timestamp_ms:
+        for ts in char.timestamps:
+            if ts > timestamp_ms:
                 self._notify_error(
                     "TIME_BACKWARD",
-                    f"时间倒退: 新时间 {timestamp_ms}ms < 已存在 {tag.timestamp_ms}ms",
+                    f"时间倒退: 新时间 {timestamp_ms}ms < 已存在 {ts}ms",
                 )
                 return
-
-        # 创建时间标签
-        tag = TimeTag(
-            timestamp_ms=timestamp_ms,
-            singer_id=line.singer_id,
-            char_idx=checkpoint.char_idx,
-            checkpoint_idx=self._current_position.checkpoint_idx,
-        )
 
         if self._command_manager and self._project:
             from strange_uta_game.backend.application.commands import AddTimeTagCommand
 
             cmd = AddTimeTagCommand(
                 project=self._project,
-                line_id=line.id,
+                sentence_id=sentence.id,
+                char_idx=self._current_position.char_idx,
                 timestamp_ms=timestamp_ms,
-                char_idx=checkpoint.char_idx,
                 checkpoint_idx=self._current_position.checkpoint_idx,
             )
             self._command_manager.execute(cmd)
         else:
-            line.add_timetag(tag)
+            char.add_timestamp(timestamp_ms, self._current_position.checkpoint_idx)
 
         # 通知回调
         if self._callbacks:
             self._callbacks.on_timetag_added(
-                line.singer_id,
+                char.singer_id,
                 self._current_position.line_idx,
-                checkpoint.char_idx,
+                self._current_position.char_idx,
                 self._current_position.checkpoint_idx,
                 timestamp_ms,
             )
@@ -639,11 +630,11 @@ class TimingService:
         if not self._project:
             return 0
 
-        # 获取该演唱者的所有歌词行
+        # 获取该演唱者的所有句子
         singer_lines = [
-            (idx, line)
-            for idx, line in enumerate(self._project.lines)
-            if line.singer_id == singer_id
+            (idx, sentence)
+            for idx, sentence in enumerate(self._project.sentences)
+            if sentence.singer_id == singer_id
         ]
 
         if not singer_lines:
@@ -653,31 +644,30 @@ class TimingService:
         first_time_ms: Optional[int] = None
 
         # 找到当前时间对应的行
-        for i, (line_idx, line) in enumerate(singer_lines):
-            if not line.timetags:
+        for i, (line_idx, sentence) in enumerate(singer_lines):
+            if not sentence.has_timetags:
                 continue
 
-            # 获取该行的第一个和最后一个时间标签
-            sorted_tags = sorted(line.timetags, key=lambda t: t.timestamp_ms)
-            first_time = sorted_tags[0].timestamp_ms
-            last_time = sorted_tags[-1].timestamp_ms
+            first_time = sentence.timing_start_ms
+            last_time = sentence.timing_end_ms
 
             if first_timed_line_idx is None:
                 first_timed_line_idx = line_idx
                 first_time_ms = first_time
 
             # 检查是否在当前行的时间范围内
-            if first_time <= time_ms <= last_time:
-                return line_idx
+            if first_time is not None and last_time is not None:
+                if first_time <= time_ms <= last_time:
+                    return line_idx
 
-            # 检查是否在下一行之前
-            if i + 1 < len(singer_lines):
-                _, next_line = singer_lines[i + 1]
-                if next_line.timetags:
-                    next_first = min(t.timestamp_ms for t in next_line.timetags)
-                    if last_time < time_ms < next_first:
-                        # 在行间间隙中，显示上一行
-                        return line_idx
+                # 检查是否在下一行之前
+                if i + 1 < len(singer_lines):
+                    _, next_sentence = singer_lines[i + 1]
+                    if next_sentence.has_timetags:
+                        next_first = next_sentence.timing_start_ms
+                        if next_first is not None and last_time < time_ms < next_first:
+                            # 在行间间隙中，显示上一行
+                            return line_idx
 
         # 默认显示第一行或最后一行
         if first_timed_line_idx is None or first_time_ms is None:
@@ -713,32 +703,23 @@ class TimingService:
             else:
                 line_idx = self._current_position.line_idx + i
 
-            if line_idx >= len(self._project.lines):
+            if line_idx >= len(self._project.sentences):
                 break
 
-            line = self._project.lines[line_idx]
+            sentence = self._project.sentences[line_idx]
 
             # 找到第一个未打轴的 checkpoint
-            for checkpoint in line.checkpoints:
-                for checkpoint_idx in range(checkpoint.check_count):
-                    existing = [
-                        tag
-                        for tag in line.get_timetags_for_char(checkpoint.char_idx)
-                        if tag.checkpoint_idx == checkpoint_idx
-                    ]
-                    if not existing:
-                        tag = TimeTag(
-                            timestamp_ms=timestamp_ms,
-                            singer_id=line.singer_id,
-                            char_idx=checkpoint.char_idx,
-                            checkpoint_idx=checkpoint_idx,
-                        )
-                        line.add_timetag(tag)
+            found = False
+            for char in sentence.characters:
+                for cp_idx in range(char.check_count):
+                    if cp_idx >= len(char.timestamps):
+                        # 该 checkpoint 尚未打轴
+                        char.add_timestamp(timestamp_ms, cp_idx)
                         added_count += 1
+                        found = True
                         break
-                else:
-                    continue
-                break
+                if found:
+                    break
 
         return added_count
 
@@ -752,26 +733,23 @@ class TimingService:
             return 0
 
         line_idx = self._current_position.line_idx
-        if line_idx >= len(self._project.lines):
+        if line_idx >= len(self._project.sentences):
             return 0
 
-        line = self._project.lines[line_idx]
-        count = len(line.timetags)
+        sentence = self._project.sentences[line_idx]
+        count = sum(len(c.timestamps) for c in sentence.characters)
 
         if self._command_manager and self._project:
             from strange_uta_game.backend.application.commands import (
-                RemoveTimeTagCommand,
+                ClearLineTimeTagsCommand,
             )
 
-            for tag in list(line.timetags):
-                self._command_manager.execute(
-                    RemoveTimeTagCommand(
-                        project=self._project,
-                        line_id=line.id,
-                        tag=tag,
-                    )
-                )
+            cmd = ClearLineTimeTagsCommand(
+                project=self._project,
+                sentence_id=sentence.id,
+            )
+            self._command_manager.execute(cmd)
         else:
-            line.timetags.clear()
+            sentence.clear_all_timestamps()
 
         return count

@@ -21,6 +21,9 @@ from qfluentwidgets import (
 )
 from typing import Optional
 from strange_uta_game.backend.domain import Project, Ruby
+from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+    split_ruby_for_checkpoints,
+)
 
 
 class BulkChangeDialog(QDialog):
@@ -141,8 +144,8 @@ class BulkChangeDialog(QDialog):
         if not self._project:
             return 0
         count = 0
-        for line in self._project.lines:
-            text = line.text
+        for sentence in self._project.sentences:
+            text = sentence.text
             pos = 0
             while pos <= len(text) - len(word):
                 if text[pos : pos + len(word)] == word:
@@ -171,48 +174,40 @@ class BulkChangeDialog(QDialog):
         word_len = len(word)
         changed = 0
 
-        for line in self._project.lines:
-            text = line.text
+        for sentence in self._project.sentences:
+            text = sentence.text
             pos = 0
             while pos <= len(text) - word_len:
                 if text[pos : pos + word_len] == word:
                     # 修改注音（留空则不修改）
                     if reading:
-                        # 查找已有的 Ruby，删除旧的
-                        line.rubies = [
-                            r
-                            for r in line.rubies
-                            if not (r.start_idx >= pos and r.end_idx <= pos + word_len)
-                        ]
-                        # 逗号分隔 → per-char Ruby；无逗号 → 整词 Ruby
                         if "," in reading and word_len > 1:
+                            # 逗号分隔 → per-char Ruby
                             parts = reading.split(",")
-                            for k, part in enumerate(parts):
-                                part = part.strip()
-                                if part and pos + k < pos + word_len:
-                                    line.rubies.append(
-                                        Ruby(
-                                            text=part,
-                                            start_idx=pos + k,
-                                            end_idx=pos + k + 1,
+                            for k in range(word_len):
+                                ci = pos + k
+                                if ci < len(sentence.characters):
+                                    part = parts[k].strip() if k < len(parts) else ""
+                                    if part:
+                                        sentence.characters[ci].set_ruby(
+                                            Ruby(text=part)
                                         )
-                                    )
+                                    else:
+                                        sentence.characters[ci].set_ruby(None)
                         else:
-                            line.rubies.append(
-                                Ruby(
-                                    text=reading,
-                                    start_idx=pos,
-                                    end_idx=pos + word_len,
-                                )
-                            )
-                        line.rubies.sort(key=lambda r: r.start_idx)
+                            # 整词 Ruby：按字符数拆分
+                            split_parts = split_ruby_for_checkpoints(reading, word_len)
+                            for k in range(word_len):
+                                ci = pos + k
+                                if ci < len(sentence.characters):
+                                    if k < len(split_parts) and split_parts[k]:
+                                        sentence.characters[ci].set_ruby(
+                                            Ruby(text=split_parts[k])
+                                        )
+                                    else:
+                                        sentence.characters[ci].set_ruby(None)
 
                     # 设置节奏点（-1=不修改，0=设为0，>0=设为指定值）
-                    # 支持逗号分隔：每个值对应搜索词中的一个字符
-                    from strange_uta_game.backend.domain.models import (
-                        CheckpointConfig,
-                    )
-
                     for ci_offset in range(word_len):
                         ci = pos + ci_offset
                         # 取对应位置的值，超出则循环最后一个值
@@ -220,16 +215,8 @@ class BulkChangeDialog(QDialog):
                         cp_val = checkpoint_vals[val_idx]
                         if cp_val < 0:
                             continue  # -1 表示不修改
-                        if ci < len(line.checkpoints):
-                            old_cp = line.checkpoints[ci]
-                            line.checkpoints[ci] = CheckpointConfig(
-                                char_idx=old_cp.char_idx,
-                                check_count=cp_val,
-                                is_line_end=old_cp.is_line_end,
-                                is_rest=old_cp.is_rest,
-                                linked_to_next=old_cp.linked_to_next,
-                                singer_id=old_cp.singer_id,
-                            )
+                        if ci < len(sentence.characters):
+                            sentence.characters[ci].check_count = cp_val
 
                     changed += 1
                     pos += word_len

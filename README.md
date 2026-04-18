@@ -75,7 +75,7 @@ strange-uta-game/
               │
 ┌─────────────▼───────────────────────┐
 │  领域层 (Domain)                     │
-│  - 核心业务实体                      │
+│  - 核心数据模型 (Ruby/Char/Sentence) │
 │  - 纯数据，无外部依赖                 │
 └─────────────┬───────────────────────┘
               │
@@ -111,9 +111,6 @@ python main.py
 ```bash
 # 运行测试
 pytest tests/
-
-# 运行特定测试
-pytest tests/unit/domain/test_checkpoint.py
 
 # 代码检查
 ruff check .
@@ -310,9 +307,9 @@ ruff check .
 ```
 tests/
 └── unit/                     # 单元测试
-    ├── domain/               # 领域层测试（85个）
+    ├── domain/               # 领域层测试（53个）
     ├── application/          # 应用层测试（35个）
-    └── infrastructure/       # 基础设施层测试（60个）
+    └── infrastructure/       # 基础设施层测试（110个）
 ```
 
 ### 运行测试
@@ -333,7 +330,7 @@ pytest tests/unit/infrastructure/
 pytest tests/ --cov=src --cov-report=html
 ```
 
-当前共有 **218 个测试**，全部通过。
+当前共有 **198 个测试**，全部通过。
 
 ## 打包发行
 
@@ -361,7 +358,7 @@ pyinstaller --noconfirm --onedir --windowed --name "StrangeUtaGame" main.py
 - **GitHub 地址**: https://github.com/Xuan-cc/StrangeUtaGame
 - **许可证**: MIT License
 - **作者**: Xuan-cc
-- **开发状态**: 已完成 Phase 1-8，具备完整歌词打轴功能
+- **开发状态**: 已完成 Phase 1-9，采用分层模型并重构核心架构
 
 ## 依赖
 

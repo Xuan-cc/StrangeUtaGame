@@ -7,7 +7,7 @@
 from .base import BaseExporter, ExportError
 from strange_uta_game.backend.domain import Project
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-    lines_to_inline_text,
+    sentences_to_inline_text,
 )
 
 
@@ -40,7 +40,7 @@ class InlineExporter(BaseExporter):
         file_path = self._ensure_extension(file_path)
 
         try:
-            content = lines_to_inline_text(project.lines)
+            content = sentences_to_inline_text(project.sentences)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
         except Exception as e:

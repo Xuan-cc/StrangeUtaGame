@@ -11,8 +11,8 @@ from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
 from strange_uta_game.backend.domain import (
     Project,
     Singer,
-    LyricLine,
-    TimeTag,
+    Sentence,
+    Character,
     Ruby,
 )
 
@@ -26,8 +26,8 @@ class TestSugProjectParser:
         project = Project()
         singer = project.get_default_singer()
 
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        project.add_sentence(sentence)
 
         # 保存
         file_path = tmp_path / "test.sug"
@@ -41,20 +41,20 @@ class TestSugProjectParser:
 
         # 验证
         assert loaded.id == project.id
-        assert len(loaded.lines) == 1
-        assert loaded.lines[0].text == "测试歌词"
+        assert len(loaded.sentences) == 1
+        assert loaded.sentences[0].text == "测试歌词"
 
     def test_save_and_load_with_timetags(self, tmp_path):
         """测试保存和加载带时间标签的项目"""
         project = Project()
         singer = project.get_default_singer()
 
-        line = LyricLine(singer_id=singer.id, text="赤い花")
-        line.add_timetag(TimeTag(timestamp_ms=1000, singer_id=singer.id, char_idx=0))
-        line.add_timetag(TimeTag(timestamp_ms=1500, singer_id=singer.id, char_idx=1))
-        line.add_timetag(TimeTag(timestamp_ms=2000, singer_id=singer.id, char_idx=2))
+        sentence = Sentence.from_text("赤い花", singer.id)
+        sentence.characters[0].add_timestamp(1000)
+        sentence.characters[1].add_timestamp(1500)
+        sentence.characters[2].add_timestamp(2000)
 
-        project.add_line(line)
+        project.add_sentence(sentence)
 
         # 保存并加载
         file_path = tmp_path / "test.sug"
@@ -62,19 +62,19 @@ class TestSugProjectParser:
         loaded = SugProjectParser.load(str(file_path))
 
         # 验证
-        assert len(loaded.lines[0].timetags) == 3
-        assert loaded.lines[0].timetags[0].timestamp_ms == 1000
+        assert sum(len(c.timestamps) for c in loaded.sentences[0].characters) == 3
+        assert loaded.sentences[0].characters[0].timestamps[0] == 1000
 
     def test_save_and_load_with_rubies(self, tmp_path):
         """测试保存和加载带注音的项目"""
         project = Project()
         singer = project.get_default_singer()
 
-        line = LyricLine(singer_id=singer.id, text="赤い花")
-        line.add_ruby(Ruby(text="あか", start_idx=0, end_idx=1))
-        line.add_ruby(Ruby(text="はな", start_idx=2, end_idx=3))
+        sentence = Sentence.from_text("赤い花", singer.id)
+        sentence.characters[0].set_ruby(Ruby(text="あか"))
+        sentence.characters[2].set_ruby(Ruby(text="はな"))
 
-        project.add_line(line)
+        project.add_sentence(sentence)
 
         # 保存并加载
         file_path = tmp_path / "test.sug"
@@ -82,8 +82,8 @@ class TestSugProjectParser:
         loaded = SugProjectParser.load(str(file_path))
 
         # 验证
-        assert len(loaded.lines[0].rubies) == 2
-        assert loaded.lines[0].rubies[0].text == "あか"
+        assert len(loaded.sentences[0].rubies) == 2
+        assert loaded.sentences[0].rubies[0].text == "あか"
 
     def test_save_and_load_multiple_singers(self, tmp_path):
         """测试保存和加载多演唱者项目"""
@@ -94,11 +94,11 @@ class TestSugProjectParser:
         project.add_singer(singer2)
 
         # 添加歌词
-        line1 = LyricLine(singer_id=project.get_default_singer().id, text="主唱")
-        line2 = LyricLine(singer_id=singer2.id, text="和声")
+        sentence1 = Sentence.from_text("主唱", project.get_default_singer().id)
+        sentence2 = Sentence.from_text("和声", singer2.id)
 
-        project.add_line(line1)
-        project.add_line(line2)
+        project.add_sentence(sentence1)
+        project.add_sentence(sentence2)
 
         # 保存并加载
         file_path = tmp_path / "test.sug"
@@ -107,7 +107,7 @@ class TestSugProjectParser:
 
         # 验证
         assert len(loaded.singers) == 2
-        assert len(loaded.lines) == 2
+        assert len(loaded.sentences) == 2
 
     def test_load_nonexistent_file_raises_error(self, tmp_path):
         """测试加载不存在的文件应该报错"""

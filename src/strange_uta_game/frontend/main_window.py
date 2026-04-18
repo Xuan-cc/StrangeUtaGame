@@ -144,7 +144,7 @@ class MainWindow(MSFluentWindow):
 
         InfoBar.success(
             title="项目创建成功",
-            content=f"共 {len(project.lines)} 行歌词",
+            content=f"共 {len(project.sentences)} 行歌词",
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -159,7 +159,7 @@ class MainWindow(MSFluentWindow):
 
         InfoBar.success(
             title="项目打开成功",
-            content=f"共 {len(project.lines)} 行歌词",
+            content=f"共 {len(project.sentences)} 行歌词",
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,

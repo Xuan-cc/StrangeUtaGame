@@ -22,10 +22,9 @@ from qfluentwidgets import (
 from typing import Optional, List
 from strange_uta_game.backend.domain import (
     Project,
-    LyricLine,
-    TimeTag,
+    Sentence,
+    Character,
     Ruby,
-    CheckpointConfig,
 )
 import re
 
@@ -55,14 +54,16 @@ def _parse_time(text: str) -> Optional[int]:
 class LineDetailDialog(QDialog):
     """行详情对话框 - 允许编辑时间标签，连词合并显示，per-char 演唱者"""
 
-    def __init__(self, line: LyricLine, project=None, parent=None):
+    def __init__(self, sentence: Sentence, project=None, parent=None):
         super().__init__(parent)
-        self.line = line
+        self.sentence = sentence
         self._project = project
         self._modified = False
         self._row_groups: List[List[int]] = []  # 每行对应的 char 索引列表
 
-        title_text = self.line.text[:30] + ("..." if len(self.line.text) > 30 else "")
+        title_text = self.sentence.text[:30] + (
+            "..." if len(self.sentence.text) > 30 else ""
+        )
         self.setWindowTitle(f"行详情 - {title_text}")
         self.resize(900, 500)
         self.setFont(QFont("Microsoft YaHei", 10))
@@ -106,19 +107,17 @@ class LineDetailDialog(QDialog):
 
     def _populate_table(self):
         self.table.blockSignals(True)
-        chars = self.line.chars
-        cps = self.line.checkpoints
+        characters = self.sentence.characters
 
         # 构建连词组
         groups: List[List[int]] = []
         cur_grp: list[int] | None = None
-        for i in range(len(chars)):
+        for i in range(len(characters)):
             if cur_grp is None:
                 cur_grp = [i]
                 groups.append(cur_grp)
             else:
-                prev_cp = cps[i - 1] if i - 1 < len(cps) else None
-                if prev_cp and prev_cp.linked_to_next:
+                if characters[i - 1].linked_to_next:
                     cur_grp.append(i)
                 else:
                     cur_grp = [i]
@@ -134,14 +133,14 @@ class LineDetailDialog(QDialog):
         self.table.setRowCount(len(groups))
         for row, group in enumerate(groups):
             # 字符 (editable)
-            group_text = "".join(chars[ci] for ci in group)
+            group_text = "".join(characters[ci].char for ci in group)
             item_char = QTableWidgetItem(group_text)
             self.table.setItem(row, 0, item_char)
 
             # 注音 (editable) — 连词用逗号分隔
             rubies_text: list[str] = []
             for ci in group:
-                r = self.line.get_ruby_for_char(ci)
+                r = characters[ci].ruby
                 rubies_text.append(r.text if r else "")
             if len(group) > 1:
                 ruby_display = ",".join(rubies_text)
@@ -153,16 +152,14 @@ class LineDetailDialog(QDialog):
             # Checkpoint数 (editable) — 连词用逗号分隔
             cp_vals: list[str] = []
             for ci in group:
-                cp = cps[ci] if ci < len(cps) else None
-                cp_vals.append(str(cp.check_count) if cp else "0")
+                cp_vals.append(str(characters[ci].check_count))
             cp_display = ",".join(cp_vals) if len(group) > 1 else cp_vals[0]
             item_cp = QTableWidgetItem(cp_display)
             self.table.setItem(row, 2, item_cp)
 
             # 句尾 (read-only) — 组内最后字符
             last_ci = group[-1]
-            cp_last = cps[last_ci] if last_ci < len(cps) else None
-            is_end = "是" if cp_last and cp_last.is_line_end else ""
+            is_end = "是" if characters[last_ci].is_line_end else ""
             item_end = QTableWidgetItem(is_end)
             item_end.setFlags(item_end.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 3, item_end)
@@ -170,8 +167,8 @@ class LineDetailDialog(QDialog):
             # 时间标签 (editable) — 连词每字符用 | 分隔
             tag_parts: list[str] = []
             for ci in group:
-                timetags = self.line.get_timetags_for_char(ci)
-                tag_texts = [_fmt_time(t.timestamp_ms) for t in timetags]
+                timetags = self.sentence.get_timetags_for_char(ci)
+                tag_texts = [_fmt_time(t) for t in timetags]
                 tag_parts.append(", ".join(tag_texts) if tag_texts else "")
             time_display = " | ".join(tag_parts) if len(group) > 1 else tag_parts[0]
             item_time = QTableWidgetItem(time_display)
@@ -180,8 +177,7 @@ class LineDetailDialog(QDialog):
             # 演唱者 (editable) — per-char singer，连词逗号分隔
             singer_parts: list[str] = []
             for ci in group:
-                cp = cps[ci] if ci < len(cps) else None
-                sid = cp.singer_id if cp and cp.singer_id else ""
+                sid = characters[ci].singer_id
                 singer_parts.append(singer_map.get(sid, "") if sid else "")
             if len(group) > 1:
                 singer_display = ",".join(singer_parts)
@@ -197,8 +193,9 @@ class LineDetailDialog(QDialog):
             self._modified = True
 
     def _on_save(self):
-        """Save edited data back to the LyricLine (supports grouped linked chars)."""
+        """Save edited data back to the Sentence (supports grouped linked chars)."""
         errors: List[str] = []
+        characters = self.sentence.characters
 
         # Singer name → id 映射
         name_to_id: dict[str, str] = {}
@@ -215,8 +212,8 @@ class LineDetailDialog(QDialog):
                 new_chars = list(item_char.text().strip())
                 if len(new_chars) == g_len:
                     for k, ci in enumerate(group):
-                        if new_chars[k] != self.line.chars[ci]:
-                            self.line.chars[ci] = new_chars[k]
+                        if new_chars[k] != characters[ci].char:
+                            characters[ci].char = new_chars[k]
 
             # --- 注音编辑 (col 1) ---
             item_ruby = self.table.item(row_idx, 1)
@@ -226,63 +223,34 @@ class LineDetailDialog(QDialog):
                     # 连词组：逗号分隔 per-char ruby
                     parts = raw.split(",")
                     for k, ci in enumerate(group):
-                        old_r = self.line.get_ruby_for_char(ci)
                         new_r_text = parts[k].strip() if k < len(parts) else ""
                         if new_r_text:
-                            if old_r:
-                                if old_r.text != new_r_text:
-                                    self.line.rubies.remove(old_r)
-                                    try:
-                                        self.line.add_ruby(
-                                            Ruby(
-                                                text=new_r_text,
-                                                start_idx=ci,
-                                                end_idx=ci + 1,
-                                            )
-                                        )
-                                    except Exception as e:
-                                        errors.append(f"字符 {ci + 1}: 注音错误 {e}")
-                            else:
-                                try:
-                                    self.line.add_ruby(
-                                        Ruby(
-                                            text=new_r_text,
-                                            start_idx=ci,
-                                            end_idx=ci + 1,
-                                        )
-                                    )
-                                except Exception as e:
-                                    errors.append(f"字符 {ci + 1}: 注音错误 {e}")
-                        else:
-                            if old_r:
-                                self.line.rubies.remove(old_r)
-                else:
-                    # 单字符或无逗号的整体 ruby
-                    ci = group[0]
-                    old_r = self.line.get_ruby_for_char(ci)
-                    if raw:
-                        if old_r:
-                            if old_r.text != raw:
-                                self.line.rubies.remove(old_r)
-                                try:
-                                    self.line.add_ruby(
-                                        Ruby(text=raw, start_idx=ci, end_idx=ci + g_len)
-                                    )
-                                except Exception as e:
-                                    errors.append(f"字符 {ci + 1}: 注音错误 {e}")
-                        else:
                             try:
-                                self.line.add_ruby(
-                                    Ruby(text=raw, start_idx=ci, end_idx=ci + g_len)
-                                )
+                                characters[ci].set_ruby(Ruby(text=new_r_text))
                             except Exception as e:
                                 errors.append(f"字符 {ci + 1}: 注音错误 {e}")
+                        else:
+                            characters[ci].set_ruby(None)
+                else:
+                    # 单字符或无逗号的整体 ruby
+                    if raw:
+                        if g_len == 1:
+                            try:
+                                characters[group[0]].set_ruby(Ruby(text=raw))
+                            except Exception as e:
+                                errors.append(f"字符 {group[0] + 1}: 注音错误 {e}")
+                        else:
+                            # 多字符无逗号：整体 ruby 分配到第一个字符
+                            try:
+                                characters[group[0]].set_ruby(Ruby(text=raw))
+                            except Exception as e:
+                                errors.append(f"字符 {group[0] + 1}: 注音错误 {e}")
+                            for ci in group[1:]:
+                                characters[ci].set_ruby(None)
                     else:
                         # 清除组内所有 ruby
                         for ci in group:
-                            old_r = self.line.get_ruby_for_char(ci)
-                            if old_r:
-                                self.line.rubies.remove(old_r)
+                            characters[ci].set_ruby(None)
 
             # --- Checkpoint 编辑 (col 2) ---
             item_cp = self.table.item(row_idx, 2)
@@ -295,19 +263,7 @@ class LineDetailDialog(QDialog):
                             new_count = int(parts[k].strip()) if k < len(parts) else 0
                             if new_count < 0:
                                 new_count = 0
-                            if ci < len(self.line.checkpoints):
-                                old_cp = self.line.checkpoints[ci]
-                                if old_cp.check_count != new_count:
-                                    self.line.set_checkpoint_config(
-                                        CheckpointConfig(
-                                            char_idx=ci,
-                                            check_count=new_count,
-                                            is_line_end=old_cp.is_line_end,
-                                            is_rest=old_cp.is_rest,
-                                            linked_to_next=old_cp.linked_to_next,
-                                            singer_id=old_cp.singer_id,
-                                        )
-                                    )
+                            characters[ci].check_count = new_count
                         except ValueError:
                             errors.append(f"字符 {ci + 1}: Checkpoint数必须为整数")
                 else:
@@ -315,20 +271,7 @@ class LineDetailDialog(QDialog):
                         new_count = int(raw_cp)
                         if new_count < 0:
                             new_count = 0
-                        ci = group[0]
-                        if ci < len(self.line.checkpoints):
-                            old_cp = self.line.checkpoints[ci]
-                            if old_cp.check_count != new_count:
-                                self.line.set_checkpoint_config(
-                                    CheckpointConfig(
-                                        char_idx=ci,
-                                        check_count=new_count,
-                                        is_line_end=old_cp.is_line_end,
-                                        is_rest=old_cp.is_rest,
-                                        linked_to_next=old_cp.linked_to_next,
-                                        singer_id=old_cp.singer_id,
-                                    )
-                                )
+                        characters[group[0]].check_count = new_count
                     except ValueError:
                         errors.append(f"行 {row_idx + 1}: Checkpoint数必须为整数")
 
@@ -340,9 +283,7 @@ class LineDetailDialog(QDialog):
                     # 连词组：用 | 分隔各字符的时间标签
                     char_time_parts = raw_time.split("|") if raw_time else []
                     for k, ci in enumerate(group):
-                        existing = self.line.get_timetags_for_char(ci)
-                        for tag in list(existing):
-                            self.line.timetags.remove(tag)
+                        characters[ci].clear_timestamps()
                         part = (
                             char_time_parts[k].strip()
                             if k < len(char_time_parts)
@@ -356,19 +297,10 @@ class LineDetailDialog(QDialog):
                             if ms is None:
                                 errors.append(f"字符 {ci + 1}: 无法解析 '{seg}'")
                                 continue
-                            self.line.add_timetag(
-                                TimeTag(
-                                    timestamp_ms=ms,
-                                    singer_id=self.line.singer_id,
-                                    char_idx=ci,
-                                    checkpoint_idx=cp_idx,
-                                )
-                            )
+                            characters[ci].add_timestamp(ms, checkpoint_idx=cp_idx)
                 else:
                     ci = group[0]
-                    existing = self.line.get_timetags_for_char(ci)
-                    for tag in list(existing):
-                        self.line.timetags.remove(tag)
+                    characters[ci].clear_timestamps()
                     if raw_time:
                         segments = [p.strip() for p in raw_time.split(",") if p.strip()]
                         for cp_idx, seg in enumerate(segments):
@@ -376,14 +308,7 @@ class LineDetailDialog(QDialog):
                             if ms is None:
                                 errors.append(f"字符 {ci + 1}: 无法解析 '{seg}'")
                                 continue
-                            self.line.add_timetag(
-                                TimeTag(
-                                    timestamp_ms=ms,
-                                    singer_id=self.line.singer_id,
-                                    char_idx=ci,
-                                    checkpoint_idx=cp_idx,
-                                )
-                            )
+                            characters[ci].add_timestamp(ms, checkpoint_idx=cp_idx)
 
             # --- 演唱者编辑 (col 5) ---
             item_singer = self.table.item(row_idx, 5)
@@ -394,35 +319,12 @@ class LineDetailDialog(QDialog):
                     for k, ci in enumerate(group):
                         sname = parts[k].strip() if k < len(parts) else ""
                         sid = name_to_id.get(sname, "") if sname else ""
-                        if ci < len(self.line.checkpoints):
-                            old_cp = self.line.checkpoints[ci]
-                            if old_cp.singer_id != sid:
-                                self.line.checkpoints[ci] = CheckpointConfig(
-                                    char_idx=ci,
-                                    check_count=old_cp.check_count,
-                                    is_line_end=old_cp.is_line_end,
-                                    is_rest=old_cp.is_rest,
-                                    linked_to_next=old_cp.linked_to_next,
-                                    singer_id=sid,
-                                )
+                        characters[ci].singer_id = sid
                 else:
                     sname = raw_singer
                     sid = name_to_id.get(sname, "") if sname else ""
                     for ci in group:
-                        if ci < len(self.line.checkpoints):
-                            old_cp = self.line.checkpoints[ci]
-                            if old_cp.singer_id != sid:
-                                self.line.checkpoints[ci] = CheckpointConfig(
-                                    char_idx=ci,
-                                    check_count=old_cp.check_count,
-                                    is_line_end=old_cp.is_line_end,
-                                    is_rest=old_cp.is_rest,
-                                    linked_to_next=old_cp.linked_to_next,
-                                    singer_id=sid,
-                                )
-
-        # 同步 text 字段
-        self.line.text = "".join(self.line.chars)
+                        characters[ci].singer_id = sid
 
         if errors:
             InfoBar.warning(
@@ -535,9 +437,9 @@ class EditInterface(QWidget):
             self.stats_label.setText("共 0 行 | 已完成 0 行 | 进度 0%")
             return
 
-        lines = self.project.lines
-        total_lines = len(lines)
-        completed_lines = sum(1 for line in lines if line.is_fully_timed())
+        sentences = self.project.sentences
+        total_lines = len(sentences)
+        completed_lines = sum(1 for s in sentences if s.is_fully_timed())
         progress = (completed_lines / total_lines * 100) if total_lines > 0 else 0
 
         self.stats_label.setText(
@@ -545,46 +447,28 @@ class EditInterface(QWidget):
         )
 
         self.table.setRowCount(total_lines)
-        for i, line in enumerate(lines):
+        for i, sentence in enumerate(sentences):
             # 1. 行号
             item_idx = QTableWidgetItem(str(i + 1))
             item_idx.setFlags(item_idx.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(i, 0, item_idx)
 
             # 2. 歌词文本 — 连词显示为词语
-            groups: list[list[int]] = []
-            cur_grp: list[int] | None = None
-            for ci in range(len(line.chars)):
-                if cur_grp is None:
-                    cur_grp = [ci]
-                    groups.append(cur_grp)
-                else:
-                    prev_cp = (
-                        line.checkpoints[ci - 1]
-                        if ci - 1 < len(line.checkpoints)
-                        else None
-                    )
-                    if prev_cp and prev_cp.linked_to_next:
-                        cur_grp.append(ci)
-                    else:
-                        cur_grp = [ci]
-                        groups.append(cur_grp)
             display_parts: list[str] = []
-            for grp in groups:
-                word = "".join(line.chars[ci] for ci in grp)
-                if len(grp) > 1:
-                    display_parts.append(f"[{word}]")
+            for word in sentence.words:
+                word_text = word.text
+                if word.char_count > 1:
+                    display_parts.append(f"[{word_text}]")
                 else:
-                    display_parts.append(word)
+                    display_parts.append(word_text)
             item_text = QTableWidgetItem("".join(display_parts))
             item_text.setFlags(item_text.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(i, 1, item_text)
 
             # 3. 演唱者 — per-char singer 汇总
             singer_ids_seen: list[str] = []
-            for ci in range(len(line.chars)):
-                cp = line.checkpoints[ci] if ci < len(line.checkpoints) else None
-                sid = cp.singer_id if cp and cp.singer_id else line.singer_id
+            for ch in sentence.characters:
+                sid = ch.singer_id if ch.singer_id else sentence.singer_id
                 if sid not in singer_ids_seen:
                     singer_ids_seen.append(sid)
             if len(singer_ids_seen) <= 1:
@@ -605,13 +489,12 @@ class EditInterface(QWidget):
             self.table.setItem(i, 2, item_singer)
 
             # 4. 字符数
-            item_len = QTableWidgetItem(str(len(line.chars)))
+            item_len = QTableWidgetItem(str(len(sentence.characters)))
             item_len.setFlags(item_len.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(i, 3, item_len)
 
             # 5. 已打轴 — 按 checkpoint 统计
-            total_cp = sum(cp.check_count for cp in line.checkpoints)
-            timed_cp = len(line.timetags)
+            timed_cp, total_cp = sentence.get_timing_progress()
 
             item_timed = QTableWidgetItem(f"{timed_cp}/{total_cp}")
             item_timed.setFlags(item_timed.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -630,10 +513,9 @@ class EditInterface(QWidget):
             self.table.setItem(i, 5, item_total_cp)
 
             # 7. 时间范围
-            if line.timetags:
-                sorted_tags = sorted(line.timetags, key=lambda t: t.timestamp_ms)
-                first_time = _fmt_time(sorted_tags[0].timestamp_ms)
-                last_time = _fmt_time(sorted_tags[-1].timestamp_ms)
+            if sentence.has_timetags:
+                first_time = _fmt_time(sentence.timing_start_ms)
+                last_time = _fmt_time(sentence.timing_end_ms)
                 time_range = f"{first_time} ~ {last_time}"
             else:
                 time_range = "未打轴"
@@ -645,12 +527,14 @@ class EditInterface(QWidget):
             # 8. 操作 (Button)
             btn = PushButton("编辑", self.table)
             btn.clicked.connect(
-                lambda checked, current_line=line: self._show_detail(current_line)
+                lambda checked, current_sentence=sentence: self._show_detail(
+                    current_sentence
+                )
             )
             self.table.setCellWidget(i, 7, btn)
 
-    def _show_detail(self, line: LyricLine):
-        dialog = LineDetailDialog(line, project=self.project, parent=self)
+    def _show_detail(self, sentence: Sentence):
+        dialog = LineDetailDialog(sentence, project=self.project, parent=self)
         dialog.exec()
         # Refresh table if dialog modified data
         if dialog.was_modified():

@@ -45,10 +45,10 @@ from strange_uta_game.backend.application import (
     ProjectService,
     AutoCheckService,
 )
-from strange_uta_game.backend.domain import Project, LyricLine, Singer
+from strange_uta_game.backend.domain import Project, Sentence, Singer
 from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
     LyricParserFactory,
-    parse_to_lyric_lines,
+    parse_to_sentences,
 )
 
 
@@ -355,7 +355,7 @@ class ImportPreview(QGroupBox):
 
         layout.addStretch()
 
-    def set_lines(self, lines: List[LyricLine]):
+    def set_lines(self, lines: List[Sentence]):
         """设置歌词行列表"""
         self.table.setRowCount(len(lines))
 
@@ -370,21 +370,22 @@ class ImportPreview(QGroupBox):
             self.table.setItem(i, 1, QTableWidgetItem(line.text))
 
             # 字符数
-            char_count = len(line.chars)
+            char_count = len(line.characters)
             total_chars += char_count
             self.table.setItem(i, 2, QTableWidgetItem(str(char_count)))
 
             # 节奏点
-            check_count = sum(c.check_count for c in line.checkpoints)
+            check_count = sum(c.check_count for c in line.characters)
             total_checkpoints += check_count
             self.table.setItem(i, 3, QTableWidgetItem(str(check_count)))
 
-            # 注音预览（前3个）
+            # 注音预览（前3个有注音的字符）
             ruby_preview = ""
-            if line.rubies:
-                ruby_texts = [r.text for r in line.rubies[:3]]
-                ruby_preview = ", ".join(ruby_texts)
-                if len(line.rubies) > 3:
+            ruby_texts = [c.ruby.text for c in line.characters if c.ruby]
+            if ruby_texts:
+                preview = ruby_texts[:3]
+                ruby_preview = ", ".join(preview)
+                if len(ruby_texts) > 3:
                     ruby_preview += "..."
             self.table.setItem(i, 4, QTableWidgetItem(ruby_preview))
 
@@ -413,7 +414,7 @@ class StartupInterface(QWidget):
         self._project_service = ProjectService()
         self._auto_check_service = AutoCheckService()
 
-        self._current_lines: List[LyricLine] = []
+        self._current_lines: List[Sentence] = []
         self._audio_path: Optional[str] = None
 
         self._init_ui()
@@ -484,13 +485,13 @@ class StartupInterface(QWidget):
             # 解析文件
             parsed_lines = LyricParserFactory.parse_file(file_path)
 
-            # 创建默认演唱者并转换为 LyricLine
+            # 创建默认演唱者并转换为 Sentence
             default_singer = Singer(name="演唱者1", color="#FF6B6B", is_default=True)
-            lines = parse_to_lyric_lines(parsed_lines, default_singer.id)
+            lines = parse_to_sentences(parsed_lines, default_singer.id)
 
             # 应用自动分析到每一行
             for line in lines:
-                self._auto_check_service.apply_to_line(line)
+                self._auto_check_service.apply_to_sentence(line)
 
             # 显示在输入区
             text = "\n".join(line.text for line in lines)
@@ -528,15 +529,15 @@ class StartupInterface(QWidget):
             lines = []
             default_singer = Singer(name="演唱者1", color="#FF6B6B", is_default=True)
 
-            # 按行分割并创建 LyricLine
+            # 按行分割并创建 Sentence
             for line_text in text.split("\n"):
                 line_text = line_text.strip()
                 if not line_text:
                     continue
 
-                line = LyricLine(singer_id=default_singer.id, text=line_text)
+                line = Sentence.from_text(line_text, default_singer.id)
                 # 应用自动分析
-                self._auto_check_service.apply_to_line(line)
+                self._auto_check_service.apply_to_sentence(line)
                 lines.append(line)
 
             self._current_lines = lines
@@ -603,13 +604,13 @@ class StartupInterface(QWidget):
             for line in self._current_lines:
                 # 更新歌词行的 singer_id 为项目的演唱者
                 line.singer_id = default_singer.id
-                project.add_line(line)
+                project.add_sentence(line)
 
             # 注意：音频路径不存储在项目文件中，用户每次使用需重新选择
 
             InfoBar.success(
                 title="项目创建成功",
-                content=f"共 {len(project.lines)} 行歌词",
+                content=f"共 {len(project.sentences)} 行歌词",
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,

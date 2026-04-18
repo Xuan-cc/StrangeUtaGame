@@ -4,14 +4,13 @@
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
-from uuid import uuid4, UUID
+from typing import List, Optional
+from uuid import uuid4
 
 from .models import (
-    CheckpointConfig,
-    TimeTag,
-    TimeTagType,
+    Character,
     Ruby,
+    Word,
     DomainError,
     ValidationError,
 )
@@ -30,6 +29,7 @@ class Singer:
         is_default: 是否为默认演唱者
         display_priority: 显示优先级（数字越小越优先显示）
         enabled: 是否启用（禁用的演唱者不参与全局序列）
+        backend_number: 后台编号（从1开始递增，不随显示名改变）
 
     Example:
         >>> singer = Singer(name="初音ミク", color="#FF6B6B")
@@ -39,14 +39,13 @@ class Singer:
 
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = "未命名"
-    color: str = "#FF6B6B"  # 默认红色
-    backend_number: int = 0  # 后台编号（从1开始递增，不随显示名改变）
+    color: str = "#FF6B6B"
+    backend_number: int = 0
     is_default: bool = False
     display_priority: int = 0
     enabled: bool = True
 
     def __post_init__(self) -> None:
-        """验证属性值"""
         if not self.id:
             raise ValidationError("演唱者ID不能为空")
         if not self.name:
@@ -55,240 +54,156 @@ class Singer:
             raise ValidationError(f"颜色格式无效: {self.color} (应为 #RRGGBB)")
 
     def rename(self, new_name: str) -> None:
-        """重命名演唱者
-
-        Args:
-            new_name: 新名称
-
-        Raises:
-            ValidationError: 如果名称为空
-        """
+        """重命名演唱者"""
         if not new_name:
             raise ValidationError("演唱者名称不能为空")
         self.name = new_name
 
     def change_color(self, new_color: str) -> None:
-        """修改显示颜色
-
-        Args:
-            new_color: 新颜色（#RRGGBB 格式）
-
-        Raises:
-            ValidationError: 如果颜色格式无效
-        """
+        """修改显示颜色"""
         if not new_color.startswith("#") or len(new_color) != 7:
             raise ValidationError(f"颜色格式无效: {new_color}")
         self.color = new_color
 
     def set_enabled(self, enabled: bool) -> None:
-        """设置启用状态
-
-        Args:
-            enabled: 是否启用
-        """
+        """设置启用状态"""
         self.enabled = enabled
 
 
 @dataclass
-class LyricLine:
-    """歌词行
+class Sentence:
+    """句子 — 一行歌词
 
-    表示一行歌词及其时间标签、注音信息、节奏点配置。
+    由字符列表构成，按 linked_to_next 标记自动分组为词语。
+    句子是歌词的基本行单位，对应一行文本。
 
     Attributes:
         id: 唯一标识符（UUID）
-        singer_id: 所属演唱者ID（必填，关联到 Singer）
-        text: 原始文本
-        chars: 拆分的字符列表（由 text 动态生成）
-        timetags: 时间标签列表（按时间排序）
-        checkpoints: 节奏点配置列表（与 chars 一一对应）
-        rubies: 注音列表
-
-    Note:
-        chars 是 text 的拆分结果，运行时动态生成。
-        持久化时两者都存储用于校验。
+        singer_id: 所属演唱者ID（行级默认演唱者）
+        characters: 字符列表
 
     Example:
-        >>> line = LyricLine(
+        >>> s = Sentence(
         ...     singer_id="singer_1",
-        ...     text="赤い花",
-        ...     chars=["赤", "い", "花"]
+        ...     characters=[
+        ...         Character(char="赤", singer_id="singer_1"),
+        ...         Character(char="い", singer_id="singer_1"),
+        ...     ]
         ... )
-        >>> len(line.chars)
-        3
+        >>> s.text
+        '赤い'
     """
 
     singer_id: str
-    text: str
     id: str = field(default_factory=lambda: str(uuid4()))
-    chars: List[str] = field(default_factory=list)
-    timetags: List[TimeTag] = field(default_factory=list)
-    checkpoints: List[CheckpointConfig] = field(default_factory=list)
-    rubies: List[Ruby] = field(default_factory=list)
+    characters: List[Character] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        """验证属性值并初始化"""
         if not self.id:
-            raise ValidationError("歌词行ID不能为空")
+            raise ValidationError("句子ID不能为空")
         if not self.singer_id:
             raise ValidationError("singer_id 不能为空")
-        if not self.text:
-            raise ValidationError("歌词文本不能为空")
 
-        # 如果没有提供 chars，从 text 生成
-        if not self.chars:
-            self.chars = list(self.text)
+    # ── 文本属性 ──
 
-        # 验证 chars 和 text 一致性
-        if "".join(self.chars) != self.text:
-            raise ValidationError("chars 和 text 不一致")
+    @property
+    def text(self) -> str:
+        """歌词文本"""
+        return "".join(c.char for c in self.characters)
 
-        # 初始化节奏点配置（如果未提供）
-        if not self.checkpoints:
-            self._init_default_checkpoints()
+    @property
+    def chars(self) -> List[str]:
+        """字符列表（兼容旧接口）"""
+        return [c.char for c in self.characters]
 
-    def _init_default_checkpoints(self) -> None:
-        """初始化默认节奏点配置"""
-        self.checkpoints = [
-            CheckpointConfig(
-                char_idx=i,
-                check_count=2 if i == len(self.chars) - 1 else 1,
-                is_line_end=(i == len(self.chars) - 1),  # 最后一个字符标记为句尾
-                singer_id=self.singer_id,
-            )
-            for i in range(len(self.chars))
-        ]
+    # ── 词语计算 ──
 
-    def add_timetag(self, tag: TimeTag) -> None:
-        """添加时间标签
+    @property
+    def words(self) -> List[Word]:
+        """从字符的 linked_to_next 标志计算词语
 
-        自动按时间排序插入。
-
-        Args:
-            tag: 要添加的时间标签
-
-        Raises:
-            ValidationError: 如果 char_idx 或 checkpoint_idx 无效
-        """
-        # 验证索引
-        if tag.char_idx < 0 or tag.char_idx >= len(self.chars):
-            raise ValidationError(
-                f"字符索引 {tag.char_idx} 超出范围 [0, {len(self.chars)})"
-            )
-
-        config = self.get_checkpoint_config(tag.char_idx)
-        if tag.checkpoint_idx < 0 or tag.checkpoint_idx >= config.check_count:
-            raise ValidationError(
-                f"节奏点索引 {tag.checkpoint_idx} 超出范围 [0, {config.check_count})"
-            )
-
-        # 添加到列表并按时间排序
-        self.timetags.append(tag)
-        self.timetags.sort(key=lambda t: t.timestamp_ms)
-
-    def remove_timetag(self, tag: TimeTag) -> None:
-        """移除时间标签
-
-        Args:
-            tag: 要移除的时间标签
-
-        Raises:
-            DomainError: 如果时间标签不存在
-        """
-        if tag not in self.timetags:
-            raise DomainError("时间标签不存在")
-        self.timetags.remove(tag)
-
-    def get_checkpoint_config(self, char_idx: int) -> CheckpointConfig:
-        """获取指定字符的节奏点配置
-
-        Args:
-            char_idx: 字符索引
+        拥有 linked_to_next=True 的字符与下一字符组成同一词语。
+        没有连词的单个字符独立为一个词语。
 
         Returns:
-            节奏点配置
-
-        Raises:
-            ValidationError: 如果字符索引无效
+            词语列表
         """
-        if char_idx < 0 or char_idx >= len(self.checkpoints):
-            raise ValidationError(
-                f"字符索引 {char_idx} 超出范围 [0, {len(self.checkpoints)})"
-            )
-        return self.checkpoints[char_idx]
+        words: List[Word] = []
+        current: List[Character] = []
+        for char in self.characters:
+            current.append(char)
+            if not char.linked_to_next:
+                words.append(Word(characters=current))
+                current = []
+        if current:
+            words.append(Word(characters=current))
+        return words
 
-    def set_checkpoint_config(self, config: CheckpointConfig) -> None:
-        """设置字符的节奏点配置
+    # ── 字符管理 ──
 
-        Args:
-            config: 节奏点配置
-        """
-        if config.char_idx < 0 or config.char_idx >= len(self.checkpoints):
-            raise ValidationError(
-                f"字符索引 {config.char_idx} 超出范围 [0, {len(self.checkpoints)})"
-            )
-        self.checkpoints[config.char_idx] = config
-
-    def get_ruby_for_char(self, char_idx: int) -> Optional[Ruby]:
-        """获取指定字符的注音
-
-        Args:
-            char_idx: 字符索引
-
-        Returns:
-            注音对象，如果没有则返回 None
-        """
-        for ruby in self.rubies:
-            if ruby.covers_char(char_idx):
-                return ruby
+    def get_character(self, char_idx: int) -> Optional[Character]:
+        """获取指定索引的字符"""
+        if 0 <= char_idx < len(self.characters):
+            return self.characters[char_idx]
         return None
 
-    def add_ruby(self, ruby: Ruby) -> None:
-        """添加注音
+    def get_ruby_for_char(self, char_idx: int) -> Optional[Ruby]:
+        """获取指定字符的注音"""
+        char = self.get_character(char_idx)
+        return char.ruby if char else None
 
-        Args:
-            ruby: 注音对象
+    def get_word_for_char(self, char_idx: int) -> Optional[Word]:
+        """获取包含指定字符的词语"""
+        idx = 0
+        for word in self.words:
+            end_idx = idx + len(word.characters)
+            if idx <= char_idx < end_idx:
+                return word
+            idx = end_idx
+        return None
 
-        Raises:
-            ValidationError: 如果索引范围无效
-        """
-        if ruby.end_idx > len(self.chars):
-            raise ValidationError(
-                f"注音结束索引 {ruby.end_idx} 超出字符数量 {len(self.chars)}"
-            )
-
-        # 检查是否有重叠的注音
-        for existing in self.rubies:
-            if ruby.start_idx < existing.end_idx and ruby.end_idx > existing.start_idx:
-                raise ValidationError(
-                    f"注音范围 [{ruby.start_idx}, {ruby.end_idx}) "
-                    f"与现有注音 [{existing.start_idx}, {existing.end_idx}) 重叠"
-                )
-
-        self.rubies.append(ruby)
-        # 按起始索引排序
-        self.rubies.sort(key=lambda r: r.start_idx)
-
-    def get_timetags_for_char(self, char_idx: int) -> List[TimeTag]:
-        """获取指定字符的所有时间标签
-
-        Args:
-            char_idx: 字符索引
+    def get_word_char_range(self, char_idx: int) -> tuple[int, int]:
+        """获取包含指定字符的词语的字符范围
 
         Returns:
-            时间标签列表（按 checkpoint_idx 排序）
+            (start_idx, end_idx) — 左闭右开
         """
-        tags = [t for t in self.timetags if t.char_idx == char_idx]
-        return sorted(tags, key=lambda t: t.checkpoint_idx)
+        idx = 0
+        for word in self.words:
+            end_idx = idx + len(word.characters)
+            if idx <= char_idx < end_idx:
+                return idx, end_idx
+            idx = end_idx
+        return char_idx, char_idx + 1
+
+    # ── 时间戳管理 ──
+
+    def push_all_timestamps(self) -> None:
+        """将所有字符的时间戳推送给各自的 Ruby"""
+        for char in self.characters:
+            char.push_to_ruby()
+
+    def get_timetags_for_char(self, char_idx: int) -> List[int]:
+        """获取指定字符的所有时间戳
+
+        Returns:
+            时间戳列表（按 checkpoint_idx 顺序）
+        """
+        char = self.get_character(char_idx)
+        return list(char.timestamps) if char else []
+
+    def clear_all_timestamps(self) -> None:
+        """清空所有字符的时间戳"""
+        for char in self.characters:
+            char.clear_timestamps()
+
+    # ── 查询 ──
 
     def is_fully_timed(self) -> bool:
-        """检查是否所有节奏点都已打轴
-
-        Returns:
-            是否所有需要的 time tag 都已存在
-        """
-        expected_count = sum(c.check_count for c in self.checkpoints)
-        return len(self.timetags) >= expected_count
+        """检查是否所有字符的节奏点都已打轴"""
+        if not self.characters:
+            return False
+        return all(c.is_fully_timed for c in self.characters)
 
     def get_timing_progress(self) -> tuple[int, int]:
         """获取打轴进度
@@ -296,5 +211,110 @@ class LyricLine:
         Returns:
             (已完成数量, 总共需要数量)
         """
-        expected = sum(c.check_count for c in self.checkpoints)
-        return (len(self.timetags), expected)
+        done = sum(len(c.timestamps) for c in self.characters)
+        total = sum(c.check_count for c in self.characters)
+        return done, total
+
+    @property
+    def timing_start_ms(self) -> Optional[int]:
+        """句子最早时间戳（毫秒），如果无时间标签返回 None"""
+        all_ts = [ts for c in self.characters for ts in c.timestamps]
+        return min(all_ts) if all_ts else None
+
+    @property
+    def timing_end_ms(self) -> Optional[int]:
+        """句子最晚时间戳（毫秒），如果无时间标签返回 None"""
+        all_ts = [ts for c in self.characters for ts in c.timestamps]
+        return max(all_ts) if all_ts else None
+
+    @property
+    def has_timetags(self) -> bool:
+        """是否有任何时间标签"""
+        return any(c.timestamps for c in self.characters)
+
+    # ── Ruby 管理 ──
+
+    @property
+    def rubies(self) -> List[Ruby]:
+        """收集所有字符的 Ruby 对象"""
+        return [c.ruby for c in self.characters if c.ruby]
+
+    def add_ruby_to_char(self, char_idx: int, ruby: Ruby) -> None:
+        """为指定字符添加注音
+
+        Args:
+            char_idx: 字符索引
+            ruby: 注音对象
+
+        Raises:
+            ValidationError: 如果字符索引无效或字符已有注音
+        """
+        char = self.get_character(char_idx)
+        if not char:
+            raise ValidationError(
+                f"字符索引 {char_idx} 超出范围 [0, {len(self.characters)})"
+            )
+        if char.ruby:
+            raise ValidationError(f"字符 {char_idx} 已有注音")
+        char.set_ruby(ruby)
+
+    def remove_ruby_from_char(self, char_idx: int) -> Optional[Ruby]:
+        """移除指定字符的注音
+
+        Returns:
+            被移除的 Ruby 对象，如果没有返回 None
+        """
+        char = self.get_character(char_idx)
+        if char and char.ruby:
+            removed = char.ruby
+            char.set_ruby(None)
+            return removed
+        return None
+
+    def clear_all_rubies(self) -> None:
+        """清空所有字符的注音"""
+        for char in self.characters:
+            char.set_ruby(None)
+
+    # ── 初始化辅助 ──
+
+    @classmethod
+    def from_text(
+        cls,
+        text: str,
+        singer_id: str,
+        id: Optional[str] = None,
+    ) -> "Sentence":
+        """从纯文本创建句子
+
+        自动拆分为单字符，设置默认 checkpoint 配置。
+        最后一个字符标记为句尾（check_count=2）。
+
+        Args:
+            text: 歌词文本
+            singer_id: 演唱者 ID
+            id: 可选的句子 ID
+
+        Returns:
+            Sentence 实例
+        """
+        if not text:
+            raise ValidationError("歌词文本不能为空")
+
+        chars_list = list(text)
+        characters = []
+        for i, ch in enumerate(chars_list):
+            is_last = i == len(chars_list) - 1
+            characters.append(
+                Character(
+                    char=ch,
+                    check_count=2 if is_last else 1,
+                    is_line_end=is_last,
+                    singer_id=singer_id,
+                )
+            )
+
+        kwargs = {"singer_id": singer_id, "characters": characters}
+        if id is not None:
+            kwargs["id"] = id
+        return cls(**kwargs)

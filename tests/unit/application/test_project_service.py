@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 from strange_uta_game.backend.application import ProjectService, ProjectCallbacks
-from strange_uta_game.backend.domain import Project
+from strange_uta_game.backend.domain import Project, Sentence
 
 
 class TestProjectService:
@@ -23,10 +23,9 @@ class TestProjectService:
 
         # 添加一些数据
         singer = project.get_default_singer()
-        from strange_uta_game.backend.domain import LyricLine
 
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        project.add_sentence(sentence)
 
         # 保存
         file_path = tmp_path / "test.sug"
@@ -41,7 +40,7 @@ class TestProjectService:
 
         assert loaded is not None
         assert loaded.id == project.id
-        assert len(loaded.lines) == 1
+        assert len(loaded.sentences) == 1
 
     def test_load_nonexistent_file(self):
         callbacks_triggered = []
@@ -72,11 +71,10 @@ class TestProjectService:
 
         # 添加数据
         singer = project.get_default_singer()
-        from strange_uta_game.backend.domain import LyricLine, TimeTag
 
-        line = LyricLine(singer_id=singer.id, text="AB")
-        line.add_timetag(TimeTag(timestamp_ms=1000, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("AB", singer.id)
+        sentence.characters[0].add_timestamp(1000)
+        project.add_sentence(sentence)
 
         stats = service.get_project_statistics()
 

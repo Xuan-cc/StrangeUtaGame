@@ -20,12 +20,11 @@ import re
 from typing import List, Optional, Tuple
 
 from strange_uta_game.backend.domain.models import (
-    CheckpointConfig,
-    TimeTag,
-    TimeTagType,
+    Character,
     Ruby,
+    TimeTagType,
 )
-from strange_uta_game.backend.domain.entities import LyricLine
+from strange_uta_game.backend.domain.entities import Sentence
 
 
 # ──────────────────────────────────────────────
@@ -132,89 +131,69 @@ def split_ruby_for_checkpoints(ruby_text: str, total_cps: int) -> List[str]:
 
 
 # ──────────────────────────────────────────────
-# 序列化: LyricLine → 内联文本
+# 序列化: Sentence → 内联文本
 # ──────────────────────────────────────────────
 
 REST_CHAR = "▨"
 RUBY_SEP = "＋"  # 全角加号
 
 
-def to_inline_text(line: LyricLine) -> str:
-    """将一个 LyricLine 序列化为 RhythmicaLyrics 风格内联文本。"""
+def to_inline_text(sentence: Sentence) -> str:
+    """将一个 Sentence 序列化为 RhythmicaLyrics 风格内联文本。"""
     parts: List[str] = []
-    cp_map = {cp.char_idx: cp for cp in line.checkpoints}
-    tag_map: dict[int, list[TimeTag]] = {}
-    for t in line.timetags:
-        tag_map.setdefault(t.char_idx, []).append(t)
-
+    chars = sentence.characters
     i = 0
-    while i < len(line.chars):
-        ruby = line.get_ruby_for_char(i)
 
-        if ruby and ruby.start_idx == i:
+    while i < len(chars):
+        char = chars[i]
+
+        if char.ruby:
+            # 找连续有 ruby 的字符组
+            group_start = i
+            while i < len(chars) and chars[i].ruby:
+                i += 1
+            group_end = i
+
             # Ruby 组: {display_chars|...per_char_portions...}
-            display = "".join(line.chars[ruby.start_idx : ruby.end_idx])
+            display = "".join(c.char for c in chars[group_start:group_end])
             ruby_portions: List[str] = []
 
-            # 计算每个字符的 cp 数量以确定 ruby 文本拆分
-            char_cp_counts: List[int] = []
-            for ci in range(ruby.start_idx, ruby.end_idx):
-                cp = cp_map.get(ci)
-                char_cp_counts.append(cp.check_count if cp else 1)
-
-            total_cps = sum(char_cp_counts)
-            segments = split_ruby_for_checkpoints(ruby.text, total_cps)
-
-            # 分配 segments 到各字符
-            seg_idx = 0
-            for ci_offset, ci in enumerate(range(ruby.start_idx, ruby.end_idx)):
-                cp = cp_map.get(ci)
-                check_count = cp.check_count if cp else 1
-                is_line_end = cp.is_line_end if cp else False
-                tags = sorted(tag_map.get(ci, []), key=lambda t: t.checkpoint_idx)
+            for c in chars[group_start:group_end]:
+                # 按 checkpoint 数量拆分该字符的 ruby 文本
+                ruby_segments = split_ruby_for_checkpoints(c.ruby.text, c.check_count)
 
                 portion_parts: List[str] = []
-                for cp_idx in range(check_count):
-                    # 查找对应 timetag
-                    tag = next((t for t in tags if t.checkpoint_idx == cp_idx), None)
-                    ts = format_timestamp(tag.timestamp_ms) if tag else "00:00:00"
+                for cp_idx in range(c.check_count):
+                    ts = c.timestamps[cp_idx] if cp_idx < len(c.timestamps) else 0
+                    ts_str = format_timestamp(ts)
 
                     if cp_idx == 0:
-                        n = encode_check_n(check_count, is_line_end)
-                        portion_parts.append(f"[{n}|{ts}]")
+                        n = encode_check_n(c.check_count, c.is_line_end)
+                        portion_parts.append(f"[{n}|{ts_str}]")
                     else:
-                        portion_parts.append(f"[{ts}]")
+                        portion_parts.append(f"[{ts_str}]")
 
-                    if seg_idx < len(segments):
-                        portion_parts.append(segments[seg_idx])
-                        seg_idx += 1
+                    if cp_idx < len(ruby_segments):
+                        portion_parts.append(ruby_segments[cp_idx])
 
                 ruby_portions.append("".join(portion_parts))
 
             inner = RUBY_SEP.join(ruby_portions)
             parts.append(f"{{{display}|{inner}}}")
-            i = ruby.end_idx
         else:
             # 普通字符
-            ch = line.chars[i]
-            cp = cp_map.get(i)
-            check_count = cp.check_count if cp else 1
-            is_line_end = cp.is_line_end if cp else False
-            is_rest = cp.is_rest if cp else False
-            tags = sorted(tag_map.get(i, []), key=lambda t: t.checkpoint_idx)
-
-            display_char = REST_CHAR if is_rest else ch
+            display_char = REST_CHAR if char.is_rest else char.char
             char_parts: List[str] = []
 
-            for cp_idx in range(check_count):
-                tag = next((t for t in tags if t.checkpoint_idx == cp_idx), None)
-                ts = format_timestamp(tag.timestamp_ms) if tag else "00:00:00"
+            for cp_idx in range(char.check_count):
+                ts = char.timestamps[cp_idx] if cp_idx < len(char.timestamps) else 0
+                ts_str = format_timestamp(ts)
 
                 if cp_idx == 0:
-                    n = encode_check_n(check_count, is_line_end)
-                    char_parts.append(f"[{n}|{ts}]")
+                    n = encode_check_n(char.check_count, char.is_line_end)
+                    char_parts.append(f"[{n}|{ts_str}]")
                 else:
-                    char_parts.append(f"[{ts}]")
+                    char_parts.append(f"[{ts_str}]")
 
             char_parts.append(display_char)
             parts.append("".join(char_parts))
@@ -223,13 +202,17 @@ def to_inline_text(line: LyricLine) -> str:
     return "".join(parts)
 
 
-def lines_to_inline_text(lines: List[LyricLine]) -> str:
-    """多行序列化，空行分隔。"""
-    return "\n".join(to_inline_text(line) for line in lines)
+def sentences_to_inline_text(sentences: List[Sentence]) -> str:
+    """多行序列化，换行分隔。"""
+    return "\n".join(to_inline_text(s) for s in sentences)
+
+
+# 兼容别名
+lines_to_inline_text = sentences_to_inline_text
 
 
 # ──────────────────────────────────────────────
-# 反序列化: 内联文本 → LyricLine
+# 反序列化: 内联文本 → Sentence
 # ──────────────────────────────────────────────
 
 # 正则: 匹配 [N|MM:SS:cc] 或 [MM:SS:cc]
@@ -242,7 +225,6 @@ def _parse_char_tokens(segment: str) -> List[Tuple[Optional[str], int, str]]:
     segment 形如 "[2|00:14:64]や[00:15:61]わ" → [(2,14640,"や"), (None,15610,"わ")]
     """
     tokens: List[Tuple[Optional[str], int, str]] = []
-    pos = 0
     for m in _TAG_RE.finditer(segment):
         n_str = m.group(1)  # None if no N|
         ts_ms = parse_timestamp(m.group(2))
@@ -266,51 +248,31 @@ def _parse_char_tokens(segment: str) -> List[Tuple[Optional[str], int, str]]:
     return tokens
 
 
-def from_inline_text(text: str, singer_id: str) -> LyricLine:
-    """解析一行内联文本为 LyricLine。"""
-    chars: List[str] = []
-    checkpoints: List[CheckpointConfig] = []
-    timetags: List[TimeTag] = []
-    rubies: List[Ruby] = []
+def from_inline_text(text: str, singer_id: str) -> Sentence:
+    """解析一行内联文本为 Sentence。"""
+    characters: List[Character] = []
 
     # 提取 ruby 组和普通段
-    # 整行扫描，区分 {...} 组和非组段
     segments = _split_ruby_groups(text)
 
     for seg_type, seg_content in segments:
         if seg_type == "ruby":
-            _parse_ruby_group(
-                seg_content, chars, checkpoints, timetags, rubies, singer_id
-            )
+            _parse_ruby_group(seg_content, characters, singer_id)
         else:
-            _parse_plain_segment(seg_content, chars, checkpoints, timetags, singer_id)
+            _parse_plain_segment(seg_content, characters, singer_id)
 
-    line_text = "".join(chars)
+    # 设置 linked_to_next: 当下一个字符 check_count==0 时
+    for i in range(len(characters) - 1):
+        if characters[i + 1].check_count == 0 and not characters[i].linked_to_next:
+            characters[i].linked_to_next = True
 
-    # 迁移: 当下一个字符 check_count==0 时，设置前一个字符的 linked_to_next=True
-    for i in range(len(checkpoints) - 1):
-        if checkpoints[i + 1].check_count == 0 and not checkpoints[i].linked_to_next:
-            cp = checkpoints[i]
-            checkpoints[i] = CheckpointConfig(
-                char_idx=cp.char_idx,
-                check_count=cp.check_count,
-                is_line_end=cp.is_line_end,
-                is_rest=cp.is_rest,
-                linked_to_next=True,
-                singer_id=cp.singer_id,
-            )
-
-    return LyricLine(
+    return Sentence(
         singer_id=singer_id,
-        text=line_text,
-        chars=chars,
-        checkpoints=checkpoints,
-        timetags=timetags,
-        rubies=rubies,
+        characters=characters,
     )
 
 
-def lines_from_inline_text(text: str, singer_id: str) -> List[LyricLine]:
+def sentences_from_inline_text(text: str, singer_id: str) -> List[Sentence]:
     """多行解析。"""
     result = []
     for raw_line in text.split("\n"):
@@ -319,6 +281,10 @@ def lines_from_inline_text(text: str, singer_id: str) -> List[LyricLine]:
             continue
         result.append(from_inline_text(stripped, singer_id))
     return result
+
+
+# 兼容别名
+lines_from_inline_text = sentences_from_inline_text
 
 
 def _split_ruby_groups(text: str) -> List[Tuple[str, str]]:
@@ -346,38 +312,42 @@ def _split_ruby_groups(text: str) -> List[Tuple[str, str]]:
 
 def _parse_ruby_group(
     content: str,
-    chars: List[str],
-    checkpoints: List[CheckpointConfig],
-    timetags: List[TimeTag],
-    rubies: List[Ruby],
+    characters: List[Character],
     singer_id: str,
 ) -> None:
     """解析 ruby 组内容 (不含花括号)。
 
     格式: "漢字|[N|ts]ruby[ts]ruby＋[N|ts]ruby"
+    每个字符直接创建 Character 对象，附带 per-char Ruby。
     """
     pipe_pos = content.index("|")
     display_text = content[:pipe_pos]
     ruby_body = content[pipe_pos + 1 :]
 
-    start_idx = len(chars)
     display_chars = list(display_text)
-    chars.extend(display_chars)
-    end_idx = len(chars)
 
     # 按 ＋ 分割各字符的 ruby 部分
     portions = ruby_body.split(RUBY_SEP)
 
-    ruby_text_parts: List[str] = []
-
     for portion_idx, portion in enumerate(portions):
-        char_idx = start_idx + portion_idx
+        # 确定对应的显示字符
+        char_text = (
+            display_chars[portion_idx] if portion_idx < len(display_chars) else "?"
+        )
         tokens = _parse_char_tokens(portion)
 
         if not tokens:
             # 无 checkpoint 信息
-            checkpoints.append(CheckpointConfig(char_idx=char_idx, check_count=1))
-            ruby_text_parts.append(portion.strip())
+            ruby_text = portion.strip()
+            ruby_obj = Ruby(text=ruby_text) if ruby_text else None
+            character = Character(
+                char=char_text,
+                ruby=ruby_obj,
+                check_count=1,
+                singer_id=singer_id,
+            )
+            character.push_to_ruby()
+            characters.append(character)
             continue
 
         # 第一个 token 确定 N
@@ -388,43 +358,38 @@ def _parse_ruby_group(
             check_count = len(tokens)
             is_line_end = False
 
-        checkpoints.append(
-            CheckpointConfig(
-                char_idx=char_idx,
-                check_count=check_count,
-                is_line_end=is_line_end,
-            )
-        )
-
-        for cp_idx, (_, ts_ms, seg_text) in enumerate(tokens):
-            timetags.append(
-                TimeTag(
-                    timestamp_ms=ts_ms,
-                    singer_id=singer_id,
-                    char_idx=char_idx,
-                    checkpoint_idx=cp_idx,
-                )
-            )
+        # 收集时间戳和 ruby 文本
+        timestamps: List[int] = []
+        ruby_text_parts: List[str] = []
+        for _, ts_ms, seg_text in tokens:
+            timestamps.append(ts_ms)
             ruby_text_parts.append(seg_text)
 
-    # 合并 ruby 文本
-    full_ruby_text = "".join(ruby_text_parts)
-    if full_ruby_text:
-        rubies.append(Ruby(text=full_ruby_text, start_idx=start_idx, end_idx=end_idx))
+        # per-char ruby 文本
+        per_char_ruby = "".join(ruby_text_parts)
+        ruby_obj = Ruby(text=per_char_ruby) if per_char_ruby else None
+
+        character = Character(
+            char=char_text,
+            ruby=ruby_obj,
+            check_count=check_count,
+            timestamps=timestamps,
+            is_line_end=is_line_end,
+            singer_id=singer_id,
+        )
+        character.push_to_ruby()
+        characters.append(character)
 
 
 def _parse_plain_segment(
     content: str,
-    chars: List[str],
-    checkpoints: List[CheckpointConfig],
-    timetags: List[TimeTag],
+    characters: List[Character],
     singer_id: str,
 ) -> None:
     """解析普通段 (非 ruby 组)。
 
     格式: "[N|ts]char[ts]..." 可能包含多个字符。
     """
-    # 找所有 tag+text 对
     pos = 0
     pending_tags: List[Tuple[Optional[str], int]] = []
 
@@ -443,9 +408,7 @@ def _parse_plain_segment(
                 if n_str is not None:
                     # 新字符起始
                     if pending_tags:
-                        _flush_pending(
-                            pending_tags, chars, checkpoints, timetags, singer_id
-                        )
+                        _flush_pending(pending_tags, characters, singer_id)
                         pending_tags = []
                     pending_tags.append((n_str, ts_ms))
                     # 检查该字符是否还有后续 checkpoint tag (无 N 前缀)
@@ -462,31 +425,24 @@ def _parse_plain_segment(
                             break
 
                     is_rest = ch == REST_CHAR
-                    char_idx = len(chars)
-                    chars.append(ch)
                     first_n = pending_tags[0][0]
                     if first_n is not None:
                         check_count, is_line_end = decode_check_n(first_n)
                     else:
                         check_count = len(pending_tags)
                         is_line_end = False
-                    checkpoints.append(
-                        CheckpointConfig(
-                            char_idx=char_idx,
-                            check_count=check_count,
-                            is_line_end=is_line_end,
-                            is_rest=is_rest,
-                        )
+
+                    timestamps = [ts for _, ts in pending_tags]
+
+                    character = Character(
+                        char=ch,
+                        check_count=check_count,
+                        timestamps=timestamps,
+                        is_line_end=is_line_end,
+                        is_rest=is_rest,
+                        singer_id=singer_id,
                     )
-                    for cp_idx, (_, ts) in enumerate(pending_tags):
-                        timetags.append(
-                            TimeTag(
-                                timestamp_ms=ts,
-                                singer_id=singer_id,
-                                char_idx=char_idx,
-                                checkpoint_idx=cp_idx,
-                            )
-                        )
+                    characters.append(character)
                     pending_tags = []
                 else:
                     # 后续 checkpoint（归属前一个字符）
@@ -498,39 +454,31 @@ def _parse_plain_segment(
             pos += 1
 
     if pending_tags:
-        _flush_pending(pending_tags, chars, checkpoints, timetags, singer_id)
+        _flush_pending(pending_tags, characters, singer_id)
 
 
 def _flush_pending(
     pending_tags: List[Tuple[Optional[str], int]],
-    chars: List[str],
-    checkpoints: List[CheckpointConfig],
-    timetags: List[TimeTag],
+    characters: List[Character],
     singer_id: str,
 ) -> None:
     """将未消费的 pending_tags 作为无字符 checkpoint 刷出。"""
-    # 这种情况不应常见，作为安全回退
     if not pending_tags:
         return
-    char_idx = len(chars)
-    chars.append("?")
     first_n = pending_tags[0][0]
     if first_n is not None:
         check_count, is_line_end = decode_check_n(first_n)
     else:
         check_count = len(pending_tags)
         is_line_end = False
-    checkpoints.append(
-        CheckpointConfig(
-            char_idx=char_idx, check_count=check_count, is_line_end=is_line_end
-        )
+
+    timestamps = [ts for _, ts in pending_tags]
+
+    character = Character(
+        char="?",
+        check_count=check_count,
+        timestamps=timestamps,
+        is_line_end=is_line_end,
+        singer_id=singer_id,
     )
-    for cp_idx, (_, ts) in enumerate(pending_tags):
-        timetags.append(
-            TimeTag(
-                timestamp_ms=ts,
-                singer_id=singer_id,
-                char_idx=char_idx,
-                checkpoint_idx=cp_idx,
-            )
-        )
+    characters.append(character)

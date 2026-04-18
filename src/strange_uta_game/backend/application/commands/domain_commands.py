@@ -1,53 +1,59 @@
-"""领域层相关的具体命令实现。"""
+"""领域层相关的具体命令实现。
 
-from typing import Optional
+所有可撤销操作均通过 Command 模式实现。
+命令操作的对象是新层次化领域模型：Sentence → Character → Ruby。
+"""
+
+from typing import Optional, Dict, Any
 from strange_uta_game.backend.domain import (
     Project,
-    LyricLine,
-    TimeTag,
-    CheckpointConfig,
+    Sentence,
+    Character,
     Ruby,
 )
 from .base import Command
 
 
 class AddTimeTagCommand(Command):
-    """添加时间标签命令"""
+    """添加时间标签命令
+
+    在指定句子的指定字符上添加一个时间戳。
+    """
 
     def __init__(
         self,
         project: Project,
-        line_id: str,
-        timestamp_ms: int,
+        sentence_id: str,
         char_idx: int,
-        checkpoint_idx: int = 0,
+        timestamp_ms: int,
+        checkpoint_idx: int = -1,
     ):
         self.project = project
-        self.line_id = line_id
-        self.timestamp_ms = timestamp_ms
+        self.sentence_id = sentence_id
         self.char_idx = char_idx
+        self.timestamp_ms = timestamp_ms
         self.checkpoint_idx = checkpoint_idx
-        self._tag: Optional[TimeTag] = None
+        self._old_timestamps: Optional[list] = None
 
     def execute(self) -> None:
-        line = self.project.get_line(self.line_id)
-        if not line:
-            raise ValueError(f"行 {self.line_id} 不存在")
+        sentence = self.project.get_sentence(self.sentence_id)
+        if not sentence:
+            raise ValueError(f"句子 {self.sentence_id} 不存在")
+        char = sentence.get_character(self.char_idx)
+        if not char:
+            raise ValueError(f"字符索引 {self.char_idx} 超出范围")
 
-        singer_id = line.singer_id
-        self._tag = TimeTag(
-            timestamp_ms=self.timestamp_ms,
-            singer_id=singer_id,
-            char_idx=self.char_idx,
-            checkpoint_idx=self.checkpoint_idx,
-        )
-        line.add_timetag(self._tag)
+        self._old_timestamps = list(char.timestamps)
+        char.add_timestamp(self.timestamp_ms, self.checkpoint_idx)
 
     def undo(self) -> None:
-        if self._tag:
-            line = self.project.get_line(self.line_id)
-            if line:
-                line.remove_timetag(self._tag)
+        if self._old_timestamps is not None:
+            sentence = self.project.get_sentence(self.sentence_id)
+            if sentence:
+                char = sentence.get_character(self.char_idx)
+                if char:
+                    char.timestamps = list(self._old_timestamps)
+                    char.push_to_ruby()
 
     @property
     def description(self) -> str:
@@ -55,148 +61,283 @@ class AddTimeTagCommand(Command):
 
 
 class RemoveTimeTagCommand(Command):
-    """删除时间标签命令"""
+    """删除时间标签命令
 
-    def __init__(self, project: Project, line_id: str, tag: TimeTag):
+    移除指定字符上指定 checkpoint 位置的时间戳。
+    """
+
+    def __init__(
+        self,
+        project: Project,
+        sentence_id: str,
+        char_idx: int,
+        checkpoint_idx: int,
+    ):
         self.project = project
-        self.line_id = line_id
-        self.tag = tag
-        self._removed = False
+        self.sentence_id = sentence_id
+        self.char_idx = char_idx
+        self.checkpoint_idx = checkpoint_idx
+        self._removed_ts: Optional[int] = None
 
     def execute(self) -> None:
-        line = self.project.get_line(self.line_id)
-        if not line:
-            raise ValueError(f"行 {self.line_id} 不存在")
+        sentence = self.project.get_sentence(self.sentence_id)
+        if not sentence:
+            raise ValueError(f"句子 {self.sentence_id} 不存在")
+        char = sentence.get_character(self.char_idx)
+        if not char:
+            raise ValueError(f"字符索引 {self.char_idx} 超出范围")
 
-        line.remove_timetag(self.tag)
-        self._removed = True
+        self._removed_ts = char.remove_timestamp_at(self.checkpoint_idx)
 
     def undo(self) -> None:
-        if self._removed:
-            line = self.project.get_line(self.line_id)
-            if line:
-                line.add_timetag(self.tag)
+        if self._removed_ts is not None:
+            sentence = self.project.get_sentence(self.sentence_id)
+            if sentence:
+                char = sentence.get_character(self.char_idx)
+                if char:
+                    char.add_timestamp(self._removed_ts, self.checkpoint_idx)
 
     @property
     def description(self) -> str:
-        return f"删除时间标签 [{self.tag.timestamp_ms}ms]"
+        ts = self._removed_ts if self._removed_ts is not None else "?"
+        return f"删除时间标签 [{ts}ms]"
 
 
-class SetCheckpointConfigCommand(Command):
-    """设置节奏点配置命令"""
+class ClearLineTimeTagsCommand(Command):
+    """清空整行时间标签命令
 
-    def __init__(self, project: Project, line_id: str, config: CheckpointConfig):
+    清除指定句子所有字符的时间戳。
+    """
+
+    def __init__(self, project: Project, sentence_id: str):
         self.project = project
-        self.line_id = line_id
-        self.new_config = config
-        self._old_config: Optional[CheckpointConfig] = None
+        self.sentence_id = sentence_id
+        self._old_timestamps: Optional[Dict[int, list]] = None
 
     def execute(self) -> None:
-        line = self.project.get_line(self.line_id)
-        if not line:
-            raise ValueError(f"行 {self.line_id} 不存在")
+        sentence = self.project.get_sentence(self.sentence_id)
+        if not sentence:
+            raise ValueError(f"句子 {self.sentence_id} 不存在")
 
-        self._old_config = line.get_checkpoint_config(self.new_config.char_idx)
-        line.set_checkpoint_config(self.new_config)
+        # 保存所有字符的时间戳
+        self._old_timestamps = {
+            i: list(c.timestamps) for i, c in enumerate(sentence.characters)
+        }
+        sentence.clear_all_timestamps()
 
     def undo(self) -> None:
-        if self._old_config:
-            line = self.project.get_line(self.line_id)
-            if line:
-                line.set_checkpoint_config(self._old_config)
+        if self._old_timestamps is not None:
+            sentence = self.project.get_sentence(self.sentence_id)
+            if sentence:
+                for i, timestamps in self._old_timestamps.items():
+                    char = sentence.get_character(i)
+                    if char:
+                        char.timestamps = list(timestamps)
+                        char.push_to_ruby()
 
     @property
     def description(self) -> str:
-        return f"修改节奏点配置 (char_idx={self.new_config.char_idx})"
+        return "清空行时间标签"
+
+
+class UpdateCharacterCommand(Command):
+    """更新字符属性命令
+
+    修改指定字符的属性（check_count、is_line_end、is_rest、
+    linked_to_next、singer_id）。通过 kwargs 传入要修改的属性。
+    """
+
+    ALLOWED_ATTRS = {
+        "check_count",
+        "is_line_end",
+        "is_rest",
+        "linked_to_next",
+        "singer_id",
+    }
+
+    def __init__(
+        self,
+        project: Project,
+        sentence_id: str,
+        char_idx: int,
+        **kwargs: Any,
+    ):
+        self.project = project
+        self.sentence_id = sentence_id
+        self.char_idx = char_idx
+        # 过滤非法属性
+        self.updates = {k: v for k, v in kwargs.items() if k in self.ALLOWED_ATTRS}
+        self._old_values: Dict[str, Any] = {}
+
+    def execute(self) -> None:
+        sentence = self.project.get_sentence(self.sentence_id)
+        if not sentence:
+            raise ValueError(f"句子 {self.sentence_id} 不存在")
+        char = sentence.get_character(self.char_idx)
+        if not char:
+            raise ValueError(f"字符索引 {self.char_idx} 超出范围")
+
+        # 保存旧值
+        for key in self.updates:
+            self._old_values[key] = getattr(char, key)
+
+        # 应用新值
+        for key, value in self.updates.items():
+            setattr(char, key, value)
+
+    def undo(self) -> None:
+        if self._old_values:
+            sentence = self.project.get_sentence(self.sentence_id)
+            if sentence:
+                char = sentence.get_character(self.char_idx)
+                if char:
+                    for key, value in self._old_values.items():
+                        setattr(char, key, value)
+
+    @property
+    def description(self) -> str:
+        attrs = ", ".join(f"{k}={v}" for k, v in self.updates.items())
+        return f"更新字符属性 (char_idx={self.char_idx}, {attrs})"
 
 
 class AddRubyCommand(Command):
-    """添加注音命令"""
+    """添加注音命令
 
-    def __init__(self, project: Project, line_id: str, ruby: Ruby):
+    为指定字符设置注音。
+    """
+
+    def __init__(
+        self,
+        project: Project,
+        sentence_id: str,
+        char_idx: int,
+        ruby: Ruby,
+    ):
         self.project = project
-        self.line_id = line_id
+        self.sentence_id = sentence_id
+        self.char_idx = char_idx
         self.ruby = ruby
+        self._old_ruby: Optional[Ruby] = None
 
     def execute(self) -> None:
-        line = self.project.get_line(self.line_id)
-        if not line:
-            raise ValueError(f"行 {self.line_id} 不存在")
+        sentence = self.project.get_sentence(self.sentence_id)
+        if not sentence:
+            raise ValueError(f"句子 {self.sentence_id} 不存在")
+        char = sentence.get_character(self.char_idx)
+        if not char:
+            raise ValueError(f"字符索引 {self.char_idx} 超出范围")
 
-        line.add_ruby(self.ruby)
+        self._old_ruby = char.ruby
+        char.set_ruby(self.ruby)
 
     def undo(self) -> None:
-        # Ruby 没有 remove 方法，这里需要从 rubies 列表移除
-        line = self.project.get_line(self.line_id)
-        if line and self.ruby in line.rubies:
-            line.rubies.remove(self.ruby)
+        sentence = self.project.get_sentence(self.sentence_id)
+        if sentence:
+            char = sentence.get_character(self.char_idx)
+            if char:
+                char.set_ruby(self._old_ruby)
 
     @property
     def description(self) -> str:
         return f"添加注音 [{self.ruby.text}]"
 
 
-class AddLineCommand(Command):
-    """添加歌词行命令"""
+class RemoveRubyCommand(Command):
+    """移除注音命令
 
-    def __init__(self, project: Project, line: LyricLine):
+    移除指定字符的注音。
+    """
+
+    def __init__(self, project: Project, sentence_id: str, char_idx: int):
         self.project = project
-        self.line = line
+        self.sentence_id = sentence_id
+        self.char_idx = char_idx
+        self._removed_ruby: Optional[Ruby] = None
+
+    def execute(self) -> None:
+        sentence = self.project.get_sentence(self.sentence_id)
+        if not sentence:
+            raise ValueError(f"句子 {self.sentence_id} 不存在")
+
+        self._removed_ruby = sentence.remove_ruby_from_char(self.char_idx)
+
+    def undo(self) -> None:
+        if self._removed_ruby:
+            sentence = self.project.get_sentence(self.sentence_id)
+            if sentence:
+                char = sentence.get_character(self.char_idx)
+                if char:
+                    char.set_ruby(self._removed_ruby)
+
+    @property
+    def description(self) -> str:
+        text = self._removed_ruby.text if self._removed_ruby else "?"
+        return f"移除注音 [{text}]"
+
+
+class AddSentenceCommand(Command):
+    """添加句子命令"""
+
+    def __init__(
+        self,
+        project: Project,
+        sentence: Sentence,
+        after_sentence_id: Optional[str] = None,
+    ):
+        self.project = project
+        self.sentence = sentence
+        self.after_sentence_id = after_sentence_id
         self._added = False
 
     def execute(self) -> None:
-        self.project.add_line(self.line)
+        self.project.add_sentence(self.sentence, self.after_sentence_id)
         self._added = True
 
     def undo(self) -> None:
         if self._added:
             try:
-                self.project.remove_line(self.line.id)
+                self.project.remove_sentence(self.sentence.id)
             except Exception:
-                pass  # 可能已经被删除
+                pass
 
     @property
     def description(self) -> str:
-        return f"添加歌词行 [{self.line.text[:10]}...]"
+        return f"添加歌词行 [{self.sentence.text[:10]}...]"
 
 
-class RemoveLineCommand(Command):
-    """删除歌词行命令"""
+class RemoveSentenceCommand(Command):
+    """删除句子命令"""
 
-    def __init__(self, project: Project, line_id: str):
+    def __init__(self, project: Project, sentence_id: str):
         self.project = project
-        self.line_id = line_id
-        self._line: Optional[LyricLine] = None
+        self.sentence_id = sentence_id
+        self._sentence: Optional[Sentence] = None
         self._index: int = -1
 
     def execute(self) -> None:
-        self._line = self.project.get_line(self.line_id)
-        if not self._line:
-            raise ValueError(f"行 {self.line_id} 不存在")
+        self._sentence = self.project.get_sentence(self.sentence_id)
+        if not self._sentence:
+            raise ValueError(f"句子 {self.sentence_id} 不存在")
 
-        # 保存位置
-        self._index = self.project.lines.index(self._line)
-
-        self.project.remove_line(self.line_id)
+        self._index = self.project.sentences.index(self._sentence)
+        self.project.remove_sentence(self.sentence_id)
 
     def undo(self) -> None:
-        if self._line:
-            # 恢复到原来的位置
-            if self._index >= 0 and self._index <= len(self.project.lines):
-                # 手动插入到指定位置
-                self.project.lines.insert(self._index, self._line)
+        if self._sentence:
+            if 0 <= self._index <= len(self.project.sentences):
+                self.project.sentences.insert(self._index, self._sentence)
             else:
-                self.project.add_line(self._line)
+                self.project.add_sentence(self._sentence)
 
     @property
     def description(self) -> str:
-        return f"删除歌词行"
+        return "删除歌词行"
 
 
 class AddSingerCommand(Command):
     """添加演唱者命令"""
 
-    def __init__(self, project, singer):
+    def __init__(self, project: Project, singer):
         self.project = project
         self.singer = singer
 
@@ -217,34 +358,31 @@ class AddSingerCommand(Command):
 class RemoveSingerCommand(Command):
     """删除演唱者命令"""
 
-    def __init__(self, project, singer_id, transfer_to=None):
+    def __init__(
+        self, project: Project, singer_id: str, transfer_to: Optional[str] = None
+    ):
         self.project = project
         self.singer_id = singer_id
         self.transfer_to = transfer_to
         self._singer = None
-        self._lines = []
+        self._sentences = []
 
     def execute(self) -> None:
         self._singer = self.project.get_singer(self.singer_id)
         if self._singer:
-            # 保存该演唱者的所有歌词
-            self._lines = [
-                line for line in self.project.lines if line.singer_id == self.singer_id
+            self._sentences = [
+                s for s in self.project.sentences if s.singer_id == self.singer_id
             ]
-
             self.project.remove_singer(self.singer_id, self.transfer_to)
 
     def undo(self) -> None:
-        # 撤销删除比较复杂，需要恢复演唱者和歌词
-        # 这里简化处理：重新添加演唱者，然后恢复歌词
         if self._singer:
             self.project.add_singer(self._singer)
-            for line in self._lines:
-                # 恢复 singer_id
-                line.singer_id = self.singer_id
-                if line not in self.project.lines:
-                    self.project.add_line(line)
+            for sentence in self._sentences:
+                sentence.singer_id = self.singer_id
+                if sentence not in self.project.sentences:
+                    self.project.add_sentence(sentence)
 
     @property
     def description(self) -> str:
-        return f"删除演唱者"
+        return "删除演唱者"

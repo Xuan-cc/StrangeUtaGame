@@ -24,96 +24,94 @@ from qfluentwidgets import (
     FluentIcon as FIF,
 )
 
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from difflib import SequenceMatcher
 
 from strange_uta_game.backend.domain import (
     Project,
-    LyricLine,
+    Sentence,
+    Character,
     Ruby,
-    TimeTag,
-    CheckpointConfig,
 )
 from strange_uta_game.backend.application import AutoCheckService
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
     CharType,
     get_char_type,
 )
+from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+    split_ruby_for_checkpoints,
+)
 
 
-def _rebuild_timetags_and_checkpoints(
-    line: LyricLine, old_chars: List[str], new_chars: List[str]
-) -> None:
-    """文本变更后重建 timetag 和 checkpoint 索引。
+def _rebuild_characters(
+    old_sentence: Sentence,
+    new_chars: List[str],
+    ruby_map: Dict[int, str],
+) -> List[Character]:
+    """文本变更后重建 Character 列表，保留匹配字符的时间戳和配置。
 
-    使用 SequenceMatcher 计算旧字符列表到新字符列表的映射，
-    将原有 timetag 的 char_idx 平移到新位置。新插入的字符无 timetag，
-    删除的字符的 timetag 被丢弃。Checkpoint 也做相应重建。
+    使用 SequenceMatcher 计算旧字符到新字符的映射，
+    匹配到的旧字符保留 timestamps/check_count/linked_to_next/singer_id，
+    新插入的字符使用默认设置。最后一个字符标记为句尾。
     """
-    if old_chars == new_chars:
-        return
+    old_chars_str = [c.char for c in old_sentence.characters]
+
+    if old_chars_str == new_chars:
+        # 文本未变，仅更新 ruby
+        for i, ch in enumerate(old_sentence.characters):
+            if i in ruby_map:
+                ch.set_ruby(Ruby(text=ruby_map[i]))
+            else:
+                ch.set_ruby(None)
+        return old_sentence.characters
 
     # 构建 old_idx → new_idx 映射
-    sm = SequenceMatcher(None, old_chars, new_chars)
-    old_to_new: dict[int, int] = {}
+    sm = SequenceMatcher(None, old_chars_str, new_chars)
+    new_to_old: Dict[int, int] = {}
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag == "equal":
             for k in range(i2 - i1):
-                old_to_new[i1 + k] = j1 + k
-        # 'replace' / 'delete' / 'insert' 不映射（被删除/替换的字符无法保留 timetag）
+                new_to_old[j1 + k] = i1 + k
 
-    # 重建 timetags：仅保留有映射的，更新 char_idx
-    new_timetags: List[TimeTag] = []
-    for tag in line.timetags:
-        new_idx = old_to_new.get(tag.char_idx)
-        if new_idx is not None:
-            new_timetags.append(
-                TimeTag(
-                    timestamp_ms=tag.timestamp_ms,
-                    singer_id=tag.singer_id,
-                    char_idx=new_idx,
-                    checkpoint_idx=tag.checkpoint_idx,
-                    tag_type=tag.tag_type,
-                )
-            )
-    line.timetags = sorted(new_timetags, key=lambda t: t.timestamp_ms)
-
-    # 重建 checkpoints：保留映射到的旧配置，新字符用默认值
-    old_cp_map: dict[int, CheckpointConfig] = {
-        cp.char_idx: cp for cp in line.checkpoints
-    }
-    new_checkpoints: List[CheckpointConfig] = []
+    characters: List[Character] = []
     for j in range(len(new_chars)):
-        # 查找是否有旧字符映射到这个新位置
-        mapped_old_idx = None
-        for old_idx, new_mapped in old_to_new.items():
-            if new_mapped == j:
-                mapped_old_idx = old_idx
-                break
+        is_last = j == len(new_chars) - 1
+        old_idx = new_to_old.get(j)
 
-        if mapped_old_idx is not None and mapped_old_idx in old_cp_map:
-            old_cp = old_cp_map[mapped_old_idx]
-            new_checkpoints.append(
-                CheckpointConfig(
-                    char_idx=j,
-                    check_count=old_cp.check_count,
-                    is_line_end=(j == len(new_chars) - 1),
-                    is_rest=old_cp.is_rest,
-                    linked_to_next=old_cp.linked_to_next,
-                    singer_id=old_cp.singer_id,
-                )
+        if old_idx is not None:
+            old_ch = old_sentence.characters[old_idx]
+            ch = Character(
+                char=new_chars[j],
+                check_count=old_ch.check_count,
+                timestamps=list(old_ch.timestamps),
+                linked_to_next=old_ch.linked_to_next if not is_last else False,
+                is_line_end=is_last,
+                is_rest=old_ch.is_rest,
+                singer_id=old_ch.singer_id,
             )
         else:
             # 新字符：默认 check_count=1，末尾字符 check_count=2
-            is_last = j == len(new_chars) - 1
-            new_checkpoints.append(
-                CheckpointConfig(
-                    char_idx=j,
-                    check_count=2 if is_last else 1,
-                    is_line_end=is_last,
-                )
+            ch = Character(
+                char=new_chars[j],
+                check_count=2 if is_last else 1,
+                is_line_end=is_last,
+                singer_id=old_sentence.singer_id,
             )
-    line.checkpoints = new_checkpoints
+
+        # 应用 ruby
+        if j in ruby_map:
+            ch.set_ruby(Ruby(text=ruby_map[j]))
+
+        characters.append(ch)
+
+    return characters
+
+
+def _apply_ruby_map(sentence: Sentence, ruby_map: Dict[int, str]) -> None:
+    """将 ruby_map 应用到句子的字符上。"""
+    for ci, ruby_text in ruby_map.items():
+        if 0 <= ci < len(sentence.characters):
+            sentence.characters[ci].set_ruby(Ruby(text=ruby_text))
 
 
 def _is_kanji_char(char: str) -> bool:
@@ -130,16 +128,16 @@ def _is_kanji_char(char: str) -> bool:
 
 def _parse_annotated_line(
     line_text: str,
-) -> Tuple[str, List[str], List[Ruby]]:
+) -> Tuple[str, List[str], Dict[int, str]]:
     """解析带注音标注的文本行。
 
     格式: 漢字{かんじ} — 花括号标注前面连续汉字块的读音。
 
     Returns:
-        (原文, 字符列表, 注音列表)
+        (原文, 字符列表, ruby_map: char_idx → ruby_text)
     """
     raw_chars: List[str] = []
-    rubies: List[Ruby] = []
+    ruby_map: Dict[int, str] = {}
     i = 0
     n = len(line_text)
 
@@ -167,23 +165,15 @@ def _parse_annotated_line(
 
                 if start_idx < end_idx:
                     # 检查是否与已有注音重叠
-                    overlap = False
-                    for existing in rubies:
-                        if (
-                            start_idx < existing.end_idx
-                            and end_idx > existing.start_idx
-                        ):
-                            overlap = True
-                            break
+                    overlap = any(ci in ruby_map for ci in range(start_idx, end_idx))
 
                     if not overlap:
-                        rubies.append(
-                            Ruby(
-                                text=ruby_text,
-                                start_idx=start_idx,
-                                end_idx=end_idx,
-                            )
-                        )
+                        block_len = end_idx - start_idx
+                        split_parts = split_ruby_for_checkpoints(ruby_text, block_len)
+                        for ci in range(start_idx, end_idx):
+                            part_idx = ci - start_idx
+                            if part_idx < len(split_parts) and split_parts[part_idx]:
+                                ruby_map[ci] = split_parts[part_idx]
 
             i = close + 1
         else:
@@ -191,7 +181,7 @@ def _parse_annotated_line(
             i += 1
 
     raw_text = "".join(raw_chars)
-    return raw_text, raw_chars, rubies
+    return raw_text, raw_chars, ruby_map
 
 
 class DeleteRubyByTypeDialog(QDialog):
@@ -363,7 +353,7 @@ class RubyInterface(QWidget):
 
     def _refresh_display(self):
         """刷新全部显示"""
-        has_project = self._project is not None and len(self._project.lines) > 0
+        has_project = self._project is not None and len(self._project.sentences) > 0
 
         for btn in (
             self.btn_auto_all,
@@ -385,23 +375,35 @@ class RubyInterface(QWidget):
         """将项目歌词转为带注音标注的文本。
 
         格式: 漢字{かんじ}
+        连词且都有 ruby 的字符合并为一个注音组。
         """
         if not self._project:
             return ""
 
         result = []
-        for line in self._project.lines:
+        for sentence in self._project.sentences:
             annotated = ""
             i = 0
-            while i < len(line.chars):
-                ruby = line.get_ruby_for_char(i)
-                if ruby and ruby.start_idx == i:
-                    target = "".join(line.chars[ruby.start_idx : ruby.end_idx])
-                    annotated += f"{target}{{{ruby.text}}}"
-                    i = ruby.end_idx
+            characters = sentence.characters
+            while i < len(characters):
+                ch = characters[i]
+                if ch.ruby:
+                    # 找连词 + ruby 组
+                    group = [ch]
+                    while (
+                        ch.linked_to_next
+                        and i + 1 < len(characters)
+                        and characters[i + 1].ruby
+                    ):
+                        i += 1
+                        ch = characters[i]
+                        group.append(ch)
+                    target = "".join(c.char for c in group)
+                    combined_ruby = "".join(c.ruby.text for c in group)
+                    annotated += f"{target}{{{combined_ruby}}}"
                 else:
-                    annotated += line.chars[i]
-                    i += 1
+                    annotated += ch.char
+                i += 1
             result.append(annotated)
         return "\n".join(result)
 
@@ -411,8 +413,10 @@ class RubyInterface(QWidget):
             self.lbl_stats.setText("共 0 行，0 个注音")
             return
 
-        total = sum(len(line.rubies) for line in self._project.lines)
-        self.lbl_stats.setText(f"共 {len(self._project.lines)} 行，{total} 个注音")
+        total = sum(
+            sum(1 for c in s.characters if c.ruby) for s in self._project.sentences
+        )
+        self.lbl_stats.setText(f"共 {len(self._project.sentences)} 行，{total} 个注音")
 
     def _create_auto_check_service(self):
         """创建带设置的自动检查服务"""
@@ -442,7 +446,7 @@ class RubyInterface(QWidget):
 
             InfoBar.success(
                 title="分析完成",
-                content=f"已为 {len(self._project.lines)} 行自动分析注音并更新节奏点",
+                content=f"已为 {len(self._project.sentences)} 行自动分析注音并更新节奏点",
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -474,20 +478,11 @@ class RubyInterface(QWidget):
             return
 
         removed = 0
-        for line in self._project.lines:
-            to_remove = []
-            for ruby in line.rubies:
-                chars_in_range = line.chars[
-                    ruby.start_idx : min(ruby.end_idx, len(line.chars))
-                ]
-                if chars_in_range and all(
-                    get_char_type(c) in selected for c in chars_in_range
-                ):
-                    to_remove.append(ruby)
-
-            for ruby in to_remove:
-                line.rubies.remove(ruby)
-                removed += 1
+        for sentence in self._project.sentences:
+            for ch in sentence.characters:
+                if ch.ruby and get_char_type(ch.char) in selected:
+                    ch.set_ruby(None)
+                    removed += 1
 
         self._refresh_display()
         if hasattr(self, "_store"):
@@ -516,7 +511,7 @@ class RubyInterface(QWidget):
 
             InfoBar.success(
                 title="更新完成",
-                content=f"已根据注音更新 {len(self._project.lines)} 行的节奏点",
+                content=f"已根据注音更新 {len(self._project.sentences)} 行的节奏点",
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -540,7 +535,7 @@ class RubyInterface(QWidget):
         """将文本编辑器内容应用回项目（支持增删行，保留打轴数据）。
 
         使用行级 SequenceMatcher 将旧行映射到新行，
-        匹配到的旧行保留 timetag/checkpoint 并做字符级 diff，
+        匹配到的旧行保留 timestamps/配置 并做字符级 diff，
         新插入行使用默认设置，删除行被丢弃。
         """
         if not self._project:
@@ -550,19 +545,19 @@ class RubyInterface(QWidget):
         new_line_strs = text.split("\n")
 
         # 解析每行的带注音文本
-        parsed_new: List[Tuple[str, List[str], List[Ruby]]] = []
+        parsed_new: List[Tuple[str, List[str], Dict[int, str]]] = []
         parse_errors = []
         for i, ls in enumerate(new_line_strs):
             try:
-                raw_text, raw_chars, rubies = _parse_annotated_line(ls)
+                raw_text, raw_chars, ruby_map = _parse_annotated_line(ls)
                 if not raw_text:
                     raw_text = " "
                     raw_chars = [" "]
-                    rubies = []
-                parsed_new.append((raw_text, raw_chars, rubies))
+                    ruby_map = {}
+                parsed_new.append((raw_text, raw_chars, ruby_map))
             except Exception as e:
                 parse_errors.append(f"第 {i + 1} 行: {e}")
-                parsed_new.append((" ", [" "], []))
+                parsed_new.append((" ", [" "], {}))
 
         if parse_errors:
             InfoBar.warning(
@@ -575,76 +570,55 @@ class RubyInterface(QWidget):
                 parent=self,
             )
 
-        old_lines = list(self._project.lines)
-        old_texts = [line.text for line in old_lines]
+        old_sentences = list(self._project.sentences)
+        old_texts = [s.text for s in old_sentences]
         new_texts = [p[0] for p in parsed_new]
 
         # 行级 diff：将旧行映射到新行
         line_sm = SequenceMatcher(None, old_texts, new_texts)
 
-        default_singer = old_lines[0].singer_id if old_lines else "default"
-        result_lines: List[LyricLine] = [None] * len(parsed_new)  # type: ignore
+        default_singer = old_sentences[0].singer_id if old_sentences else "default"
+        result_sentences: List[Optional[Sentence]] = [None] * len(parsed_new)
 
         for tag, i1, i2, j1, j2 in line_sm.get_opcodes():
             if tag == "equal":
                 # 旧行 i1..i2 完全匹配新行 j1..j2
                 for k in range(i2 - i1):
-                    old_line = old_lines[i1 + k]
-                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
-                    old_chars = list(old_line.chars)
-                    old_line.text = raw_text
-                    old_line.chars = raw_chars
-                    old_line.rubies.clear()
-                    for r in rubies:
-                        old_line.add_ruby(r)
-                    _rebuild_timetags_and_checkpoints(old_line, old_chars, raw_chars)
-                    result_lines[j1 + k] = old_line
+                    old_s = old_sentences[i1 + k]
+                    raw_text, raw_chars, ruby_map = parsed_new[j1 + k]
+                    old_s.characters = _rebuild_characters(old_s, raw_chars, ruby_map)
+                    result_sentences[j1 + k] = old_s
 
             elif tag == "replace":
-                # 尝试 1:1 映射 — 如果旧段和新段长度相同，逐行做字符级 diff
+                # 尝试 1:1 映射
                 old_count = i2 - i1
                 new_count = j2 - j1
                 matched = min(old_count, new_count)
                 for k in range(matched):
-                    old_line = old_lines[i1 + k]
-                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
-                    old_chars = list(old_line.chars)
-                    old_line.text = raw_text
-                    old_line.chars = raw_chars
-                    old_line.rubies.clear()
-                    for r in rubies:
-                        old_line.add_ruby(r)
-                    _rebuild_timetags_and_checkpoints(old_line, old_chars, raw_chars)
-                    result_lines[j1 + k] = old_line
+                    old_s = old_sentences[i1 + k]
+                    raw_text, raw_chars, ruby_map = parsed_new[j1 + k]
+                    old_s.characters = _rebuild_characters(old_s, raw_chars, ruby_map)
+                    result_sentences[j1 + k] = old_s
                 # 多出的新行 → 创建
                 for k in range(matched, new_count):
-                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
-                    nl = LyricLine(
-                        singer_id=default_singer,
-                        text=raw_text,
-                        chars=raw_chars,
-                    )
-                    for r in rubies:
-                        nl.add_ruby(r)
-                    result_lines[j1 + k] = nl
-                # 多出的旧行 → 丢弃（tag == replace 中 old_count > new_count 部分）
+                    raw_text, raw_chars, ruby_map = parsed_new[j1 + k]
+                    new_s = Sentence.from_text(raw_text, default_singer)
+                    _apply_ruby_map(new_s, ruby_map)
+                    result_sentences[j1 + k] = new_s
+                # 多出的旧行 → 丢弃
 
             elif tag == "insert":
                 # 新插入行
                 for k in range(j2 - j1):
-                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
-                    nl = LyricLine(
-                        singer_id=default_singer,
-                        text=raw_text,
-                        chars=raw_chars,
-                    )
-                    for r in rubies:
-                        nl.add_ruby(r)
-                    result_lines[j1 + k] = nl
+                    raw_text, raw_chars, ruby_map = parsed_new[j1 + k]
+                    new_s = Sentence.from_text(raw_text, default_singer)
+                    _apply_ruby_map(new_s, ruby_map)
+                    result_sentences[j1 + k] = new_s
 
-            # tag == "delete": 旧行被删除，不出现在 result_lines 中
+            # tag == "delete": 旧行被删除，不出现在 result_sentences 中
 
-        self._project.lines = result_lines
+        # 过滤掉 None（不应该有，但安全处理）
+        self._project.sentences = [s for s in result_sentences if s is not None]
 
         if hasattr(self, "_store"):
             self._store.notify("lyrics")
@@ -653,7 +627,7 @@ class RubyInterface(QWidget):
 
         InfoBar.success(
             title="应用成功",
-            content=f"已更新 {len(result_lines)} 行",
+            content=f"已更新 {len(self._project.sentences)} 行",
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,

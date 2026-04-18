@@ -1,11 +1,21 @@
-"""领域层核心值对象定义。
+"""领域层核心数据结构定义。
 
-值对象(Value Object)由属性值决定相等性，创建后不可变。
+数据层次（自底向上）：
+  Ruby → Character → Word → Sentence → Project
+
+- Ruby:      最小单元，存储假名文本；checkpoint 时间戳和演唱者由母对象推送
+- Character: 主要单元，存储单字、Ruby、节奏点配置、时间戳、连词/句尾标记、演唱者
+- Word:      逻辑单元，由连词字符组成；不存储 Ruby，但收集字符的 Ruby 用于渲染和输出
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import List, Optional
 from enum import Enum, auto
+
+
+# ──────────────────────────────────────────────
+# 错误类
+# ──────────────────────────────────────────────
 
 
 class DomainError(Exception):
@@ -20,211 +30,242 @@ class ValidationError(DomainError):
     pass
 
 
+# ──────────────────────────────────────────────
+# 枚举
+# ──────────────────────────────────────────────
+
+
 class TimeTagType(Enum):
-    """时间标签类型"""
+    """时间标签类型（用于导出兼容）
 
-    CHAR_START = auto()  # 字符开始
-    CHAR_MIDDLE = auto()  # 字符中间（连打场景）
-    LINE_END = auto()  # 行尾
-    REST = auto()  # 休止符
-
-
-@dataclass(frozen=True)
-class Checkpoint:
-    """节奏点/检查点
-
-    表示一个需要击打的时间点，对应用户一次按键操作。
-    属于值对象，创建后不可变。
-
-    Attributes:
-        timestamp_ms: 时间戳（毫秒）
-        char_idx: 对应字符索引
-        checkpoint_idx: 在该字符内的第几个节奏点（从0开始）
-
-    Example:
-        >>> cp = Checkpoint(timestamp_ms=1000, char_idx=0, checkpoint_idx=0)
-        >>> cp.timestamp_ms
-        1000
+    在新层次模型中，tag_type 由上下文推导：
+      - CHAR_START  : Character.timestamps[0]
+      - CHAR_MIDDLE : Character.timestamps[1:]（非句尾字符）
+      - LINE_END    : is_line_end 字符的最后一个 timestamp
+      - REST        : is_rest 字符的 timestamp
     """
 
-    timestamp_ms: int
-    char_idx: int
-    checkpoint_idx: int = 0
-
-    def __post_init__(self) -> None:
-        """验证属性值"""
-        if self.timestamp_ms < 0:
-            raise ValidationError(f"时间戳不能为负数: {self.timestamp_ms}")
-        if self.char_idx < 0:
-            raise ValidationError(f"字符索引不能为负数: {self.char_idx}")
-        if self.checkpoint_idx < 0:
-            raise ValidationError(f"节奏点索引不能为负数: {self.checkpoint_idx}")
+    CHAR_START = auto()
+    CHAR_MIDDLE = auto()
+    LINE_END = auto()
+    REST = auto()
 
 
-@dataclass(frozen=True)
-class CheckpointConfig:
-    """节奏点配置
-
-    配置每个字符的节奏点数量和类型。
-    与 LyricLine.chars 一一对应。
-
-    Attributes:
-        char_idx: 字符索引
-        check_count: 节奏点数量（需要击打几次，默认1，可以为0）
-        is_line_end: 是否是句尾字符（行末，默认False）
-        is_rest: 是否是休止符（默认False）
-
-    Examples:
-        普通字符：
-        >>> config = CheckpointConfig(char_idx=0, check_count=1)
-
-        连打场景（如「赤」=あ+か）：
-        >>> config = CheckpointConfig(char_idx=0, check_count=2)
-
-        长音连唱：
-        >>> config = CheckpointConfig(char_idx=1, check_count=0)  # 长音"ー"
-
-        句尾字符：
-        >>> config = CheckpointConfig(char_idx=5, check_count=1, is_line_end=True)
-    """
-
-    char_idx: int
-    check_count: int = 1
-    is_line_end: bool = False
-    is_rest: bool = False
-    linked_to_next: bool = False
-    singer_id: str = ""  # 每字符演唱者ID，空串表示继承行级 singer_id
-
-    def __post_init__(self) -> None:
-        """验证属性值"""
-        if self.char_idx < 0:
-            raise ValidationError(f"字符索引不能为负数: {self.char_idx}")
-        if self.check_count < 0:
-            raise ValidationError(f"节奏点数量不能为负数: {self.check_count}")
+# ──────────────────────────────────────────────
+# Ruby — 最小数据结构单元
+# ──────────────────────────────────────────────
 
 
-@dataclass(frozen=True)
-class TimeTag:
-    """时间标签
-
-    表示一个时间点，允许时间倒退（用户修改时可能出现）。
-    仅标记异常，不阻止操作。
-
-    Attributes:
-        timestamp_ms: 绝对时间（毫秒）
-        singer_id: 所属演唱者ID（必填，用于多声部）
-        char_idx: 对应字符索引
-        checkpoint_idx: 在该字符内的第几个节奏点
-        tag_type: 标签类型
-
-    Example:
-        >>> tag = TimeTag(
-        ...     timestamp_ms=10000,
-        ...     singer_id="singer_1",
-        ...     char_idx=0,
-        ...     checkpoint_idx=0,
-        ...     tag_type=TimeTagType.CHAR_START
-        ... )
-    """
-
-    timestamp_ms: int
-    singer_id: str
-    char_idx: int
-    checkpoint_idx: int = 0
-    tag_type: TimeTagType = TimeTagType.CHAR_START
-
-    def __post_init__(self) -> None:
-        """验证属性值"""
-        if self.timestamp_ms < 0:
-            raise ValidationError(f"时间戳不能为负数: {self.timestamp_ms}")
-        if not self.singer_id:
-            raise ValidationError("singer_id 不能为空")
-        if self.char_idx < 0:
-            raise ValidationError(f"字符索引不能为负数: {self.char_idx}")
-        if self.checkpoint_idx < 0:
-            raise ValidationError(f"节奏点索引不能为负数: {self.checkpoint_idx}")
-
-
-@dataclass(frozen=True)
+@dataclass
 class Ruby:
-    """注音/振り仮名
+    """注音/振り仮名 — 最小数据结构单元
 
-    表示汉字的注音（ルビ）。
-    支持一个注音覆盖多个连续字符。
+    存储 Ruby 的假名文本。除假名文本以外的所有属性均由母对象
+    (Character) 推送更新，用于 Ruby 绘制和 Ruby 输出。
 
     Attributes:
-        text: 注音文本（如 "あか"）
-        start_idx: 起始字符索引（包含）
-        end_idx: 结束字符索引（不包含）
+        text: 注音文本（如 "あか"、"きのう"）
+        timestamps: checkpoint 时间戳列表（从 Character 推送，毫秒）
+        singer_id: 演唱者 ID（从 Character 推送）
 
     Example:
-        「赤」的注音：
-        >>> ruby = Ruby(text="あか", start_idx=0, end_idx=1)
-
-        「昨日」的注音（多对一）：
-        >>> ruby = Ruby(text="きのう", start_idx=0, end_idx=2)
+        >>> ruby = Ruby(text="あか")
+        >>> ruby.text
+        'あか'
     """
 
     text: str
-    start_idx: int
-    end_idx: int
+    timestamps: List[int] = field(default_factory=list)
+    singer_id: str = ""
 
     def __post_init__(self) -> None:
-        """验证属性值"""
         if not self.text:
             raise ValidationError("注音文本不能为空")
-        if self.start_idx < 0:
-            raise ValidationError(f"起始索引不能为负数: {self.start_idx}")
-        if self.end_idx < 0:
-            raise ValidationError(f"结束索引不能为负数: {self.end_idx}")
-        if self.start_idx >= self.end_idx:
-            raise ValidationError(
-                f"起始索引必须小于结束索引: {self.start_idx} >= {self.end_idx}"
-            )
-
-    def covers_char(self, char_idx: int) -> bool:
-        """检查注音是否覆盖指定字符
-
-        Args:
-            char_idx: 字符索引
-
-        Returns:
-            是否覆盖该字符
-        """
-        return self.start_idx <= char_idx < self.end_idx
 
 
-@dataclass(frozen=True)
-class LineTimingInfo:
-    """歌词行时间信息
+# ──────────────────────────────────────────────
+# Character — 主要数据结构单元
+# ──────────────────────────────────────────────
 
-    记录歌词行的时间范围，用于性能优化和显示。
+
+@dataclass
+class Character:
+    """字符 — 主要数据结构单元
+
+    存储单个字符及其注音、节奏点配置、时间戳、连词/句尾标记、演唱者。
+    当时间戳或演唱者更新时，主动将变更推送给 Ruby 对象。
 
     Attributes:
-        start_ms: 行开始时间（该行第一个时间标签）
-        end_ms: 行结束时间（该行最后一个时间标签或下一行开始）
+        char: 单个字符（如 "赤"、"い"）
+        ruby: 注音对象，可以为空
+        check_count: 节奏点数量（需要击打几次，默认 1，可以为 0）
+        timestamps: checkpoint 时间戳列表（毫秒），索引 = checkpoint_idx
+        linked_to_next: 是否与下一字符连词
+        is_line_end: 是否是句尾字符
+        is_rest: 是否是休止符
+        singer_id: 演唱者 UUID
+
+    Example:
+        >>> ch = Character(char="赤", check_count=2, singer_id="singer_1")
+        >>> ch.set_ruby(Ruby(text="あか"))
+        >>> ch.add_timestamp(1000)
+        >>> ch.ruby.timestamps
+        [1000]
     """
 
-    start_ms: int
-    end_ms: int
+    char: str
+    ruby: Optional[Ruby] = None
+    check_count: int = 1
+    timestamps: List[int] = field(default_factory=list)
+    linked_to_next: bool = False
+    is_line_end: bool = False
+    is_rest: bool = False
+    singer_id: str = ""
 
     def __post_init__(self) -> None:
-        if self.start_ms < 0:
-            raise ValidationError(f"开始时间不能为负数: {self.start_ms}")
-        if self.end_ms < 0:
-            raise ValidationError(f"结束时间不能为负数: {self.end_ms}")
-        if self.start_ms > self.end_ms:
-            raise ValidationError(
-                f"开始时间不能大于结束时间: {self.start_ms} > {self.end_ms}"
-            )
+        if not self.char:
+            raise ValidationError("字符不能为空")
+        if self.check_count < 0:
+            raise ValidationError(f"节奏点数量不能为负数: {self.check_count}")
 
-    def contains(self, timestamp_ms: int) -> bool:
-        """检查时间戳是否在该行时间范围内
+    # ── 时间戳管理 ──
+
+    def push_to_ruby(self) -> None:
+        """将自己的时间戳和演唱者推送给 Ruby 对象"""
+        if self.ruby:
+            self.ruby.timestamps = list(self.timestamps)
+            self.ruby.singer_id = self.singer_id
+
+    def add_timestamp(self, timestamp_ms: int, checkpoint_idx: int = -1) -> None:
+        """添加时间戳
 
         Args:
             timestamp_ms: 时间戳（毫秒）
+            checkpoint_idx: 指定插入位置（-1 = 追加到末尾并排序）
+        """
+        if timestamp_ms < 0:
+            raise ValidationError(f"时间戳不能为负数: {timestamp_ms}")
+        if checkpoint_idx >= 0:
+            # 指定位置插入
+            while len(self.timestamps) <= checkpoint_idx:
+                self.timestamps.append(0)
+            self.timestamps[checkpoint_idx] = timestamp_ms
+        else:
+            self.timestamps.append(timestamp_ms)
+            self.timestamps.sort()
+        self.push_to_ruby()
+
+    def remove_timestamp_at(self, checkpoint_idx: int) -> Optional[int]:
+        """移除指定 checkpoint_idx 的时间戳
+
+        Args:
+            checkpoint_idx: checkpoint 索引
 
         Returns:
-            是否在该行时间范围内
+            被移除的时间戳，如果索引无效返回 None
         """
-        return self.start_ms <= timestamp_ms < self.end_ms
+        if 0 <= checkpoint_idx < len(self.timestamps):
+            removed = self.timestamps.pop(checkpoint_idx)
+            self.push_to_ruby()
+            return removed
+        return None
+
+    def clear_timestamps(self) -> None:
+        """清空所有时间戳"""
+        self.timestamps.clear()
+        self.push_to_ruby()
+
+    def get_timestamp(self, checkpoint_idx: int) -> Optional[int]:
+        """获取指定 checkpoint_idx 的时间戳"""
+        if 0 <= checkpoint_idx < len(self.timestamps):
+            return self.timestamps[checkpoint_idx]
+        return None
+
+    # ── Ruby 管理 ──
+
+    def set_ruby(self, ruby: Optional[Ruby]) -> None:
+        """设置 Ruby 并推送当前时间戳和演唱者"""
+        self.ruby = ruby
+        self.push_to_ruby()
+
+    # ── 查询 ──
+
+    @property
+    def is_fully_timed(self) -> bool:
+        """检查是否所有节奏点都已打轴"""
+        return len(self.timestamps) >= self.check_count
+
+    @property
+    def has_ruby(self) -> bool:
+        """是否有注音"""
+        return self.ruby is not None
+
+    def get_tag_type(self, checkpoint_idx: int) -> TimeTagType:
+        """根据上下文推导时间标签类型
+
+        Args:
+            checkpoint_idx: checkpoint 索引
+
+        Returns:
+            推导出的 TimeTagType
+        """
+        if self.is_rest:
+            return TimeTagType.REST
+        if self.is_line_end and checkpoint_idx == self.check_count - 1:
+            return TimeTagType.LINE_END
+        if checkpoint_idx == 0:
+            return TimeTagType.CHAR_START
+        return TimeTagType.CHAR_MIDDLE
+
+
+# ──────────────────────────────────────────────
+# Word — 逻辑单元（由连词字符组成）
+# ──────────────────────────────────────────────
+
+
+@dataclass
+class Word:
+    """词语 — 由连词字符组成的逻辑单元
+
+    通过日语词典、英语词典自动语义分割，或用户手动 F3 toggle。
+    如果字符的 linked_to_next=True，则与下一字符组成同一词语；
+    如果没有连词，单个字符即为一个词语。
+
+    Word 不存储 Ruby，但会把字符的 Ruby 收集起来，
+    用于绘制连词框、解析和最终输出（逗号分隔）。
+
+    Attributes:
+        characters: 组成该词语的字符列表
+    """
+
+    characters: List[Character] = field(default_factory=list)
+
+    @property
+    def text(self) -> str:
+        """词语文本"""
+        return "".join(c.char for c in self.characters)
+
+    @property
+    def ruby_parts(self) -> List[str]:
+        """各字符的 Ruby 文本列表（仅有 Ruby 的字符）"""
+        return [c.ruby.text for c in self.characters if c.ruby]
+
+    @property
+    def ruby_text(self) -> str:
+        """合并的 Ruby 文本（用于渲染连词框）"""
+        return "".join(self.ruby_parts)
+
+    @property
+    def ruby_csv(self) -> str:
+        """逗号分隔的 Ruby 文本（用于输出）"""
+        return ",".join(self.ruby_parts)
+
+    @property
+    def has_ruby(self) -> bool:
+        """词语中是否包含 Ruby"""
+        return any(c.ruby for c in self.characters)
+
+    @property
+    def char_count(self) -> int:
+        """字符数量"""
+        return len(self.characters)

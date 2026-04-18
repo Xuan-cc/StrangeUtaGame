@@ -221,12 +221,12 @@ class ExportService:
             errors.append("项目为空")
             return errors
 
-        if not project.lines:
+        if not project.sentences:
             errors.append("项目没有歌词行")
 
         # 检查是否有时间标签
-        lines_with_tags = sum(1 for line in project.lines if line.timetags)
-        if lines_with_tags == 0:
+        sentences_with_tags = sum(1 for s in project.sentences if s.has_timetags)
+        if sentences_with_tags == 0:
             errors.append("没有时间标签，导出的歌词将没有时间信息")
 
         # 统计信息

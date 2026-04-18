@@ -27,18 +27,18 @@ from qfluentwidgets import (
 from typing import Optional, List
 from pathlib import Path
 
-from strange_uta_game.backend.domain import Project, LyricLine, Singer, TimeTag
+from strange_uta_game.backend.domain import Project, Sentence, Singer
 from strange_uta_game.backend.application import ProjectService, AutoCheckService
 from strange_uta_game.backend.infrastructure import SugProjectParser
 from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
     LyricParserFactory,
     LRCParser,
     NicokaraParser,
-    parse_to_lyric_lines,
-    nicokara_result_to_lyric_lines,
+    parse_to_sentences,
+    nicokara_result_to_sentences,
 )
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-    lines_from_inline_text,
+    sentences_from_inline_text,
 )
 
 
@@ -62,7 +62,7 @@ class HomeInterface(QWidget):
 
         self._project_service = ProjectService()
         self._audio_path: Optional[str] = None
-        self._lyric_lines: List[LyricLine] = []
+        self._lyric_lines: List[Sentence] = []
         self._nicokara_singers: List[Singer] = []
         self._nicokara_singer_key_to_id: dict = {}
 
@@ -399,22 +399,14 @@ class HomeInterface(QWidget):
                         line.singer_id = nicokara_id_map[line.singer_id]
                     else:
                         line.singer_id = default_singer.id
-                    # 映射 per-tag singer_id（需要替换 frozen TimeTag）
-                    new_tags = []
-                    for tag in line.timetags:
-                        new_singer_id = nicokara_id_map.get(
-                            tag.singer_id, default_singer.id
-                        )
-                        new_tags.append(
-                            TimeTag(
-                                timestamp_ms=tag.timestamp_ms,
-                                singer_id=new_singer_id,
-                                char_idx=tag.char_idx,
-                                checkpoint_idx=tag.checkpoint_idx,
-                                tag_type=tag.tag_type,
-                            )
-                        )
-                    line.timetags = new_tags
+                    # 映射 per-char singer_id
+                    for char in line.characters:
+                        if char.singer_id in nicokara_id_map:
+                            char.singer_id = nicokara_id_map[char.singer_id]
+                        else:
+                            char.singer_id = default_singer.id
+                        if char.ruby:
+                            char.ruby.singer_id = char.singer_id
 
             if self._lyric_lines:
                 # 使用已导入的歌词行（可能包含注音、时间标签等富数据）
@@ -422,16 +414,14 @@ class HomeInterface(QWidget):
                     if not self._nicokara_singers:
                         # 非 Nicokara 导入：将演唱者 ID 替换为项目的默认演唱者
                         line.singer_id = default_singer.id
-                    project.add_line(line)
+                    project.add_sentence(line)
             else:
                 # 从文本框手动输入的纯文本
                 for line_text in text.split("\n"):
                     line_text = line_text.strip()
                     if line_text:
-                        lyric_line = LyricLine(
-                            singer_id=default_singer.id, text=line_text
-                        )
-                        project.add_line(lyric_line)
+                        sentence = Sentence.from_text(line_text, default_singer.id)
+                        project.add_sentence(sentence)
 
             # 自动分析注音并生成节奏点（仅对无注音的行）
             try:
@@ -540,21 +530,21 @@ class HomeInterface(QWidget):
                 )
             return 0
 
-    def _read_lyric_file(self, file_path: str) -> tuple[List[LyricLine], str, bool]:
+    def _read_lyric_file(self, file_path: str) -> tuple[List[Sentence], str, bool]:
         content = Path(file_path).read_text(encoding="utf-8")
 
         # 检测是否为 RhythmicaLyrics 内联格式（含 [N|MM:SS:cc] 标记）
         if self._is_inline_format(content):
             temp_singer = Singer(name="临时", is_default=True)
-            lyric_lines = lines_from_inline_text(content, temp_singer.id)
-            text_content = "\n".join(line.text for line in lyric_lines)
-            return lyric_lines, text_content, True
+            sentences = sentences_from_inline_text(content, temp_singer.id)
+            text_content = "\n".join(s.text for s in sentences)
+            return sentences, text_content, True
 
         # 检测是否为 Nicokara 格式（含 【svN】 标签或 @Ruby/@Emoji 元数据）
         if NicokaraParser.is_nicokara_format(content):
-            lyric_lines = self._parse_nicokara_content(content)
-            text_content = "\n".join(line.text for line in lyric_lines)
-            return lyric_lines, text_content, True
+            sentences = self._parse_nicokara_content(content)
+            text_content = "\n".join(s.text for s in sentences)
+            return sentences, text_content, True
 
         parsed_lines = LyricParserFactory.parse_file(file_path)
 
@@ -565,16 +555,16 @@ class HomeInterface(QWidget):
             parsed_lines = lrc_parser.parse(content)
 
         temp_singer = Singer(name="临时", is_default=True)
-        lyric_lines = parse_to_lyric_lines(parsed_lines, temp_singer.id)
-        text_content = "\n".join(line.text for line in lyric_lines)
+        sentences = parse_to_sentences(parsed_lines, temp_singer.id)
+        text_content = "\n".join(s.text for s in sentences)
         parsed_with_tags = any(parsed_line.timetags for parsed_line in parsed_lines)
-        return lyric_lines, text_content, parsed_with_tags
+        return sentences, text_content, parsed_with_tags
 
-    def _parse_nicokara_content(self, content: str) -> List[LyricLine]:
+    def _parse_nicokara_content(self, content: str) -> List[Sentence]:
         """解析 Nicokara 格式内容，自动创建不存在的演唱者
 
         Returns:
-            LyricLine 列表（含 per-tag singer_id）
+            Sentence 列表（含 per-char singer_id）
         """
         parser = NicokaraParser()
         result = parser.parse(content)
@@ -631,7 +621,7 @@ class HomeInterface(QWidget):
         self._nicokara_singers = temp_singers
         self._nicokara_singer_key_to_id = singer_key_to_id
 
-        lyric_lines = nicokara_result_to_lyric_lines(
+        lyric_lines = nicokara_result_to_sentences(
             result, singer_key_to_id, default_singer_id
         )
         return lyric_lines
@@ -660,14 +650,14 @@ class HomeInterface(QWidget):
             return True
         return False
 
-    def _create_lyric_lines_from_entries(self, line_entries: List) -> List[LyricLine]:
-        temp_singer = Singer(name="临时", is_default=True)
-        lyric_lines: List[LyricLine] = []
+    def _create_lyric_lines_from_entries(self, line_entries: List) -> List[Sentence]:
+        temp_singer = Singer(name="临時", is_default=True)
+        sentences: List[Sentence] = []
         for line_data in line_entries:
             text = line_data.text.strip()
             if text:
-                lyric_lines.append(LyricLine(singer_id=temp_singer.id, text=text))
-        return lyric_lines
+                sentences.append(Sentence.from_text(text, temp_singer.id))
+        return sentences
 
     def _set_lyrics_text(self, text: str, append: bool = False) -> None:
         if append and self.text_lyrics.toPlainText().strip():

@@ -5,7 +5,13 @@ import tempfile
 import os
 from pathlib import Path
 
-from strange_uta_game.backend.domain import Project, LyricLine, TimeTag, TimeTagType
+from strange_uta_game.backend.domain import (
+    Project,
+    Sentence,
+    Character,
+    Ruby,
+    TimeTagType,
+)
 from strange_uta_game.backend.infrastructure.exporters import (
     LRCExporter,
     KRAExporter,
@@ -27,9 +33,9 @@ class TestLRCExporter:
         """测试简单导出"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         exporter = LRCExporter()
 
@@ -55,9 +61,9 @@ class TestLRCExporter:
         project.metadata.artist = "测试艺术家"
 
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         exporter = LRCExporter()
 
@@ -101,9 +107,9 @@ class TestKRAExporter:
         """测试 KRA 导出"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         exporter = KRAExporter()
 
@@ -133,9 +139,9 @@ class TestTXTExporter:
         project = Project()
         project.metadata.title = "测试歌曲"
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         exporter = TXTExporter()
 
@@ -164,9 +170,9 @@ class TestTxt2AssExporter:
         """测试 txt2ass 导出"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         exporter = Txt2AssExporter()
 
@@ -195,10 +201,9 @@ class TestASSDirectExporter:
         project = Project()
         project.metadata.title = "测试歌曲"
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.chars = list("测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         exporter = ASSDirectExporter()
 
@@ -229,9 +234,9 @@ class TestNicokaraExporter:
         """测试基本导出：单字符时间戳使用 [MM:SS:CC] 冒号格式"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         exporter = NicokaraExporter()
 
@@ -259,11 +264,11 @@ class TestNicokaraExporter:
         """测试逐字时间戳：每个字符前有 [MM:SS:CC]"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="宝箱")
+        sentence = Sentence.from_text("宝箱", singer.id)
         # 为两个字符分别打轴
-        line.add_timetag(TimeTag(timestamp_ms=10330, singer_id=singer.id, char_idx=0))
-        line.add_timetag(TimeTag(timestamp_ms=10780, singer_id=singer.id, char_idx=1))
-        project.add_line(line)
+        sentence.characters[0].add_timestamp(10330)
+        sentence.characters[1].add_timestamp(10780)
+        project.add_sentence(sentence)
 
         exporter = NicokaraExporter()
 
@@ -288,20 +293,14 @@ class TestNicokaraExporter:
         """测试行末结束时间戳"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="あ")
-        # 默认 checkpoints: char_idx=0, check_count=2, is_line_end=True
+        sentence = Sentence.from_text("あ", singer.id)
+        # 默认 Sentence.from_text 会为每个字符设置 check_count=1
+        # 但为了测试行末，我们需要 check_count=2 (1个字符 + 1个行末节点)
+        sentence.characters[0].check_count = 2
         # checkpoint_idx=0 → 字符开始，checkpoint_idx=1 → 行结束
-        line.add_timetag(
-            TimeTag(
-                timestamp_ms=1000, singer_id=singer.id, char_idx=0, checkpoint_idx=0
-            )
-        )
-        line.add_timetag(
-            TimeTag(
-                timestamp_ms=2000, singer_id=singer.id, char_idx=0, checkpoint_idx=1
-            )
-        )
-        project.add_line(line)
+        sentence.characters[0].add_timestamp(1000, checkpoint_idx=0)
+        sentence.characters[0].add_timestamp(2000, checkpoint_idx=1)
+        project.add_sentence(sentence)
 
         exporter = NicokaraExporter()
 
@@ -331,13 +330,13 @@ class TestNicokaraExporter:
         project = Project()
         singer = project.singers[0]
 
-        line1 = LyricLine(singer_id=singer.id, text="第一行")
-        line1.add_timetag(TimeTag(timestamp_ms=1000, singer_id=singer.id, char_idx=0))
-        project.add_line(line1)
+        sentence1 = Sentence.from_text("第一行", singer.id)
+        sentence1.characters[0].add_timestamp(1000)
+        project.add_sentence(sentence1)
 
-        line2 = LyricLine(singer_id=singer.id, text="第二行")
-        line2.add_timetag(TimeTag(timestamp_ms=10000, singer_id=singer.id, char_idx=0))
-        project.add_line(line2)
+        sentence2 = Sentence.from_text("第二行", singer.id)
+        sentence2.characters[0].add_timestamp(10000)
+        project.add_sentence(sentence2)
 
         exporter = NicokaraExporter()
 
@@ -371,11 +370,11 @@ class TestNicokaraWithRubyExporter:
         project = Project()
         singer = project.singers[0]
 
-        line = LyricLine(singer_id=singer.id, text="赤い")
-        line.add_ruby(Ruby(text="あか", start_idx=0, end_idx=1))
-        line.add_timetag(TimeTag(timestamp_ms=5000, singer_id=singer.id, char_idx=0))
-        line.add_timetag(TimeTag(timestamp_ms=6000, singer_id=singer.id, char_idx=1))
-        project.add_line(line)
+        sentence = Sentence.from_text("赤い", singer.id)
+        sentence.characters[0].set_ruby(Ruby(text="あか"))
+        sentence.characters[0].add_timestamp(5000)
+        sentence.characters[1].add_timestamp(6000)
+        project.add_sentence(sentence)
 
         exporter = NicokaraWithRubyExporter()
 
@@ -401,7 +400,7 @@ class TestNicokaraWithRubyExporter:
 
     def test_export_ruby_relative_timestamps(self):
         """测试 @Ruby 读音中的相对时间戳"""
-        from strange_uta_game.backend.domain import Ruby, CheckpointConfig
+        from strange_uta_game.backend.domain import Ruby
         from strange_uta_game.backend.infrastructure.exporters import (
             NicokaraWithRubyExporter,
         )
@@ -409,30 +408,16 @@ class TestNicokaraWithRubyExporter:
         project = Project()
         singer = project.singers[0]
 
-        line = LyricLine(singer_id=singer.id, text="赤い")
-        # 设置「赤」的 checkpoint 为 2（对应读音 あか）
-        line.checkpoints[0] = CheckpointConfig(char_idx=0, check_count=2)
-        line.add_ruby(Ruby(text="あか", start_idx=0, end_idx=1))
+        sentence = Sentence.from_text("赤い", singer.id)
+        # 设置「赤」的 check_count 为 2（对应读音 あか）
+        sentence.characters[0].check_count = 2
+        sentence.characters[0].set_ruby(Ruby(text="あか"))
 
         # checkpoint_idx=0 → あ, checkpoint_idx=1 → か
-        line.add_timetag(
-            TimeTag(
-                timestamp_ms=5000,
-                singer_id=singer.id,
-                char_idx=0,
-                checkpoint_idx=0,
-            )
-        )
-        line.add_timetag(
-            TimeTag(
-                timestamp_ms=5150,
-                singer_id=singer.id,
-                char_idx=0,
-                checkpoint_idx=1,
-            )
-        )
-        line.add_timetag(TimeTag(timestamp_ms=6000, singer_id=singer.id, char_idx=1))
-        project.add_line(line)
+        sentence.characters[0].add_timestamp(5000, checkpoint_idx=0)
+        sentence.characters[0].add_timestamp(5150, checkpoint_idx=1)
+        sentence.characters[1].add_timestamp(6000)
+        project.add_sentence(sentence)
 
         exporter = NicokaraWithRubyExporter()
 
@@ -499,9 +484,9 @@ class TestExportService:
         """测试导出功能"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         service = ExportService()
 
@@ -528,9 +513,9 @@ class TestExportService:
         """测试导出前验证"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
+        sentence = Sentence.from_text("测试歌词", singer.id)
         # 不添加时间标签
-        project.add_line(line)
+        project.add_sentence(sentence)
 
         service = ExportService()
         errors = service.validate_before_export(project)
@@ -543,9 +528,9 @@ class TestExportService:
         """测试批量导出"""
         project = Project()
         singer = project.singers[0]
-        line = LyricLine(singer_id=singer.id, text="测试歌词")
-        line.add_timetag(TimeTag(timestamp_ms=12345, singer_id=singer.id, char_idx=0))
-        project.add_line(line)
+        sentence = Sentence.from_text("测试歌词", singer.id)
+        sentence.characters[0].add_timestamp(12345)
+        project.add_sentence(sentence)
 
         service = ExportService()
 
