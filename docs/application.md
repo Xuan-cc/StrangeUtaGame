@@ -406,6 +406,21 @@ ProjectService 解析 SUG，重建 Project（歌词 + 时间数据）
 **依赖**：
 - RubyAnalyzer（注音分析器）
 - SettingsService（获取自动检查配置）
+- `inline_format.split_into_moras()`（mora 分割）
+- `inline_format.split_ruby_for_checkpoints()`（注音均分）
+
+**核心数据结构**：
+
+```python
+@dataclass
+class AutoCheckResult:
+    line_idx: int
+    char_idx: int
+    char: str
+    check_count: int
+    ruby: Optional[str]
+    origin_block_id: int = -1  # 标记来自哪个分析块，防止跨块注音合并
+```
 
 **主要用例**：
 
@@ -414,8 +429,9 @@ ProjectService 解析 SUG，重建 Project（歌词 + 时间数据）
    - **输入**：纯文本歌词
    - **处理**：
      - 逐字符分析注音
-     - 根据注音计算节奏点数量
+     - 使用 mora 分割计算节奏点数量（拗音视为一个 mora）
      - 标记句尾字符
+     - 为每个结果标记 `origin_block_id` 防止跨块合并
    - **输出**：带有 checkpoints 配置和注音的 LyricLine 列表
    - **预览**：在 ImportPreview 中显示分析结果（字符 + 节奏点数 + 注音）
 
@@ -442,15 +458,28 @@ ProjectService 解析 SUG，重建 Project（歌词 + 时间数据）
 
 1. 对于每个字符：
    - 调用 RubyAnalyzer 获取注音
-   - 根据注音假名数量计算 check_count
+   - 使用 `split_into_moras()` 将注音分割为 mora 列表（拗音如「きょ」为单个 mora）
+   - mora 数量 = check_count
    - 应用配置选项调整（促音/长音特殊处理）
    - 标记行末字符 is_line_end = true
+   - 为每个结果分配 `origin_block_id`
 
 2. 特殊处理：
-   - 汉字：注音假名数量 = 节奏点数量
-   - 假名：通常 1 个
+   - 汉字：注音 mora 数量 = 节奏点数量
+   - 假名：通常 1 个 mora
+   - 拗音（きゃ/しゅ/ちょ等）：计为 1 个 mora
    - 促音/长音：根据配置
    - 英文单词：可配置为单字或整词
+   - 符号/emoji/波浪号：正确识别并处理
+
+3. 跨块合并保护：
+   - 每个分析块（如一个汉字词）分配唯一 `origin_block_id`
+   - 注音合并时只在同一 `origin_block_id` 内进行
+   - 防止"偷走"相邻字符注音（如「何にされる」不会偷走「な」的注音）
+
+4. 多字符词注音分配：
+   - 使用 `split_ruby_for_checkpoints(ruby_text, total_cps)` 将注音按 mora 均分到各字符
+   - 例：「決別」→ けつべつ → 「決」=けつ、「別」=べつ
 
 **用户交互**：
 - 分析前：显示预估的节奏点总数

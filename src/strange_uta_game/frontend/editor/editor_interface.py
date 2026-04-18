@@ -276,6 +276,7 @@ class KaraokePreview(QWidget):
         self._current_line_idx = 0
         self._current_char_idx = 0
         self._current_time_ms = 0
+        self._render_offset_ms = 0
         self._visible_lines = 7  # 视口内可见行数（决定行高）
         self._scroll_center_line: float = 0.0  # 视口中央对应的行索引
         self._checkpoint_hitboxes: list = []  # [(QRect, line_idx, char_idx, cp_idx)]
@@ -314,6 +315,10 @@ class KaraokePreview(QWidget):
     def set_current_time_ms(self, time_ms: int):
         self._current_time_ms = time_ms
         self.update()
+
+    def set_render_offset(self, offset_ms: int):
+        """设置渲染偏移量（毫秒），与导出偏移联动"""
+        self._render_offset_ms = offset_ms
 
     def _update_display(self):
         self.update()
@@ -454,6 +459,9 @@ class KaraokePreview(QWidget):
         self._checkpoint_hitboxes = []
         self._char_hitboxes = []
 
+        # 渲染偏移：预览效果与导出一致
+        adjusted_time = self._current_time_ms + self._render_offset_ms
+
         if not self._project or not self._project.lines:
             painter.setPen(QColor("#999"))
             painter.drawText(
@@ -553,16 +561,21 @@ class KaraokePreview(QWidget):
                     else:
                         char_start_times[ci] = min(t.timestamp_ms for t in ci_tags)
 
-            # 构建字符组：有checkpoint的字符为组长，后续0-checkpoint字符加入同组
+            # 构建字符组：使用 linked_to_next 标记
             char_groups: list = []
             current_group = None
             for ci in range(len(line.chars)):
                 cp = cps_in_line.get(ci)
-                if cp and cp.check_count > 0:
+                if current_group is None:
                     current_group = [ci]
                     char_groups.append(current_group)
-                elif current_group is not None:
-                    current_group.append(ci)
+                elif ci > 0:
+                    prev_cp = cps_in_line.get(ci - 1)
+                    if prev_cp and prev_cp.linked_to_next:
+                        current_group.append(ci)
+                    else:
+                        current_group = [ci]
+                        char_groups.append(current_group)
 
             # 预计算每个字符的wipe时间区间（支持0-checkpoint字符连读均分）
             char_wipe_times: dict = {}  # ci -> (start_ms, end_ms)
@@ -666,17 +679,17 @@ class KaraokePreview(QWidget):
                         ruby_wipe_et = char_wipe_times.get(last_ci)
                         ruby_et = ruby_wipe_et[1] if ruby_wipe_et else ruby_st + 300
 
-                        if self._current_time_ms >= ruby_et:
+                        if adjusted_time >= ruby_et:
                             # 已唱完 → ruby 全高亮
                             painter.setPen(ruby_highlight)
                             painter.drawText(int(ruby_x), ruby_y, ruby.text)
-                        elif self._current_time_ms >= ruby_st:
+                        elif adjusted_time >= ruby_st:
                             # 正在唱 → ruby wipe 渐变
                             r_dur = ruby_et - ruby_st
                             r_ratio = (
                                 min(
                                     1.0,
-                                    (self._current_time_ms - ruby_st) / r_dur,
+                                    (adjusted_time - ruby_st) / r_dur,
                                 )
                                 if r_dur > 0
                                 else 1.0
@@ -719,11 +732,11 @@ class KaraokePreview(QWidget):
                 if char_pos in char_wipe_times:
                     char_time, next_time = char_wipe_times[char_pos]
 
-                    if self._current_time_ms >= next_time:
+                    if adjusted_time >= next_time:
                         # 已唱完 → 全高亮
                         painter.setPen(char_highlight)
                         painter.drawText(int(curr_x), int(y_center), ch)
-                    elif self._current_time_ms >= char_time:
+                    elif adjusted_time >= char_time:
                         # 正在唱 → wipe 渐变
                         painter.setPen(base_color)
                         painter.drawText(int(curr_x), int(y_center), ch)
@@ -732,7 +745,7 @@ class KaraokePreview(QWidget):
                         if duration > 0:
                             wipe_ratio = min(
                                 1.0,
-                                (self._current_time_ms - char_time) / duration,
+                                (adjusted_time - char_time) / duration,
                             )
                         else:
                             wipe_ratio = 1.0
@@ -798,7 +811,8 @@ class KaraokePreview(QWidget):
                     marker_y = int(y_center + main_fm.descent() + 14)
 
                     for cp_idx, (marker_char, has_timed) in enumerate(markers):
-                        color = highlight_color if has_timed else QColor("#ccc")
+                        char_color = _char_singer_colors.get(char_pos, highlight_color)
+                        color = char_color if has_timed else QColor("#ccc")
                         painter.setPen(color)
 
                         mw = fm_checkpoint.horizontalAdvance(marker_char)
@@ -1271,6 +1285,9 @@ class EditorInterface(QWidget):
         default_speed = settings.get("audio.default_speed", 1.0)
         speed_pct = int(default_speed * 100)
         self.transport.spin_speed.setValue(max(50, min(200, speed_pct)))
+        # 应用渲染偏移（与导出偏移联动）
+        render_offset = settings.get("export.offset_ms", -100)
+        self.preview.set_render_offset(render_offset)
 
     # ==================== 项目 ====================
 
@@ -1517,18 +1534,21 @@ class EditorInterface(QWidget):
                 text = line.text
                 cps = line.checkpoints
                 if 0 <= char_idx < len(text):
-                    # 向前查找连词起点（check_count == 0 的字符属于前一个词）
+                    # 向前查找连词起点（使用 linked_to_next 标记）
                     start = char_idx
                     while (
-                        start > 0 and start < len(cps) and cps[start].check_count == 0
+                        start > 0
+                        and start - 1 < len(cps)
+                        and cps[start - 1].linked_to_next
                     ):
                         start -= 1
                     # 向后查找连词终点
-                    end = char_idx + 1
+                    end = char_idx
                     while (
-                        end < len(text) and end < len(cps) and cps[end].check_count == 0
+                        end < len(text) and end < len(cps) and cps[end].linked_to_next
                     ):
                         end += 1
+                    end += 1  # exclusive
                     initial_word = text[start:end]
 
         dialog = BulkChangeDialog(self._project, self, initial_word=initial_word)
@@ -1561,6 +1581,20 @@ class EditorInterface(QWidget):
                 )
             else:
                 new_tags.append(tag)
+
+        # 为没有 timetag 的字符创建占位 timetag，确保演唱者信息生效
+        tagged_chars = {t.char_idx for t in new_tags}
+        for ci in range(start_char, end_char + 1):
+            if ci not in tagged_chars:
+                new_tags.append(
+                    TimeTag(
+                        timestamp_ms=0,
+                        singer_id=singer_id,
+                        char_idx=ci,
+                        checkpoint_idx=0,
+                    )
+                )
+
         line.timetags = sorted(new_tags, key=lambda t: t.timestamp_ms)
 
         # 如果选中了整行，也更新 line.singer_id
@@ -1742,6 +1776,7 @@ class EditorInterface(QWidget):
             check_count=new_count,
             is_line_end=old_cp.is_line_end,
             is_rest=old_cp.is_rest,
+            linked_to_next=old_cp.linked_to_next,
         )
         # 重建 timing_service 的全局 checkpoint 列表
         if self._timing_service:
@@ -1793,6 +1828,7 @@ class EditorInterface(QWidget):
             check_count=new_count,
             is_line_end=new_is_line_end,
             is_rest=old_cp.is_rest,
+            linked_to_next=old_cp.linked_to_next,
         )
         if self._timing_service:
             self._timing_service._rebuild_global_checkpoints()
@@ -1802,7 +1838,7 @@ class EditorInterface(QWidget):
             self._store.notify("checkpoints")
 
     def _toggle_word_join(self):
-        """F3 连词/取消连词 — 切换当前字符与下一个字符的 Ruby 合并状态。"""
+        """F3 连词/取消连词 — toggle 当前字符的 linked_to_next 标记"""
         if not self._project:
             return
         line_idx = self._current_line_idx
@@ -1810,97 +1846,68 @@ class EditorInterface(QWidget):
             return
         line = self._project.lines[line_idx]
         char_idx = self.preview._current_char_idx
-        if char_idx >= len(line.chars):
+        if char_idx >= len(line.chars) or char_idx >= len(line.checkpoints):
             return
 
-        ruby = line.get_ruby_for_char(char_idx)
-        is_merged = ruby and (ruby.end_idx - ruby.start_idx) > 1
-
-        if is_merged and ruby:
-            # ── 取消连词：拆分 ──
-            from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-                split_ruby_for_checkpoints,
-            )
-
-            old_text = ruby.text
-            old_start = ruby.start_idx
-            old_end = ruby.end_idx
-            line.rubies.remove(ruby)
-            count = old_end - old_start
-            split_parts = split_ruby_for_checkpoints(old_text, count)
-            for i, part in enumerate(split_parts):
-                if part:
-                    try:
-                        line.add_ruby(
-                            Ruby(
-                                text=part,
-                                start_idx=old_start + i,
-                                end_idx=old_start + i + 1,
-                            )
-                        )
-                    except Exception:
-                        pass
-            InfoBar.success(
-                title="取消连词",
-                content=f"已拆分「{''.join(line.chars[old_start:old_end])}」",
+        # 不能在最后一个字符上连词
+        if char_idx >= len(line.checkpoints) - 1:
+            InfoBar.warning(
+                title="无法连词",
+                content="已是最后一个字符",
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
                 duration=2000,
                 parent=self,
             )
-        else:
-            # ── 连词：合并当前字符与下一个字符 ──
-            if char_idx + 1 >= len(line.chars):
-                InfoBar.warning(
-                    title="无法连词",
-                    content="已是最后一个字符",
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                    parent=self,
+            return
+
+        old_cp = line.checkpoints[char_idx]
+        new_linked = not old_cp.linked_to_next
+        line.checkpoints[char_idx] = CheckpointConfig(
+            char_idx=old_cp.char_idx,
+            check_count=old_cp.check_count,
+            is_line_end=old_cp.is_line_end,
+            is_rest=old_cp.is_rest,
+            linked_to_next=new_linked,
+        )
+
+        # 连词时：下一个字符 check_count 设为 0
+        # 取消连词时：下一个字符 check_count 恢复为 1（如果当前是0）
+        if char_idx + 1 < len(line.checkpoints):
+            next_cp = line.checkpoints[char_idx + 1]
+            if new_linked:
+                new_next_count = 0
+            else:
+                new_next_count = (
+                    max(1, next_cp.check_count)
+                    if next_cp.check_count == 0
+                    else next_cp.check_count
                 )
-                return
-
-            new_start = char_idx
-            new_end = char_idx + 2
-
-            # 收集覆盖范围内的注音文本
-            parts = []
-            overlapping = [
-                r
-                for r in line.rubies
-                if r.start_idx < new_end and r.end_idx > new_start
-            ]
-            for r in overlapping:
-                if r.text:
-                    parts.append(r.text)
-                line.rubies.remove(r)
-
-            merged_text = "".join(parts) if parts else ""
-            if merged_text:
-                try:
-                    line.add_ruby(
-                        Ruby(text=merged_text, start_idx=new_start, end_idx=new_end)
-                    )
-                except Exception:
-                    pass
-
-            InfoBar.success(
-                title="连词",
-                content=f"已合并「{''.join(line.chars[new_start:new_end])}」",
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=2000,
-                parent=self,
+            line.checkpoints[char_idx + 1] = CheckpointConfig(
+                char_idx=next_cp.char_idx,
+                check_count=new_next_count,
+                is_line_end=next_cp.is_line_end,
+                is_rest=next_cp.is_rest,
+                linked_to_next=next_cp.linked_to_next,
             )
 
+        if self._timing_service:
+            self._timing_service._rebuild_global_checkpoints()
         self.refresh_lyric_display()
         self._update_status()
         if hasattr(self, "_store") and self._store:
-            self._store.notify("rubies")
+            self._store.notify("checkpoints")
+
+        InfoBar.success(
+            title="连词" if new_linked else "取消连词",
+            content=f"已{'连接' if new_linked else '断开'}「{line.chars[char_idx]}」与「{line.chars[char_idx + 1]}」",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self,
+        )
 
     def _on_nav_line(self, delta: int):
         """方向键导航：上一行 (delta=-1) 或下一行 (delta=+1)"""

@@ -915,10 +915,21 @@ class SettingsInterface(ScrollArea):
             suffix=" 行",
             parent=self.timing_group,
         )
+        self.card_export_offset = SpinSettingCard(
+            FIF.HISTORY,
+            "Karaoke渲染偏移及导出偏移",
+            "导出时及Karaoke预览渲染的时间偏移（毫秒）",
+            min_val=-5000,
+            max_val=5000,
+            step=10,
+            suffix=" ms",
+            parent=self.timing_group,
+        )
 
         self.timing_group.addSettingCard(self.card_offset)
         self.timing_group.addSettingCard(self.card_speed_correction)
         self.timing_group.addSettingCard(self.card_preview_lines)
+        self.timing_group.addSettingCard(self.card_export_offset)
         self.expandLayout.addWidget(self.timing_group)
 
     def _init_calibration_group(self):
@@ -1350,20 +1361,9 @@ class SettingsInterface(ScrollArea):
             "导出文件的默认保存位置",
             parent=self.export_group,
         )
-        self.card_export_offset = SpinSettingCard(
-            FIF.HISTORY,
-            "导出时间偏移",
-            "导出时对所有时间标签施加偏移（毫秒）",
-            min_val=-5000,
-            max_val=5000,
-            step=10,
-            suffix=" ms",
-            parent=self.export_group,
-        )
 
         self.export_group.addSettingCard(self.card_default_format)
         self.export_group.addSettingCard(self.card_export_dir)
-        self.export_group.addSettingCard(self.card_export_offset)
         self.expandLayout.addWidget(self.export_group)
 
     # ── 快捷键 ──

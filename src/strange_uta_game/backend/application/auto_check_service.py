@@ -23,6 +23,10 @@ from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
     RubyAnalyzer,
     RubyResult,
 )
+from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+    split_ruby_for_checkpoints,
+    split_into_moras,
+)
 
 
 @dataclass
@@ -34,6 +38,7 @@ class AutoCheckResult:
     char: str
     check_count: int
     ruby: Optional[str]
+    origin_block_id: int = -1
 
 
 class AutoCheckService:
@@ -154,27 +159,40 @@ class AutoCheckService:
         if self._dict:
             ruby_results = self._apply_dictionary(line.text, ruby_results)
 
-        # 创建字符到注音的映射
+        # 创建字符到注音的映射（按 mora 分割到每个字符）
         char_to_ruby = {}
-        for result in ruby_results:
+        char_to_block = {}  # char_idx → block_id
+        for block_id, result in enumerate(ruby_results):
+            block_len = result.end_idx - result.start_idx
+            if result.text == result.reading:
+                # 假名/符号：不设 ruby，只标记 block
+                for idx in range(result.start_idx, result.end_idx):
+                    if idx < len(chars):
+                        char_to_block[idx] = block_id
+                continue
+            # 汉字块：按 mora 分割 reading
+            split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
                 if idx < len(chars):
-                    char_to_ruby[idx] = result.reading
+                    pos = idx - result.start_idx
+                    if pos < len(split_parts) and split_parts[pos]:
+                        char_to_ruby[idx] = split_parts[pos]
+                    char_to_block[idx] = block_id
 
-        # 根据注音更新 check_count（汉字按读音假名数分配节奏点）
+        # 根据注音更新 check_count（汉字按 mora 数分配节奏点）
         for result in ruby_results:
             if result.text == result.reading:
                 continue  # 假名/符号/空格等读音与原文相同，不更新
 
             block_len = result.end_idx - result.start_idx
-            reading_len = len(result.reading)
-
+            split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
                 if idx < len(check_counts):
-                    pos_in_block = idx - result.start_idx
-                    base = reading_len // block_len
-                    extra = 1 if pos_in_block < (reading_len % block_len) else 0
-                    check_counts[idx] = base + extra
+                    pos = idx - result.start_idx
+                    if pos < len(split_parts) and split_parts[pos]:
+                        check_counts[idx] = len(split_into_moras(split_parts[pos]))
+                    else:
+                        check_counts[idx] = 0
 
         # 应用自动打勾过滤规则
         if self._flags:
@@ -257,6 +275,7 @@ class AutoCheckService:
                     char=char,
                     check_count=count,
                     ruby=char_to_ruby.get(i),
+                    origin_block_id=char_to_block.get(i, -1),
                 )
             )
 
@@ -283,35 +302,40 @@ class AutoCheckService:
         # 更新 chars
         line.chars = [r.char for r in results]
 
-        # 重建注音
+        # 重建注音（使用 origin_block_id 防止跨块合并）
         line.rubies.clear()
-        current_ruby = None
+        current_ruby_parts: list = []
+        current_block_id = -1
         current_start = 0
 
         for i, result in enumerate(results):
             if result.ruby:
-                if current_ruby is None:
-                    current_ruby = result.ruby
+                if not current_ruby_parts:
+                    current_ruby_parts = [result.ruby]
+                    current_block_id = result.origin_block_id
                     current_start = i
-                elif result.ruby != current_ruby:
-                    # 注音变化，保存之前的
-                    line.add_ruby(
-                        Ruby(text=current_ruby, start_idx=current_start, end_idx=i)
-                    )
-                    current_ruby = result.ruby
+                elif (
+                    result.origin_block_id == current_block_id and current_block_id >= 0
+                ):
+                    current_ruby_parts.append(result.ruby)
+                else:
+                    # 跨块：先保存当前块的 Ruby
+                    merged = "".join(current_ruby_parts)
+                    line.add_ruby(Ruby(text=merged, start_idx=current_start, end_idx=i))
+                    current_ruby_parts = [result.ruby]
+                    current_block_id = result.origin_block_id
                     current_start = i
             else:
-                if current_ruby is not None:
-                    # 保存之前的注音
-                    line.add_ruby(
-                        Ruby(text=current_ruby, start_idx=current_start, end_idx=i)
-                    )
-                    current_ruby = None
+                if current_ruby_parts:
+                    merged = "".join(current_ruby_parts)
+                    line.add_ruby(Ruby(text=merged, start_idx=current_start, end_idx=i))
+                    current_ruby_parts = []
 
-        # 处理最后一个注音
-        if current_ruby is not None:
+        # 处理最后一个注音块
+        if current_ruby_parts:
+            merged = "".join(current_ruby_parts)
             line.add_ruby(
-                Ruby(text=current_ruby, start_idx=current_start, end_idx=len(results))
+                Ruby(text=merged, start_idx=current_start, end_idx=len(results))
             )
 
         # 重建 checkpoint 配置
@@ -328,6 +352,21 @@ class AutoCheckService:
             )
             for i, result in enumerate(results)
         ]
+
+        # 设置 linked_to_next: 当下一个字符 check_count==0 时，当前字符连词到下一个
+        for i in range(len(line.checkpoints) - 1):
+            if (
+                line.checkpoints[i + 1].check_count == 0
+                and not line.checkpoints[i].linked_to_next
+            ):
+                cp = line.checkpoints[i]
+                line.checkpoints[i] = CheckpointConfig(
+                    char_idx=cp.char_idx,
+                    check_count=cp.check_count,
+                    is_line_end=cp.is_line_end,
+                    is_rest=cp.is_rest,
+                    linked_to_next=True,
+                )
 
         # 如果不保留时间标签，清空
         if not keep_existing_timetags:
@@ -398,20 +437,20 @@ class AutoCheckService:
             check_counts.append(1)
         check_counts = check_counts[: len(line.chars)]
 
-        # 根据现有注音更新 check_count
+        # 根据现有注音更新 check_count（按 mora 分割）
         for ruby in line.rubies:
             target_text = "".join(line.chars[ruby.start_idx : ruby.end_idx])
             if target_text == ruby.text:
                 continue  # 假名注音，不更新
 
             block_len = ruby.end_idx - ruby.start_idx
-            reading_len = len(ruby.text)
-
+            split_parts = split_ruby_for_checkpoints(ruby.text, block_len)
             for idx in range(ruby.start_idx, min(ruby.end_idx, len(check_counts))):
-                pos_in_block = idx - ruby.start_idx
-                base = reading_len // block_len
-                extra = 1 if pos_in_block < (reading_len % block_len) else 0
-                check_counts[idx] = base + extra
+                pos = idx - ruby.start_idx
+                if pos < len(split_parts) and split_parts[pos]:
+                    check_counts[idx] = len(split_into_moras(split_parts[pos]))
+                else:
+                    check_counts[idx] = 0
 
         # 重建 checkpoint 配置
         add_line_end = self._flags.get("check_line_end", True)
@@ -424,6 +463,21 @@ class AutoCheckService:
             )
             for i, count in enumerate(check_counts)
         ]
+
+        # 设置 linked_to_next: 当下一个字符 check_count==0 时，当前字符连词到下一个
+        for i in range(len(line.checkpoints) - 1):
+            if (
+                line.checkpoints[i + 1].check_count == 0
+                and not line.checkpoints[i].linked_to_next
+            ):
+                cp = line.checkpoints[i]
+                line.checkpoints[i] = CheckpointConfig(
+                    char_idx=cp.char_idx,
+                    check_count=cp.check_count,
+                    is_line_end=cp.is_line_end,
+                    is_rest=cp.is_rest,
+                    linked_to_next=True,
+                )
 
     def update_checkpoints_for_project(
         self,

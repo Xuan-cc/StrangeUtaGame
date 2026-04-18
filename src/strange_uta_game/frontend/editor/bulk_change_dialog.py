@@ -78,17 +78,17 @@ class BulkChangeDialog(QDialog):
         row2.addWidget(self.edit_reading)
         layout.addLayout(row2)
 
-        # 节奏点数量变更
+        # 节奏点数量设置
         row3 = QHBoxLayout()
-        lbl3 = QLabel("节奏点变更：")
+        lbl3 = QLabel("设置节奏点：")
         lbl3.setFont(QFont("Microsoft YaHei", 10))
         lbl3.setFixedWidth(100)
         self.edit_delta = LineEdit()
         self.edit_delta.setText("0")
-        self.edit_delta.setPlaceholderText("整数，如 -1、0、2")
+        self.edit_delta.setPlaceholderText("整数，如 0、1、2")
         self.edit_delta.setFont(QFont("Microsoft YaHei", 10))
         self.edit_delta.setFixedWidth(120)
-        hint = QLabel("（每个匹配字符的节奏点数±，0=不变）")
+        hint = QLabel("（设置每个字符的节奏点数，0=不修改）")
         hint.setFont(QFont("Microsoft YaHei", 9))
         row3.addWidget(lbl3)
         row3.addWidget(self.edit_delta)
@@ -153,9 +153,9 @@ class BulkChangeDialog(QDialog):
 
         reading = self.edit_reading.text().strip()
         try:
-            delta = int(self.edit_delta.text().strip() or "0")
+            checkpoint_val = int(self.edit_delta.text().strip() or "0")
         except ValueError:
-            delta = 0
+            checkpoint_val = 0
         word_len = len(word)
         changed = 0
 
@@ -164,7 +164,7 @@ class BulkChangeDialog(QDialog):
             pos = 0
             while pos <= len(text) - word_len:
                 if text[pos : pos + word_len] == word:
-                    # 修改注音
+                    # 修改注音（留空则不修改）
                     if reading:
                         # 查找已有的 Ruby，删除旧的，添加新的
                         line.rubies = [
@@ -177,8 +177,8 @@ class BulkChangeDialog(QDialog):
                         )
                         line.rubies.sort(key=lambda r: r.start_idx)
 
-                    # 修改节奏点
-                    if delta != 0:
+                    # 设置节奏点（absolute, 0=不修改）
+                    if checkpoint_val > 0:
                         from strange_uta_game.backend.domain.models import (
                             CheckpointConfig,
                         )
@@ -186,12 +186,12 @@ class BulkChangeDialog(QDialog):
                         for ci in range(pos, pos + word_len):
                             if ci < len(line.checkpoints):
                                 old_cp = line.checkpoints[ci]
-                                new_count = max(0, old_cp.check_count + delta)
                                 line.checkpoints[ci] = CheckpointConfig(
                                     char_idx=old_cp.char_idx,
-                                    check_count=new_count,
+                                    check_count=checkpoint_val,
                                     is_line_end=old_cp.is_line_end,
                                     is_rest=old_cp.is_rest,
+                                    linked_to_next=old_cp.linked_to_next,
                                 )
 
                     changed += 1

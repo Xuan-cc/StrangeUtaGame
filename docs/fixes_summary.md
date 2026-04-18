@@ -238,4 +238,91 @@
 
 ---
 
+---
+
+## 第三批修复与重设计（2026-04-18）
+
+### 核心重设计：连词系统 linked_to_next
+
+**问题**：原连词设计基于 Ruby 合并，F3 按键行为不可预测（取消连词后无法从中间重新连接），数据结构耦合严重。
+
+**修复**：在 `CheckpointConfig` 新增 `linked_to_next: bool = False` 字段，作为独立标记表示"是否与下一个字符相连"。
+
+| 修改文件 | 修改内容 |
+|---------|---------|
+| models.py | CheckpointConfig 新增 `linked_to_next` 字段 |
+| sug_parser.py | 序列化/反序列化/迁移 `linked_to_next`，旧文件自动兼容 |
+| inline_format.py | `from_inline_text` 迁移适配 linked_to_next |
+| editor_interface.py | `_toggle_word_join` 完全重写为 toggle linked_to_next flag |
+| editor_interface.py | `paintEvent` 字符组构建改用 linked_to_next 判断 |
+| bulk_change_dialog.py | 批量编辑保留 linked_to_next 字段 |
+| ruby_editor.py | `_rebuild_timetags_and_checkpoints` 补充 linked_to_next 保留 |
+
+### AutoCheck 注音修复（B-7）
+
+**问题**：
+- 符号、拗音、长音、波浪号、emoji 等识别错误
+- 多汉字词（如「決別仕切る」）注音被错误拆分为逐字
+- 相同注音（如「何にされる」）会"偷走"前面字符的注音
+
+**修复**：
+| 修改内容 | 说明 |
+|---------|------|
+| 引入 `split_into_moras()` | 按 mora（拗音为一组）分割假名文本 |
+| 引入 `split_ruby_for_checkpoints()` | 将注音按 mora 均分到多个 checkpoint |
+| 新增 `origin_block_id` 字段 | 标记每个 AutoCheckResult 来自哪个分析块，防止跨块注音合并 |
+| 修复跨块合并逻辑 | 只在同一 origin_block_id 内合并注音 |
+
+### Offset 设置重构（B-8）
+
+**问题**：导出偏移写死 -100ms，不与设置项联动；名称不够准确。
+
+**修复**：
+| 修改内容 | 说明 |
+|---------|------|
+| 设置项移到打轴设定组 | `card_export_offset` 从导出组移到 timing_group |
+| 重命名 | "导出偏移" → "Karaoke渲染偏移及导出偏移" |
+| KaraokePreview 渲染偏移 | 新增 `_render_offset_ms` 和 `set_render_offset()`，走字预览使用 `adjusted_time = current_time - offset` |
+
+### 批量编辑修复（C-11）
+
+**问题**：
+- "留空注音"应用后实际不会清空注音
+- "节奏点变更"是 delta 增减而非绝对设置
+
+**修复**：
+| 修改内容 | 说明 |
+|---------|------|
+| 重命名"节奏点变更"→"设置节奏点" | 语义更准确 |
+| 改为绝对设置 | 0=不修改，>0 设置为指定值 |
+| 留空注音生效 | 输入空字符串时正确清除注音 |
+| linked_to_next 保留 | 批量编辑不丢失连词标记 |
+
+### 划词演唱者数据同步（C-13）
+
+**问题**：
+- 划词后无法在编辑模式看到变化
+- checkpoint 颜色不随演唱者改变
+- 英文单词内无 checkpoint 的字符不会被一起选中
+
+**修复**：
+| 修改内容 | 说明 |
+|---------|------|
+| 占位 timetag | 为无 timetag 的字符插入 `timestamp_ms=0` 的占位 timetag 以携带 singer_id |
+| checkpoint 颜色 | `paintEvent` 中按每个字符的实际 singer_id 渲染颜色 |
+| 数据同步 | 划词设置后立即更新 project 数据并触发 repaint |
+
+### 弹窗自动填充适配（C-12）
+
+**修复**：`_on_bulk_change` 自动填充改用 linked_to_next 字段读取当前焦点字符的连词状态。
+
+### 其他补丁
+
+| 修改内容 | 说明 |
+|---------|------|
+| `_toggle_checkpoint` | 增减节奏点时保留 linked_to_next |
+| `_toggle_line_end` | 切换句尾标记时保留 linked_to_next |
+
+---
+
 **修复完成**: 所有冲突点和遗漏项已解决，文档现在一致且完整。

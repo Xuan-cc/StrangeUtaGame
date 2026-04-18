@@ -99,6 +99,7 @@ def _rebuild_timetags_and_checkpoints(
                     check_count=old_cp.check_count,
                     is_line_end=(j == len(new_chars) - 1),
                     is_rest=old_cp.is_rest,
+                    linked_to_next=old_cp.linked_to_next,
                 )
             )
         else:

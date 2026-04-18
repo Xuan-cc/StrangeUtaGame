@@ -286,6 +286,19 @@ def from_inline_text(text: str, singer_id: str) -> LyricLine:
             _parse_plain_segment(seg_content, chars, checkpoints, timetags, singer_id)
 
     line_text = "".join(chars)
+
+    # 迁移: 当下一个字符 check_count==0 时，设置前一个字符的 linked_to_next=True
+    for i in range(len(checkpoints) - 1):
+        if checkpoints[i + 1].check_count == 0 and not checkpoints[i].linked_to_next:
+            cp = checkpoints[i]
+            checkpoints[i] = CheckpointConfig(
+                char_idx=cp.char_idx,
+                check_count=cp.check_count,
+                is_line_end=cp.is_line_end,
+                is_rest=cp.is_rest,
+                linked_to_next=True,
+            )
+
     return LyricLine(
         singer_id=singer_id,
         text=line_text,

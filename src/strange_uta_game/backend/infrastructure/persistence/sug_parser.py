@@ -167,6 +167,7 @@ class SugProjectParser:
                     "check_count": c.check_count,
                     "is_line_end": c.is_line_end,
                     "is_rest": c.is_rest,
+                    "linked_to_next": c.linked_to_next,
                 }
                 for c in line.checkpoints
             ],
@@ -271,8 +272,25 @@ class SugProjectParser:
                 check_count=int(cp_data.get("check_count", 1)),
                 is_line_end=cp_data.get("is_line_end", False),
                 is_rest=cp_data.get("is_rest", False),
+                linked_to_next=cp_data.get("linked_to_next", False),
             )
             checkpoints.append(cp)
+
+        # 旧数据迁移: check_count==0 的字符表示与前一个字符连词
+        # 在前一个字符上设置 linked_to_next=True
+        for i in range(1, len(checkpoints)):
+            if (
+                checkpoints[i].check_count == 0
+                and not checkpoints[i - 1].linked_to_next
+            ):
+                prev = checkpoints[i - 1]
+                checkpoints[i - 1] = CheckpointConfig(
+                    char_idx=prev.char_idx,
+                    check_count=prev.check_count,
+                    is_line_end=prev.is_line_end,
+                    is_rest=prev.is_rest,
+                    linked_to_next=True,
+                )
 
         # 解析注音
         rubies = []

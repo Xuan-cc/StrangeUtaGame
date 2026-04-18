@@ -128,17 +128,23 @@
 - `check_count`: 节奏点数量（需要击打几次，**默认 1，可以为 0**）
 - `is_line_end`: 是否是句尾字符（行末，默认 False）
 - `is_rest`: 是否是休止符（默认 False）
+- `linked_to_next`: 是否与下一个字符连词（默认 False）
 
 **业务含义**：
 - `check_count`: 该字符对应的读音需要击打几次
   - **check_count >= 1**: 该字符有独立的节奏点，需要单独击打
     - 例：「赤」(あか) → check_count = 2（あ・か）
     - 例：「い」→ check_count = 1
-  - **check_count = 0**: 该字符**没有独立节奏点**，视为"连打"
-    - 该字符和上一个拥有 Checkpoint 的字符**连唱**
+  - **check_count = 0**: 该字符**没有独立节奏点**
+    - 该字符和前一个字符连唱
     - 上一个字符的节奏点延续到该字符
     - 例：「ー」(长音) → check_count = 0，和前面的字符连唱
     - 例：「っ」(促音) → check_count = 0（如果配置不计数）
+- `linked_to_next`: 标记当前字符与下一个字符连词
+  - F3 快捷键切换此标记
+  - 连词时下一个字符的 check_count 自动设为 0
+  - 取消连词时下一个字符的 check_count 恢复为 1
+  - 与 check_count=0 的区别：linked_to_next 是显式的连词标记，独立于 check_count
 - `is_line_end`: 标记行末字符，通常有长音或休止
 - `is_rest`: 特殊标记，表示这是一个休止符而非歌词字符
 
