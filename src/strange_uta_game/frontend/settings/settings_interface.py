@@ -118,7 +118,7 @@ class AppSettings:
             "volume_down": "DOWN",
             "nav_prev_line": "LEFT",
             "nav_next_line": "RIGHT",
-            "clear_tags": "ESCAPE",
+            "clear_tags": "BACKSPACE",
         },
     }
 
@@ -371,6 +371,14 @@ class _KeyCaptureButton(PushButton):
             Qt.Key.Key_Alt,
             Qt.Key.Key_Meta,
         ):
+            a0.accept()
+            return
+        # ESC 取消捕获，不设置按键
+        if key == Qt.Key.Key_Escape:
+            self._listening = False
+            self._update_display()
+            self.setStyleSheet("")
+            self.clearFocus()
             a0.accept()
             return
         modifiers = a0.modifiers()
@@ -1407,7 +1415,7 @@ class SettingsInterface(ScrollArea):
             FIF.DELETE,
             "清除时间标签",
             "清除当前行时间标签",
-            "ESCAPE",
+            "BACKSPACE",
             parent=self.shortcut_group,
         )
         self.card_sc_toggle_line_end = ShortcutSettingCard(
@@ -1645,7 +1653,7 @@ class SettingsInterface(ScrollArea):
             self._settings.get("shortcuts.nav_next_line", "RIGHT")
         )
         self.card_sc_clear.setValue(
-            self._settings.get("shortcuts.clear_tags", "ESCAPE")
+            self._settings.get("shortcuts.clear_tags", "BACKSPACE")
         )
         self.card_sc_toggle_line_end.setValue(
             self._settings.get("shortcuts.toggle_line_end", "F5")

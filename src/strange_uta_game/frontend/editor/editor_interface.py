@@ -462,6 +462,57 @@ class KaraokePreview(QWidget):
                     else:
                         char_start_times[ci] = min(t.timestamp_ms for t in ci_tags)
 
+            # 构建字符组：有checkpoint的字符为组长，后续0-checkpoint字符加入同组
+            char_groups: list = []
+            current_group = None
+            for ci in range(len(line.chars)):
+                cp = cps_in_line.get(ci)
+                if cp and cp.check_count > 0:
+                    current_group = [ci]
+                    char_groups.append(current_group)
+                elif current_group is not None:
+                    current_group.append(ci)
+
+            # 预计算每个字符的wipe时间区间（支持0-checkpoint字符连读均分）
+            char_wipe_times: dict = {}  # ci -> (start_ms, end_ms)
+            for group in char_groups:
+                leader = group[0]
+                group_start = char_start_times.get(leader)
+                if group_start is None:
+                    continue
+                leader_cp = cps_in_line.get(leader)
+                # 句尾字符：end = release tag
+                if leader_cp and leader_cp.is_line_end:
+                    l_tags = tags_in_line.get(leader, [])
+                    release_tags = [
+                        t
+                        for t in l_tags
+                        if t.checkpoint_idx == leader_cp.check_count - 1
+                    ]
+                    group_end = (
+                        release_tags[0].timestamp_ms
+                        if release_tags
+                        else group_start + 300
+                    )
+                else:
+                    # 非句尾：end = 下一个有timetag字符的起始时间
+                    group_end = None
+                    last_in_group = group[-1]
+                    for nci in range(last_in_group + 1, len(line.chars)):
+                        if nci in char_start_times:
+                            group_end = char_start_times[nci]
+                            break
+                    if group_end is None:
+                        group_end = group_start + 300
+
+                n = len(group)
+                dur = group_end - group_start
+                for i, ci in enumerate(group):
+                    char_wipe_times[ci] = (
+                        group_start + dur * i / n,
+                        group_start + dur * (i + 1) / n,
+                    )
+
             for char_pos, ch in enumerate(line.chars):
                 char_w = char_widths[char_pos]
 
@@ -498,31 +549,13 @@ class KaraokePreview(QWidget):
                     painter.setPen(base_color)
                     painter.drawText(int(ruby_x), ruby_y, ruby.text)
 
-                    # Ruby 走字效果 — 与主字符同步 wipe
-                    ruby_st = char_start_times.get(ruby.start_idx)
+                    # Ruby 走字效果 — 与主字符wipe时间同步
+                    ruby_wipe_st = char_wipe_times.get(ruby.start_idx)
+                    ruby_st = ruby_wipe_st[0] if ruby_wipe_st else None
                     if ruby_st is not None:
                         last_ci = ruby.end_idx - 1
-                        last_cp = cps_in_line.get(last_ci)
-                        if last_cp and last_cp.is_line_end:
-                            l_tags = tags_in_line.get(last_ci, [])
-                            rel = [
-                                t
-                                for t in l_tags
-                                if t.checkpoint_idx == last_cp.check_count - 1
-                            ]
-                            ruby_et = (
-                                rel[0].timestamp_ms
-                                if rel
-                                else char_start_times.get(last_ci, ruby_st) + 300
-                            )
-                        else:
-                            ruby_et = None
-                            for nci in range(ruby.end_idx, len(line.chars)):
-                                if nci in char_start_times:
-                                    ruby_et = char_start_times[nci]
-                                    break
-                            if ruby_et is None:
-                                ruby_et = char_start_times.get(last_ci, ruby_st) + 300
+                        ruby_wipe_et = char_wipe_times.get(last_ci)
+                        ruby_et = ruby_wipe_et[1] if ruby_wipe_et else ruby_st + 300
 
                         if self._current_time_ms >= ruby_et:
                             # 已唱完 → ruby 全高亮
@@ -572,35 +605,8 @@ class KaraokePreview(QWidget):
                 # 主文字 — 基于 checkpoint 的逐字 wipe
                 painter.setFont(main_font)
 
-                if char_pos in char_start_times:
-                    char_time = char_start_times[char_pos]
-                    cp = cps_in_line.get(char_pos)
-
-                    if cp and cp.is_line_end:
-                        # 句尾字符：start = cp_idx=0 的 tag 时间
-                        #           end = cp_idx=(check_count-1) 的 tag 时间（release）
-                        char_tags = tags_in_line.get(char_pos, [])
-                        release_tags = [
-                            t
-                            for t in char_tags
-                            if t.checkpoint_idx == cp.check_count - 1
-                        ]
-                        next_time = (
-                            release_tags[0].timestamp_ms
-                            if release_tags
-                            else char_time + 300
-                        )
-                    else:
-                        # 非句尾字符：start = 自己的 cp_idx=0 tag
-                        #             end = 下一个有 timetag 字符的 cp_idx=0 tag
-                        next_time = None
-                        for next_ci in range(char_pos + 1, len(line.chars)):
-                            if next_ci in char_start_times:
-                                next_time = char_start_times[next_ci]
-                                break
-
-                        if next_time is None:
-                            next_time = char_time + 300
+                if char_pos in char_wipe_times:
+                    char_time, next_time = char_wipe_times[char_pos]
 
                     if self._current_time_ms >= next_time:
                         # 已唱完 → 全高亮
@@ -638,7 +644,7 @@ class KaraokePreview(QWidget):
                         painter.setPen(base_color)
                         painter.drawText(int(curr_x), int(y_center), ch)
                 else:
-                    # 无 timetag → 基色
+                    # 不在任何字符组内 → 基色
                     painter.setPen(base_color)
                     painter.drawText(int(curr_x), int(y_center), ch)
 
@@ -1063,7 +1069,7 @@ class EditorInterface(QWidget):
         self.btn_tag.clicked.connect(self._on_tag_now)
         bottom.addWidget(self.btn_tag)
 
-        self.btn_clear_tags = PushButton("清除当前行标签 (Esc)", self)
+        self.btn_clear_tags = PushButton("清除当前行标签 (Backspace)", self)
         self.btn_clear_tags.setIcon(FIF.DELETE)
         self.btn_clear_tags.clicked.connect(self._on_clear_current_line_tags)
         bottom.addWidget(self.btn_clear_tags)
@@ -1141,7 +1147,7 @@ class EditorInterface(QWidget):
             "volume_down": settings.get("shortcuts.volume_down", "DOWN"),
             "nav_prev_line": settings.get("shortcuts.nav_prev_line", "LEFT"),
             "nav_next_line": settings.get("shortcuts.nav_next_line", "RIGHT"),
-            "clear_tags": settings.get("shortcuts.clear_tags", "ESCAPE"),
+            "clear_tags": settings.get("shortcuts.clear_tags", "BACKSPACE"),
         }
         for action, key_str in shortcut_actions.items():
             # 支持双键位：值可能是 "Space,A" 格式
@@ -1565,7 +1571,11 @@ class EditorInterface(QWidget):
             self._store.notify("checkpoints")
 
     def _toggle_line_end(self):
-        """F5 切换当前字符的句尾标记 (is_line_end)。"""
+        """F5 切换当前字符的句尾标记 (is_line_end)。
+
+        添加句尾标记时：check_count += 1（句尾需要额外的 release checkpoint）。
+        删除句尾标记时：check_count -= 1，同时移除该字符最后一个 checkpoint 的 timetag。
+        """
         if not self._project:
             return
         line_idx = self._current_line_idx
@@ -1577,10 +1587,30 @@ class EditorInterface(QWidget):
             return
 
         old_cp = line.checkpoints[char_idx]
+        new_is_line_end = not old_cp.is_line_end
+
+        if new_is_line_end:
+            # 添加句尾：+1 checkpoint
+            new_count = old_cp.check_count + 1
+        else:
+            # 删除句尾：-1 checkpoint（最小保留 0）
+            new_count = max(0, old_cp.check_count - 1)
+            # 移除该字符最后一个 checkpoint 对应的 timetag
+            old_last_idx = old_cp.check_count - 1
+            if old_last_idx >= 0:
+                line.timetags = [
+                    t
+                    for t in line.timetags
+                    if not (
+                        t.char_idx == old_cp.char_idx
+                        and t.checkpoint_idx == old_last_idx
+                    )
+                ]
+
         line.checkpoints[char_idx] = CheckpointConfig(
             char_idx=old_cp.char_idx,
-            check_count=old_cp.check_count,
-            is_line_end=not old_cp.is_line_end,
+            check_count=new_count,
+            is_line_end=new_is_line_end,
             is_rest=old_cp.is_rest,
         )
         if self._timing_service:
@@ -1927,7 +1957,7 @@ class EditorInterface(QWidget):
             "X": "seek_forward",
             "Q": "speed_down",
             "W": "speed_up",
-            "ESCAPE": "clear_tags",
+            "BACKSPACE": "clear_tags",
             "F2": "edit_ruby",
             "F3": "toggle_word_join",
             "F4": "toggle_checkpoint",

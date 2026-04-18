@@ -183,6 +183,11 @@ class MainWindow(MSFluentWindow):
         elif change_type in ("lyrics", "checkpoints"):
             # 歌词/轴点变更后重建全局 checkpoint 列表
             self._timing_service._rebuild_global_checkpoints()
+        elif change_type == "audio":
+            # 音频路径变更 → 全局加载到 editor
+            audio_path = self._store.audio_path
+            if audio_path:
+                self.editorInterface.load_audio(audio_path)
 
     # ==================== 窗口事件 ====================
 

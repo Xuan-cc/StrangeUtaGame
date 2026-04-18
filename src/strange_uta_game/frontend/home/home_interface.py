@@ -560,6 +560,8 @@ class HomeInterface(QWidget):
     def _set_audio_path(self, file_path: str) -> None:
         self._audio_path = file_path
         self.line_audio_path.setText(file_path)
+        if hasattr(self, "_store") and self._store:
+            self._store.set_audio_path(file_path)
 
     def _reset_form(self) -> None:
         self.text_lyrics.clear()

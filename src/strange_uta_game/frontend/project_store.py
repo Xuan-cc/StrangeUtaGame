@@ -19,6 +19,7 @@ class ProjectStore(QObject):
 
     Change types:
         "project"      — 项目加载/创建（全量刷新）
+        "audio"        — 音频路径变更
         "rubies"       — 注音变更
         "singers"      — 演唱者变更
         "lyrics"       — 歌词文本/字符变更
@@ -57,6 +58,11 @@ class ProjectStore(QObject):
     @property
     def audio_path(self) -> Optional[str]:
         return self._audio_path
+
+    def set_audio_path(self, path: Optional[str]) -> None:
+        """设置音频路径并广播变更。"""
+        self._audio_path = path
+        self.data_changed.emit("audio")
 
     @property
     def dirty(self) -> bool:
