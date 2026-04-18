@@ -512,15 +512,13 @@ class KaraokePreview(QWidget):
                 QColor(singer.color) if singer and singer.color else default_highlight
             )
 
-            # 预计算每个字符的 per-tag singer 颜色（优先使用 tag 的 singer_id）
+            # 预计算每个字符的 per-char singer 颜色（从 CheckpointConfig.singer_id 读取）
             _char_singer_colors: dict = {}  # char_idx -> QColor
-            for t in line.timetags:
-                if t.char_idx not in _char_singer_colors and t.singer_id != (
-                    line.singer_id or ""
-                ):
-                    tag_singer = self._project.get_singer(t.singer_id)
-                    if tag_singer and tag_singer.color:
-                        _char_singer_colors[t.char_idx] = QColor(tag_singer.color)
+            for cp in line.checkpoints:
+                if cp.singer_id and cp.singer_id != (line.singer_id or ""):
+                    cp_singer = self._project.get_singer(cp.singer_id)
+                    if cp_singer and cp_singer.color:
+                        _char_singer_colors[cp.char_idx] = QColor(cp_singer.color)
 
             if is_current:
                 main_font = font_current
@@ -1559,17 +1557,31 @@ class EditorInterface(QWidget):
     def _on_singer_change_selection(
         self, line_idx: int, start_char: int, end_char: int, singer_id: str
     ):
-        """划词选中后，修改选中范围内所有 TimeTag 的 singer_id"""
+        """划词选中后，修改选中范围内所有字符的 per-char singer_id"""
         if not self._project or line_idx < 0 or line_idx >= len(self._project.lines):
             return
 
-        from strange_uta_game.backend.domain.models import TimeTag
+        from strange_uta_game.backend.domain.models import TimeTag, CheckpointConfig
 
         line = self._project.lines[line_idx]
+
+        # 更新选中范围内每个字符的 CheckpointConfig.singer_id
+        for ci in range(start_char, end_char + 1):
+            if ci < len(line.checkpoints):
+                old_cp = line.checkpoints[ci]
+                line.checkpoints[ci] = CheckpointConfig(
+                    char_idx=old_cp.char_idx,
+                    check_count=old_cp.check_count,
+                    is_line_end=old_cp.is_line_end,
+                    is_rest=old_cp.is_rest,
+                    linked_to_next=old_cp.linked_to_next,
+                    singer_id=singer_id,
+                )
+
+        # 同步更新已有 timetag 的 singer_id（不创建占位 timetag）
         new_tags = []
         for tag in line.timetags:
             if start_char <= tag.char_idx <= end_char:
-                # 替换 singer_id（frozen dataclass，需重建）
                 new_tags.append(
                     TimeTag(
                         timestamp_ms=tag.timestamp_ms,
@@ -1581,20 +1593,6 @@ class EditorInterface(QWidget):
                 )
             else:
                 new_tags.append(tag)
-
-        # 为没有 timetag 的字符创建占位 timetag，确保演唱者信息生效
-        tagged_chars = {t.char_idx for t in new_tags}
-        for ci in range(start_char, end_char + 1):
-            if ci not in tagged_chars:
-                new_tags.append(
-                    TimeTag(
-                        timestamp_ms=0,
-                        singer_id=singer_id,
-                        char_idx=ci,
-                        checkpoint_idx=0,
-                    )
-                )
-
         line.timetags = sorted(new_tags, key=lambda t: t.timestamp_ms)
 
         # 如果选中了整行，也更新 line.singer_id
@@ -1777,6 +1775,7 @@ class EditorInterface(QWidget):
             is_line_end=old_cp.is_line_end,
             is_rest=old_cp.is_rest,
             linked_to_next=old_cp.linked_to_next,
+            singer_id=old_cp.singer_id,
         )
         # 重建 timing_service 的全局 checkpoint 列表
         if self._timing_service:
@@ -1829,6 +1828,7 @@ class EditorInterface(QWidget):
             is_line_end=new_is_line_end,
             is_rest=old_cp.is_rest,
             linked_to_next=old_cp.linked_to_next,
+            singer_id=old_cp.singer_id,
         )
         if self._timing_service:
             self._timing_service._rebuild_global_checkpoints()
@@ -1870,31 +1870,13 @@ class EditorInterface(QWidget):
             is_line_end=old_cp.is_line_end,
             is_rest=old_cp.is_rest,
             linked_to_next=new_linked,
+            singer_id=old_cp.singer_id,
         )
-
-        # 连词时：下一个字符 check_count 设为 0
-        # 取消连词时：下一个字符 check_count 恢复为 1（如果当前是0）
-        if char_idx + 1 < len(line.checkpoints):
-            next_cp = line.checkpoints[char_idx + 1]
-            if new_linked:
-                new_next_count = 0
-            else:
-                new_next_count = (
-                    max(1, next_cp.check_count)
-                    if next_cp.check_count == 0
-                    else next_cp.check_count
-                )
-            line.checkpoints[char_idx + 1] = CheckpointConfig(
-                char_idx=next_cp.char_idx,
-                check_count=new_next_count,
-                is_line_end=next_cp.is_line_end,
-                is_rest=next_cp.is_rest,
-                linked_to_next=next_cp.linked_to_next,
-            )
 
         if self._timing_service:
             self._timing_service._rebuild_global_checkpoints()
         self.refresh_lyric_display()
+        self.preview.repaint()  # 强制同步重绘，确保连词视觉立即更新
         self._update_status()
         if hasattr(self, "_store") and self._store:
             self._store.notify("checkpoints")

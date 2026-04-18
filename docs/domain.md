@@ -128,6 +128,7 @@
 - `check_count`: 节奏点数量（需要击打几次，**默认 1，可以为 0**）
 - `is_line_end`: 是否是句尾字符（行末，默认 False）
 - `is_rest`: 是否是休止符（默认 False）
+- `singer_id`: 每字符演唱者 ID（默认空串 ""，空串表示继承行级 singer_id）
 - `linked_to_next`: 是否与下一个字符连词（默认 False）
 
 **业务含义**：
@@ -142,9 +143,14 @@
     - 例：「っ」(促音) → check_count = 0（如果配置不计数）
 - `linked_to_next`: 标记当前字符与下一个字符连词
   - F3 快捷键切换此标记
-  - 连词时下一个字符的 check_count 自动设为 0
-  - 取消连词时下一个字符的 check_count 恢复为 1
+  - 连词不影响 check_count（独立属性）
+  - 连词的字符在编辑视图中显示为一个词语
   - 与 check_count=0 的区别：linked_to_next 是显式的连词标记，独立于 check_count
+- `singer_id`: 每字符级别的演唱者标识
+  - 空串("")表示继承行级 singer_id
+  - 非空串表示该字符使用指定演唱者
+  - 划词选择演唱者时直接写入 singer_id，不再需要占位 timetag
+  - checkpoint 颜色渲染从此字段读取演唱者
 - `is_line_end`: 标记行末字符，通常有长音或休止
 - `is_rest`: 特殊标记，表示这是一个休止符而非歌词字符
 

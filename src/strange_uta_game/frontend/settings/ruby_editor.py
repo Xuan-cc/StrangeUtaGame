@@ -100,6 +100,7 @@ def _rebuild_timetags_and_checkpoints(
                     is_line_end=(j == len(new_chars) - 1),
                     is_rest=old_cp.is_rest,
                     linked_to_next=old_cp.linked_to_next,
+                    singer_id=old_cp.singer_id,
                 )
             )
         else:
@@ -113,6 +114,39 @@ def _rebuild_timetags_and_checkpoints(
                 )
             )
     line.checkpoints = new_checkpoints
+
+
+def _apply_parsed_metadata(
+    line: LyricLine,
+    linked_flags: List[bool],
+    cp_counts: List[Optional[int]],
+    s_names: List[str],
+    name_to_id: dict,
+) -> None:
+    """将解析出的连词/节奏点/演唱者元数据应用到行的 checkpoints。"""
+    for ci in range(min(len(line.checkpoints), len(line.chars))):
+        old = line.checkpoints[ci]
+        new_linked = linked_flags[ci] if ci < len(linked_flags) else False
+        _raw = cp_counts[ci] if ci < len(cp_counts) else None
+        new_count: int = _raw if _raw is not None else old.check_count
+        new_singer = old.singer_id
+        if ci < len(s_names) and s_names[ci]:
+            mapped = name_to_id.get(s_names[ci])
+            if mapped:
+                new_singer = mapped
+        if (
+            new_linked != old.linked_to_next
+            or new_count != old.check_count
+            or new_singer != old.singer_id
+        ):
+            line.checkpoints[ci] = CheckpointConfig(
+                char_idx=ci,
+                check_count=new_count,
+                is_line_end=old.is_line_end,
+                is_rest=old.is_rest,
+                linked_to_next=new_linked,
+                singer_id=new_singer,
+            )
 
 
 def _is_kanji_char(char: str) -> bool:
@@ -129,43 +163,150 @@ def _is_kanji_char(char: str) -> bool:
 
 def _parse_annotated_line(
     line_text: str,
-) -> Tuple[str, List[str], List[Ruby]]:
-    """解析带注音标注的文本行。
+) -> Tuple[
+    str,
+    List[str],
+    List[Ruby],
+    List[bool],
+    List[Optional[int]],
+    List[str],
+]:
+    """解析带注音标注的扩展文本行。
 
-    格式: 漢字{かんじ} — 花括号标注前面连续汉字块的读音。
+    格式:
+      漢字{かんじ}          — 普通注音
+      [连词]{注音1,注音2}    — 连词 + 逗号分隔注音
+      字<count>             — 节奏点数量（非默认时显示）
+      字@(演唱者名)          — 演唱者（非空时显示）
 
     Returns:
-        (原文, 字符列表, 注音列表)
+        (原文, 字符列表, 注音列表, linked_to_next标记, 节奏点数量, 演唱者名称)
     """
     raw_chars: List[str] = []
     rubies: List[Ruby] = []
+    linked_flags: List[bool] = []
+    check_counts: List[Optional[int]] = []
+    singer_names: List[str] = []
     i = 0
     n = len(line_text)
 
+    def _parse_ruby_after(pos: int, g_start: int, g_end: int) -> int:
+        """解析 {ruby} 注解，返回新位置。"""
+        if pos >= n or line_text[pos] != "{":
+            return pos
+        cb = line_text.find("}", pos + 1)
+        if cb == -1:
+            return pos
+        ruby_text = line_text[pos + 1 : cb]
+        g_len = g_end - g_start
+        if not ruby_text:
+            return cb + 1
+        if g_len > 1 and "," in ruby_text:
+            # 连词逐字注音
+            parts = ruby_text.split(",")
+            for k, rt in enumerate(parts):
+                rt = rt.strip()
+                if rt and g_start + k < g_end:
+                    rubies.append(
+                        Ruby(text=rt, start_idx=g_start + k, end_idx=g_start + k + 1)
+                    )
+        else:
+            rubies.append(Ruby(text=ruby_text, start_idx=g_start, end_idx=g_end))
+        return cb + 1
+
+    def _parse_checkpoint_after(pos: int, g_start: int, g_end: int) -> int:
+        """解析 <checkpoint> 注解，返回新位置。"""
+        if pos >= n or line_text[pos] != "<":
+            return pos
+        ca = line_text.find(">", pos + 1)
+        if ca == -1:
+            return pos
+        cp_text = line_text[pos + 1 : ca]
+        # 验证内容仅为数字和逗号
+        stripped = cp_text.replace(",", "").replace(" ", "")
+        if not stripped.lstrip("-").isdigit():
+            return pos  # 不是合法节奏点，原样保留
+        parts = cp_text.split(",")
+        for k, ct in enumerate(parts):
+            idx = g_start + k
+            if idx < len(check_counts):
+                try:
+                    check_counts[idx] = int(ct.strip())
+                except ValueError:
+                    pass
+        return ca + 1
+
+    def _parse_singer_after(pos: int, g_start: int, g_end: int) -> int:
+        """解析 @(singer) 注解，返回新位置。"""
+        if pos >= n or line_text[pos] != "@":
+            return pos
+        if pos + 1 >= n or line_text[pos + 1] != "(":
+            return pos
+        cp = line_text.find(")", pos + 2)
+        if cp == -1:
+            return pos
+        s_text = line_text[pos + 2 : cp]
+        g_len = g_end - g_start
+        if "," in s_text and g_len > 1:
+            parts = s_text.split(",")
+            for k, sn in enumerate(parts):
+                idx = g_start + k
+                if idx < len(singer_names):
+                    singer_names[idx] = sn.strip()
+        else:
+            sn = s_text.strip()
+            for k in range(g_len):
+                idx = g_start + k
+                if idx < len(singer_names):
+                    singer_names[idx] = sn
+        return cp + 1
+
     while i < n:
-        if line_text[i] == "{":
-            close = line_text.find("}", i)
+        ch = line_text[i]
+
+        if ch == "[":
+            # ===== 连词组 =====
+            close = line_text.find("]", i + 1)
             if close == -1:
-                # 无配对右括号，当普通字符处理
-                raw_chars.append(line_text[i])
+                raw_chars.append(ch)
+                linked_flags.append(False)
+                check_counts.append(None)
+                singer_names.append("")
                 i += 1
                 continue
+            group_text = line_text[i + 1 : close]
+            group_chars = list(group_text)
+            g_start = len(raw_chars)
+            for k, gc in enumerate(group_chars):
+                raw_chars.append(gc)
+                linked_flags.append(k < len(group_chars) - 1)
+                check_counts.append(None)
+                singer_names.append("")
+            g_end = len(raw_chars)
+            i = close + 1
+            i = _parse_ruby_after(i, g_start, g_end)
+            i = _parse_checkpoint_after(i, g_start, g_end)
+            i = _parse_singer_after(i, g_start, g_end)
 
+        elif ch == "{":
+            # ===== 普通注音（原始格式） =====
+            close = line_text.find("}", i + 1)
+            if close == -1:
+                raw_chars.append(ch)
+                linked_flags.append(False)
+                check_counts.append(None)
+                singer_names.append("")
+                i += 1
+                continue
             ruby_text = line_text[i + 1 : close]
-
             if ruby_text and raw_chars:
-                # 向前查找连续汉字块
                 end_idx = len(raw_chars)
                 start_idx = end_idx
                 while start_idx > 0 and _is_kanji_char(raw_chars[start_idx - 1]):
                     start_idx -= 1
-
-                # 若前面没有汉字，退一格（允许给任意字符标注）
                 if start_idx == end_idx and end_idx > 0:
                     start_idx = end_idx - 1
-
                 if start_idx < end_idx:
-                    # 检查是否与已有注音重叠
                     overlap = False
                     for existing in rubies:
                         if (
@@ -174,7 +315,6 @@ def _parse_annotated_line(
                         ):
                             overlap = True
                             break
-
                     if not overlap:
                         rubies.append(
                             Ruby(
@@ -183,14 +323,58 @@ def _parse_annotated_line(
                                 end_idx=end_idx,
                             )
                         )
-
             i = close + 1
+            # 后续注解（单字节奏点/演唱者）
+            last_idx = len(raw_chars) - 1 if raw_chars else 0
+            i = _parse_checkpoint_after(i, last_idx, last_idx + 1)
+            i = _parse_singer_after(i, last_idx, last_idx + 1)
+
+        elif ch == "<":
+            # ===== 单字节奏点（无注音前缀） =====
+            ca = line_text.find(">", i + 1)
+            if ca != -1:
+                cp_text = line_text[i + 1 : ca]
+                stripped = cp_text.replace(",", "").replace(" ", "")
+                if stripped.lstrip("-").isdigit() and raw_chars:
+                    try:
+                        check_counts[-1] = int(cp_text.strip())
+                    except ValueError:
+                        pass
+                    i = ca + 1
+                    last_idx = len(raw_chars) - 1
+                    i = _parse_singer_after(i, last_idx, last_idx + 1)
+                    continue
+            # 不合法，当普通字符
+            raw_chars.append(ch)
+            linked_flags.append(False)
+            check_counts.append(None)
+            singer_names.append("")
+            i += 1
+
+        elif ch == "@":
+            # ===== 单字演唱者（无注音/节奏点前缀） =====
+            if i + 1 < n and line_text[i + 1] == "(":
+                cp = line_text.find(")", i + 2)
+                if cp != -1 and raw_chars:
+                    singer_names[-1] = line_text[i + 2 : cp].strip()
+                    i = cp + 1
+                    continue
+            raw_chars.append(ch)
+            linked_flags.append(False)
+            check_counts.append(None)
+            singer_names.append("")
+            i += 1
+
         else:
-            raw_chars.append(line_text[i])
+            # ===== 普通字符 =====
+            raw_chars.append(ch)
+            linked_flags.append(False)
+            check_counts.append(None)
+            singer_names.append("")
             i += 1
 
     raw_text = "".join(raw_chars)
-    return raw_text, raw_chars, rubies
+    return raw_text, raw_chars, rubies, linked_flags, check_counts, singer_names
 
 
 class DeleteRubyByTypeDialog(QDialog):
@@ -273,6 +457,7 @@ class RubyInterface(QWidget):
         # 说明
         desc = QLabel(
             "全文本编辑：汉字注音用 {假名} 标注，如 赤{あか}い花{はな}\n"
+            "连词用 [字字字]{注音1,注音2} 表示，节奏点 <数量>，演唱者 @(名称)\n"
             "支持增删行（换行/排版），编辑后点击「应用修改」保存"
         )
         desc.setStyleSheet("color: gray;")
@@ -381,27 +566,115 @@ class RubyInterface(QWidget):
             self.lbl_stats.setText("共 0 行，0 个注音")
 
     def _lines_to_text(self) -> str:
-        """将项目歌词转为带注音标注的文本。
+        """将项目歌词转为带注音标注的扩展文本。
 
-        格式: 漢字{かんじ}
+        格式:
+          漢字{かんじ}          — 普通注音
+          [连词]{注音1,注音2}    — 连词 + 逗号分隔注音
+          字<2>                — 节奏点数量（非默认时显示）
+          字@(演唱者名)          — 演唱者（非空时显示）
         """
         if not self._project:
             return ""
 
+        singer_map = {s.id: s.name for s in self._project.singers}
         result = []
         for line in self._project.lines:
-            annotated = ""
+            parts: list[str] = []
             i = 0
-            while i < len(line.chars):
+            num = len(line.chars)
+            while i < num:
+                cp_i = line.checkpoints[i] if i < len(line.checkpoints) else None
+                # ===== 连词组 =====
+                if cp_i and cp_i.linked_to_next:
+                    gs = i
+                    while (
+                        i < num - 1
+                        and i < len(line.checkpoints)
+                        and line.checkpoints[i].linked_to_next
+                    ):
+                        i += 1
+                    ge = i + 1
+                    i = ge
+                    gl = ge - gs
+                    g_text = "".join(line.chars[gs:ge])
+                    part = f"[{g_text}]"
+                    # 注音
+                    g_rubies = sorted(
+                        [
+                            r
+                            for r in line.rubies
+                            if r.start_idx >= gs and r.end_idx <= ge
+                        ],
+                        key=lambda r: r.start_idx,
+                    )
+                    if g_rubies:
+                        if (
+                            len(g_rubies) == 1
+                            and g_rubies[0].start_idx == gs
+                            and g_rubies[0].end_idx == ge
+                        ):
+                            part += f"{{{g_rubies[0].text}}}"
+                        else:
+                            pc = [""] * gl
+                            for r in g_rubies:
+                                pc[r.start_idx - gs] = r.text
+                            part += "{" + ",".join(pc) + "}"
+                    # 节奏点
+                    counts = [
+                        (
+                            line.checkpoints[j].check_count
+                            if j < len(line.checkpoints)
+                            else 1
+                        )
+                        for j in range(gs, ge)
+                    ]
+                    defaults = [2 if j == num - 1 else 1 for j in range(gs, ge)]
+                    if counts != defaults:
+                        part += "<" + ",".join(str(c) for c in counts) + ">"
+                    # 演唱者
+                    sids = [
+                        (
+                            line.checkpoints[j].singer_id
+                            if j < len(line.checkpoints)
+                            else ""
+                        )
+                        for j in range(gs, ge)
+                    ]
+                    if any(sids):
+                        names = [singer_map.get(s, s) if s else "" for s in sids]
+                        unique = set(nm for nm in names if nm)
+                        if len(unique) == 1 and all(names):
+                            part += f"@({names[0]})"
+                        else:
+                            part += "@(" + ",".join(names) + ")"
+                    parts.append(part)
+                    continue
+
+                # ===== 多字符注音（非连词） =====
                 ruby = line.get_ruby_for_char(i)
-                if ruby and ruby.start_idx == i:
-                    target = "".join(line.chars[ruby.start_idx : ruby.end_idx])
-                    annotated += f"{target}{{{ruby.text}}}"
+                if ruby and ruby.start_idx == i and ruby.end_idx > i + 1:
+                    span = "".join(line.chars[ruby.start_idx : ruby.end_idx])
+                    parts.append(f"{span}{{{ruby.text}}}")
                     i = ruby.end_idx
-                else:
-                    annotated += line.chars[i]
-                    i += 1
-            result.append(annotated)
+                    continue
+
+                # ===== 单字符 =====
+                part = line.chars[i]
+                if ruby and ruby.start_idx == i:
+                    part += f"{{{ruby.text}}}"
+                # 节奏点
+                if cp_i:
+                    default_cc = 2 if i == num - 1 else 1
+                    if cp_i.check_count != default_cc:
+                        part += f"<{cp_i.check_count}>"
+                # 演唱者
+                if cp_i and cp_i.singer_id:
+                    name = singer_map.get(cp_i.singer_id, cp_i.singer_id)
+                    part += f"@({name})"
+                parts.append(part)
+                i += 1
+            result.append("".join(parts))
         return "\n".join(result)
 
     def _update_stats(self):
@@ -541,6 +814,7 @@ class RubyInterface(QWidget):
         使用行级 SequenceMatcher 将旧行映射到新行，
         匹配到的旧行保留 timetag/checkpoint 并做字符级 diff，
         新插入行使用默认设置，删除行被丢弃。
+        扩展：应用连词标记(linked_to_next)、节奏点数量、per-char 演唱者。
         """
         if not self._project:
             return
@@ -548,20 +822,33 @@ class RubyInterface(QWidget):
         text = self.text_edit.toPlainText()
         new_line_strs = text.split("\n")
 
+        # singer name → id 映射
+        name_to_id: dict[str, str] = {s.name: s.id for s in self._project.singers}
+
         # 解析每行的带注音文本
-        parsed_new: List[Tuple[str, List[str], List[Ruby]]] = []
+        parsed_new: List[
+            Tuple[
+                str,
+                List[str],
+                List[Ruby],
+                List[bool],
+                List[Optional[int]],
+                List[str],
+            ]
+        ] = []
         parse_errors = []
         for i, ls in enumerate(new_line_strs):
             try:
-                raw_text, raw_chars, rubies = _parse_annotated_line(ls)
+                result = _parse_annotated_line(ls)
+                raw_text = result[0]
+                raw_chars = result[1]
                 if not raw_text:
-                    raw_text = " "
-                    raw_chars = [" "]
-                    rubies = []
-                parsed_new.append((raw_text, raw_chars, rubies))
+                    parsed_new.append((" ", [" "], [], [False], [None], [""]))
+                else:
+                    parsed_new.append(result)
             except Exception as e:
                 parse_errors.append(f"第 {i + 1} 行: {e}")
-                parsed_new.append((" ", [" "], []))
+                parsed_new.append((" ", [" "], [], [False], [None], [""]))
 
         if parse_errors:
             InfoBar.warning(
@@ -586,10 +873,11 @@ class RubyInterface(QWidget):
 
         for tag, i1, i2, j1, j2 in line_sm.get_opcodes():
             if tag == "equal":
-                # 旧行 i1..i2 完全匹配新行 j1..j2
                 for k in range(i2 - i1):
                     old_line = old_lines[i1 + k]
-                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
+                    p = parsed_new[j1 + k]
+                    raw_text, raw_chars, rubies = p[0], p[1], p[2]
+                    linked_f, cp_c, s_n = p[3], p[4], p[5]
                     old_chars = list(old_line.chars)
                     old_line.text = raw_text
                     old_line.chars = raw_chars
@@ -597,16 +885,18 @@ class RubyInterface(QWidget):
                     for r in rubies:
                         old_line.add_ruby(r)
                     _rebuild_timetags_and_checkpoints(old_line, old_chars, raw_chars)
+                    _apply_parsed_metadata(old_line, linked_f, cp_c, s_n, name_to_id)
                     result_lines[j1 + k] = old_line
 
             elif tag == "replace":
-                # 尝试 1:1 映射 — 如果旧段和新段长度相同，逐行做字符级 diff
                 old_count = i2 - i1
                 new_count = j2 - j1
                 matched = min(old_count, new_count)
                 for k in range(matched):
                     old_line = old_lines[i1 + k]
-                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
+                    p = parsed_new[j1 + k]
+                    raw_text, raw_chars, rubies = p[0], p[1], p[2]
+                    linked_f, cp_c, s_n = p[3], p[4], p[5]
                     old_chars = list(old_line.chars)
                     old_line.text = raw_text
                     old_line.chars = raw_chars
@@ -614,10 +904,13 @@ class RubyInterface(QWidget):
                     for r in rubies:
                         old_line.add_ruby(r)
                     _rebuild_timetags_and_checkpoints(old_line, old_chars, raw_chars)
+                    _apply_parsed_metadata(old_line, linked_f, cp_c, s_n, name_to_id)
                     result_lines[j1 + k] = old_line
                 # 多出的新行 → 创建
                 for k in range(matched, new_count):
-                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
+                    p = parsed_new[j1 + k]
+                    raw_text, raw_chars, rubies = p[0], p[1], p[2]
+                    linked_f, cp_c, s_n = p[3], p[4], p[5]
                     nl = LyricLine(
                         singer_id=default_singer,
                         text=raw_text,
@@ -625,13 +918,14 @@ class RubyInterface(QWidget):
                     )
                     for r in rubies:
                         nl.add_ruby(r)
+                    _apply_parsed_metadata(nl, linked_f, cp_c, s_n, name_to_id)
                     result_lines[j1 + k] = nl
-                # 多出的旧行 → 丢弃（tag == replace 中 old_count > new_count 部分）
 
             elif tag == "insert":
-                # 新插入行
                 for k in range(j2 - j1):
-                    raw_text, raw_chars, rubies = parsed_new[j1 + k]
+                    p = parsed_new[j1 + k]
+                    raw_text, raw_chars, rubies = p[0], p[1], p[2]
+                    linked_f, cp_c, s_n = p[3], p[4], p[5]
                     nl = LyricLine(
                         singer_id=default_singer,
                         text=raw_text,
@@ -639,6 +933,7 @@ class RubyInterface(QWidget):
                     )
                     for r in rubies:
                         nl.add_ruby(r)
+                    _apply_parsed_metadata(nl, linked_f, cp_c, s_n, name_to_id)
                     result_lines[j1 + k] = nl
 
             # tag == "delete": 旧行被删除，不出现在 result_lines 中

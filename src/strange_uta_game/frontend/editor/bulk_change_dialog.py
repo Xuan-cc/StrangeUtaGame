@@ -84,11 +84,11 @@ class BulkChangeDialog(QDialog):
         lbl3.setFont(QFont("Microsoft YaHei", 10))
         lbl3.setFixedWidth(100)
         self.edit_delta = LineEdit()
-        self.edit_delta.setText("0")
-        self.edit_delta.setPlaceholderText("整数，如 0、1、2")
+        self.edit_delta.setText("-1")
+        self.edit_delta.setPlaceholderText("整数或逗号分隔，如 -1、0、1,2,1")
         self.edit_delta.setFont(QFont("Microsoft YaHei", 10))
-        self.edit_delta.setFixedWidth(120)
-        hint = QLabel("（设置每个字符的节奏点数，0=不修改）")
+        self.edit_delta.setFixedWidth(160)
+        hint = QLabel("（-1=不修改，0=设为0，逗号分隔对应各字符）")
         hint.setFont(QFont("Microsoft YaHei", 9))
         row3.addWidget(lbl3)
         row3.addWidget(self.edit_delta)
@@ -152,10 +152,14 @@ class BulkChangeDialog(QDialog):
             return
 
         reading = self.edit_reading.text().strip()
+        checkpoint_str = self.edit_delta.text().strip() or "-1"
+        # 支持逗号分隔的per-char节奏点值（如 "1,2,1"）
+        checkpoint_vals = []
         try:
-            checkpoint_val = int(self.edit_delta.text().strip() or "0")
+            for v in checkpoint_str.split(","):
+                checkpoint_vals.append(int(v.strip()))
         except ValueError:
-            checkpoint_val = 0
+            checkpoint_vals = [-1]
         word_len = len(word)
         changed = 0
 
@@ -177,22 +181,29 @@ class BulkChangeDialog(QDialog):
                         )
                         line.rubies.sort(key=lambda r: r.start_idx)
 
-                    # 设置节奏点（absolute, 0=不修改）
-                    if checkpoint_val > 0:
-                        from strange_uta_game.backend.domain.models import (
-                            CheckpointConfig,
-                        )
+                    # 设置节奏点（-1=不修改，0=设为0，>0=设为指定值）
+                    # 支持逗号分隔：每个值对应搜索词中的一个字符
+                    from strange_uta_game.backend.domain.models import (
+                        CheckpointConfig,
+                    )
 
-                        for ci in range(pos, pos + word_len):
-                            if ci < len(line.checkpoints):
-                                old_cp = line.checkpoints[ci]
-                                line.checkpoints[ci] = CheckpointConfig(
-                                    char_idx=old_cp.char_idx,
-                                    check_count=checkpoint_val,
-                                    is_line_end=old_cp.is_line_end,
-                                    is_rest=old_cp.is_rest,
-                                    linked_to_next=old_cp.linked_to_next,
-                                )
+                    for ci_offset in range(word_len):
+                        ci = pos + ci_offset
+                        # 取对应位置的值，超出则循环最后一个值
+                        val_idx = min(ci_offset, len(checkpoint_vals) - 1)
+                        cp_val = checkpoint_vals[val_idx]
+                        if cp_val < 0:
+                            continue  # -1 表示不修改
+                        if ci < len(line.checkpoints):
+                            old_cp = line.checkpoints[ci]
+                            line.checkpoints[ci] = CheckpointConfig(
+                                char_idx=old_cp.char_idx,
+                                check_count=cp_val,
+                                is_line_end=old_cp.is_line_end,
+                                is_rest=old_cp.is_rest,
+                                linked_to_next=old_cp.linked_to_next,
+                                singer_id=old_cp.singer_id,
+                            )
 
                     changed += 1
                     pos += word_len

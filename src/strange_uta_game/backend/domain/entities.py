@@ -154,6 +154,7 @@ class LyricLine:
                 char_idx=i,
                 check_count=2 if i == len(self.chars) - 1 else 1,
                 is_line_end=(i == len(self.chars) - 1),  # 最后一个字符标记为句尾
+                singer_id=self.singer_id,
             )
             for i in range(len(self.chars))
         ]

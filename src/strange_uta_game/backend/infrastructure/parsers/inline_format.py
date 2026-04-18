@@ -297,6 +297,7 @@ def from_inline_text(text: str, singer_id: str) -> LyricLine:
                 is_line_end=cp.is_line_end,
                 is_rest=cp.is_rest,
                 linked_to_next=True,
+                singer_id=cp.singer_id,
             )
 
     return LyricLine(

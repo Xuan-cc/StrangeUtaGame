@@ -168,6 +168,7 @@ class SugProjectParser:
                     "is_line_end": c.is_line_end,
                     "is_rest": c.is_rest,
                     "linked_to_next": c.linked_to_next,
+                    "singer_id": c.singer_id,
                 }
                 for c in line.checkpoints
             ],
@@ -265,6 +266,7 @@ class SugProjectParser:
             timetags.append(tag)
 
         # 解析节奏点配置
+        line_singer_id = data.get("singer_id", "")
         checkpoints = []
         for cp_data in data.get("checkpoints", []):
             cp = CheckpointConfig(
@@ -273,6 +275,7 @@ class SugProjectParser:
                 is_line_end=cp_data.get("is_line_end", False),
                 is_rest=cp_data.get("is_rest", False),
                 linked_to_next=cp_data.get("linked_to_next", False),
+                singer_id=cp_data.get("singer_id", "") or line_singer_id,
             )
             checkpoints.append(cp)
 
@@ -290,6 +293,7 @@ class SugProjectParser:
                     is_line_end=prev.is_line_end,
                     is_rest=prev.is_rest,
                     linked_to_next=True,
+                    singer_id=prev.singer_id,
                 )
 
         # 解析注音

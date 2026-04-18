@@ -93,6 +93,7 @@ class CheckpointConfig:
     is_line_end: bool = False
     is_rest: bool = False
     linked_to_next: bool = False
+    singer_id: str = ""  # 每字符演唱者ID，空串表示继承行级 singer_id
 
     def __post_init__(self) -> None:
         """验证属性值"""

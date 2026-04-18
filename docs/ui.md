@@ -131,6 +131,8 @@ MainWindow (MSFluentWindow)
 - [x] 状态栏（播放状态 + 打轴进度百分比）
 - [x] 拖拽加载（音频/歌词/项目文件直接拖入窗口）
 - [x] Ctrl+H 批量変更
+- [x] 演唱者划词选择（拖拽选中文字 → 右键 → 设置 per-char singer_id）
+- [x] 连词不影响 checkpoint（F3 toggle 独立于 check_count）
 
 ### 导出
 - [x] 7 种格式（LRC/KRA/TXT/Txt2Ass/ASS/Nicokara/NicokaraRuby）
@@ -146,6 +148,10 @@ MainWindow (MSFluentWindow)
 - [x] 按字符类型删除注音（汉字/平假名/片假名/英字/数字/符号/空格）
 - [x] 自由文本编辑（增删行，时间标签/checkpoint 智能重建保留打轴数据）
 - [x] F3 连词/取消连词
+- [x] 编辑视图连词显示（linked_to_next 字符显示为一个词语 `[chars]{ruby1,ruby2}`）
+- [x] 编辑视图节奏点注解（`<count>` 或 `<c1,c2>` 格式）
+- [x] 编辑视图演唱者注解（`@(name)` 或 `@(n1,n2)` 格式）
+- [x] 批量变更节奏点支持逗号分隔（-1=不修改，0=设为0）
 
 ### 设置
 - [x] 音频/打轴/界面/导出/快捷键设置

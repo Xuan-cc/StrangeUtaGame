@@ -341,6 +341,7 @@ class AutoCheckService:
         # 重建 checkpoint 配置
         # 句尾字符额外 +1 节奏点用于记录行结束时间（长按释放）
         add_line_end = self._flags.get("check_line_end", True)
+        old_singer_map = {cp.char_idx: cp.singer_id for cp in line.checkpoints}
         line.checkpoints = [
             CheckpointConfig(
                 char_idx=i,
@@ -349,6 +350,7 @@ class AutoCheckService:
                     + (1 if i == len(results) - 1 and add_line_end else 0)
                 ),
                 is_line_end=(i == len(results) - 1 and add_line_end),
+                singer_id=old_singer_map.get(i, line.singer_id),
             )
             for i, result in enumerate(results)
         ]
@@ -366,6 +368,7 @@ class AutoCheckService:
                     is_line_end=cp.is_line_end,
                     is_rest=cp.is_rest,
                     linked_to_next=True,
+                    singer_id=cp.singer_id,
                 )
 
         # 如果不保留时间标签，清空
@@ -454,12 +457,14 @@ class AutoCheckService:
 
         # 重建 checkpoint 配置
         add_line_end = self._flags.get("check_line_end", True)
+        old_singer_map2 = {cp.char_idx: cp.singer_id for cp in line.checkpoints}
         line.checkpoints = [
             CheckpointConfig(
                 char_idx=i,
                 check_count=count
                 + (1 if i == len(check_counts) - 1 and add_line_end else 0),
                 is_line_end=(i == len(check_counts) - 1 and add_line_end),
+                singer_id=old_singer_map2.get(i, line.singer_id),
             )
             for i, count in enumerate(check_counts)
         ]
@@ -477,6 +482,7 @@ class AutoCheckService:
                     is_line_end=cp.is_line_end,
                     is_rest=cp.is_rest,
                     linked_to_next=True,
+                    singer_id=cp.singer_id,
                 )
 
     def update_checkpoints_for_project(

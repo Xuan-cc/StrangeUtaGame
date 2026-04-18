@@ -229,6 +229,7 @@ class LineDetailDialog(QDialog):
                                 check_count=new_count,
                                 is_line_end=old_cp_cfg.is_line_end,
                                 is_rest=old_cp_cfg.is_rest,
+                                singer_id=old_cp_cfg.singer_id,
                             )
                         )
                 except ValueError:
