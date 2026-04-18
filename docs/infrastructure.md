@@ -19,6 +19,16 @@
     - `to_inline_text(sentence)`：将带时间标签的句子转换为带有 `[timestamp]` 标记的文本字符串。
     - `from_inline_text(text)`：解析内联格式文本并重建 Sentence 和时间标签。
 
+### SudachiAnalyzer (SudachiPy 分析器)
+提供高精度的日语分词与注音分析实现。
+
+- **职责**：
+    - **SudachiPy Mode C 上下文感知分析器**：利用 SudachiPy 进行长单位（Mode C）分词，能够准确识别复合词。
+    - **假名锚点分配算法**：基于分词结果，将假名智能分配至对应的汉字。
+    - **pykakasi 单字参考分配**：在无法通过上下文确定读音时，使用 pykakasi 作为单字读音参考。
+    - **PykakasiAnalyzer 作为回退**：若系统未安装 SudachiPy 相关依赖，自动降级至 PykakasiAnalyzer。
+    - **create_analyzer() 优先级**：SudachiPy → pykakasi → DummyAnalyzer。
+
 ### lyric_parser (歌词解析器)
 支持多种原始歌词格式的导入。
 

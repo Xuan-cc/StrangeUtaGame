@@ -5,12 +5,14 @@
 ## 功能特性
 
 - **精准打轴**：类似节奏游戏的打轴体验，支持空格键和 F1-F9 功能键
-- **卡拉OK预览**：实时ワイプ効果，逐字高亮显示演唱进度，Ruby 注音同步走字，无节奏点字符连读均分渲染
+- **上下文感知注音**：基于 SudachiPy 的复合词分析与智能单字读音分配
+- **卡拉OK预览**：实时ワイプ効果，逐字高亮显示演唱进度，Ruby 注音同步走字，无时间戳字符连读平滑渲染
+- **小写假名 AutoCheck 开关**：可选择是否自动为小写假名分配节奏点
 - **演唱者颜色区分**：多演唱者模式下走字高亮颜色跟随演唱者设置
 - **日语注音**：自动为汉字添加假名注音（ルビ），支持手动编辑、按字符类型批量删除
 - **连词编辑**：F3 toggle linked_to_next 标记，控制字符是否与下一字符相连，每个字符独立标记，连词不影响 checkpoint，连词 ruby 框合并渲染
 - **自由文本编辑**：编辑模式下支持增删行、自由排版，智能保留打轴数据
-- **Offset 校准**：节拍器 + 空格 tap 校准耳机/设备延迟
+- **Offset 校准改进**：5-4-3-2-1 倒计时校准，支持 BPM 设置，采用暴力对齐算法优化精度
 - **变速播放**：50%~200% 速度调节（SpinBox 显示百分比），Q/W 快捷键 ±10%
 - **快捷键自定义**：键盘监听捕获设置、支持组合键、双快捷键绑定、冲突检测、ESC 取消设置
 - **全局音频管理**：主页加载音频后自动同步到打轴界面，无需通过创建项目中转
@@ -25,7 +27,7 @@
 
 - **UI 框架**：PyQt6 + PyQt-Fluent-Widgets
 - **音频处理**：sounddevice + soundfile
-- **日语处理**：pykakasi + jaconv
+- **日语处理**：SudachiPy + pykakasi (回退) + jaconv
 - **架构模式**：分层架构（Domain + Application + Infrastructure + Presentation）
 
 ## 项目结构
@@ -198,8 +200,8 @@ ruff check .
 ### 7. Offset 校准
 
 - 在「设置」→「Offset 校准」中使用
-- 设置 BPM → 点击「开始校准」→ 跟随节拍器敲击空格键
-- 自动计算平均 offset → 点击「应用」写入全局设置
+- 设置 BPM → 点击「开始校准」→ 画面出现 5-4-3-2-1 倒计时 → 跟随节拍器敲击空格键
+- 采用改进算法（暴力对齐 + IQR 剔除 + 截尾均值）自动计算平均 offset → 点击「应用」写入全局设置
 
 ### 8. 拖拽加载
 
@@ -367,6 +369,8 @@ pyinstaller --noconfirm --onedir --windowed --name "StrangeUtaGame" main.py
 - PyQt-Fluent-Widgets >= 1.5.0
 - sounddevice >= 0.4.6
 - soundfile >= 0.12.1
+- sudachipy >= 0.6.0
+- sudachidict_core
 - pykakasi >= 2.2.1
 
 完整依赖列表见 [requirements.txt](requirements.txt)

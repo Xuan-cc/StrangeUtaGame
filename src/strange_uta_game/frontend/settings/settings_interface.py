@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QKeyEvent
 from qfluentwidgets import (
     PushButton,
@@ -82,6 +82,7 @@ class AppSettings:
             "space_after_japanese": True,
             "space_after_alphabet": True,
             "space_after_symbol": True,
+            "small_kana": False,
         },
         "ui": {
             "theme": "light",
@@ -945,15 +946,21 @@ class SettingsInterface(ScrollArea):
         self.expandLayout.addWidget(self.timing_group)
 
     def _init_calibration_group(self):
-        """Offset 校准 — 通过节拍器 tap 校准耳机延迟。"""
+        """Offset 校准 — 倒数 + 节拍器 tap + 暴力对齐算法。"""
         self.calibration_group = SettingCardGroup("Offset 校准", self.scrollWidget)
 
         cal_card = SettingCard(
             FIF.SPEED_HIGH,
             "节拍器校准",
-            "播放 120 BPM 节拍器，按空格键跟拍，自动计算耳机延迟",
+            "倒数后播放节拍器，按空格跟拍，自动对齐计算延迟",
             self.calibration_group,
         )
+
+        self.spin_cal_bpm = SpinBox(cal_card)
+        self.spin_cal_bpm.setRange(60, 240)
+        self.spin_cal_bpm.setValue(120)
+        self.spin_cal_bpm.setSuffix(" BPM")
+        self.spin_cal_bpm.setFixedWidth(120)
 
         self.btn_cal_start = PushButton("开始校准", cal_card)
         self.btn_cal_start.setFont(QFont("Microsoft YaHei", 10))
@@ -976,6 +983,8 @@ class SettingsInterface(ScrollArea):
             self.lbl_cal_result, 0, Qt.AlignmentFlag.AlignRight
         )
         cal_card.hBoxLayout.addSpacing(8)
+        cal_card.hBoxLayout.addWidget(self.spin_cal_bpm, 0, Qt.AlignmentFlag.AlignRight)
+        cal_card.hBoxLayout.addSpacing(4)
         cal_card.hBoxLayout.addWidget(
             self.btn_cal_start, 0, Qt.AlignmentFlag.AlignRight
         )
@@ -991,9 +1000,12 @@ class SettingsInterface(ScrollArea):
         self._cal_stream = None
         self._cal_thread = None
         self._cal_running = False
+        self._cal_countdown_active = False
+        self._cal_countdown_remaining = 0
+        self._cal_countdown_timer: Optional[QTimer] = None
         self._cal_bpm = 120
-        self._cal_beat_times = []
-        self._cal_tap_times = []
+        self._cal_beat_times: list = []
+        self._cal_tap_times: list = []
         self._cal_start_time = 0.0
         self._cal_offset_ms = 0
 
@@ -1012,7 +1024,6 @@ class SettingsInterface(ScrollArea):
                 samplerate=sr, channels=1, dtype="float32"
             )
             self._cal_stream.start()
-            # 分块写入，每块约 0.1 秒，便于中途安全停止
             chunk_size = int(sr * 0.1)
             reshaped = audio.reshape(-1, 1)
             offset = 0
@@ -1033,18 +1044,48 @@ class SettingsInterface(ScrollArea):
             )
 
     def _on_cal_start(self):
-        """开始节拍器校准。"""
+        """开始校准：先进入倒数阶段，再播放节拍器。"""
         self._cal_tap_times.clear()
         self._cal_beat_times.clear()
         self._cal_offset_ms = 0
+        self._cal_bpm = self.spin_cal_bpm.value()
 
-        # 防御性：校准期间临时置零打轴偏移，避免补偿干扰
         self._cal_saved_offset = self.card_offset.value()
         self.card_offset.setValue(0)
 
         self.btn_cal_start.setEnabled(False)
         self.btn_cal_stop.setEnabled(True)
         self.btn_cal_apply.setEnabled(False)
+        self.spin_cal_bpm.setEnabled(False)
+
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setFocus()
+
+        # 启动倒数 5, 4, 3, 2, 1
+        self._cal_countdown_active = True
+        self._cal_countdown_remaining = 5
+        self.lbl_cal_result.setText(f"准备... {self._cal_countdown_remaining}")
+        self._cal_countdown_timer = QTimer(self)
+        self._cal_countdown_timer.setInterval(1000)
+        self._cal_countdown_timer.timeout.connect(self._on_countdown_tick)
+        self._cal_countdown_timer.start()
+
+    def _on_countdown_tick(self):
+        """倒数计时回调。"""
+        self._cal_countdown_remaining -= 1
+        if self._cal_countdown_remaining > 0:
+            self.lbl_cal_result.setText(f"准备... {self._cal_countdown_remaining}")
+        else:
+            # 倒数结束，启动节拍器
+            if self._cal_countdown_timer:
+                self._cal_countdown_timer.stop()
+                self._cal_countdown_timer.deleteLater()
+                self._cal_countdown_timer = None
+            self._cal_countdown_active = False
+            self._start_metronome()
+
+    def _start_metronome(self):
+        """倒数结束后实际启动节拍器播放。"""
         self.lbl_cal_result.setText("校准中... 请按空格键跟拍")
 
         sr = 44100
@@ -1073,15 +1114,17 @@ class SettingsInterface(ScrollArea):
         except Exception as e:
             self.lbl_cal_result.setText(f"音频错误: {e}")
             self._on_cal_stop()
-            return
-
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setFocus()
 
     def _on_cal_stop(self):
         """停止节拍器。"""
+        # 如果仍在倒数阶段则取消倒数
+        if self._cal_countdown_timer:
+            self._cal_countdown_timer.stop()
+            self._cal_countdown_timer.deleteLater()
+            self._cal_countdown_timer = None
+        self._cal_countdown_active = False
+
         self._cal_running = False
-        # 等待播放线程退出，避免竞争条件
         if self._cal_thread and self._cal_thread.is_alive():
             self._cal_thread.join(timeout=1.0)
         self._cal_thread = None
@@ -1093,12 +1136,12 @@ class SettingsInterface(ScrollArea):
                 pass
             self._cal_stream = None
 
-        # 恢复校准前保存的打轴偏移值
         saved = getattr(self, "_cal_saved_offset", 0)
         self.card_offset.setValue(saved)
 
         self.btn_cal_start.setEnabled(True)
         self.btn_cal_stop.setEnabled(False)
+        self.spin_cal_bpm.setEnabled(True)
 
         if len(self._cal_tap_times) >= 8:
             self._calculate_offset()
@@ -1108,25 +1151,75 @@ class SettingsInterface(ScrollArea):
             )
 
     def _calculate_offset(self):
-        """计算平均 offset。"""
-        offsets = []
-        for tap_time in self._cal_tap_times:
-            diffs = [abs(tap_time - bt) for bt in self._cal_beat_times]
-            min_diff = min(diffs)
-            nearest_beat = self._cal_beat_times[diffs.index(min_diff)]
-            offset_ms = (tap_time - nearest_beat) * 1000
-            if abs(offset_ms) < 250:
-                offsets.append(offset_ms)
+        """暴力对齐 + IQR 剔除 + 截尾均值算法。
 
-        if len(offsets) >= 4:
-            avg = sum(offsets) / len(offsets)
-            self._cal_offset_ms = round(avg)
-            self.lbl_cal_result.setText(
-                f"Offset: {self._cal_offset_ms} ms（{len(offsets)} 次有效 tap）"
-            )
-            self.btn_cal_apply.setEnabled(True)
-        else:
+        用户可能从任意拍次开始跟拍（例如第 6 拍），因此暴力搜索最优对齐位置，
+        使得 tap 序列与拍序列之间的总平方误差最小。
+        """
+        taps = self._cal_tap_times
+        beats = self._cal_beat_times
+        n_taps = len(taps)
+        n_beats = len(beats)
+
+        if n_taps < 8 or n_beats == 0:
+            self.lbl_cal_result.setText("有效数据不足，请重新校准")
+            return
+
+        # 暴力搜索最优起始拍：逐个尝试 tap[0] 对齐到 beats[k]
+        best_offset_start = 0
+        best_error = float("inf")
+
+        for k in range(n_beats):
+            if k + n_taps > n_beats:
+                break
+            total_err = 0.0
+            for j in range(n_taps):
+                diff = taps[j] - beats[k + j]
+                total_err += diff * diff
+            if total_err < best_error:
+                best_error = total_err
+                best_offset_start = k
+
+        # 计算最优对齐下的各 tap offset（毫秒）
+        raw_offsets = []
+        for j in range(n_taps):
+            bi = best_offset_start + j
+            if bi < n_beats:
+                raw_offsets.append((taps[j] - beats[bi]) * 1000)
+
+        if len(raw_offsets) < 4:
             self.lbl_cal_result.setText("有效 tap 不足，请重新校准")
+            return
+
+        # IQR 剔除异常值
+        sorted_offs = sorted(raw_offsets)
+        q1_idx = len(sorted_offs) // 4
+        q3_idx = len(sorted_offs) * 3 // 4
+        q1 = sorted_offs[q1_idx]
+        q3 = sorted_offs[q3_idx]
+        iqr = q3 - q1
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        filtered = [o for o in sorted_offs if lower <= o <= upper]
+
+        if len(filtered) < 4:
+            self.lbl_cal_result.setText("有效 tap 不足（异常值过多），请重新校准")
+            return
+
+        # 截尾均值：去掉首尾各 10%
+        trim_count = max(1, len(filtered) // 10)
+        trimmed = filtered[trim_count : len(filtered) - trim_count]
+        if not trimmed:
+            trimmed = filtered
+
+        avg = sum(trimmed) / len(trimmed)
+        self._cal_offset_ms = round(avg)
+        self.lbl_cal_result.setText(
+            f"Offset: {self._cal_offset_ms} ms"
+            f"（{len(filtered)}/{len(raw_offsets)} 次有效 tap，"
+            f"对齐起始拍: {best_offset_start + 1}）"
+        )
+        self.btn_cal_apply.setEnabled(True)
 
     def _on_cal_apply(self):
         """将校准结果应用到设置。"""
@@ -1146,18 +1239,24 @@ class SettingsInterface(ScrollArea):
         )
 
     def keyPressEvent(self, a0: QKeyEvent | None):
-        """捕获空格键 tap 用于校准。"""
+        """捕获空格键 tap 用于校准（倒数阶段忽略 tap）。"""
         if a0 is None:
             return super().keyPressEvent(a0)
-        if self._cal_stream and a0.key() == Qt.Key.Key_Space and not a0.isAutoRepeat():
-            self._cal_tap_times.append(_time.monotonic())
-            count = len(self._cal_tap_times)
-            if count >= 8:
-                self._calculate_offset()
-            else:
-                self.lbl_cal_result.setText(f"校准中... 已记录 {count} 次 tap")
-            a0.accept()
-            return
+        if a0.key() == Qt.Key.Key_Space and not a0.isAutoRepeat():
+            # 倒数阶段忽略
+            if self._cal_countdown_active:
+                a0.accept()
+                return
+            # 节拍器播放阶段记录 tap
+            if self._cal_stream and self._cal_running:
+                self._cal_tap_times.append(_time.monotonic())
+                count = len(self._cal_tap_times)
+                if count >= 8:
+                    self._calculate_offset()
+                else:
+                    self.lbl_cal_result.setText(f"校准中... 已记录 {count} 次 tap")
+                a0.accept()
+                return
         super().keyPressEvent(a0)
 
     # ── Auto Check ──
@@ -1284,10 +1383,17 @@ class SettingsInterface(ScrollArea):
             "符号或数字后的空格设置check点",
             parent=self.auto_check_group,
         )
+        self.card_small_kana = SwitchSettingCard(
+            FIF.ACCEPT,
+            "小写假名check",
+            "对小写假名（ぁ、ぃ、ゃ、ゅ、ょ等）设置节奏点",
+            parent=self.auto_check_group,
+        )
 
         self.auto_check_group.addSettingCard(self.card_auto_on_load)
         self.auto_check_group.addSettingCard(self.card_check_n)
         self.auto_check_group.addSettingCard(self.card_check_sokuon)
+        self.auto_check_group.addSettingCard(self.card_small_kana)
         self.auto_check_group.addSettingCard(self.card_check_parentheses)
         self.auto_check_group.addSettingCard(self.card_check_empty_lines)
         self.auto_check_group.addSettingCard(self.card_check_line_start)
@@ -1634,6 +1740,9 @@ class SettingsInterface(ScrollArea):
         self.card_space_after_symbol.setChecked(
             self._settings.get("auto_check.space_after_symbol", True)
         )
+        self.card_small_kana.setChecked(
+            self._settings.get("auto_check.small_kana", False)
+        )
 
         # 界面设定
         theme = self._settings.get("ui.theme", "light")
@@ -1742,6 +1851,7 @@ class SettingsInterface(ScrollArea):
         self._settings.set(
             "auto_check.space_after_symbol", self.card_space_after_symbol.isChecked()
         )
+        self._settings.set("auto_check.small_kana", self.card_small_kana.isChecked())
 
         # 界面设定
         theme_map = {0: "light", 1: "dark", 2: "auto"}

@@ -6,6 +6,8 @@ PyQt-Fluent-Widgets>=1.5.0
 sounddevice>=0.4.6
 soundfile>=0.12.1
 pykakasi>=2.2.1
+sudachipy>=0.6.0
+sudachidict_core
 
 # 测试依赖
 pytest>=7.4.0

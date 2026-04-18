@@ -222,6 +222,12 @@ class AutoCheckService:
                     check_counts[i] = 0
                     continue
 
+                # 小写假名（排除促音っ/ッ，已有独立flag）
+                _SMALL_KANA = set("ぁぃぅぇぉゃゅょゎァィゥェォャュョヮゕゖ")
+                if char in _SMALL_KANA and not self._flags.get("small_kana", False):
+                    check_counts[i] = 0
+                    continue
+
                 if ct == CharType.KANJI and self._flags.get(
                     "kanji_single_check", False
                 ):

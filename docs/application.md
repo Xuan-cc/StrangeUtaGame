@@ -19,6 +19,7 @@
 - **职责**：
     - `analyze_sentence`：分析句子结构，识别汉字等需要多节奏点的字符。
     - `apply_to_sentence`：将分析结果应用到 Sentence 实体，设置 check_count。
+    - **小写假名 check flag**：提供 `small_kana` 开关，控制是否自动为小写假名分配节奏点，默认为 OFF。
 
 ### ProjectService (项目服务)
 管理项目的生命周期和持久化逻辑。

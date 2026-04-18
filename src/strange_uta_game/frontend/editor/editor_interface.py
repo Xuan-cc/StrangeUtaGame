@@ -566,6 +566,18 @@ class KaraokePreview(QWidget):
             for group in char_groups:
                 leader = group[0]
                 group_start = char_start_times.get(leader)
+                # 组首无时间戳时，搜索组内任意已打轴成员
+                if group_start is None:
+                    for ci in group:
+                        if ci in char_start_times:
+                            group_start = char_start_times[ci]
+                            break
+                # 仍无时间戳：连读处理——取前方最近已渲染组的结束时间
+                if group_start is None:
+                    for pci in range(leader - 1, -1, -1):
+                        if pci in char_wipe_times:
+                            group_start = char_wipe_times[pci][1]
+                            break
                 if group_start is None:
                     continue
                 leader_ch = line.characters[leader]
