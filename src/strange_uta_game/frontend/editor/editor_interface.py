@@ -615,6 +615,15 @@ class KaraokePreview(QWidget):
                         group_start + dur * (i + 1) / n,
                     )
 
+            # Build linked group info for ruby rendering
+            _linked_leader_groups: dict[int, list[int]] = {}
+            _linked_non_leader: set[int] = set()
+            for group in char_groups:
+                if len(group) > 1:
+                    _linked_leader_groups[group[0]] = group
+                    for _ci in group[1:]:
+                        _linked_non_leader.add(_ci)
+
             for char_pos, ch in enumerate(line.chars):
                 char_w = char_widths[char_pos]
 
@@ -652,75 +661,138 @@ class KaraokePreview(QWidget):
                 )
                 self._char_hitboxes.append((char_rect, idx, char_pos))
 
-                # Ruby
-                ruby = line.get_ruby_for_char(char_pos)
-                if ruby and ruby.start_idx == char_pos:
-                    ruby_chars_w = sum(char_widths[char_pos : ruby.end_idx])
-                    ruby_text_w = fm_ruby.horizontalAdvance(ruby.text)
-                    ruby_x = curr_x + (ruby_chars_w - ruby_text_w) // 2
-                    ruby_y = int(y_center - main_fm.ascent() - 4)
-                    painter.setFont(font_ruby)
-
-                    # 第一遍：基色绘制 ruby 文本
-                    painter.setPen(base_color)
-                    painter.drawText(int(ruby_x), ruby_y, ruby.text)
-
-                    # Ruby 走字效果 — 与主字符wipe时间同步
-                    ruby_wipe_st = char_wipe_times.get(ruby.start_idx)
-                    ruby_st = ruby_wipe_st[0] if ruby_wipe_st else None
-                    # Ruby 高亮色跟随起始字符的演唱者颜色
-                    ruby_highlight = _char_singer_colors.get(
-                        ruby.start_idx, highlight_color
-                    )
-                    if ruby_st is not None:
-                        last_ci = ruby.end_idx - 1
-                        ruby_wipe_et = char_wipe_times.get(last_ci)
-                        ruby_et = ruby_wipe_et[1] if ruby_wipe_et else ruby_st + 300
-
-                        if adjusted_time >= ruby_et:
-                            # 已唱完 → ruby 全高亮
-                            painter.setPen(ruby_highlight)
-                            painter.drawText(int(ruby_x), ruby_y, ruby.text)
-                        elif adjusted_time >= ruby_st:
-                            # 正在唱 → ruby wipe 渐变
-                            r_dur = ruby_et - ruby_st
-                            r_ratio = (
-                                min(
-                                    1.0,
-                                    (adjusted_time - ruby_st) / r_dur,
+                # Ruby — 连词组合并绘制 / 单字独立绘制
+                if char_pos in _linked_non_leader:
+                    pass  # Ruby 由组 leader 统一绘制
+                elif char_pos in _linked_leader_groups:
+                    # 连词组 leader：收集组内所有 ruby 合并绘制
+                    _grp = _linked_leader_groups[char_pos]
+                    _grp_rubies: list = []
+                    _seen_ids: set = set()
+                    for _gci in _grp:
+                        _r = line.get_ruby_for_char(_gci)
+                        if _r and id(_r) not in _seen_ids:
+                            _grp_rubies.append(_r)
+                            _seen_ids.add(id(_r))
+                    if _grp_rubies:
+                        _merged = "".join(r.text for r in _grp_rubies)
+                        _grp_w = sum(char_widths[g] for g in _grp)
+                        ruby_text_w = fm_ruby.horizontalAdvance(_merged)
+                        ruby_x = curr_x + (_grp_w - ruby_text_w) // 2
+                        ruby_y = int(y_center - main_fm.ascent() - 4)
+                        painter.setFont(font_ruby)
+                        painter.setPen(base_color)
+                        painter.drawText(int(ruby_x), ruby_y, _merged)
+                        # Wipe
+                        _fw = char_wipe_times.get(_grp[0])
+                        _lw = char_wipe_times.get(_grp[-1])
+                        _rs = _fw[0] if _fw else None
+                        _re = _lw[1] if _lw else None
+                        _rh = _char_singer_colors.get(_grp[0], highlight_color)
+                        if _rs is not None and _re is not None:
+                            if adjusted_time >= _re:
+                                painter.setPen(_rh)
+                                painter.drawText(int(ruby_x), ruby_y, _merged)
+                            elif adjusted_time >= _rs:
+                                _rd = _re - _rs
+                                _rr = (
+                                    min(1.0, (adjusted_time - _rs) / _rd)
+                                    if _rd > 0
+                                    else 1.0
                                 )
-                                if r_dur > 0
-                                else 1.0
-                            )
-                            if r_ratio > 0:
-                                painter.save()
-                                r_wipe_w = int(ruby_text_w * r_ratio)
-                                r_clip = QRect(
-                                    int(ruby_x),
-                                    ruby_y - fm_ruby.ascent() - 2,
-                                    r_wipe_w,
-                                    fm_ruby.height() + 4,
-                                )
-                                painter.setClipRect(r_clip)
+                                if _rr > 0:
+                                    painter.save()
+                                    _rww = int(ruby_text_w * _rr)
+                                    painter.setClipRect(
+                                        QRect(
+                                            int(ruby_x),
+                                            ruby_y - fm_ruby.ascent() - 2,
+                                            _rww,
+                                            fm_ruby.height() + 4,
+                                        )
+                                    )
+                                    painter.setPen(_rh)
+                                    painter.drawText(int(ruby_x), ruby_y, _merged)
+                                    painter.restore()
+                        # 连词框
+                        painter.save()
+                        _fc = QColor(base_color)
+                        _fc.setAlpha(120)
+                        _fp = QPen(_fc, 1.0)
+                        _fp.setStyle(Qt.PenStyle.SolidLine)
+                        painter.setPen(_fp)
+                        painter.setBrush(Qt.BrushStyle.NoBrush)
+                        painter.drawRoundedRect(
+                            int(ruby_x) - 2,
+                            ruby_y - fm_ruby.ascent() - 1,
+                            int(ruby_text_w) + 4,
+                            fm_ruby.height() + 2,
+                            2,
+                            2,
+                        )
+                        painter.restore()
+                else:
+                    ruby = line.get_ruby_for_char(char_pos)
+                    if ruby and ruby.start_idx == char_pos:
+                        ruby_chars_w = sum(char_widths[char_pos : ruby.end_idx])
+                        ruby_text_w = fm_ruby.horizontalAdvance(ruby.text)
+                        ruby_x = curr_x + (ruby_chars_w - ruby_text_w) // 2
+                        ruby_y = int(y_center - main_fm.ascent() - 4)
+                        painter.setFont(font_ruby)
+                        painter.setPen(base_color)
+                        painter.drawText(int(ruby_x), ruby_y, ruby.text)
+                        # Wipe
+                        ruby_wipe_st = char_wipe_times.get(ruby.start_idx)
+                        ruby_st = ruby_wipe_st[0] if ruby_wipe_st else None
+                        ruby_highlight = _char_singer_colors.get(
+                            ruby.start_idx, highlight_color
+                        )
+                        if ruby_st is not None:
+                            last_ci = ruby.end_idx - 1
+                            ruby_wipe_et = char_wipe_times.get(last_ci)
+                            ruby_et = ruby_wipe_et[1] if ruby_wipe_et else ruby_st + 300
+                            if adjusted_time >= ruby_et:
                                 painter.setPen(ruby_highlight)
                                 painter.drawText(int(ruby_x), ruby_y, ruby.text)
-                                painter.restore()
-
-                    # 連詞Ruby標注 — 多字符合併時畫邊框
-                    if ruby.end_idx - ruby.start_idx > 1:
-                        painter.save()
-                        frame_color = QColor(base_color)
-                        frame_color.setAlpha(120)
-                        pen = QPen(frame_color, 1.0)
-                        pen.setStyle(Qt.PenStyle.SolidLine)
-                        painter.setPen(pen)
-                        painter.setBrush(Qt.BrushStyle.NoBrush)
-                        rx = int(ruby_x) - 2
-                        ry = ruby_y - fm_ruby.ascent() - 1
-                        rw = int(ruby_text_w) + 4
-                        rh = fm_ruby.height() + 2
-                        painter.drawRoundedRect(rx, ry, rw, rh, 2, 2)
-                        painter.restore()
+                            elif adjusted_time >= ruby_st:
+                                r_dur = ruby_et - ruby_st
+                                r_ratio = (
+                                    min(1.0, (adjusted_time - ruby_st) / r_dur)
+                                    if r_dur > 0
+                                    else 1.0
+                                )
+                                if r_ratio > 0:
+                                    painter.save()
+                                    r_wipe_w = int(ruby_text_w * r_ratio)
+                                    painter.setClipRect(
+                                        QRect(
+                                            int(ruby_x),
+                                            ruby_y - fm_ruby.ascent() - 2,
+                                            r_wipe_w,
+                                            fm_ruby.height() + 4,
+                                        )
+                                    )
+                                    painter.setPen(ruby_highlight)
+                                    painter.drawText(int(ruby_x), ruby_y, ruby.text)
+                                    painter.restore()
+                        # 多字符 Ruby 框（非连词的原始多字符注音）
+                        if ruby.end_idx - ruby.start_idx > 1:
+                            painter.save()
+                            frame_color = QColor(base_color)
+                            frame_color.setAlpha(120)
+                            pen = QPen(frame_color, 1.0)
+                            pen.setStyle(Qt.PenStyle.SolidLine)
+                            painter.setPen(pen)
+                            painter.setBrush(Qt.BrushStyle.NoBrush)
+                            painter.drawRoundedRect(
+                                int(ruby_x) - 2,
+                                ruby_y - fm_ruby.ascent() - 1,
+                                int(ruby_text_w) + 4,
+                                fm_ruby.height() + 2,
+                                2,
+                                2,
+                            )
+                            painter.restore()
 
                 # 主文字 — 基于 checkpoint 的逐字 wipe
                 painter.setFont(main_font)
@@ -1255,6 +1327,7 @@ class EditorInterface(QWidget):
         settings = setting_iface.get_settings()
         self._fast_forward_ms = settings.get("timing.fast_forward_ms", 5000)
         self._rewind_ms = settings.get("timing.rewind_ms", 5000)
+        self._jump_before_ms = settings.get("timing.jump_before_ms", 3000)
         # 读取快捷键映射
         self._key_map = {}
         shortcut_actions = {
@@ -1524,6 +1597,7 @@ class EditorInterface(QWidget):
         from strange_uta_game.frontend.editor.bulk_change_dialog import BulkChangeDialog
 
         initial_word = ""
+        initial_reading = ""
         if self._project:
             line_idx = self.preview._current_line_idx
             char_idx = self.preview._current_char_idx
@@ -1548,8 +1622,24 @@ class EditorInterface(QWidget):
                         end += 1
                     end += 1  # exclusive
                     initial_word = text[start:end]
+                    # 收集已有注音，逗号分隔
+                    readings: list[str] = []
+                    for ci in range(start, end):
+                        r = line.get_ruby_for_char(ci)
+                        if r:
+                            readings.append(r.text)
+                        else:
+                            readings.append("")
+                    # 只有至少一个有注音时才填充
+                    if any(readings):
+                        initial_reading = ",".join(readings)
 
-        dialog = BulkChangeDialog(self._project, self, initial_word=initial_word)
+        dialog = BulkChangeDialog(
+            self._project,
+            self,
+            initial_word=initial_word,
+            initial_reading=initial_reading,
+        )
         dialog.exec()
 
     # ==================== 音频 ====================
@@ -1904,16 +1994,17 @@ class EditorInterface(QWidget):
             self._update_status()
 
     def _on_seek_to_char(self, line_idx: int, char_idx: int):
-        """双击字符 → 跳转到该字符的 checkpoint 前 3 秒"""
+        """双击字符 → 跳转到该字符的 checkpoint 前指定毫秒数"""
         if not self._project or line_idx >= len(self._project.lines):
             return
         line = self._project.lines[line_idx]
         if char_idx >= len(line.chars):
             return
 
+        jump_before = getattr(self, "_jump_before_ms", 3000)
         tags = line.get_timetags_for_char(char_idx)
         if tags:
-            target_ms = max(0, tags[0].timestamp_ms - 3000)
+            target_ms = max(0, tags[0].timestamp_ms - jump_before)
             self._on_seek(target_ms)
 
         # 同时移动打轴位置到该字符

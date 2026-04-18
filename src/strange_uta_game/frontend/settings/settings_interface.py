@@ -61,6 +61,7 @@ class AppSettings:
             "speed_correction": 100,
             "fast_forward_ms": 5000,
             "rewind_ms": 5000,
+            "jump_before_ms": 3000,
         },
         "auto_check": {
             "hiragana": True,
@@ -872,12 +873,23 @@ class SettingsInterface(ScrollArea):
             "加载音频文件后自动开始播放",
             parent=self.playback_group,
         )
+        self.card_jump_before = SpinSettingCard(
+            FIF.HISTORY,
+            "双击跳转提前量",
+            "双击字符跳转到该字符时间戳前的毫秒数",
+            min_val=0,
+            max_val=30000,
+            step=500,
+            suffix=" ms",
+            parent=self.playback_group,
+        )
 
         self.playback_group.addSettingCard(self.card_volume)
         self.playback_group.addSettingCard(self.card_speed)
         self.playback_group.addSettingCard(self.card_fast_forward)
         self.playback_group.addSettingCard(self.card_rewind)
         self.playback_group.addSettingCard(self.card_auto_play)
+        self.playback_group.addSettingCard(self.card_jump_before)
         self.expandLayout.addWidget(self.playback_group)
 
     # ── 打轴设定 ──
@@ -1562,6 +1574,9 @@ class SettingsInterface(ScrollArea):
         self.card_auto_play.setChecked(
             self._settings.get("audio.auto_play_on_load", False)
         )
+        self.card_jump_before.setValue(
+            self._settings.get("timing.jump_before_ms", 3000)
+        )
 
         # 打轴设定
         self.card_offset.setValue(self._settings.get("timing.tag_offset_ms", 0))
@@ -1678,6 +1693,7 @@ class SettingsInterface(ScrollArea):
         self._settings.set("audio.auto_play_on_load", self.card_auto_play.isChecked())
         self._settings.set("timing.fast_forward_ms", self.card_fast_forward.value())
         self._settings.set("timing.rewind_ms", self.card_rewind.value())
+        self._settings.set("timing.jump_before_ms", self.card_jump_before.value())
 
         # 打轴设定
         self._settings.set("timing.tag_offset_ms", self.card_offset.value())

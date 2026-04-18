@@ -326,3 +326,33 @@
 ---
 
 **修复完成**: 所有冲突点和遗漏项已解决，文档现在一致且完整。
+
+---
+
+## 第四批修复与功能增强（2026-04-18）
+
+### 修复的 BUG
+
+| # | BUG | 修改文件 | 说明 |
+|---|-----|---------|------|
+| 1 | ruby_editor.py 被误改（混淆注音界面与编辑界面） | ruby_editor.py | 回退到 76818c8~1 版本，仅保留 singer_id 传播修复 |
+| 2 | F3 连词后 ruby 框不更新 | editor_interface.py | paintEvent 新增 `_linked_leader_groups` / `_linked_non_leader`，连词组 leader 合并绘制 ruby 框，非 leader 跳过 |
+| 3 | 批量变更不自动填充已有注音 | editor_interface.py, bulk_change_dialog.py | `_on_bulk_change` 收集已有 rubies 构建 `initial_reading`；BulkChangeDialog 接受 `initial_reading` 参数自动填入 |
+| 4 | 批量变更逗号分隔注音未解析 | bulk_change_dialog.py | `_on_apply` 中逗号分隔注音自动 split 为 per-char Ruby |
+| 5 | 编辑界面（edit_interface.py）连词/演唱者未适配 | edit_interface.py | `_update_table` 连词分组显示 `[chars]`、per-char singer 汇总；LineDetailDialog 完全重写 |
+
+### 新增功能
+
+| # | 功能 | 修改文件 | 说明 |
+|---|------|---------|------|
+| 1 | 侧边栏标签重命名 | main_window.py | "注音编辑" → "注音" |
+| 2 | 双击跳转秒数可配置 | settings_interface.py, editor_interface.py | 设置 → 演奏控制新增"跳转前置时间"（默认3000ms），双击字符跳转时使用该值 |
+| 3 | 编辑界面连词分组显示 | edit_interface.py | linked_to_next 字符以 `[chars]` 形式合并显示在歌词列 |
+| 4 | 编辑界面 per-char 演唱者 | edit_interface.py | 演唱者列汇总显示每行的 per-char singer 名称 |
+| 5 | 行详情对话框 per-char 编辑 | edit_interface.py | LineDetailDialog 支持每个字符独立编辑演唱者、注音、节奏点；连词组合并为一行 |
+
+### 数据结构说明
+
+- `BulkChangeDialog.__init__` 新增 `initial_reading: str = ""` 参数
+- `settings_interface.py` DEFAULT_SETTINGS 新增 `timing.jump_before_ms: 3000`
+- `LineDetailDialog` 新表格列：字符(col0)、注音(col1)、时间标签(col2)、节奏点(col3)、句尾(col4)、演唱者(col5)

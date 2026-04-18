@@ -33,7 +33,13 @@ class BulkChangeDialog(QDialog):
     - 可选注册到用户读音词典
     """
 
-    def __init__(self, project: Optional[Project], parent=None, initial_word: str = ""):
+    def __init__(
+        self,
+        project: Optional[Project],
+        parent=None,
+        initial_word: str = "",
+        initial_reading: str = "",
+    ):
         super().__init__(parent)
         self._project = project
         self.setWindowTitle("批量变更 (Ctrl+H)")
@@ -74,6 +80,8 @@ class BulkChangeDialog(QDialog):
         self.edit_reading = LineEdit()
         self.edit_reading.setPlaceholderText("留空则不修改注音（假名，逗号分隔多段）")
         self.edit_reading.setFont(QFont("Microsoft YaHei", 10))
+        if initial_reading:
+            self.edit_reading.setText(initial_reading)
         row2.addWidget(lbl2)
         row2.addWidget(self.edit_reading)
         layout.addLayout(row2)
@@ -170,15 +178,33 @@ class BulkChangeDialog(QDialog):
                 if text[pos : pos + word_len] == word:
                     # 修改注音（留空则不修改）
                     if reading:
-                        # 查找已有的 Ruby，删除旧的，添加新的
+                        # 查找已有的 Ruby，删除旧的
                         line.rubies = [
                             r
                             for r in line.rubies
                             if not (r.start_idx >= pos and r.end_idx <= pos + word_len)
                         ]
-                        line.rubies.append(
-                            Ruby(text=reading, start_idx=pos, end_idx=pos + word_len)
-                        )
+                        # 逗号分隔 → per-char Ruby；无逗号 → 整词 Ruby
+                        if "," in reading and word_len > 1:
+                            parts = reading.split(",")
+                            for k, part in enumerate(parts):
+                                part = part.strip()
+                                if part and pos + k < pos + word_len:
+                                    line.rubies.append(
+                                        Ruby(
+                                            text=part,
+                                            start_idx=pos + k,
+                                            end_idx=pos + k + 1,
+                                        )
+                                    )
+                        else:
+                            line.rubies.append(
+                                Ruby(
+                                    text=reading,
+                                    start_idx=pos,
+                                    end_idx=pos + word_len,
+                                )
+                            )
                         line.rubies.sort(key=lambda r: r.start_idx)
 
                     # 设置节奏点（-1=不修改，0=设为0，>0=设为指定值）

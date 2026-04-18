@@ -117,7 +117,7 @@ class MainWindow(MSFluentWindow):
         self.addSubInterface(self.editViewInterface, FIF.EDIT, "编辑")
         self.addSubInterface(self.exportInterface, FIF.SHARE, "导出")
         self.addSubInterface(self.singerInterface, FIF.PEOPLE, "演唱者")
-        self.addSubInterface(self.rubyInterface, FIF.FONT, "注音编辑")
+        self.addSubInterface(self.rubyInterface, FIF.FONT, "注音")
 
         # 底部
         self.addSubInterface(

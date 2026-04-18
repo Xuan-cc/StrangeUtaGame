@@ -22,7 +22,8 @@ MainWindow (MSFluentWindow)
 │   ├── 打轴 (EditorInterface) ← 核心界面
 │   ├── 导出 (ExportInterface)
 │   ├── 演唱者 (SingerManagerInterface)
-│   ├── 注音编辑 (RubyInterface)
+│   ├── 编辑 (EditInterface)
+│   ├── 注音 (RubyInterface)
 │   └── 设置 (SettingsInterface) [底部]
 │
 ├── HomeInterface (主页)
@@ -59,7 +60,7 @@ MainWindow (MSFluentWindow)
 │   ├── 演唱者列表 ([后台编号] 显示名)
 │   └── 添加 / 编辑 / 删除
 │
-├── RubyInterface (注音编辑)
+├── RubyInterface (注音)
 │   ├── 行选择导航
 │   ├── 注音表格
 │   └── 自动分析 / 添加注音
@@ -98,7 +99,7 @@ MainWindow (MSFluentWindow)
 | 按键 | 功能 |
 |------|------|
 | **Space 长按** | 句尾拖音（按下开始，抬起结束） |
-| **双击 Checkpoint** | 预听（跳转到该时间前 X 秒） |
+| **双击字符** | 跳转到该字符前 N 秒（可在设置中配置） | ✅ |
 | **Alt+滚轮** | 缩放歌词显示 |
 
 ### 快捷键系统特性
@@ -133,6 +134,9 @@ MainWindow (MSFluentWindow)
 - [x] Ctrl+H 批量変更
 - [x] 演唱者划词选择（拖拽选中文字 → 右键 → 设置 per-char singer_id）
 - [x] 连词不影响 checkpoint（F3 toggle 独立于 check_count）
+- [x] 连词 ruby 框合并渲染（linked_to_next 组的 leader 字符合并显示 ruby 框）
+- [x] 双击字符跳转预听（跳转到该字符 checkpoint 前 N 秒，N 可在设置中配置）
+- [x] 批量変更自动填充已有注音 + 逗号分隔注音自动解析为 per-char Ruby
 
 ### 导出
 - [x] 7 种格式（LRC/KRA/TXT/Txt2Ass/ASS/Nicokara/NicokaraRuby）
@@ -143,7 +147,7 @@ MainWindow (MSFluentWindow)
 - [x] 默认"未命名"，后台编号从 1 递增
 - [x] 添加/编辑/删除，颜色标识
 
-### 注音编辑
+### 注音
 - [x] 行选择，注音表格，自动分析
 - [x] 按字符类型删除注音（汉字/平假名/片假名/英字/数字/符号/空格）
 - [x] 自由文本编辑（增删行，时间标签/checkpoint 智能重建保留打轴数据）
@@ -152,6 +156,13 @@ MainWindow (MSFluentWindow)
 - [x] 编辑视图节奏点注解（`<count>` 或 `<c1,c2>` 格式）
 - [x] 编辑视图演唱者注解（`@(name)` 或 `@(n1,n2)` 格式）
 - [x] 批量变更节奏点支持逗号分隔（-1=不修改，0=设为0）
+
+### 编辑界面
+- [x] 歌词表格视图（行号/歌词/演唱者/时间标签）
+- [x] 连词分组显示（linked_to_next 字符以 `[chars]` 形式合并显示）
+- [x] per-char 演唱者汇总显示（多演唱者以逗号分隔显示名称）
+- [x] 行详情对话框（双击行打开，支持 per-char 演唱者编辑）
+- [x] 连词组合并为一行编辑（每个字符的注音/节奏点/演唱者用逗号分隔）
 
 ### 设置
 - [x] 音频/打轴/界面/导出/快捷键设置
@@ -162,15 +173,15 @@ MainWindow (MSFluentWindow)
 - [x] 快捷键冲突检测（自动清除冲突键并提示）
 - [x] ESC 取消快捷键设置（按 ESC 直接取消，不改动键位）
 - [x] 用户读音词典管理
+- [x] 双击跳转预听时间可配置（设置 → 演奏控制 → 跳转前置时间）
 
 ## 待实现功能
 
 1. 句尾长按打轴（Space 长按记录拖音）
-2. 双击预听
-3. 歌词缩放（Alt+滚轮）
-4. 音频波形显示
-5. 多演唱者和声渲染
-6. 时间异常检测
+2. 歌词缩放（Alt+滚轮）
+3. 音频波形显示
+4. 多演唱者和声渲染
+5. 时间异常检测
 
 ## 文件格式
 
