@@ -1,0 +1,82 @@
+{
+  "audio": {
+    "default_volume": 80,
+    "default_speed": 1.0,
+    "auto_play_on_load": false
+  },
+  "timing": {
+    "default_check_count": 1,
+    "auto_advance_after_tag": true,
+    "show_preview_lines": 5,
+    "tag_offset_ms": -130,
+    "speed_correction": 100,
+    "fast_forward_ms": 5000,
+    "rewind_ms": 5000,
+    "jump_before_ms": 3000
+  },
+  "auto_check": {
+    "hiragana": true,
+    "katakana": true,
+    "kanji": true,
+    "alphabet": false,
+    "digit": false,
+    "symbol": false,
+    "space": false,
+    "auto_on_load": true,
+    "check_n": false,
+    "check_sokuon": false,
+    "check_parentheses": true,
+    "check_empty_lines": false,
+    "check_line_start": false,
+    "check_line_end": true,
+    "kanji_single_check": false,
+    "space_after_japanese": false,
+    "space_after_alphabet": true,
+    "space_after_symbol": true,
+    "small_kana": false,
+    "check_space_as_line_end": true
+  },
+  "ui": {
+    "theme": "light",
+    "language": "zh_CN",
+    "font_size": 24
+  },
+  "export": {
+    "default_format": "LRC",
+    "auto_add_extension": true,
+    "last_export_dir": "",
+    "offset_ms": -100
+  },
+  "ruby_dictionary": {
+    "enabled": true
+  },
+  "nicokara_tags": {
+    "title": "",
+    "artist": "",
+    "album": "",
+    "tagging_by": "",
+    "silence_ms": 0,
+    "custom": []
+  },
+  "auto_save": {
+    "enabled": true,
+    "interval_minutes": 5
+  },
+  "shortcuts": {
+    "play_pause": "A",
+    "stop": "S",
+    "tag_now": "Space",
+    "seek_back": "Z",
+    "seek_forward": "X",
+    "speed_down": "Q",
+    "speed_up": "W",
+    "edit_ruby": "F2",
+    "toggle_checkpoint": "F4",
+    "volume_up": "UP",
+    "volume_down": "DOWN",
+    "nav_prev_line": "LEFT",
+    "nav_next_line": "RIGHT",
+    "clear_tags": "BACKSPACE",
+    "toggle_line_end": "F5"
+  }
+}
