@@ -58,6 +58,29 @@ class MainWindow(MSFluentWindow):
         # 延迟检查闪退恢复（等 UI 显示完毕后再弹窗）
         QTimer.singleShot(500, self._check_crash_recovery)
 
+    @staticmethod
+    def _find_icon_path() -> Optional[str]:
+        """查找应用图标路径（兼容开发环境和 PyInstaller 打包环境）。"""
+        import sys
+        from pathlib import Path
+
+        candidates = []
+        # PyInstaller 打包后
+        base = getattr(sys, "_MEIPASS", None)
+        if base:
+            candidates.append(Path(base) / "strange_uta_game" / "resource" / "icon.ico")
+        # 开发环境：相对于本文件
+        candidates.append(
+            Path(__file__).resolve().parent.parent / "resource" / "icon.ico"
+        )
+        # 项目根目录
+        candidates.append(Path(sys.argv[0]).resolve().parent / "icon.ico")
+
+        for p in candidates:
+            if p.exists():
+                return str(p)
+        return None
+
     def _init_window(self):
         """初始化窗口属性"""
         setThemeColor("#FF6B6B", lazy=True)
@@ -66,6 +89,13 @@ class MainWindow(MSFluentWindow):
         self.setWindowTitle("StrangeUtaGame - 歌词打轴工具")
         self.setMinimumSize(1200, 800)
         self.resize(1400, 900)
+
+        # 设置窗口图标（左上角）
+        from PyQt6.QtGui import QIcon
+
+        icon_path = self._find_icon_path()
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
 
         # 居中
         screen = QApplication.primaryScreen()

@@ -56,4 +56,4 @@
     - **TXT Exporter**：纯文本打轴数据。使用 `ch.export_timestamps`。
     - **txt2ass Exporter**：兼容特定 ASS 生成工具的中间格式。使用 `ch.export_timestamps`。
     - **ASS Exporter**：直接生成包含 Ruby 支持和样式信息的 ASS 字幕。
-    - **Nicokara Exporter**：生成符合ニコカラメーカー规范的歌词文件。使用 `ch.export_timestamps`。
+    - **Nicokara Exporter**：生成符合ニコカラメーカー规范的歌词文件。使用 `ch.export_timestamps`。支持同一汉字多次出现时的独立 @Ruby 条目生成（每次出现生成独立的位置时间窗口）；支持单行内非行尾句尾的释放时间戳导出（句尾字符后插入额外时间戳）。

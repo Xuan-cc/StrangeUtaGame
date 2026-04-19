@@ -121,12 +121,14 @@ class AppSettings:
             "speed_down": "Q",
             "speed_up": "W",
             "edit_ruby": "F2",
-            "toggle_checkpoint": "F4",
+            "add_checkpoint": "F4",
+            "remove_checkpoint": "F5",
             "volume_up": "UP",
             "volume_down": "DOWN",
             "nav_prev_line": "LEFT",
             "nav_next_line": "RIGHT",
             "clear_tags": "BACKSPACE",
+            "toggle_line_end": "F6",
         },
     }
 
@@ -146,6 +148,21 @@ class AppSettings:
             except Exception:
                 pass
         return program_dir
+
+    @staticmethod
+    def _get_packaged_config_path(filename: str) -> Optional[Path]:
+        """获取内嵌配置文件路径（兼容开发环境和 PyInstaller 打包环境）。"""
+        # PyInstaller 打包后
+        base = getattr(sys, "_MEIPASS", None)
+        if base:
+            p = Path(base) / "strange_uta_game" / "config" / filename
+            if p.exists():
+                return p
+        # 开发环境：相对于 settings_interface.py 的位置
+        dev_path = Path(__file__).resolve().parent.parent.parent / "config" / filename
+        if dev_path.exists():
+            return dev_path
+        return None
 
     def __init__(self, config_path: Optional[str] = None):
         if config_path is None:
@@ -180,6 +197,17 @@ class AppSettings:
         """首次启动时，将内置 RL 字典固化为默认 dictionary.json。"""
         if self._dict_path.exists():
             return
+        # 优先使用打包的 dictionary.json
+        packaged = self._get_packaged_config_path("dictionary.json")
+        if packaged:
+            try:
+                import shutil
+
+                shutil.copy2(str(packaged), str(self._dict_path))
+                return
+            except Exception:
+                pass
+        # 回退到代码内置的默认字典文本
         try:
             from strange_uta_game.backend.infrastructure.data.default_dictionary import (
                 DEFAULT_RL_DICT_TEXT,
@@ -201,6 +229,18 @@ class AppSettings:
                     return settings
             except Exception as e:
                 print(f"加载设置失败: {e}")
+
+        # 回退到内嵌默认配置
+        packaged = self._get_packaged_config_path("config.json")
+        if packaged:
+            try:
+                with open(packaged, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                    settings = self._deep_copy_defaults()
+                    self._deep_merge(settings, loaded)
+                    return settings
+            except Exception:
+                pass
 
         return self._deep_copy_defaults()
 
@@ -280,8 +320,16 @@ class AppSettings:
 
     @staticmethod
     def _load_json(path: Path, default: Any = None) -> Any:
-        """读取 JSON 文件。"""
+        """读取 JSON 文件，不存在时回退到内嵌默认文件。"""
         if not path.exists():
+            # 尝试从内嵌配置包回退
+            packaged = AppSettings._get_packaged_config_path(path.name)
+            if packaged:
+                try:
+                    with open(packaged, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
             return default if default is not None else []
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -1977,8 +2025,15 @@ class SettingsInterface(ScrollArea):
         self.card_sc_toggle_cp = ShortcutSettingCard(
             FIF.PIN,
             "增加节奏点",
-            "增加当前字符的节奏点数量（Alt+该键减少）",
+            "增加当前字符的节奏点数量",
             "F4",
+            parent=self.shortcut_group,
+        )
+        self.card_sc_remove_cp = ShortcutSettingCard(
+            FIF.REMOVE,
+            "删除节奏点",
+            "减少当前字符的节奏点数量（最小为0）",
+            "F5",
             parent=self.shortcut_group,
         )
         self.card_sc_volume_up = ShortcutSettingCard(
@@ -2012,7 +2067,7 @@ class SettingsInterface(ScrollArea):
             FIF.TAG,
             "切换句尾",
             "切换当前字符的句尾标记",
-            "F5",
+            "F6",
             parent=self.shortcut_group,
         )
 
@@ -2025,6 +2080,7 @@ class SettingsInterface(ScrollArea):
         self.shortcut_group.addSettingCard(self.card_sc_speed_up)
         self.shortcut_group.addSettingCard(self.card_sc_edit_ruby)
         self.shortcut_group.addSettingCard(self.card_sc_toggle_cp)
+        self.shortcut_group.addSettingCard(self.card_sc_remove_cp)
         self.shortcut_group.addSettingCard(self.card_sc_volume_up)
         self.shortcut_group.addSettingCard(self.card_sc_volume_down)
         self.shortcut_group.addSettingCard(self.card_sc_nav_prev)
@@ -2045,6 +2101,7 @@ class SettingsInterface(ScrollArea):
             ("加速", self.card_sc_speed_up),
             ("注音编辑", self.card_sc_edit_ruby),
             ("增加节奏点", self.card_sc_toggle_cp),
+            ("删除节奏点", self.card_sc_remove_cp),
             ("音量增大", self.card_sc_volume_up),
             ("音量减小", self.card_sc_volume_down),
             ("上一行", self.card_sc_nav_prev),
@@ -2362,7 +2419,10 @@ class SettingsInterface(ScrollArea):
         self.card_sc_speed_up.setValue(self._settings.get("shortcuts.speed_up", "W"))
         self.card_sc_edit_ruby.setValue(self._settings.get("shortcuts.edit_ruby", "F2"))
         self.card_sc_toggle_cp.setValue(
-            self._settings.get("shortcuts.toggle_checkpoint", "F4")
+            self._settings.get("shortcuts.add_checkpoint", "F4")
+        )
+        self.card_sc_remove_cp.setValue(
+            self._settings.get("shortcuts.remove_checkpoint", "F5")
         )
         self.card_sc_volume_up.setValue(self._settings.get("shortcuts.volume_up", "UP"))
         self.card_sc_volume_down.setValue(
@@ -2378,7 +2438,7 @@ class SettingsInterface(ScrollArea):
             self._settings.get("shortcuts.clear_tags", "BACKSPACE")
         )
         self.card_sc_toggle_line_end.setValue(
-            self._settings.get("shortcuts.toggle_line_end", "F5")
+            self._settings.get("shortcuts.toggle_line_end", "F6")
         )
 
     def _collect_settings(self):
@@ -2486,8 +2546,9 @@ class SettingsInterface(ScrollArea):
         self._settings.set("shortcuts.speed_down", self.card_sc_speed_down.value())
         self._settings.set("shortcuts.speed_up", self.card_sc_speed_up.value())
         self._settings.set("shortcuts.edit_ruby", self.card_sc_edit_ruby.value())
+        self._settings.set("shortcuts.add_checkpoint", self.card_sc_toggle_cp.value())
         self._settings.set(
-            "shortcuts.toggle_checkpoint", self.card_sc_toggle_cp.value()
+            "shortcuts.remove_checkpoint", self.card_sc_remove_cp.value()
         )
         self._settings.set("shortcuts.volume_up", self.card_sc_volume_up.value())
         self._settings.set("shortcuts.volume_down", self.card_sc_volume_down.value())

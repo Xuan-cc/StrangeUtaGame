@@ -387,8 +387,8 @@ class TestNicokaraWithRubyExporter:
 
             # 应包含 @Offset
             assert "@Offset=+0" in content
-            # 应包含 @Ruby 标签
-            assert "@Ruby1=赤,あか," in content
+            # 应包含 @Ruby 标签（单次出现无需位置标记）
+            assert "@Ruby1=赤,あか" in content
             # 歌词部分仍为逐字时间戳
             assert "[00:05:00]赤" in content
         finally:

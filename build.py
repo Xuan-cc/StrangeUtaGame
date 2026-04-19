@@ -39,6 +39,10 @@ args = [
     "--noconfirm",  # 不确认覆盖
     # 数据文件
     "--add-data=src/strange_uta_game;strange_uta_game",  # 源代码
+    "--add-data=src/strange_uta_game/resource/icon.ico;strange_uta_game/resource",  # 图标
+    "--add-data=src/strange_uta_game/config/config.json;strange_uta_game/config",  # 默认配置
+    "--add-data=src/strange_uta_game/config/dictionary.json;strange_uta_game/config",  # 默认字典
+    "--add-data=src/strange_uta_game/config/singers.json;strange_uta_game/config",  # 默认演唱者
     # 隐藏导入（PyInstaller 可能检测不到的模块）
     "--hidden-import=sounddevice",
     "--hidden-import=soundfile",
@@ -65,7 +69,7 @@ args = [
     "--collect-all=pykakasi",
     "--collect-all=qfluentwidgets",
     # 图标（如果有的话）
-    # '--icon=icon.ico',
+    "--icon=src/strange_uta_game/resource/icon.ico",
 ]
 
 # 平台特定配置

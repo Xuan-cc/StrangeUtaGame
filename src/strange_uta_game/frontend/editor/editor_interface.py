@@ -1244,7 +1244,7 @@ class EditorInterface(QWidget):
 
         # 快捷键提示
         shortcut_hint = QLabel(
-            "A播放 S停止 Z/X跳转 Q/W变速 F2注音 F3连词 F4节奏点 F5句尾 Ctrl+H批量"
+            "A播放 S停止 Z/X跳转 Q/W变速 F2注音 F3连词 F4增加节奏点 F5删除节奏点 F6句尾 Ctrl+H批量"
         )
         shortcut_hint.setStyleSheet("font-size: 11px; color: gray;")
         bottom.addWidget(shortcut_hint)
@@ -1308,8 +1308,9 @@ class EditorInterface(QWidget):
             "speed_down": settings.get("shortcuts.speed_down", "Q"),
             "speed_up": settings.get("shortcuts.speed_up", "W"),
             "edit_ruby": settings.get("shortcuts.edit_ruby", "F2"),
-            "toggle_checkpoint": settings.get("shortcuts.toggle_checkpoint", "F4"),
-            "toggle_line_end": settings.get("shortcuts.toggle_line_end", "F5"),
+            "add_checkpoint": settings.get("shortcuts.add_checkpoint", "F4"),
+            "remove_checkpoint": settings.get("shortcuts.remove_checkpoint", "F5"),
+            "toggle_line_end": settings.get("shortcuts.toggle_line_end", "F6"),
             "volume_up": settings.get("shortcuts.volume_up", "UP"),
             "volume_down": settings.get("shortcuts.volume_down", "DOWN"),
             "nav_prev_line": settings.get("shortcuts.nav_prev_line", "LEFT"),
@@ -1861,12 +1862,31 @@ class EditorInterface(QWidget):
             self._update_status()
 
     def _on_char_selected(self, line_idx: int, char_idx: int):
-        """点击字符选中 — 直接移动到该字符的第一个 checkpoint"""
+        """点击字符选中 — 移动到该字符的第一个 checkpoint。
+
+        若字符无 checkpoint（check_count=0 且非句尾），保持视觉焦点在
+        该字符上，方便用户通过 F4 添加节奏点；内部打轴位置仍移到最近的
+        下一个有效 checkpoint，确保按空格时能正确赋时间戳。
+        """
         self._current_line_idx = line_idx
         self.preview.set_current_position(line_idx, char_idx)
+
+        # 判断当前字符是否有 checkpoint
+        no_checkpoint = True
+        if self._project and line_idx < len(self._project.sentences):
+            sentence = self._project.sentences[line_idx]
+            if char_idx < len(sentence.characters):
+                ch = sentence.characters[char_idx]
+                no_checkpoint = ch.check_count == 0 and not ch.is_sentence_end
+
         # 单击即移动 checkpoint 目标到选中字符
         if self._timing_service:
             self._timing_service.move_to_checkpoint(line_idx, char_idx, 0)
+
+        # 无 checkpoint 时恢复视觉焦点到被点击的字符
+        if no_checkpoint:
+            self.preview.set_current_position(line_idx, char_idx)
+
         self._update_line_info()
         self._update_time_tags_display()
         self._update_status()
@@ -1887,8 +1907,16 @@ class EditorInterface(QWidget):
             if hasattr(self, "_store"):
                 self._store.notify("lyrics")
 
-    def _toggle_checkpoint(self, delta: int = 1):
-        """F4 增加轴点数 (+1)，Ctrl+F4 减少轴点数 (-1)，最小为 0。"""
+    def _add_checkpoint(self):
+        """F4 增加当前字符节奏点 (+1)。"""
+        self._change_checkpoint(delta=1)
+
+    def _remove_checkpoint(self):
+        """F5 删除当前字符节奏点 (-1)，最小为 0。"""
+        self._change_checkpoint(delta=-1)
+
+    def _change_checkpoint(self, delta: int):
+        """增加或减少当前字符的节奏点数量。"""
         if not self._project:
             return
         line_idx = self._current_line_idx
@@ -1913,7 +1941,7 @@ class EditorInterface(QWidget):
             self._store.notify("checkpoints")
 
     def _toggle_line_end(self):
-        """F5 切换当前字符的句尾标记 (is_line_end)。
+        """F6 切换当前字符的句尾标记 (is_line_end)。
 
         句尾标记独立于普通 checkpoint 数量。
         """
@@ -2046,11 +2074,6 @@ class EditorInterface(QWidget):
                 self._on_bulk_change()
                 a0.accept()
                 return
-            elif key == Qt.Key.Key_F4:
-                if self._project:
-                    self._toggle_checkpoint(delta=-1)
-                a0.accept()
-                return
             # 其他 Ctrl 组合键：不直接 return，继续走 key_map 查找
 
         # Convert Qt key to string name for mapping lookup
@@ -2120,9 +2143,12 @@ class EditorInterface(QWidget):
                 line_idx = self._current_line_idx
                 char_idx = self.preview._current_char_idx
                 self._on_char_edit_requested(line_idx, char_idx)
-        elif action == "toggle_checkpoint":
+        elif action == "add_checkpoint":
             if self._project:
-                self._toggle_checkpoint(delta=1)
+                self._add_checkpoint()
+        elif action == "remove_checkpoint":
+            if self._project:
+                self._remove_checkpoint()
         elif action == "toggle_word_join":
             if self._project:
                 self._toggle_word_join()
@@ -2228,9 +2254,9 @@ class EditorInterface(QWidget):
             "BACKSPACE": "clear_tags",
             "F2": "edit_ruby",
             "F3": "toggle_word_join",
-            "F4": "toggle_checkpoint",
-            "CTRL+F4": "toggle_checkpoint",
-            "F5": "toggle_line_end",
+            "F4": "add_checkpoint",
+            "F5": "remove_checkpoint",
+            "F6": "toggle_line_end",
             "UP": "volume_up",
             "DOWN": "volume_down",
             "LEFT": "nav_prev_line",

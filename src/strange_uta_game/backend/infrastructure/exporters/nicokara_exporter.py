@@ -4,7 +4,7 @@
 - 时间戳格式: [MM:SS:CC]（分:秒:厘秒，冒号分隔）
 - 每个字符前有独立时间戳
 - 行末附加结束时间戳
-- @Ruby 注音标签（含字内相对时间和多次出现位置）
+- @Ruby 注音标签（含字内相对时间；多次出现时每次独立条目+位置范围）
 - @Offset 全局偏移
 - @Title/@Artist/@Album/@TaggingBy/@SilencemSec 元数据标签（可选）
 - 演唱者过滤：可按选定的演唱者筛选输出行/字符
@@ -153,6 +153,15 @@ class NicokaraExporter(BaseExporter):
                 parts.append(_format_nicokara_ts(ch.export_timestamps[0]))
             parts.append(ch.char)
 
+            # 非行尾句尾字符的释放时间戳（句中句尾需要输出一前一后两个时间戳）
+            if (
+                i < len(sentence.characters) - 1
+                and ch.is_sentence_end
+                and ch.export_sentence_end_ts is not None
+            ):
+                if singer_ids is None or ch.singer_id in singer_ids:
+                    parts.append(_format_nicokara_ts(ch.export_sentence_end_ts))
+
         # 行末结束时间戳（最后一个字符的 sentence-end checkpoint）
         if sentence.characters:
             last_char = sentence.characters[-1]
@@ -284,11 +293,10 @@ class NicokaraWithRubyExporter(NicokaraExporter):
     ) -> List[str]:
         """收集所有注音并生成 @Ruby 条目列表
 
-        按 (汉字原文, 读音) 分组，合并多次出现的位置。
-        如果指定了 singer_ids，只收集属于指定演唱者的注音。
-
-        通过 Word 分组来收集 ruby：连词字符组成的词语中，
-        各字符的 Ruby 文本连接起来作为完整读音。
+        每次出现的 (汉字, 读音) 组都生成独立的 @Ruby 条目，
+        每个条目有各自的字内相对时间戳和出现位置范围。
+        对于没有内部时间戳的读音（如单假名）且多次出现时，
+        合并为一个全局条目，不附加位置信息。
 
         Args:
             project: 项目数据
@@ -297,18 +305,14 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         Returns:
             格式: ["漢字,読み[ts],pos1,pos2", ...]
         """
-        # key: (kanji, reading) → List[(sentence, start_idx, end_idx)]
-        ruby_groups: OrderedDict[tuple[str, str], list[tuple[Sentence, int, int]]] = (
-            OrderedDict()
-        )
+        # key: (kanji, reading) → List[{reading_with_ts, first_char_ts}]
+        ruby_groups: OrderedDict[tuple[str, str], list[dict]] = OrderedDict()
 
         for sentence in project.sentences:
-            # 演唱者过滤：跳过不含选定演唱者的行
             if singer_ids is not None:
                 if not self._sentence_has_singer(sentence, singer_ids):
                     continue
 
-            # 通过 Word 分组收集 ruby
             char_offset = 0
             for word in sentence.words:
                 if word.has_ruby:
@@ -317,37 +321,83 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                     start_idx = char_offset
                     end_idx = char_offset + word.char_count
                     key = (kanji, reading)
+
+                    # 为每次出现独立构建带时间戳的读音
+                    reading_with_ts = self._build_reading_with_timestamps(
+                        sentence, start_idx, end_idx, reading
+                    )
+
+                    # 获取本次出现的首字符时间戳（用于位置标记）
+                    first_char_ts: Optional[int] = None
+                    if start_idx < len(sentence.characters):
+                        ch = sentence.characters[start_idx]
+                        if ch.export_timestamps:
+                            first_char_ts = ch.export_timestamps[0]
+
                     if key not in ruby_groups:
                         ruby_groups[key] = []
-                    ruby_groups[key].append((sentence, start_idx, end_idx))
+                    ruby_groups[key].append(
+                        {
+                            "reading_with_ts": reading_with_ts,
+                            "first_char_ts": first_char_ts,
+                        }
+                    )
                 char_offset += word.char_count
 
         entries: List[str] = []
         for (kanji, reading), occurrences in ruby_groups.items():
-            # 用第一个有时间数据的出现来计算读音内相对时间戳
-            reading_with_ts = reading
-            for occ_sentence, start, end in occurrences:
-                built = self._build_reading_with_timestamps(
-                    occ_sentence, start, end, reading
+            if len(occurrences) == 1:
+                # 单次出现：直接输出，不附加位置
+                entries.append(f"{kanji},{occurrences[0]['reading_with_ts']}")
+            else:
+                # 多次出现：检查是否有内部相对时间戳
+                has_internal_ts = any(
+                    occ["reading_with_ts"] != reading for occ in occurrences
                 )
-                if built != reading:
-                    reading_with_ts = built
-                    break
-
-            # 出现位置列表
-            positions: List[str] = []
-            for j, (occ_sentence, _start, _end) in enumerate(occurrences):
-                if j == 0:
-                    positions.append("")  # 首次出现，位置留空
+                if not has_internal_ts:
+                    # 所有出现均无内部时间戳（单假名等）→ 全局条目
+                    entries.append(f"{kanji},{reading}")
                 else:
-                    start_ms = occ_sentence.export_timing_start_ms
-                    if start_ms is not None:
-                        positions.append(_format_nicokara_ts(start_ms))
-                    else:
-                        positions.append("")
+                    # 有内部时间戳 → 每次出现独立条目
+                    n = len(occurrences)
+                    for i, occ in enumerate(occurrences):
+                        r_ts = occ["reading_with_ts"]
+                        this_ts = occ.get("first_char_ts")
+                        next_ts = (
+                            occurrences[i + 1].get("first_char_ts")
+                            if i + 1 < n
+                            else None
+                        )
 
-            entry = f"{kanji},{reading_with_ts},{','.join(positions)}"
-            entries.append(entry)
+                        if i == 0:
+                            # 首次出现：pos1 留空
+                            if next_ts is not None:
+                                entry = (
+                                    f"{kanji},{r_ts},,{_format_nicokara_ts(next_ts)}"
+                                )
+                            else:
+                                entry = f"{kanji},{r_ts}"
+                        elif i == n - 1:
+                            # 最后一次出现：仅 pos1
+                            if this_ts is not None:
+                                entry = f"{kanji},{r_ts},{_format_nicokara_ts(this_ts)}"
+                            else:
+                                entry = f"{kanji},{r_ts}"
+                        else:
+                            # 中间出现：两个位置
+                            p1 = (
+                                _format_nicokara_ts(this_ts)
+                                if this_ts is not None
+                                else ""
+                            )
+                            p2 = (
+                                _format_nicokara_ts(next_ts)
+                                if next_ts is not None
+                                else ""
+                            )
+                            entry = f"{kanji},{r_ts},{p1},{p2}"
+
+                        entries.append(entry)
 
         return entries
 

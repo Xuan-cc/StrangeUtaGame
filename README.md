@@ -20,6 +20,8 @@
 - **字符编辑操作**：行详情对话框支持添加、删除、复制、插入字符，Ctrl+C/V/Delete 快捷键
 - **Offset 校准（可视化弹窗）**：独立校准窗口，2 个滑块按 BPM 滑动。使用 `sd.OutputStream` 实现低延迟节拍音，以滑块中心穿过判定线（视觉正中央）为完美判定点计算偏移量（正=偏早，负=偏晚），实时显示最近/平均偏移，支持校准中调节 BPM
 - **配置与自定义**：默认配置文件位于程序目录。支持通过 `.config_redirect` 文件重定向配置目录。About 界面提供「打开目录」和「更改位置」按钮，方便管理配置文件。用户字典和演唱者预设独立存储（`dictionary.json`、`singers.json`），重置配置不影响字典和演唱者数据。
+- **应用图标**：窗口左上角和 Windows 任务栏显示自定义图标，兼容开发和打包环境
+- **内嵌默认配置**：config.json、dictionary.json、singers.json 作为 package data 嵌入，打包后无需额外携带配置文件
 - **变速播放**：50%~200% 速度调节（SpinBox 显示百分比），Q/W 快捷键 ±10%
 - **快捷键自定义**：键盘监听捕获设置、支持组合键、双快捷键绑定、冲突检测、ESC 取消设置
 - **全局音频管理**：主页加载音频后自动同步到打轴界面，无需通过创建项目中转
@@ -52,11 +54,13 @@ strange-uta-game/
 │       │   ├── domain/         # 领域层：纯数据模型，无外部依赖
 │       │   ├── application/    # 应用服务层：业务逻辑协调
 │       │   └── infrastructure/ # 基础设施层：具体实现
-│       └── frontend/           # 前端 UI 层（PyQt）
-│           ├── startup/        # 启动界面
-│           ├── editor/         # 编辑器界面
-│           ├── online/         # 在线查询界面（占位）
-│           └── settings/       # 设置界面
+│       ├── frontend/           # 前端 UI 层（PyQt）
+│       │   ├── startup/        # 启动界面
+│       │   ├── editor/         # 编辑器界面
+│       │   ├── online/         # 在线查询界面（占位）
+│       │   └── settings/       # 设置界面
+│       ├── resource/           # 应用资源（图标等）
+│       └── config/             # 内嵌默认配置文件
 ├── tests/                      # 测试文件（与应用代码分离）
 │   └── unit/                   # 单元测试
 │       ├── domain/             # 领域层测试
@@ -164,13 +168,13 @@ ruff check .
 | `F2` | 编辑注音（支持连词合并/拆分） |
 | `F3` | 连词/取消连词（toggle linked_to_next 标记） |
 | `F4` | 增加当前字符节奏点 (+1) |
-| `Ctrl+F4` | 减少当前字符节奏点 (-1，最小0) |
-| `F5` | 切换当前字符句尾标记（is_sentence_end） |
+| `F5` | 删除当前字符节奏点 (-1，最小0) |
+| `F6` | 切换当前字符句尾标记（is_sentence_end） |
 | `Ctrl+Z` | 撤销 |
 | `Ctrl+Y` | 重做 |
 | `Ctrl+S` | 保存项目 |
 | `Ctrl+H` | 批量変更（替换注音/删除注音/设置节奏点/注册词典） |
-| 单击字符 | 移动到该字符的第一个checkpoint |
+| 单击字符 | 移动到该字符的第一个checkpoint（若字符无节奏点，视觉焦点保持在该字符上） |
 | 双击字符 | 跳转到该字符 checkpoint 前 N 秒（N 可在设置中配置，默认3秒） |
 
 ### 3. 保存和导出
@@ -296,8 +300,8 @@ ruff check .
 | `F2` | 编辑注音 |
 | `F3` | 连词/取消连词 |
 | `F4` | 增加节奏点 |
-| `Ctrl+F4` | 减少节奏点（最小0） |
-| `F5` | 切换句尾标记 |
+| `F5` | 删除节奏点 |
+| `F6` | 切换句尾标记 |
 
 ### 文件操作
 
@@ -387,7 +391,7 @@ pytest tests/unit/infrastructure/
 pytest tests/ --cov=src --cov-report=html
 ```
 
-当前共有 **210 个测试**，全部通过。
+当前共有 **211 个测试**，全部通过。
 
 ## 打包发行
 
@@ -398,10 +402,16 @@ pytest tests/ --cov=src --cov-report=html
 pip install pyinstaller
 
 # 打包（Windows）
-pyinstaller --noconfirm --onefile --windowed --name "StrangeUtaGame" --icon=icon.ico main.py
+pyinstaller --noconfirm --onefile --windowed --name "StrangeUtaGame" --icon=src/strange_uta_game/resource/icon.ico main.py
 
 # 打包（包含依赖目录）
 pyinstaller --noconfirm --onedir --windowed --name "StrangeUtaGame" main.py
+```
+
+### 使用打包脚本（推荐）
+
+```bash
+python build.py
 ```
 
 ### 打包后的文件
