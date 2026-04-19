@@ -174,6 +174,22 @@ class AppSettings:
         self._singers_path = self._config_path.parent / "singers.json"
         self._settings = self._load_settings()
         self._migrate_to_separate_files()
+        self._ensure_default_dictionary()
+
+    def _ensure_default_dictionary(self) -> None:
+        """首次启动时，将内置 RL 字典固化为默认 dictionary.json。"""
+        if self._dict_path.exists():
+            return
+        try:
+            from strange_uta_game.backend.infrastructure.data.default_dictionary import (
+                DEFAULT_RL_DICT_TEXT,
+            )
+
+            entries = _parse_rl_dictionary(DEFAULT_RL_DICT_TEXT)
+            if entries:
+                self._save_json(self._dict_path, entries)
+        except Exception as e:
+            print(f"初始化默认词典失败: {e}")
 
     def _load_settings(self) -> Dict[str, Any]:
         if self._config_path.exists():
