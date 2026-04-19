@@ -162,8 +162,16 @@ class AutoCheckService:
         char_to_block: Dict[int, int] = {}
         for block_id, result in enumerate(ruby_results):
             block_len = result.end_idx - result.start_idx
-            # 按 mora 分割 reading，为每个字符分配 ruby（包括自注音字符）
-            split_parts = split_ruby_for_checkpoints(result.reading, block_len)
+            # 词典条目可能用逗号分隔各字符的读音（如 "だい,ぼう,けん"）
+            if "," in (result.reading or "") and block_len > 1:
+                parts = [p.strip() for p in result.reading.split(",")]
+                # 补齐不足的部分
+                while len(parts) < block_len:
+                    parts.append("")
+                split_parts = parts[:block_len]
+            else:
+                # 按 mora 分割 reading，为每个字符分配 ruby（包括自注音字符）
+                split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
                 if idx < len(chars):
                     pos = idx - result.start_idx
@@ -182,7 +190,14 @@ class AutoCheckService:
                 continue  # 假名/符号/空格等读音与原文相同，不更新
 
             block_len = result.end_idx - result.start_idx
-            split_parts = split_ruby_for_checkpoints(result.reading, block_len)
+            # 词典条目可能用逗号分隔各字符的读音（如 "だい,ぼう,けん"）
+            if "," in (result.reading or "") and block_len > 1:
+                parts = [p.strip() for p in result.reading.split(",")]
+                while len(parts) < block_len:
+                    parts.append("")
+                split_parts = parts[:block_len]
+            else:
+                split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
                 if idx < len(check_counts):
                     pos = idx - result.start_idx
@@ -307,10 +322,13 @@ class AutoCheckService:
 
         # 保留现有时间标签和演唱者映射
         old_timestamps: Dict[int, List[int]] = {}
+        old_sentence_end_ts: Dict[int, int] = {}
         old_singer_map: Dict[int, str] = {}
         for i, char in enumerate(sentence.characters):
             if char.timestamps:
                 old_timestamps[i] = list(char.timestamps)
+            if char.sentence_end_ts is not None:
+                old_sentence_end_ts[i] = char.sentence_end_ts
             old_singer_map[i] = char.singer_id
 
         # 构建新的 Character 对象列表
@@ -328,11 +346,12 @@ class AutoCheckService:
                 and results[i + 1].char.isspace()
             )
             extra = 0
+            is_sentence_end = False
             if is_last and add_line_end:
-                extra += 1
+                is_sentence_end = True
             if is_before_space and result.check_count > 0:
-                extra += 1
-            check_count = result.check_count + extra
+                is_sentence_end = True
+            check_count = result.check_count
 
             # 每个字符直接携带自己的 Ruby（无需跨字符合并）
             ruby_obj = Ruby(text=result.ruby) if result.ruby else None
@@ -342,6 +361,7 @@ class AutoCheckService:
                 ruby=ruby_obj,
                 check_count=check_count,
                 is_line_end=(is_last and add_line_end),
+                is_sentence_end=is_sentence_end,
                 singer_id=old_singer_map.get(i, sentence.singer_id),
             )
             new_characters.append(character)
@@ -360,6 +380,8 @@ class AutoCheckService:
             for i, char in enumerate(new_characters):
                 if i in old_timestamps:
                     char.timestamps = old_timestamps[i]
+                if char.is_sentence_end and i in old_sentence_end_ts:
+                    char.sentence_end_ts = old_sentence_end_ts[i]
                     char.push_to_ruby()
 
         sentence.characters = new_characters
@@ -530,12 +552,16 @@ class AutoCheckService:
                 and chars[i + 1].isspace()
             )
             extra = 0
+            is_sentence_end = False
             if is_last and add_line_end:
-                extra += 1
+                is_sentence_end = True
             if is_before_space and check_counts[i] > 0:
-                extra += 1
-            char.check_count = check_counts[i] + extra
+                is_sentence_end = True
+            char.check_count = check_counts[i]
             char.is_line_end = is_last and add_line_end
+            char.is_sentence_end = is_sentence_end
+            if not char.is_sentence_end:
+                char.clear_sentence_end_ts()
 
         # 重置并设置 linked_to_next
         # 空格字符不应触发连词（空格 check_count==0 是过滤规则的结果，不代表连读）

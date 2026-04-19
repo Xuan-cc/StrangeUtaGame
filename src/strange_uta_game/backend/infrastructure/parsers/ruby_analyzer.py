@@ -116,12 +116,12 @@ class SudachiAnalyzer(RubyAnalyzer):
             has_kanji = any(self._is_kanji(c) for c in surface)
 
             if not has_kanji or not reading or surface == reading:
-                # 纯假名/符号/无读音: 逐字 identity
+                # 纯假名/符号/无読音: 逐字处理，片假名转平假名
                 for i, c in enumerate(surface):
                     results.append(
                         RubyResult(
                             text=c,
-                            reading=c,
+                            reading=self._kata_to_hira(c),
                             start_idx=start + i,
                             end_idx=start + i + 1,
                         )
@@ -394,8 +394,12 @@ class PykakasiAnalyzer(RubyAnalyzer):
                 i = j
             else:
                 if self._is_kana(char):
+                    # 片假名转平假名
+                    reading = self._kata_to_hira(char)
                     results.append(
-                        RubyResult(text=char, reading=char, start_idx=i, end_idx=i + 1)
+                        RubyResult(
+                            text=char, reading=reading, start_idx=i, end_idx=i + 1
+                        )
                     )
                 else:
                     results.append(
@@ -418,6 +422,18 @@ class PykakasiAnalyzer(RubyAnalyzer):
     def _is_kana(char: str) -> bool:
         code = ord(char)
         return (0x3040 <= code <= 0x309F) or (0x30A0 <= code <= 0x30FF)
+
+    @staticmethod
+    def _kata_to_hira(text: str) -> str:
+        """片假名 → 平假名"""
+        result = []
+        for ch in text:
+            code = ord(ch)
+            if 0x30A1 <= code <= 0x30F6:
+                result.append(chr(code - 0x60))
+            else:
+                result.append(ch)
+        return "".join(result)
 
 
 class DummyAnalyzer(RubyAnalyzer):

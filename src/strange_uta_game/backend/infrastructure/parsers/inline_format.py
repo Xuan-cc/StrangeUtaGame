@@ -57,21 +57,32 @@ def parse_timestamp(s: str) -> int:
 # ──────────────────────────────────────────────
 
 
-def encode_check_n(check_count: int, is_line_end: bool) -> str:
-    """编码 check_count 和 is_line_end 到 N 字符串。
+def encode_check_n(
+    check_count: int, is_line_end: bool, is_sentence_end: bool = False
+) -> str:
+    """编码 check_count、is_line_end 和 is_sentence_end 到 N 字符串。
 
-    规则: 末尾 "0" 表示 line_end。
+    规则: 末尾 "0" 表示 line_end，末尾 "e" 表示 sentence_end。
     """
+    suffix = ""
     if is_line_end:
-        return f"{check_count}0"
-    return str(check_count)
+        suffix += "0"
+    if is_sentence_end:
+        suffix += "e"
+    return f"{check_count}{suffix}"
 
 
-def decode_check_n(n_str: str) -> Tuple[int, bool]:
-    """解码 N 字符串到 (check_count, is_line_end)。"""
+def decode_check_n(n_str: str) -> Tuple[int, bool, bool]:
+    """解码 N 字符串到 (check_count, is_line_end, is_sentence_end)。"""
+    is_sentence_end = False
+    if n_str.endswith("e"):
+        is_sentence_end = True
+        n_str = n_str[:-1]
+    is_line_end = False
     if len(n_str) >= 2 and n_str.endswith("0"):
-        return int(n_str[:-1]), True
-    return int(n_str), False
+        is_line_end = True
+        n_str = n_str[:-1]
+    return int(n_str), is_line_end, is_sentence_end
 
 
 # ──────────────────────────────────────────────
@@ -159,21 +170,27 @@ def to_inline_text(sentence: Sentence) -> str:
             ruby_portions: List[str] = []
 
             for c in chars[group_start:group_end]:
+                assert c.ruby is not None  # 由上方 while 条件保证
                 # 按 checkpoint 数量拆分该字符的 ruby 文本
                 ruby_segments = split_ruby_for_checkpoints(c.ruby.text, c.check_count)
 
                 portion_parts: List[str] = []
-                for cp_idx in range(c.check_count):
-                    ts = c.timestamps[cp_idx] if cp_idx < len(c.timestamps) else 0
+                for cp_idx in range(c.total_timing_points):
+                    if cp_idx < c.check_count:
+                        ts = c.timestamps[cp_idx] if cp_idx < len(c.timestamps) else 0
+                    else:
+                        ts = c.sentence_end_ts or 0
                     ts_str = format_timestamp(ts)
 
                     if cp_idx == 0:
-                        n = encode_check_n(c.check_count, c.is_line_end)
+                        n = encode_check_n(
+                            c.check_count, c.is_line_end, c.is_sentence_end
+                        )
                         portion_parts.append(f"[{n}|{ts_str}]")
                     else:
                         portion_parts.append(f"[{ts_str}]")
 
-                    if cp_idx < len(ruby_segments):
+                    if cp_idx < c.check_count and cp_idx < len(ruby_segments):
                         portion_parts.append(ruby_segments[cp_idx])
 
                 ruby_portions.append("".join(portion_parts))
@@ -185,12 +202,17 @@ def to_inline_text(sentence: Sentence) -> str:
             display_char = REST_CHAR if char.is_rest else char.char
             char_parts: List[str] = []
 
-            for cp_idx in range(char.check_count):
-                ts = char.timestamps[cp_idx] if cp_idx < len(char.timestamps) else 0
+            for cp_idx in range(char.total_timing_points):
+                if cp_idx < char.check_count:
+                    ts = char.timestamps[cp_idx] if cp_idx < len(char.timestamps) else 0
+                else:
+                    ts = char.sentence_end_ts or 0
                 ts_str = format_timestamp(ts)
 
                 if cp_idx == 0:
-                    n = encode_check_n(char.check_count, char.is_line_end)
+                    n = encode_check_n(
+                        char.check_count, char.is_line_end, char.is_sentence_end
+                    )
                     char_parts.append(f"[{n}|{ts_str}]")
                 else:
                     char_parts.append(f"[{ts_str}]")
@@ -215,8 +237,8 @@ lines_to_inline_text = sentences_to_inline_text
 # 反序列化: 内联文本 → Sentence
 # ──────────────────────────────────────────────
 
-# 正则: 匹配 [N|MM:SS:cc] 或 [MM:SS:cc]
-_TAG_RE = re.compile(r"\[(?:(\d+)\|)?(\d{2}:\d{2}:\d{2})\]")
+# 正则: 匹配 [N|MM:SS:cc] 或 [MM:SS:cc]（N 可含 "e" 后缀表示 sentence_end）
+_TAG_RE = re.compile(r"\[(?:(\d+e?)\|)?(\d{2}:\d{2}:\d{2})\]")
 
 
 def _parse_char_tokens(segment: str) -> List[Tuple[Optional[str], int, str]]:
@@ -353,17 +375,23 @@ def _parse_ruby_group(
         # 第一个 token 确定 N
         first_n_str = tokens[0][0]
         if first_n_str is not None:
-            check_count, is_line_end = decode_check_n(first_n_str)
+            check_count, is_line_end, is_sentence_end = decode_check_n(first_n_str)
         else:
             check_count = len(tokens)
             is_line_end = False
+            is_sentence_end = False
 
         # 收集时间戳和 ruby 文本
-        timestamps: List[int] = []
+        all_timestamps: List[int] = []
         ruby_text_parts: List[str] = []
         for _, ts_ms, seg_text in tokens:
-            timestamps.append(ts_ms)
+            all_timestamps.append(ts_ms)
             ruby_text_parts.append(seg_text)
+
+        timestamps = all_timestamps[:check_count]
+        sentence_end_ts = None
+        if is_sentence_end and len(all_timestamps) > check_count:
+            sentence_end_ts = all_timestamps[check_count]
 
         # per-char ruby 文本
         per_char_ruby = "".join(ruby_text_parts)
@@ -374,7 +402,9 @@ def _parse_ruby_group(
             ruby=ruby_obj,
             check_count=check_count,
             timestamps=timestamps,
+            sentence_end_ts=sentence_end_ts,
             is_line_end=is_line_end,
+            is_sentence_end=is_sentence_end,
             singer_id=singer_id,
         )
         character.push_to_ruby()
@@ -427,18 +457,27 @@ def _parse_plain_segment(
                     is_rest = ch == REST_CHAR
                     first_n = pending_tags[0][0]
                     if first_n is not None:
-                        check_count, is_line_end = decode_check_n(first_n)
+                        check_count, is_line_end, is_sentence_end = decode_check_n(
+                            first_n
+                        )
                     else:
                         check_count = len(pending_tags)
                         is_line_end = False
+                        is_sentence_end = False
 
-                    timestamps = [ts for _, ts in pending_tags]
+                    all_timestamps = [ts for _, ts in pending_tags]
+                    timestamps = all_timestamps[:check_count]
+                    sentence_end_ts = None
+                    if is_sentence_end and len(all_timestamps) > check_count:
+                        sentence_end_ts = all_timestamps[check_count]
 
                     character = Character(
                         char=ch,
                         check_count=check_count,
                         timestamps=timestamps,
+                        sentence_end_ts=sentence_end_ts,
                         is_line_end=is_line_end,
+                        is_sentence_end=is_sentence_end,
                         is_rest=is_rest,
                         singer_id=singer_id,
                     )
@@ -467,18 +506,25 @@ def _flush_pending(
         return
     first_n = pending_tags[0][0]
     if first_n is not None:
-        check_count, is_line_end = decode_check_n(first_n)
+        check_count, is_line_end, is_sentence_end = decode_check_n(first_n)
     else:
         check_count = len(pending_tags)
         is_line_end = False
+        is_sentence_end = False
 
-    timestamps = [ts for _, ts in pending_tags]
+    all_timestamps = [ts for _, ts in pending_tags]
+    timestamps = all_timestamps[:check_count]
+    sentence_end_ts = None
+    if is_sentence_end and len(all_timestamps) > check_count:
+        sentence_end_ts = all_timestamps[check_count]
 
     character = Character(
         char="?",
         check_count=check_count,
         timestamps=timestamps,
+        sentence_end_ts=sentence_end_ts,
         is_line_end=is_line_end,
+        is_sentence_end=is_sentence_end,
         singer_id=singer_id,
     )
     characters.append(character)

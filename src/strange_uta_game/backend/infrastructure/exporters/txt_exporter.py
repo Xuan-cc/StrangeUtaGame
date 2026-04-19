@@ -85,11 +85,14 @@ class TXTExporter(BaseExporter):
         # 行号
         parts.append(f"[{line_number:03d}]")
 
-        # 时间标签
+        # 时间标签（使用导出时间戳，含偏移）
         if sentence.has_timetags:
-            start_ms = sentence.timing_start_ms
-            time_str = self._format_timestamp(start_ms, "lrc")
-            parts.append(time_str)
+            start_ms = sentence.export_timing_start_ms
+            parts.append(
+                self._format_timestamp(start_ms, "lrc")
+                if start_ms is not None
+                else "[--:--.--]"
+            )
         else:
             parts.append("[--:--.--]")
 
@@ -98,7 +101,7 @@ class TXTExporter(BaseExporter):
 
         # 节奏点信息（可选）
         if self.include_checkpoints and sentence.characters:
-            total_checks = sum(c.check_count for c in sentence.characters)
+            total_checks = sum(c.total_timing_points for c in sentence.characters)
             parts.append(f"  [节奏点: {total_checks}]")
 
         # 注音（可选）

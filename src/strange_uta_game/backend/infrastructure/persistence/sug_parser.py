@@ -329,8 +329,10 @@ class SugProjectParser:
                 "char": char.char,
                 "check_count": char.check_count,
                 "timestamps": list(char.timestamps),
+                "sentence_end_ts": char.sentence_end_ts,
                 "linked_to_next": char.linked_to_next,
                 "is_line_end": char.is_line_end,
+                "is_sentence_end": char.is_sentence_end,
                 "is_rest": char.is_rest,
                 "singer_id": char.singer_id,
             }
@@ -413,13 +415,35 @@ class SugProjectParser:
             if ruby_data and ruby_data.get("text"):
                 ruby = Ruby(text=ruby_data["text"])
 
+            raw_check_count = int(char_data.get("check_count", 1))
+            timestamps = [int(ts) for ts in char_data.get("timestamps", [])]
+            is_sentence_end = bool(char_data.get("is_sentence_end", False))
+            has_sentence_end_ts_field = "sentence_end_ts" in char_data
+            sentence_end_ts = char_data.get("sentence_end_ts")
+
+            if has_sentence_end_ts_field:
+                if sentence_end_ts is not None:
+                    sentence_end_ts = int(sentence_end_ts)
+                check_count = raw_check_count
+            else:
+                check_count = raw_check_count
+                if is_sentence_end:
+                    old_check_count = raw_check_count
+                    check_count = max(0, old_check_count - 1)
+                    if len(timestamps) == old_check_count and timestamps:
+                        sentence_end_ts = timestamps.pop()
+                    else:
+                        timestamps = timestamps[:check_count]
+
             char = Character(
                 char=char_data.get("char", "?"),
                 ruby=ruby,
-                check_count=int(char_data.get("check_count", 1)),
-                timestamps=[int(ts) for ts in char_data.get("timestamps", [])],
+                check_count=check_count,
+                timestamps=timestamps,
+                sentence_end_ts=sentence_end_ts,
                 linked_to_next=bool(char_data.get("linked_to_next", False)),
                 is_line_end=bool(char_data.get("is_line_end", False)),
+                is_sentence_end=is_sentence_end,
                 is_rest=bool(char_data.get("is_rest", False)),
                 singer_id=char_data.get("singer_id", "") or singer_id,
             )

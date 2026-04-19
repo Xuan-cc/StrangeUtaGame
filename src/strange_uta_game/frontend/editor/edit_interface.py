@@ -65,8 +65,10 @@ def _clone_character(character: Character) -> Character:
         ruby=_clone_ruby(character.ruby),
         check_count=character.check_count,
         timestamps=list(character.timestamps),
+        sentence_end_ts=character.sentence_end_ts,
         linked_to_next=character.linked_to_next,
         is_line_end=character.is_line_end,
+        is_sentence_end=character.is_sentence_end,
         is_rest=character.is_rest,
         singer_id=character.singer_id,
     )
@@ -89,14 +91,17 @@ def _fix_sentence_character_invariants(sentence: Sentence):
     for index, character in enumerate(sentence.characters):
         if index == last_index:
             continue
+        # 非末尾字符不能是行尾
         if character.is_line_end:
             character.is_line_end = False
-            character.check_count = max(0, character.check_count - 1)
 
     last_character = sentence.characters[-1]
+    # 末尾字符始终是行尾
     if not last_character.is_line_end:
         last_character.is_line_end = True
-        last_character.check_count += 1
+    # 默认末尾也是句尾（如果之前不是句尾，添加句尾并+1 checkpoint）
+    if not last_character.is_sentence_end:
+        last_character.is_sentence_end = True
     if last_character.check_count < 1:
         last_character.check_count = 1
     last_character.linked_to_next = False
@@ -126,7 +131,8 @@ class LineDetailDialog(QDialog):
         # 提示
         hint = QLabel(
             "连词合并为一行，注音/Checkpoint/演唱者用逗号分隔对应各字符\n"
-            "双击可编辑「字符」「注音」「Checkpoint数」「时间标签」「演唱者」列"
+            "双击可编辑「字符」「注音」「Checkpoint数」「句尾」「时间标签」「演唱者」列\n"
+            "句尾列填写「是」标记为句尾（独立记录释放时间），留空取消"
         )
         hint.setStyleSheet("color: gray; font-size: 11px;")
         self.vbox.addWidget(hint)
@@ -229,11 +235,10 @@ class LineDetailDialog(QDialog):
             item_cp = QTableWidgetItem(cp_display)
             self.table.setItem(row, 2, item_cp)
 
-            # 句尾 (read-only) — 组内最后字符
+            # 句尾 (editable) — 组内最后字符
             last_ci = group[-1]
-            is_end = "是" if characters[last_ci].is_line_end else ""
+            is_end = "是" if characters[last_ci].is_sentence_end else ""
             item_end = QTableWidgetItem(is_end)
-            item_end.setFlags(item_end.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 3, item_end)
 
             # 时间标签 (editable) — 连词每字符用 | 分隔
@@ -261,7 +266,7 @@ class LineDetailDialog(QDialog):
         self.table.blockSignals(False)
 
     def _on_cell_changed(self, row: int, col: int):
-        if col in (0, 1, 2, 4, 5):
+        if col in (0, 1, 2, 3, 4, 5):
             self._modified = True
 
     def _selected_detail_rows(self) -> List[int]:
@@ -475,6 +480,25 @@ class LineDetailDialog(QDialog):
                     except ValueError:
                         errors.append(f"行 {row_idx + 1}: Checkpoint数必须为整数")
 
+            # --- 句尾编辑 (col 3) ---
+            item_end = self.table.item(row_idx, 3)
+            if item_end:
+                raw_end = item_end.text().strip()
+                last_ci = group[-1]
+                new_is_sentence_end = raw_end == "是"
+                old_is_sentence_end = characters[last_ci].is_sentence_end
+                if new_is_sentence_end != old_is_sentence_end:
+                    if new_is_sentence_end:
+                        if characters[last_ci].check_count <= 0:
+                            errors.append(
+                                f"字符 {last_ci + 1}: 句尾至少需要 1 个普通节奏点"
+                            )
+                            continue
+                        characters[last_ci].is_sentence_end = True
+                    else:
+                        characters[last_ci].clear_sentence_end_ts()
+                        characters[last_ci].is_sentence_end = False
+
             # --- 时间标签编辑 (col 4) ---
             item_time = self.table.item(row_idx, 4)
             if item_time:
@@ -492,23 +516,47 @@ class LineDetailDialog(QDialog):
                         if not part:
                             continue
                         segments = [p.strip() for p in part.split(",") if p.strip()]
-                        for cp_idx, seg in enumerate(segments):
+                        normal_segments = segments[: characters[ci].check_count]
+                        for cp_idx, seg in enumerate(normal_segments):
                             ms = _parse_time(seg)
                             if ms is None:
                                 errors.append(f"字符 {ci + 1}: 无法解析 '{seg}'")
                                 continue
                             characters[ci].add_timestamp(ms, checkpoint_idx=cp_idx)
+                        if (
+                            characters[ci].is_sentence_end
+                            and len(segments) > characters[ci].check_count
+                        ):
+                            ms = _parse_time(segments[characters[ci].check_count])
+                            if ms is None:
+                                errors.append(
+                                    f"字符 {ci + 1}: 无法解析 '{segments[characters[ci].check_count]}'"
+                                )
+                            else:
+                                characters[ci].set_sentence_end_ts(ms)
                 else:
                     ci = group[0]
                     characters[ci].clear_timestamps()
                     if raw_time:
                         segments = [p.strip() for p in raw_time.split(",") if p.strip()]
-                        for cp_idx, seg in enumerate(segments):
+                        normal_segments = segments[: characters[ci].check_count]
+                        for cp_idx, seg in enumerate(normal_segments):
                             ms = _parse_time(seg)
                             if ms is None:
                                 errors.append(f"字符 {ci + 1}: 无法解析 '{seg}'")
                                 continue
                             characters[ci].add_timestamp(ms, checkpoint_idx=cp_idx)
+                        if (
+                            characters[ci].is_sentence_end
+                            and len(segments) > characters[ci].check_count
+                        ):
+                            ms = _parse_time(segments[characters[ci].check_count])
+                            if ms is None:
+                                errors.append(
+                                    f"字符 {ci + 1}: 无法解析 '{segments[characters[ci].check_count]}'"
+                                )
+                            else:
+                                characters[ci].set_sentence_end_ts(ms)
 
             # --- 演唱者编辑 (col 5) ---
             item_singer = self.table.item(row_idx, 5)

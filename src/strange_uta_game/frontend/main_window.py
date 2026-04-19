@@ -4,7 +4,7 @@
 参考 March7thAssistant 的 UI 架构。
 """
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QAction, QKeySequence, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
@@ -38,6 +38,9 @@ class MainWindow(MSFluentWindow):
         self._timing_service = TimingService(self._audio_engine, self._command_manager)
         self._store = ProjectStore(self)
 
+        # 跟踪当前界面（用于 switchTo 自动应用修改，必须在 _init_navigation 之前）
+        self._current_interface = None
+
         self._init_window()
         self._init_interfaces()
         self._init_navigation()
@@ -49,8 +52,11 @@ class MainWindow(MSFluentWindow):
         self._save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         self._save_shortcut.activated.connect(self._on_global_save)
 
-        # 跟踪当前界面（用于 switchTo 自动应用修改）
-        self._current_interface = None
+        # 初始化自动保存配置
+        self._apply_auto_save_settings()
+
+        # 延迟检查闪退恢复（等 UI 显示完毕后再弹窗）
+        QTimer.singleShot(500, self._check_crash_recovery)
 
     def _init_window(self):
         """初始化窗口属性"""
@@ -79,6 +85,7 @@ class MainWindow(MSFluentWindow):
         from .settings.ruby_editor import RubyInterface
         from .settings.settings_interface import SettingsInterface
         from .editor.edit_interface import EditInterface
+        from .online.online_interface import OnlineQueryInterface
 
         self.homeInterface = HomeInterface(self)
         self.homeInterface.setObjectName("homeInterface")
@@ -105,6 +112,9 @@ class MainWindow(MSFluentWindow):
         self.editViewInterface = EditInterface(self)
         self.editViewInterface.setObjectName("editViewInterface")
 
+        self.onlineInterface = OnlineQueryInterface(self)
+        self.onlineInterface.setObjectName("onlineInterface")
+
         # 将 store 传递给所有子界面
         self.homeInterface.set_store(self._store)
         self.editorInterface.set_store(self._store)
@@ -125,6 +135,7 @@ class MainWindow(MSFluentWindow):
         self.addSubInterface(self.exportInterface, FIF.SHARE, "导出")
         self.addSubInterface(self.singerInterface, FIF.PEOPLE, "演唱者")
         self.addSubInterface(self.rubyInterface, FIF.FONT, "全文本编辑")
+        self.addSubInterface(self.onlineInterface, FIF.GLOBE, "在线查询")
 
         # 底部
         self.addSubInterface(
@@ -148,6 +159,9 @@ class MainWindow(MSFluentWindow):
             and self.rubyInterface.is_dirty()
         ):
             self.rubyInterface._on_apply_changes()
+        # 切换到设置界面时从磁盘重新加载配置（用户可能通过其他途径修改了配置）
+        if hasattr(self, "settingInterface") and interface is self.settingInterface:
+            self.settingInterface.reload_from_disk()
         self._current_interface = interface
         super().switchTo(interface)
 
@@ -204,6 +218,8 @@ class MainWindow(MSFluentWindow):
             settings = self.settingInterface.get_settings()
             offset_ms = settings.get("timing.tag_offset_ms", 0)
             self._timing_service.set_timing_offset(offset_ms)
+            # 同步自动保存配置到 ProjectStore
+            self._apply_auto_save_settings()
         elif change_type in ("lyrics", "checkpoints"):
             # 歌词/轴点变更后重建全局 checkpoint 列表
             self._timing_service._rebuild_global_checkpoints()
@@ -212,6 +228,61 @@ class MainWindow(MSFluentWindow):
             audio_path = self._store.audio_path
             if audio_path:
                 self.editorInterface.load_audio(audio_path)
+
+    # ==================== 自动保存配置 ====================
+
+    def _apply_auto_save_settings(self):
+        """从 AppSettings 读取自动保存配置并应用到 ProjectStore。"""
+        settings = self.settingInterface.get_settings()
+        enabled = settings.get("auto_save.enabled", True)
+        interval = settings.get("auto_save.interval_minutes", 5)
+        self._store.set_periodic_save_config(enabled, interval)
+
+    # ==================== 闪退恢复 ====================
+
+    def _check_crash_recovery(self):
+        """启动时检查是否有未命名项目的闪退恢复文件。"""
+        if not ProjectStore.has_crash_recovery():
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "恢复未保存的项目",
+            "检测到上次异常退出时的未保存项目数据。\n是否加载恢复？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            project = ProjectStore.load_crash_recovery()
+            if project:
+                self._store.load_project(project)
+                self.switchTo(self.editorInterface)
+                InfoBar.success(
+                    title="恢复成功",
+                    content=f"已恢复 {len(project.sentences)} 行歌词",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
+                # 恢复后删除临时文件
+                ProjectStore.delete_crash_recovery()
+            else:
+                InfoBar.error(
+                    title="恢复失败",
+                    content="无法读取恢复文件，文件可能已损坏",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self,
+                )
+                ProjectStore.delete_crash_recovery()
+        else:
+            # 用户拒绝恢复 → 删除临时文件
+            ProjectStore.delete_crash_recovery()
 
     # ==================== 窗口事件 ====================
 
@@ -236,6 +307,8 @@ class MainWindow(MSFluentWindow):
         if self._store.save_path:
             success = self._store.save()
             if success:
+                # 手动保存成功 → 清理临时文件
+                self._store.cleanup_temp_files()
                 InfoBar.success(
                     title="保存成功",
                     content=self._store.save_path,
@@ -267,7 +340,15 @@ class MainWindow(MSFluentWindow):
             if not path.endswith(".sug"):
                 path += ".sug"
 
+            # 另存为前先清理旧的 untitled 临时文件
+            old_temp = self._store.get_temp_path()
             if self._store.save(path):
+                # 保存成功 → 清理旧临时文件
+                try:
+                    if old_temp.exists():
+                        old_temp.unlink()
+                except Exception:
+                    pass
                 InfoBar.success(
                     title="保存成功",
                     content=path,
@@ -302,9 +383,17 @@ class MainWindow(MSFluentWindow):
             )
             if reply == QMessageBox.StandardButton.Save:
                 self._on_save_project()
+                # 保存后清理临时文件
+                self._store.cleanup_temp_files()
+            elif reply == QMessageBox.StandardButton.Discard:
+                # 用户主动放弃保存 → 删除临时文件
+                self._store.cleanup_temp_files()
             elif reply == QMessageBox.StandardButton.Cancel:
                 e.ignore()
                 return
+        else:
+            # 无脏数据，正常退出 → 清理临时文件
+            self._store.cleanup_temp_files()
 
         # 释放编辑器资源
         if hasattr(self, "editorInterface"):

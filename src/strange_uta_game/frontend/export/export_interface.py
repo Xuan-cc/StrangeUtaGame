@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QCheckBox,
     QGroupBox,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from qfluentwidgets import (
@@ -27,7 +28,7 @@ from qfluentwidgets import (
     CheckBox,
 )
 
-from typing import Optional, Set, Dict
+from typing import Optional, Set, Dict, cast
 from pathlib import Path
 
 from strange_uta_game.backend.domain import Project
@@ -135,17 +136,32 @@ class ExportInterface(QWidget):
         singer_group_layout.addWidget(singer_hint)
 
         self._singer_checkboxes: list[CheckBox] = []
-        self._singer_checkbox_container = QVBoxLayout()
-        singer_group_layout.addLayout(self._singer_checkbox_container)
+        self._singer_checkbox_widget = QWidget()
+        self._singer_checkbox_container = QVBoxLayout(self._singer_checkbox_widget)
+        self._singer_checkbox_container.setContentsMargins(0, 0, 0, 0)
+        self._singer_checkbox_container.setSpacing(6)
+
+        self._singer_scroll_area = QScrollArea()
+        self._singer_scroll_area.setWidgetResizable(True)
+        self._singer_scroll_area.setMaximumHeight(120)
+        self._singer_scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._singer_scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._singer_scroll_area.setWidget(self._singer_checkbox_widget)
+        singer_group_layout.addWidget(self._singer_scroll_area)
 
         self._chk_insert_singer_tags = CheckBox("在演唱者切换处插入【演唱者名】标签")
         self._chk_insert_singer_tags.setToolTip(
             "导出时，当演唱者发生变化，在字符前自动插入演唱者名称标签"
         )
-        singer_group_layout.addWidget(self._chk_insert_singer_tags)
+        self._chk_insert_singer_tags.hide()
 
         self._singer_group.hide()
         right_layout.addWidget(self._singer_group)
+        right_layout.addWidget(self._chk_insert_singer_tags)
 
         right_layout.addStretch()
 
@@ -184,6 +200,7 @@ class ExportInterface(QWidget):
             is_nicokara = "nicokara" in name.lower()
             self.btn_tags.setVisible(is_nicokara)
             self._singer_group.setVisible(is_nicokara)
+            self._chk_insert_singer_tags.setVisible(is_nicokara)
             if is_nicokara:
                 self._refresh_singer_checkboxes()
 
@@ -220,15 +237,27 @@ class ExportInterface(QWidget):
     def _refresh_singer_checkboxes(self):
         """刷新演唱者 checkbox 列表"""
         # 清除现有 checkbox
-        for chk in self._singer_checkboxes:
-            self._singer_checkbox_container.removeWidget(chk)
-            chk.deleteLater()
+        while self._singer_checkbox_container.count():
+            item = self._singer_checkbox_container.takeAt(0)
+            if item is not None:
+                widget = item.widget()
+                if widget is not None:
+                    cast(QWidget, widget).deleteLater()
         self._singer_checkboxes.clear()
 
         if not self._project:
             return
 
+        used_singer_ids = set()
+        for sentence in getattr(self._project, "sentences", []) or []:
+            for character in getattr(sentence, "characters", []) or []:
+                singer_id = getattr(character, "singer_id", None)
+                if singer_id:
+                    used_singer_ids.add(singer_id)
+
         for singer in self._project.singers:
+            if singer.id not in used_singer_ids:
+                continue
             chk = CheckBox(f"{singer.name}")
             chk.setProperty("singer_id", singer.id)
             chk.setStyleSheet(
@@ -236,6 +265,8 @@ class ExportInterface(QWidget):
             )
             self._singer_checkbox_container.addWidget(chk)
             self._singer_checkboxes.append(chk)
+
+        self._singer_checkbox_container.addStretch(1)
 
     def _get_selected_singer_ids(self) -> Optional[Set[str]]:
         """获取勾选的演唱者 ID 集合，如果没有勾选任何则返回 None（表示全部）"""

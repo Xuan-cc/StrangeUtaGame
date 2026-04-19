@@ -375,7 +375,7 @@ class ImportPreview(QGroupBox):
             self.table.setItem(i, 2, QTableWidgetItem(str(char_count)))
 
             # 节奏点
-            check_count = sum(c.check_count for c in line.characters)
+            check_count = sum(c.total_timing_points for c in line.characters)
             total_checkpoints += check_count
             self.table.setItem(i, 3, QTableWidgetItem(str(check_count)))
 

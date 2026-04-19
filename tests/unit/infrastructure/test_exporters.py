@@ -294,12 +294,8 @@ class TestNicokaraExporter:
         project = Project()
         singer = project.singers[0]
         sentence = Sentence.from_text("あ", singer.id)
-        # 默认 Sentence.from_text 会为每个字符设置 check_count=1
-        # 但为了测试行末，我们需要 check_count=2 (1个字符 + 1个行末节点)
-        sentence.characters[0].check_count = 2
-        # checkpoint_idx=0 → 字符开始，checkpoint_idx=1 → 行结束
         sentence.characters[0].add_timestamp(1000, checkpoint_idx=0)
-        sentence.characters[0].add_timestamp(2000, checkpoint_idx=1)
+        sentence.characters[0].set_sentence_end_ts(2000)
         project.add_sentence(sentence)
 
         exporter = NicokaraExporter()

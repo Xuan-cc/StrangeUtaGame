@@ -190,7 +190,7 @@ class Sentence:
             时间戳列表（按 checkpoint_idx 顺序）
         """
         char = self.get_character(char_idx)
-        return list(char.timestamps) if char else []
+        return char.all_timestamps if char else []
 
     def clear_all_timestamps(self) -> None:
         """清空所有字符的时间戳"""
@@ -211,26 +211,41 @@ class Sentence:
         Returns:
             (已完成数量, 总共需要数量)
         """
-        done = sum(len(c.timestamps) for c in self.characters)
-        total = sum(c.check_count for c in self.characters)
+        done = sum(
+            len(c.timestamps) + (1 if c.sentence_end_ts is not None else 0)
+            for c in self.characters
+        )
+        total = sum(c.total_timing_points for c in self.characters)
         return done, total
 
     @property
     def timing_start_ms(self) -> Optional[int]:
         """句子最早时间戳（毫秒），如果无时间标签返回 None"""
-        all_ts = [ts for c in self.characters for ts in c.timestamps]
+        all_ts = [ts for c in self.characters for ts in c.all_timestamps]
         return min(all_ts) if all_ts else None
 
     @property
     def timing_end_ms(self) -> Optional[int]:
         """句子最晚时间戳（毫秒），如果无时间标签返回 None"""
-        all_ts = [ts for c in self.characters for ts in c.timestamps]
+        all_ts = [ts for c in self.characters for ts in c.all_timestamps]
+        return max(all_ts) if all_ts else None
+
+    @property
+    def export_timing_start_ms(self) -> Optional[int]:
+        """句子最早导出时间戳（含偏移），如果无时间标签返回 None"""
+        all_ts = [ts for c in self.characters for ts in c.all_export_timestamps]
+        return min(all_ts) if all_ts else None
+
+    @property
+    def export_timing_end_ms(self) -> Optional[int]:
+        """句子最晚导出时间戳（含偏移），如果无时间标签返回 None"""
+        all_ts = [ts for c in self.characters for ts in c.all_export_timestamps]
         return max(all_ts) if all_ts else None
 
     @property
     def has_timetags(self) -> bool:
         """是否有任何时间标签"""
-        return any(c.timestamps for c in self.characters)
+        return any(c.all_timestamps for c in self.characters)
 
     # ── Ruby 管理 ──
 
@@ -288,7 +303,7 @@ class Sentence:
         """从纯文本创建句子
 
         自动拆分为单字符，设置默认 checkpoint 配置。
-        最后一个字符标记为句尾（check_count=2）。
+        最后一个字符标记为句尾（check_count=1）。
 
         Args:
             text: 歌词文本
@@ -308,8 +323,9 @@ class Sentence:
             characters.append(
                 Character(
                     char=ch,
-                    check_count=2 if is_last else 1,
+                    check_count=1,
                     is_line_end=is_last,
+                    is_sentence_end=is_last,
                     singer_id=singer_id,
                 )
             )

@@ -13,6 +13,7 @@ class TestCharacter:
         assert ch.char == "赤"
         assert ch.check_count == 1
         assert ch.timestamps == []
+        assert ch.sentence_end_ts is None
         assert not ch.linked_to_next
         assert not ch.is_line_end
         assert not ch.is_rest
@@ -25,8 +26,10 @@ class TestCharacter:
             ruby=ruby,
             check_count=2,
             timestamps=[1000, 1500],
+            sentence_end_ts=2000,
             linked_to_next=True,
             is_line_end=True,
+            is_sentence_end=True,
             is_rest=False,
             singer_id="s1",
         )
@@ -34,6 +37,7 @@ class TestCharacter:
         assert ch.ruby == ruby
         assert ch.check_count == 2
         assert ch.timestamps == [1000, 1500]
+        assert ch.sentence_end_ts == 2000
         assert ch.linked_to_next is True
         assert ch.is_line_end is True
         assert ch.singer_id == "s1"
@@ -46,12 +50,23 @@ class TestCharacter:
         with pytest.raises(ValidationError, match="节奏点数量不能为负数"):
             Character(char="a", check_count=-1)
 
+    def test_validation_sentence_end_requires_normal_checkpoint(self):
+        with pytest.raises(ValidationError, match="句尾字符必须至少有 1 个普通节奏点"):
+            Character(char="a", check_count=0, is_sentence_end=True)
+
     def test_push_to_ruby(self):
         ruby = Ruby(text="あか")
-        ch = Character(char="赤", ruby=ruby, timestamps=[1000], singer_id="s1")
+        ch = Character(
+            char="赤",
+            ruby=ruby,
+            timestamps=[1000],
+            sentence_end_ts=1500,
+            is_sentence_end=True,
+            singer_id="s1",
+        )
         # Manually verify push_to_ruby (it's often called by other methods)
         ch.push_to_ruby()
-        assert ruby.timestamps == [1000]
+        assert ruby.timestamps == [1000, 1500]
         assert ruby.singer_id == "s1"
 
     def test_add_timestamp_sorts(self):
@@ -61,13 +76,13 @@ class TestCharacter:
         assert ch.timestamps == [1000, 2000]
 
     def test_add_timestamp_at_index(self):
-        ch = Character(char="a")
+        ch = Character(char="a", check_count=3)
         ch.add_timestamp(1000, checkpoint_idx=0)
         ch.add_timestamp(3000, checkpoint_idx=2)
         assert ch.timestamps == [1000, 0, 3000]
 
     def test_remove_timestamp_at(self):
-        ch = Character(char="a", timestamps=[1000, 2000, 3000])
+        ch = Character(char="a", check_count=3, timestamps=[1000, 2000, 3000])
         removed = ch.remove_timestamp_at(1)
         assert removed == 2000
         assert ch.timestamps == [1000, 3000]
@@ -76,26 +91,59 @@ class TestCharacter:
 
     def test_clear_timestamps(self):
         ruby = Ruby(text="a")
-        ch = Character(char="a", ruby=ruby, timestamps=[1000, 2000])
+        ch = Character(
+            char="a",
+            ruby=ruby,
+            timestamps=[1000, 2000],
+            sentence_end_ts=3000,
+            is_sentence_end=True,
+        )
         ch.clear_timestamps()
         assert ch.timestamps == []
+        assert ch.sentence_end_ts is None
         assert ruby.timestamps == []
 
     def test_set_ruby_pushes(self):
-        ch = Character(char="赤", timestamps=[1000], singer_id="s1")
+        ch = Character(
+            char="赤",
+            timestamps=[1000],
+            sentence_end_ts=1500,
+            is_sentence_end=True,
+            singer_id="s1",
+        )
         ruby = Ruby(text="あか")
         ch.set_ruby(ruby)
         assert ch.ruby == ruby
-        assert ruby.timestamps == [1000]
+        assert ruby.timestamps == [1000, 1500]
         assert ruby.singer_id == "s1"
 
     def test_is_fully_timed(self):
-        ch = Character(char="a", check_count=2)
+        ch = Character(char="a", check_count=2, is_sentence_end=True)
         assert not ch.is_fully_timed
         ch.add_timestamp(1000)
         assert not ch.is_fully_timed
         ch.add_timestamp(2000)
+        assert not ch.is_fully_timed
+        ch.set_sentence_end_ts(2500)
         assert ch.is_fully_timed
+
+    def test_total_timing_points_and_all_timestamps(self):
+        ch = Character(
+            char="a",
+            check_count=2,
+            timestamps=[1000, 2000],
+            sentence_end_ts=2500,
+            is_sentence_end=True,
+        )
+        assert ch.total_timing_points == 3
+        assert ch.all_timestamps == [1000, 2000, 2500]
+
+    def test_set_and_clear_sentence_end_ts(self):
+        ch = Character(char="a", check_count=1, is_sentence_end=True)
+        ch.set_sentence_end_ts(1234)
+        assert ch.sentence_end_ts == 1234
+        ch.clear_sentence_end_ts()
+        assert ch.sentence_end_ts is None
 
     def test_get_tag_type(self):
         # Normal char
@@ -107,6 +155,10 @@ class TestCharacter:
         assert ch2.get_tag_type(0) == TimeTagType.CHAR_START
         assert ch2.get_tag_type(1) == TimeTagType.CHAR_MIDDLE
         assert ch2.get_tag_type(2) == TimeTagType.CHAR_MIDDLE
+
+        ch3 = Character(char="c", check_count=1, is_sentence_end=True)
+        assert ch3.get_tag_type(0) == TimeTagType.CHAR_START
+        assert ch3.get_tag_type(1) == TimeTagType.SENTENCE_END
 
         # Rest char
         ch_rest = Character(char=" ", is_rest=True)

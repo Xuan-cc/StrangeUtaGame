@@ -228,6 +228,15 @@ class TimingService:
                         singer_id=char.singer_id,
                     )
                     self._global_checkpoints.append(pos)
+                if char.is_sentence_end:
+                    self._global_checkpoints.append(
+                        CheckpointPosition(
+                            line_idx=line_idx,
+                            char_idx=char_idx,
+                            checkpoint_idx=char.check_count,
+                            singer_id=char.singer_id,
+                        )
+                    )
 
         # 按行、字符、checkpoint_idx 排序
         self._global_checkpoints.sort(
@@ -254,7 +263,10 @@ class TimingService:
         sentence = self._project.sentences[pos.line_idx]
         char = sentence.get_character(pos.char_idx)
 
-        if char and pos.checkpoint_idx < char.check_count:
+        if char and (
+            pos.checkpoint_idx < char.check_count
+            or (char.is_sentence_end and pos.checkpoint_idx == char.check_count)
+        ):
             return sentence, char
 
         return sentence, None
@@ -406,14 +418,10 @@ class TimingService:
                 self._notify_error("NO_CHECKPOINT", "无效的 checkpoint 位置")
                 return
 
-        # 检查是否为句尾字符的倒数第二个节奏点（开始长按录制）
-        # 句尾字符的最后两个节奏点用于长按录制：
-        #   checkpoint_idx = check_count-2: 按下时间（开始）
-        #   checkpoint_idx = check_count-1: 抬起时间（结束）
-        # 之前的节奏点按普通打轴处理（用于多假名汉字的注音节奏点）
+        # 检查是否为句尾字符的最后一个普通节奏点（开始长按录制）
         if (
-            char.is_line_end
-            and self._current_position.checkpoint_idx == char.check_count - 2
+            char.is_sentence_end
+            and self._current_position.checkpoint_idx == char.check_count - 1
         ):
             # 句尾长按处理 - 记录开始时间
             self._start_line_end_recording()
@@ -461,16 +469,16 @@ class TimingService:
     def _finish_line_end_recording(self, end_time_ms: int) -> None:
         """完成句尾长按录制
 
-        句尾字符的最后两个节奏点用于长按录制：
-        - 当前 checkpoint_idx (= check_count-2): 按下时间（start_time_ms）
-        - 下一个 checkpoint_idx (= check_count-1): 抬起时间（end_time_ms）
+        句尾字符的最后一个普通节奏点和句尾释放点用于长按录制：
+        - 当前 checkpoint_idx (= check_count-1): 按下时间（start_time_ms）
+        - 下一个 checkpoint_idx (= check_count): 抬起时间（end_time_ms）
         短按时两者均填 start_time_ms。
 
         注意：对于有注音的汉字句尾（如「花」=はな，check_count=3），
         前面的注音节奏点已在普通打轴流程中处理完毕，
-        此方法仅处理最后两个节奏点。
+        此方法仅处理最后一个普通节奏点和句尾释放点。
 
-        调用后 _current_position 停在最后一个 checkpoint_idx，
+        调用后 _current_position 停在句尾释放点，
         外层 on_timing_key_released 的 move_to_next_checkpoint() 会
         将位置推进到下一行首字符。
 
@@ -528,15 +536,6 @@ class TimingService:
         if not sentence or not char:
             return
 
-        # 检查时间倒退
-        for ts in char.timestamps:
-            if ts > timestamp_ms:
-                self._notify_error(
-                    "TIME_BACKWARD",
-                    f"时间倒退: 新时间 {timestamp_ms}ms < 已存在 {ts}ms",
-                )
-                return
-
         if self._command_manager and self._project:
             from strange_uta_game.backend.application.commands import AddTimeTagCommand
 
@@ -549,7 +548,11 @@ class TimingService:
             )
             self._command_manager.execute(cmd)
         else:
-            char.add_timestamp(timestamp_ms, self._current_position.checkpoint_idx)
+            checkpoint_idx = self._current_position.checkpoint_idx
+            if char.is_sentence_end and checkpoint_idx == char.check_count:
+                char.set_sentence_end_ts(timestamp_ms)
+            else:
+                char.add_timestamp(timestamp_ms, checkpoint_idx)
 
         # 通知回调
         if self._callbacks:
@@ -718,6 +721,10 @@ class TimingService:
                         added_count += 1
                         found = True
                         break
+                if not found and char.is_sentence_end and char.sentence_end_ts is None:
+                    char.set_sentence_end_ts(timestamp_ms)
+                    added_count += 1
+                    found = True
                 if found:
                     break
 
@@ -737,7 +744,7 @@ class TimingService:
             return 0
 
         sentence = self._project.sentences[line_idx]
-        count = sum(len(c.timestamps) for c in sentence.characters)
+        count = sum(len(c.all_timestamps) for c in sentence.characters)
 
         if self._command_manager and self._project:
             from strange_uta_game.backend.application.commands import (

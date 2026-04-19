@@ -74,8 +74,8 @@ class Txt2AssExporter(BaseExporter):
             # 没有时间标签，使用占位符
             return f"[00:00.00]{sentence.text}"
 
-        # 使用最早的时间标签
-        start_ms = sentence.timing_start_ms
+        # 使用最早的时间标签（导出时间戳，含偏移）
+        start_ms = sentence.export_timing_start_ms
         time_str = self._format_timestamp(start_ms, "lrc")
 
         return f"{time_str}{sentence.text}"
@@ -165,14 +165,14 @@ class ASSDirectExporter(BaseExporter):
             if not sentence.has_timetags:
                 continue
 
-            # 获取时间范围
-            start_time = sentence.timing_start_ms
+            # 获取时间范围（使用导出时间戳，含偏移）
+            start_time = sentence.export_timing_start_ms
 
             # 结束时间：下一行的开始时间，或当前行 + 5 秒
             if i + 1 < len(sentences):
                 next_sentence = sentences[i + 1]
                 if next_sentence.has_timetags:
-                    end_time = next_sentence.timing_start_ms
+                    end_time = next_sentence.export_timing_start_ms
                 else:
                     end_time = start_time + 5000
             else:
@@ -194,10 +194,10 @@ class ASSDirectExporter(BaseExporter):
         if not sentence.has_timetags or not sentence.characters:
             return sentence.text
 
-        # 收集所有 (timestamp_ms, char) 并按时间排序
+        # 收集所有 (timestamp_ms, char) 并按时间排序（使用导出时间戳）
         all_tags: List[tuple[int, str]] = []
         for ch in sentence.characters:
-            for ts in ch.timestamps:
+            for ts in ch.export_timestamps:
                 all_tags.append((ts, ch.char))
 
         if not all_tags:

@@ -78,7 +78,7 @@ class LRCExporter(BaseExporter):
         # 收集所有 (timestamp_ms, char_idx, checkpoint_idx) 并排序
         all_tags: List[tuple[int, int, int]] = []
         for i, ch in enumerate(sentence.characters):
-            for cp_idx, ts in enumerate(ch.timestamps):
+            for cp_idx, ts in enumerate(ch.export_timestamps):
                 all_tags.append((ts, i, cp_idx))
 
         if not all_tags:

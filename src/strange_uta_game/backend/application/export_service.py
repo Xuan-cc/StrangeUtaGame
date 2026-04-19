@@ -91,9 +91,10 @@ class ExportService:
             # 获取导出器
             exporter = get_exporter_by_name(format_name)
 
-            # 设置导出偏移
+            # 设置导出偏移：偏移已预计算在 Character.export_timestamps 中，
+            # 导出器不再需要额外偏移
             if hasattr(exporter, "_offset_ms"):
-                exporter._offset_ms = offset_ms
+                exporter._offset_ms = 0
 
             # 报告进度
             if self._progress_callback:

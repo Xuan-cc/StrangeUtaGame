@@ -53,6 +53,7 @@ class TestSugProjectParser:
         sentence.characters[0].add_timestamp(1000)
         sentence.characters[1].add_timestamp(1500)
         sentence.characters[2].add_timestamp(2000)
+        sentence.characters[2].set_sentence_end_ts(2500)
 
         project.add_sentence(sentence)
 
@@ -62,8 +63,109 @@ class TestSugProjectParser:
         loaded = SugProjectParser.load(str(file_path))
 
         # 验证
-        assert sum(len(c.timestamps) for c in loaded.sentences[0].characters) == 3
+        assert sum(len(c.all_timestamps) for c in loaded.sentences[0].characters) == 4
         assert loaded.sentences[0].characters[0].timestamps[0] == 1000
+        assert loaded.sentences[0].characters[2].sentence_end_ts == 2500
+
+    def test_load_legacy_v2_sentence_end_without_sentence_end_ts(self, tmp_path):
+        file_path = tmp_path / "legacy_v2.sug"
+        file_path.write_text(
+            """
+{
+  "version": "2.0",
+  "id": "p1",
+  "metadata": {},
+  "audio_duration_ms": 0,
+  "singers": [
+    {
+      "id": "s1",
+      "name": "默认",
+      "color": "#FF6B6B",
+      "is_default": true,
+      "display_priority": 0,
+      "enabled": true,
+      "backend_number": 1
+    }
+  ],
+  "sentences": [
+    {
+      "id": "line1",
+      "singer_id": "s1",
+      "characters": [
+        {
+          "char": "花",
+          "check_count": 2,
+          "timestamps": [1000, 1500],
+          "linked_to_next": false,
+          "is_line_end": true,
+          "is_sentence_end": true,
+          "is_rest": false,
+          "singer_id": "s1"
+        }
+      ]
+    }
+  ]
+}
+            """.strip(),
+            encoding="utf-8",
+        )
+
+        loaded = SugProjectParser.load(str(file_path))
+
+        char = loaded.sentences[0].characters[0]
+        assert char.check_count == 1
+        assert char.timestamps == [1000]
+        assert char.sentence_end_ts == 1500
+
+    def test_load_legacy_v2_sentence_end_without_release_timestamp(self, tmp_path):
+        file_path = tmp_path / "legacy_v2_partial.sug"
+        file_path.write_text(
+            """
+{
+  "version": "2.0",
+  "id": "p1",
+  "metadata": {},
+  "audio_duration_ms": 0,
+  "singers": [
+    {
+      "id": "s1",
+      "name": "默认",
+      "color": "#FF6B6B",
+      "is_default": true,
+      "display_priority": 0,
+      "enabled": true,
+      "backend_number": 1
+    }
+  ],
+  "sentences": [
+    {
+      "id": "line1",
+      "singer_id": "s1",
+      "characters": [
+        {
+          "char": "花",
+          "check_count": 2,
+          "timestamps": [1000],
+          "linked_to_next": false,
+          "is_line_end": true,
+          "is_sentence_end": true,
+          "is_rest": false,
+          "singer_id": "s1"
+        }
+      ]
+    }
+  ]
+}
+            """.strip(),
+            encoding="utf-8",
+        )
+
+        loaded = SugProjectParser.load(str(file_path))
+
+        char = loaded.sentences[0].characters[0]
+        assert char.check_count == 1
+        assert char.timestamps == [1000]
+        assert char.sentence_end_ts is None
 
     def test_save_and_load_with_rubies(self, tmp_path):
         """测试保存和加载带注音的项目"""

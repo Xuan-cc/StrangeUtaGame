@@ -1,7 +1,7 @@
 """设置界面 — RhythmicaLyrics 风格层级设定系统。
 
 使用 qfluentwidgets 的 SettingCardGroup + ExpandLayout 实现分组卡片布局。
-所有设置通过 AppSettings 统一管理，保存到 ~/.strange_uta_game/config.json。
+所有设置通过 AppSettings 统一管理，默认保存到程序所在目录的 config.json。
 """
 
 from PyQt6.QtWidgets import (
@@ -37,6 +37,7 @@ from qfluentwidgets import (
 from typing import Optional, Dict, Any
 from pathlib import Path
 import json
+import sys
 import threading
 
 import numpy as np
@@ -57,7 +58,7 @@ class AppSettings:
             "default_check_count": 1,
             "auto_advance_after_tag": True,
             "show_preview_lines": 5,
-            "tag_offset_ms": 0,
+            "tag_offset_ms": -130,
             "speed_correction": 100,
             "fast_forward_ms": 5000,
             "rewind_ms": 5000,
@@ -108,6 +109,10 @@ class AppSettings:
             "silence_ms": 0,
             "custom": [],
         },
+        "auto_save": {
+            "enabled": True,
+            "interval_minutes": 5,
+        },
         "singer_presets": [],
         "shortcuts": {
             "play_pause": "A",
@@ -127,11 +132,43 @@ class AppSettings:
         },
     }
 
+    @staticmethod
+    def get_config_dir() -> Path:
+        """获取配置文件目录（默认为程序所在目录）。
+
+        支持通过程序目录下的 .config_redirect 文件重定向到自定义位置。
+        """
+        program_dir = Path(sys.argv[0]).resolve().parent
+        redirect_file = program_dir / ".config_redirect"
+        if redirect_file.exists():
+            try:
+                custom_dir = Path(redirect_file.read_text(encoding="utf-8").strip())
+                if custom_dir.is_dir():
+                    return custom_dir
+            except Exception:
+                pass
+        return program_dir
+
     def __init__(self, config_path: Optional[str] = None):
         if config_path is None:
-            config_dir = Path.home() / ".strange_uta_game"
-            config_dir.mkdir(exist_ok=True)
+            config_dir = self.get_config_dir()
+            try:
+                config_dir.mkdir(exist_ok=True)
+            except OSError:
+                # 程序目录不可写时回退到用户目录
+                config_dir = Path.home() / ".strange_uta_game"
+                config_dir.mkdir(exist_ok=True)
             self._config_path = config_dir / "config.json"
+            # 迁移：若新位置无配置，检查旧位置
+            if not self._config_path.exists():
+                old_config = Path.home() / ".strange_uta_game" / "config.json"
+                if old_config.exists():
+                    try:
+                        import shutil
+
+                        shutil.copy2(str(old_config), str(self._config_path))
+                    except Exception:
+                        pass
         else:
             self._config_path = Path(config_path)
         self._settings = self._load_settings()
@@ -166,6 +203,10 @@ class AppSettings:
                 json.dump(self._settings, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"保存设置失败: {e}")
+
+    def reload(self) -> None:
+        """从磁盘重新加载配置文件。"""
+        self._settings = self._load_settings()
 
     def get(self, path: str, default=None) -> Any:
         keys = path.split(".")
@@ -973,46 +1014,67 @@ class CalibrationDialog(QDialog):
         with self._state_lock:
             self._running = False
             self._schedule_version += 1
-        try:
-            sd.stop()
-        except Exception:
-            pass
         if self._metronome_thread and self._metronome_thread.is_alive():
             self._metronome_thread.join(timeout=1.0)
         self._metronome_thread = None
 
     def _play_metronome_loop(self):
-        while True:
-            with self._state_lock:
-                if not self._running:
-                    return
-                next_beat_time = self._next_beat_time
-                version = self._schedule_version
+        stream = None
+        try:
+            stream = sd.OutputStream(
+                samplerate=self._sample_rate,
+                channels=1,
+                dtype="float32",
+                latency="low",
+            )
+            stream.start()
+        except Exception:
+            stream = None
 
-            wait_time = next_beat_time - _time.monotonic()
-            if wait_time > 0.01:
-                _time.sleep(min(wait_time / 2, 0.01))
-                continue
-            if wait_time > 0:
-                _time.sleep(wait_time)
+        try:
+            while True:
+                with self._state_lock:
+                    if not self._running:
+                        return
+                    next_beat_time = self._next_beat_time
+                    version = self._schedule_version
 
-            beat_time = next_beat_time
-            try:
-                sd.play(self._click_audio, self._sample_rate, blocking=False)
-            except Exception:
-                _time.sleep(0.05)
+                now = _time.monotonic()
+                wait_time = next_beat_time - now
 
-            with self._state_lock:
-                if not self._running:
-                    return
-                self._beat_times.append(beat_time)
-                if len(self._beat_times) > 256:
-                    self._beat_times = self._beat_times[-256:]
-                if (
-                    version == self._schedule_version
-                    and abs(self._next_beat_time - beat_time) < 0.02
-                ):
-                    self._next_beat_time = beat_time + self._beat_interval
+                if wait_time > 0.003:
+                    _time.sleep(min(wait_time - 0.002, 0.008))
+                    continue
+
+                # 精确自旋等待，确保判定时间与视觉中心一致
+                while _time.monotonic() < next_beat_time:
+                    pass
+
+                beat_time = next_beat_time
+                if stream is not None:
+                    try:
+                        stream.write(self._click_audio)
+                    except Exception:
+                        pass
+
+                with self._state_lock:
+                    if not self._running:
+                        return
+                    self._beat_times.append(beat_time)
+                    if len(self._beat_times) > 256:
+                        self._beat_times = self._beat_times[-256:]
+                    if (
+                        version == self._schedule_version
+                        and abs(self._next_beat_time - beat_time) < 0.02
+                    ):
+                        self._next_beat_time = beat_time + self._beat_interval
+        finally:
+            if stream is not None:
+                try:
+                    stream.stop()
+                    stream.close()
+                except Exception:
+                    pass
 
     def _on_bpm_changed(self, value: int):
         now = _time.monotonic()
@@ -1114,6 +1176,7 @@ class CalibrationDialog(QDialog):
             duration=3000,
             parent=self._settings_interface,
         )
+        self._stop_metronome()
         self.accept()
 
 
@@ -1141,12 +1204,21 @@ class SettingsInterface(ScrollArea):
         super().__init__(parent)
         self._store = None
         self._settings = AppSettings()
+        self._calibration_dialog = None
+
+        # 自动保存防抖定时器
+        self._auto_save_timer = QTimer(self)
+        self._auto_save_timer.setSingleShot(True)
+        self._auto_save_timer.setInterval(500)
+        self._auto_save_timer.timeout.connect(self._do_auto_save)
+        self._loading_settings = False  # 防止加载时触发自动保存
 
         self.scrollWidget = QWidget()
         self.expandLayout = ExpandLayout(self.scrollWidget)
 
         self._init_ui()
         self._load_current_settings()
+        self._connect_auto_save_signals()
 
         # ScrollArea 配置
         self.setWidget(self.scrollWidget)
@@ -1157,6 +1229,40 @@ class SettingsInterface(ScrollArea):
         """接入 ProjectStore 统一数据中心。"""
         self._store = store
 
+    def _connect_auto_save_signals(self):
+        """将所有设置卡片的变更信号连接到自动保存。"""
+        # 遍历所有属性，按类型连接信号
+        for attr_name in dir(self):
+            card = getattr(self, attr_name, None)
+            if isinstance(card, SpinSettingCard):
+                card.value_changed.connect(self._schedule_auto_save)
+            elif isinstance(card, DoubleSpinSettingCard):
+                card.value_changed.connect(self._schedule_auto_save)
+            elif isinstance(card, SwitchSettingCard):
+                card.checked_changed.connect(self._schedule_auto_save)
+            elif isinstance(card, ComboSettingCard):
+                card.index_changed.connect(self._schedule_auto_save)
+            elif isinstance(card, BrowseSettingCard):
+                card.path_changed.connect(self._schedule_auto_save)
+            elif isinstance(card, ShortcutSettingCard):
+                card.value_changed.connect(self._schedule_auto_save)
+
+    def _schedule_auto_save(self, *_args):
+        """防抖调度自动保存（500ms 内无新操作则保存）。"""
+        if self._loading_settings:
+            return
+        self._auto_save_timer.start()
+
+    def _do_auto_save(self):
+        """执行自动保存：收集设置 → 保存到磁盘 → 通知变更。"""
+        # 先检测快捷键冲突并自动解决
+        self._resolve_shortcut_conflicts()
+        self._collect_settings()
+        self._settings.save()
+        self.settings_changed.emit()
+        if self._store is not None:
+            self._store.notify("settings")
+
     def _init_ui(self):
         self.expandLayout.setSpacing(28)
         self.expandLayout.setContentsMargins(60, 20, 60, 20)
@@ -1164,6 +1270,7 @@ class SettingsInterface(ScrollArea):
         self._init_playback_group()
         self._init_timing_group()
         self._init_calibration_group()
+        self._init_auto_save_group()
         self._init_auto_check_group()
         self._init_check_behavior_group()
         self._init_dictionary_group()
@@ -1316,12 +1423,48 @@ class SettingsInterface(ScrollArea):
         self.expandLayout.addWidget(self.calibration_group)
 
     def _open_calibration_dialog(self):
-        dialog = CalibrationDialog(self)
-        dialog.exec()
+        self._calibration_dialog = CalibrationDialog(self)
+        self._calibration_dialog.exec()
+        # 安全网：无论对话框如何关闭，确保节拍器已停止
+        if self._calibration_dialog is not None:
+            self._calibration_dialog._stop_metronome()
+        self._calibration_dialog = None
+
+    # ── 自动保存 ──
+
+    def _init_auto_save_group(self):
+        self.auto_save_group = SettingCardGroup("自动保存", self.scrollWidget)
+
+        self.card_auto_save_enabled = SwitchSettingCard(
+            FIF.SAVE,
+            "启用定时自动保存",
+            "定时将项目保存为临时文件，防止闪退丢失数据",
+            parent=self.auto_save_group,
+        )
+        self.card_auto_save_interval = SpinSettingCard(
+            FIF.HISTORY,
+            "自动保存间隔",
+            "每隔多少分钟自动保存一次（1~60分钟）",
+            min_val=1,
+            max_val=60,
+            step=1,
+            suffix=" 分钟",
+            parent=self.auto_save_group,
+        )
+
+        self.auto_save_group.addSettingCard(self.card_auto_save_enabled)
+        self.auto_save_group.addSettingCard(self.card_auto_save_interval)
+        self.expandLayout.addWidget(self.auto_save_group)
 
     def keyPressEvent(self, a0: QKeyEvent | None):
         """设置界面按键事件。"""
         super().keyPressEvent(a0)
+
+    def hideEvent(self, a0):
+        """设置界面隐藏时关闭校准弹窗并释放资源。"""
+        if self._calibration_dialog is not None:
+            self._calibration_dialog.close()
+        super().hideEvent(a0)
 
     # ── Auto Check ──
 
@@ -1727,20 +1870,117 @@ class SettingsInterface(ScrollArea):
         self.about_group.addSettingCard(link_card)
 
         # 配置文件路径
-        path_card = SettingCard(
+        self._path_card = SettingCard(
             FIF.FOLDER,
             "配置文件位置",
             str(self._settings._config_path),
             self.about_group,
         )
-        self.about_group.addSettingCard(path_card)
+        btn_open_config = PushButton("打开目录", self._path_card)
+        btn_open_config.setFont(QFont("Microsoft YaHei", 10))
+        btn_open_config.clicked.connect(self._open_config_dir)
+        self._path_card.hBoxLayout.addWidget(
+            btn_open_config, 0, Qt.AlignmentFlag.AlignRight
+        )
+        btn_change_config = PushButton("更改位置", self._path_card)
+        btn_change_config.setFont(QFont("Microsoft YaHei", 10))
+        btn_change_config.clicked.connect(self._change_config_dir)
+        self._path_card.hBoxLayout.addWidget(
+            btn_change_config, 0, Qt.AlignmentFlag.AlignRight
+        )
+        self._path_card.hBoxLayout.addSpacing(16)
+
+        self.about_group.addSettingCard(self._path_card)
 
         self.expandLayout.addWidget(self.about_group)
+
+    def _open_config_dir(self):
+        """打开配置文件所在目录。"""
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+
+        config_dir = self._settings._config_path.parent
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(config_dir)))
+
+    def _change_config_dir(self):
+        """更改配置文件存储位置。"""
+        new_dir = QFileDialog.getExistingDirectory(
+            self, "选择配置文件存储目录", str(self._settings._config_path.parent)
+        )
+        if not new_dir:
+            return
+
+        new_dir_path = Path(new_dir)
+        program_dir = Path(sys.argv[0]).resolve().parent
+        redirect_file = program_dir / ".config_redirect"
+
+        if new_dir_path.resolve() == program_dir.resolve():
+            # 回到默认位置 — 删除重定向文件
+            try:
+                if redirect_file.exists():
+                    redirect_file.unlink()
+            except Exception:
+                pass
+        else:
+            try:
+                redirect_file.write_text(str(new_dir_path), encoding="utf-8")
+            except Exception as e:
+                InfoBar.error(
+                    title="更改失败",
+                    content=f"无法写入重定向文件: {e}",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                    parent=self,
+                )
+                return
+
+        old_path = self._settings._config_path
+        new_path = new_dir_path / "config.json"
+
+        # 复制配置到新位置
+        if old_path.exists() and old_path != new_path:
+            try:
+                import shutil
+
+                new_dir_path.mkdir(exist_ok=True)
+                shutil.copy2(str(old_path), str(new_path))
+            except Exception as e:
+                InfoBar.warning(
+                    title="配置复制失败",
+                    content=f"请手动复制配置文件: {e}",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                    parent=self,
+                )
+
+        self._settings._config_path = new_path
+        self._path_card.setContent(str(new_path))
+        InfoBar.success(
+            title="配置位置已更改",
+            content=f"配置文件将保存到: {new_path}",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=5000,
+            parent=self,
+        )
 
     # ==================== 数据绑定 ====================
 
     def _load_current_settings(self):
         """从 AppSettings 加载所有设置到 UI 控件"""
+        self._loading_settings = True
+        try:
+            self._load_current_settings_inner()
+        finally:
+            self._loading_settings = False
+
+    def _load_current_settings_inner(self):
+        """实际加载逻辑（被 _loading_settings 守护）"""
         # 演奏控制
         self.card_volume.setValue(self._settings.get("audio.default_volume", 80))
         self.card_speed.setValue(self._settings.get("audio.default_speed", 1.0))
@@ -1832,6 +2072,14 @@ class SettingsInterface(ScrollArea):
         if export_dir:
             self.card_export_dir.setText(export_dir)
         self.card_export_offset.setValue(self._settings.get("export.offset_ms", 0))
+
+        # 自动保存
+        self.card_auto_save_enabled.setChecked(
+            self._settings.get("auto_save.enabled", True)
+        )
+        self.card_auto_save_interval.setValue(
+            self._settings.get("auto_save.interval_minutes", 5)
+        )
 
         # 快捷键
         self.card_sc_tag.setValue(self._settings.get("shortcuts.tag_now", "Space"))
@@ -1949,6 +2197,12 @@ class SettingsInterface(ScrollArea):
             self._settings.set("export.last_export_dir", export_dir)
         self._settings.set("export.offset_ms", self.card_export_offset.value())
 
+        # 自动保存
+        self._settings.set("auto_save.enabled", self.card_auto_save_enabled.isChecked())
+        self._settings.set(
+            "auto_save.interval_minutes", self.card_auto_save_interval.value()
+        )
+
         # 快捷键
         self._settings.set("shortcuts.tag_now", self.card_sc_tag.value())
         self._settings.set("shortcuts.play_pause", self.card_sc_play_pause.value())
@@ -2042,3 +2296,8 @@ class SettingsInterface(ScrollArea):
 
     def get_settings(self) -> AppSettings:
         return self._settings
+
+    def reload_from_disk(self):
+        """从磁盘重新加载配置并刷新 UI 控件。"""
+        self._settings.reload()
+        self._load_current_settings()

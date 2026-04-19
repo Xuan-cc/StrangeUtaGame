@@ -356,3 +356,48 @@
 - `BulkChangeDialog.__init__` 新增 `initial_reading: str = ""` 参数
 - `settings_interface.py` DEFAULT_SETTINGS 新增 `timing.jump_before_ms: 3000`
 - `LineDetailDialog` 新表格列：字符(col0)、注音(col1)、时间标签(col2)、节奏点(col3)、句尾(col4)、演唱者(col5)
+
+---
+
+## 第五批修复与功能增强（2026-04-19）
+
+### 核心重设计：checkpoint/句尾时间戳分离
+
+**问题**：句尾标记（is_sentence_end）通过增加 check_count 实现，导致删除 checkpoint 可能破坏句尾标记的正常工作。句尾释放时间戳与普通 checkpoint 时间戳混存在同一列表中。
+
+**修复**：
+- Character 新增 `sentence_end_ts: Optional[int]` 字段，独立存储句尾释放时间戳
+- `check_count` 和 `timestamps` 仅存储普通节奏点
+- 新增 `total_timing_points` 属性 = `check_count + (1 if is_sentence_end else 0)`
+- 新增 `all_timestamps` 属性 = `timestamps + [sentence_end_ts]`（用于渲染和导出）
+- SUG 文件格式向后兼容：旧文件加载时自动从最后一个时间戳提取 sentence_end_ts
+- 影响范围：14+ 文件，涵盖领域层、应用层、基础设施层、前端层
+
+### 修复与增强列表
+
+| # | 类型 | 说明 | 修改文件 |
+|---|------|------|---------|
+| 1 | BUG修复 | Offset校准窗口关闭后节拍器音频残留 | settings_interface.py |
+| 2 | 功能增强 | 设置项自动保存（500ms防抖，失去焦点即保存） | settings_interface.py |
+| 3 | 功能增强 | 切换标签页时自动重载配置文件 | settings_interface.py, main_window.py |
+| 4 | 功能增强 | 批量变更支持 linked_to_next 连词设置 | bulk_change_dialog.py |
+| 5 | 核心重设计 | checkpoint/句尾标记数据结构分离（sentence_end_ts独立存储） | models.py, entities.py, project.py, auto_check_service.py, timing_service.py, domain_commands.py, inline_format.py, sug_parser.py, nicokara_exporter.py, txt_exporter.py, editor_interface.py, edit_interface.py, ruby_editor.py, startup_interface.py |
+| 6 | 功能增强 | 导出演唱者过滤改进（自动过滤、可滚动、标签独立设置） | export_interface.py |
+| 7 | BUG修复 | 片假名注音分析修复（片假名→平假名转换） | ruby_analyzer.py |
+
+---
+
+## 第六批修复与功能增强（2026-04-19）
+
+| # | 问题 | 说明 | 修改文件 |
+|---|------|------|---------|
+| 1 | 渲染/导出偏移数据结构重设计 | Character 新增 render_timestamps/export_timestamps/set_offsets()，预计算偏移以简化逻辑。 | models.py, entities.py, domain_commands.py |
+| 2 | 打轴界面全局 Offset 调整 | 工具栏新增 SpinBox，实时联动设置和所有字符的预计算偏移。 | editor_interface.py |
+| 3 | 导出器适配 export_timestamps | LRC/Nicokara/TXT/txt2ass 全部使用预计算的 export_timestamps，ExportService 内部 offset 设为 0。 | 各 exporter 文件, export_service.py |
+| 4 | 词典逗号分隔读音 BUG 修复 | 调用 split_ruby_for_checkpoints 前增加逗号检测，防止错误分割。 | auto_check_service.py |
+| 5 | 批量变更连词继承 | 移除 linked_to_next 复选框，批量变更时保留并继承原字符的连词属性。 | bulk_change_dialog.py |
+| 6 | 批量变更多字符选择 | 划选区域优先提取初始词和注音填充至批量变更对话框。 | editor_interface.py |
+| 7 | 单击字符设置 checkpoint 目标 | 单击字符即刻调用 move_to_checkpoint，提升打轴效率。 | editor_interface.py |
+| 8 | KaraokePreview 渲染逻辑修复 | 直接使用 render_timestamps 消除渲染时的手动时间偏移计算。 | editor_interface.py |
+
+---

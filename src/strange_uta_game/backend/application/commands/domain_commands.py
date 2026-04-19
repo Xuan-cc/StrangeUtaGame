@@ -34,6 +34,7 @@ class AddTimeTagCommand(Command):
         self.timestamp_ms = timestamp_ms
         self.checkpoint_idx = checkpoint_idx
         self._old_timestamps: Optional[list] = None
+        self._old_sentence_end_ts: Optional[int] = None
 
     def execute(self) -> None:
         sentence = self.project.get_sentence(self.sentence_id)
@@ -44,7 +45,11 @@ class AddTimeTagCommand(Command):
             raise ValueError(f"字符索引 {self.char_idx} 超出范围")
 
         self._old_timestamps = list(char.timestamps)
-        char.add_timestamp(self.timestamp_ms, self.checkpoint_idx)
+        self._old_sentence_end_ts = char.sentence_end_ts
+        if char.is_sentence_end and self.checkpoint_idx >= char.check_count:
+            char.set_sentence_end_ts(self.timestamp_ms)
+        else:
+            char.add_timestamp(self.timestamp_ms, self.checkpoint_idx)
 
     def undo(self) -> None:
         if self._old_timestamps is not None:
@@ -53,6 +58,8 @@ class AddTimeTagCommand(Command):
                 char = sentence.get_character(self.char_idx)
                 if char:
                     char.timestamps = list(self._old_timestamps)
+                    char.sentence_end_ts = self._old_sentence_end_ts
+                    char._update_offset_timestamps()
                     char.push_to_ruby()
 
     @property
@@ -78,6 +85,7 @@ class RemoveTimeTagCommand(Command):
         self.char_idx = char_idx
         self.checkpoint_idx = checkpoint_idx
         self._removed_ts: Optional[int] = None
+        self._removed_sentence_end_ts: Optional[int] = None
 
     def execute(self) -> None:
         sentence = self.project.get_sentence(self.sentence_id)
@@ -87,19 +95,31 @@ class RemoveTimeTagCommand(Command):
         if not char:
             raise ValueError(f"字符索引 {self.char_idx} 超出范围")
 
-        self._removed_ts = char.remove_timestamp_at(self.checkpoint_idx)
+        if char.is_sentence_end and self.checkpoint_idx >= char.check_count:
+            self._removed_sentence_end_ts = char.sentence_end_ts
+            char.clear_sentence_end_ts()
+        else:
+            self._removed_ts = char.remove_timestamp_at(self.checkpoint_idx)
 
     def undo(self) -> None:
-        if self._removed_ts is not None:
+        if self._removed_ts is not None or self._removed_sentence_end_ts is not None:
             sentence = self.project.get_sentence(self.sentence_id)
             if sentence:
                 char = sentence.get_character(self.char_idx)
                 if char:
-                    char.add_timestamp(self._removed_ts, self.checkpoint_idx)
+                    if self._removed_ts is not None:
+                        char.add_timestamp(self._removed_ts, self.checkpoint_idx)
+                    elif self._removed_sentence_end_ts is not None:
+                        char.set_sentence_end_ts(self._removed_sentence_end_ts)
 
     @property
     def description(self) -> str:
-        ts = self._removed_ts if self._removed_ts is not None else "?"
+        ts = (
+            self._removed_ts
+            if self._removed_ts is not None
+            else self._removed_sentence_end_ts
+        )
+        ts = ts if ts is not None else "?"
         return f"删除时间标签 [{ts}ms]"
 
 
@@ -113,6 +133,7 @@ class ClearLineTimeTagsCommand(Command):
         self.project = project
         self.sentence_id = sentence_id
         self._old_timestamps: Optional[Dict[int, list]] = None
+        self._old_sentence_end_ts: Optional[Dict[int, Optional[int]]] = None
 
     def execute(self) -> None:
         sentence = self.project.get_sentence(self.sentence_id)
@@ -122,6 +143,9 @@ class ClearLineTimeTagsCommand(Command):
         # 保存所有字符的时间戳
         self._old_timestamps = {
             i: list(c.timestamps) for i, c in enumerate(sentence.characters)
+        }
+        self._old_sentence_end_ts = {
+            i: c.sentence_end_ts for i, c in enumerate(sentence.characters)
         }
         sentence.clear_all_timestamps()
 
@@ -133,6 +157,9 @@ class ClearLineTimeTagsCommand(Command):
                     char = sentence.get_character(i)
                     if char:
                         char.timestamps = list(timestamps)
+                        if self._old_sentence_end_ts is not None:
+                            char.sentence_end_ts = self._old_sentence_end_ts.get(i)
+                        char._update_offset_timestamps()
                         char.push_to_ruby()
 
     @property

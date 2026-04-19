@@ -39,15 +39,17 @@ class TimeTagType(Enum):
     """时间标签类型（用于导出兼容）
 
     在新层次模型中，tag_type 由上下文推导：
-      - CHAR_START  : Character.timestamps[0]
-      - CHAR_MIDDLE : Character.timestamps[1:]（非句尾字符）
-      - LINE_END    : is_line_end 字符的最后一个 timestamp
-      - REST        : is_rest 字符的 timestamp
+      - CHAR_START   : Character.timestamps[0]
+      - CHAR_MIDDLE  : Character.timestamps[1:]（非句尾字符）
+      - LINE_END     : is_line_end 字符的最后一个 timestamp
+      - SENTENCE_END : is_sentence_end 字符的最后一个 timestamp
+      - REST         : is_rest 字符的 timestamp
     """
 
     CHAR_START = auto()
     CHAR_MIDDLE = auto()
     LINE_END = auto()
+    SENTENCE_END = auto()
     REST = auto()
 
 
@@ -101,7 +103,8 @@ class Character:
         check_count: 节奏点数量（需要击打几次，默认 1，可以为 0）
         timestamps: checkpoint 时间戳列表（毫秒），索引 = checkpoint_idx
         linked_to_next: 是否与下一字符连词
-        is_line_end: 是否是句尾字符
+        is_line_end: 是否是行尾字符（行级换行标记，一行只有一个）
+        is_sentence_end: 是否是句尾字符（句尾标记，一行内可有多个，额外 +1 checkpoint）
         is_rest: 是否是休止符
         singer_id: 演唱者 UUID
 
@@ -117,23 +120,39 @@ class Character:
     ruby: Optional[Ruby] = None
     check_count: int = 1
     timestamps: List[int] = field(default_factory=list)
+    sentence_end_ts: Optional[int] = None
     linked_to_next: bool = False
     is_line_end: bool = False
+    is_sentence_end: bool = False
     is_rest: bool = False
     singer_id: str = ""
+
+    # 渲染/导出偏移量（内部管理，不参与构造和序列化）
+    _render_offset_ms: int = field(default=0, init=False, repr=False)
+    _export_offset_ms: int = field(default=0, init=False, repr=False)
+
+    # 派生偏移时间戳（自动维护，不参与构造和序列化）
+    render_timestamps: List[int] = field(default_factory=list, init=False, repr=False)
+    render_sentence_end_ts: Optional[int] = field(default=None, init=False, repr=False)
+    export_timestamps: List[int] = field(default_factory=list, init=False, repr=False)
+    export_sentence_end_ts: Optional[int] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.char:
             raise ValidationError("字符不能为空")
         if self.check_count < 0:
             raise ValidationError(f"节奏点数量不能为负数: {self.check_count}")
+        if self.is_sentence_end and self.check_count <= 0:
+            raise ValidationError("句尾字符必须至少有 1 个普通节奏点")
+        # 初始化渲染/导出偏移时间戳（确保从文件加载的 Character 也有正确的派生数据）
+        self._update_offset_timestamps()
 
     # ── 时间戳管理 ──
 
     def push_to_ruby(self) -> None:
         """将自己的时间戳和演唱者推送给 Ruby 对象"""
         if self.ruby:
-            self.ruby.timestamps = list(self.timestamps)
+            self.ruby.timestamps = self.all_timestamps
             self.ruby.singer_id = self.singer_id
 
     def add_timestamp(self, timestamp_ms: int, checkpoint_idx: int = -1) -> None:
@@ -145,6 +164,8 @@ class Character:
         """
         if timestamp_ms < 0:
             raise ValidationError(f"时间戳不能为负数: {timestamp_ms}")
+        if checkpoint_idx >= self.check_count:
+            raise ValidationError("普通节奏点索引超出范围")
         if checkpoint_idx >= 0:
             # 指定位置插入
             while len(self.timestamps) <= checkpoint_idx:
@@ -153,6 +174,7 @@ class Character:
         else:
             self.timestamps.append(timestamp_ms)
             self.timestamps.sort()
+        self._update_offset_timestamps()
         self.push_to_ruby()
 
     def remove_timestamp_at(self, checkpoint_idx: int) -> Optional[int]:
@@ -164,8 +186,11 @@ class Character:
         Returns:
             被移除的时间戳，如果索引无效返回 None
         """
+        if checkpoint_idx >= self.check_count:
+            return None
         if 0 <= checkpoint_idx < len(self.timestamps):
             removed = self.timestamps.pop(checkpoint_idx)
+            self._update_offset_timestamps()
             self.push_to_ruby()
             return removed
         return None
@@ -173,6 +198,24 @@ class Character:
     def clear_timestamps(self) -> None:
         """清空所有时间戳"""
         self.timestamps.clear()
+        self.sentence_end_ts = None
+        self._update_offset_timestamps()
+        self.push_to_ruby()
+
+    def set_sentence_end_ts(self, ts: int) -> None:
+        """设置句尾释放时间戳"""
+        if ts < 0:
+            raise ValidationError(f"时间戳不能为负数: {ts}")
+        if not self.is_sentence_end:
+            raise ValidationError("当前字符不是句尾字符")
+        self.sentence_end_ts = ts
+        self._update_offset_timestamps()
+        self.push_to_ruby()
+
+    def clear_sentence_end_ts(self) -> None:
+        """清除句尾释放时间戳"""
+        self.sentence_end_ts = None
+        self._update_offset_timestamps()
         self.push_to_ruby()
 
     def get_timestamp(self, checkpoint_idx: int) -> Optional[int]:
@@ -193,7 +236,27 @@ class Character:
     @property
     def is_fully_timed(self) -> bool:
         """检查是否所有节奏点都已打轴"""
-        return len(self.timestamps) >= self.check_count
+        normal_done = len(self.timestamps) >= self.check_count
+        if not normal_done:
+            return False
+        if self.is_sentence_end:
+            return self.sentence_end_ts is not None
+        return True
+
+    @property
+    def total_timing_points(self) -> int:
+        """总打轴点数（普通 checkpoint + 句尾释放点）"""
+        return self.check_count + (1 if self.is_sentence_end else 0)
+
+    @property
+    def all_timestamps(self) -> List[int]:
+        """按打轴顺序返回所有时间戳（只读视图）"""
+        sentence_end = (
+            [self.sentence_end_ts]
+            if self.is_sentence_end and self.sentence_end_ts is not None
+            else []
+        )
+        return list(self.timestamps) + sentence_end
 
     @property
     def has_ruby(self) -> bool:
@@ -211,11 +274,65 @@ class Character:
         """
         if self.is_rest:
             return TimeTagType.REST
+        if self.is_sentence_end and checkpoint_idx == self.total_timing_points - 1:
+            return TimeTagType.SENTENCE_END
         if self.is_line_end and checkpoint_idx == self.check_count - 1:
             return TimeTagType.LINE_END
         if checkpoint_idx == 0:
             return TimeTagType.CHAR_START
         return TimeTagType.CHAR_MIDDLE
+
+    # ── 偏移时间戳管理 ──
+
+    def set_offsets(self, render_offset_ms: int, export_offset_ms: int) -> None:
+        """设置渲染/导出偏移量并重新计算派生时间戳
+
+        Args:
+            render_offset_ms: 渲染偏移量（毫秒），负值=提前渲染
+            export_offset_ms: 导出偏移量（毫秒），负值=提前导出
+        """
+        self._render_offset_ms = render_offset_ms
+        self._export_offset_ms = export_offset_ms
+        self._update_offset_timestamps()
+
+    def _update_offset_timestamps(self) -> None:
+        """根据基础时间戳和偏移量重新计算渲染/导出时间戳"""
+        self.render_timestamps = [
+            max(0, ts + self._render_offset_ms) for ts in self.timestamps
+        ]
+        self.export_timestamps = [
+            max(0, ts + self._export_offset_ms) for ts in self.timestamps
+        ]
+        self.render_sentence_end_ts = (
+            max(0, self.sentence_end_ts + self._render_offset_ms)
+            if self.sentence_end_ts is not None
+            else None
+        )
+        self.export_sentence_end_ts = (
+            max(0, self.sentence_end_ts + self._export_offset_ms)
+            if self.sentence_end_ts is not None
+            else None
+        )
+
+    @property
+    def all_render_timestamps(self) -> List[int]:
+        """按打轴顺序返回所有渲染时间戳"""
+        sentence_end = (
+            [self.render_sentence_end_ts]
+            if self.is_sentence_end and self.render_sentence_end_ts is not None
+            else []
+        )
+        return list(self.render_timestamps) + sentence_end
+
+    @property
+    def all_export_timestamps(self) -> List[int]:
+        """按打轴顺序返回所有导出时间戳"""
+        sentence_end = (
+            [self.export_sentence_end_ts]
+            if self.is_sentence_end and self.export_sentence_end_ts is not None
+            else []
+        )
+        return list(self.export_timestamps) + sentence_end
 
 
 # ──────────────────────────────────────────────

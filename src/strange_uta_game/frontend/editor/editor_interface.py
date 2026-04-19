@@ -181,7 +181,7 @@ class TransportBar(QFrame):
 # 工具栏
 # ──────────────────────────────────────────────
 class EditorToolBar(QFrame):
-    """编辑器工具栏 - 保存/加载音频/加载歌词/撤销/重做/批量变更"""
+    """编辑器工具栏 - 保存/加载音频/加载歌词/撤销/重做/批量变更/偏移调整"""
 
     save_clicked = pyqtSignal()
     load_audio_clicked = pyqtSignal()
@@ -189,6 +189,7 @@ class EditorToolBar(QFrame):
     undo_clicked = pyqtSignal()
     redo_clicked = pyqtSignal()
     bulk_change_clicked = pyqtSignal()
+    offset_changed = pyqtSignal(int)  # 偏移量变化（毫秒）
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -239,6 +240,21 @@ class EditorToolBar(QFrame):
         self.btn_bulk_change.setFixedHeight(32)
         self.btn_bulk_change.clicked.connect(self.bulk_change_clicked.emit)
         layout.addWidget(self.btn_bulk_change)
+
+        layout.addSpacing(10)
+
+        # 整体时间戳偏移调整
+        lbl_offset = QLabel("偏移(ms):")
+        lbl_offset.setStyleSheet("font-size: 11px;")
+        layout.addWidget(lbl_offset)
+        self.spin_offset = SpinBox(self)
+        self.spin_offset.setRange(-2000, 2000)
+        self.spin_offset.setSingleStep(10)
+        self.spin_offset.setValue(-100)
+        self.spin_offset.setFixedWidth(100)
+        self.spin_offset.setFixedHeight(32)
+        self.spin_offset.valueChanged.connect(self.offset_changed.emit)
+        layout.addWidget(self.spin_offset)
 
         layout.addStretch()
 
@@ -321,8 +337,12 @@ class KaraokePreview(QWidget):
         self.update()
 
     def set_render_offset(self, offset_ms: int):
-        """设置渲染偏移量（毫秒），与导出偏移联动"""
+        """设置渲染偏移量（毫秒），与导出偏移联动，更新所有字符的渲染时间戳"""
         self._render_offset_ms = offset_ms
+        # 偏移变更时，渲染时间戳已在字符上更新，清除缓存使 wipe 区间重新计算
+        self._sentence_cache.clear()
+        self._cache_version += 1
+        self.update()
 
     def _update_display(self):
         self._cache_version += 1
@@ -466,11 +486,11 @@ class KaraokePreview(QWidget):
                 cur_grp = [ci]
                 char_groups.append(cur_grp)
 
-        # 字符起始时间
+        # 字符起始时间（使用渲染时间戳，已含偏移）
         char_start_times: dict = {}
         for ci, ch in enumerate(characters):
-            if ch.timestamps:
-                char_start_times[ci] = ch.timestamps[0]
+            if ch.render_timestamps:
+                char_start_times[ci] = ch.render_timestamps[0]
 
         # 字符 wipe 时间区间
         char_wipe_times: dict = {}
@@ -490,10 +510,9 @@ class KaraokePreview(QWidget):
             if group_start is None:
                 continue
             leader_ch = characters[leader]
-            if leader_ch.is_line_end:
-                release_idx = leader_ch.check_count - 1
-                if 0 <= release_idx < len(leader_ch.timestamps):
-                    group_end = leader_ch.timestamps[release_idx]
+            if leader_ch.is_sentence_end:
+                if leader_ch.render_sentence_end_ts is not None:
+                    group_end = leader_ch.render_sentence_end_ts
                 else:
                     group_end = group_start + 300
             else:
@@ -561,8 +580,8 @@ class KaraokePreview(QWidget):
         self._checkpoint_hitboxes = []
         self._char_hitboxes = []
 
-        # 渲染偏移：预览效果与导出一致
-        adjusted_time = self._current_time_ms + self._render_offset_ms
+        # 渲染时间：偏移已在 render_timestamps 中预计算，直接使用当前播放时间
+        current_time = self._current_time_ms
 
         if not self._project or not self._project.sentences:
             painter.setPen(QColor("#999"))
@@ -712,13 +731,13 @@ class KaraokePreview(QWidget):
                         _re = _lw[1] if _lw else None
                         _rh = _char_singer_colors.get(_grp[0], highlight_color)
                         if _rs is not None and _re is not None:
-                            if adjusted_time >= _re:
+                            if current_time >= _re:
                                 painter.setPen(_rh)
                                 painter.drawText(int(ruby_x), ruby_y, _merged)
-                            elif adjusted_time >= _rs:
+                            elif current_time >= _rs:
                                 _rd = _re - _rs
                                 _rr = (
-                                    min(1.0, (adjusted_time - _rs) / _rd)
+                                    min(1.0, (current_time - _rs) / _rd)
                                     if _rd > 0
                                     else 1.0
                                 )
@@ -772,13 +791,13 @@ class KaraokePreview(QWidget):
                         if ruby_st is not None:
                             ruby_wipe_et = char_wipe_times.get(char_pos)
                             ruby_et = ruby_wipe_et[1] if ruby_wipe_et else ruby_st + 300
-                            if adjusted_time >= ruby_et:
+                            if current_time >= ruby_et:
                                 painter.setPen(ruby_highlight)
                                 painter.drawText(int(ruby_x), ruby_y, ruby.text)
-                            elif adjusted_time >= ruby_st:
+                            elif current_time >= ruby_st:
                                 r_dur = ruby_et - ruby_st
                                 r_ratio = (
-                                    min(1.0, (adjusted_time - ruby_st) / r_dur)
+                                    min(1.0, (current_time - ruby_st) / r_dur)
                                     if r_dur > 0
                                     else 1.0
                                 )
@@ -805,11 +824,11 @@ class KaraokePreview(QWidget):
                 if char_pos in char_wipe_times:
                     char_time, next_time = char_wipe_times[char_pos]
 
-                    if adjusted_time >= next_time:
+                    if current_time >= next_time:
                         # 已唱完 → 全高亮
                         painter.setPen(char_highlight)
                         painter.drawText(int(curr_x), int(y_center), ch)
-                    elif adjusted_time >= char_time:
+                    elif current_time >= char_time:
                         # 正在唱 → wipe 渐变
                         painter.setPen(base_color)
                         painter.drawText(int(curr_x), int(y_center), ch)
@@ -818,7 +837,7 @@ class KaraokePreview(QWidget):
                         if duration > 0:
                             wipe_ratio = min(
                                 1.0,
-                                (adjusted_time - char_time) / duration,
+                                (current_time - char_time) / duration,
                             )
                         else:
                             wipe_ratio = 1.0
@@ -857,14 +876,21 @@ class KaraokePreview(QWidget):
 
                 # Checkpoint 标记（逐 checkpoint 绘制）
                 ch_obj = line.characters[char_pos]
-                if ch_obj.check_count > 0:
+                if ch_obj.total_timing_points > 0:
                     painter.setFont(font_checkpoint)
 
                     markers = []
-                    for cp_idx in range(ch_obj.check_count):
-                        has_timed = cp_idx < len(ch_obj.timestamps)
+                    for cp_idx in range(ch_obj.total_timing_points):
+                        is_sentence_end_marker = (
+                            ch_obj.is_sentence_end and cp_idx == ch_obj.check_count
+                        )
+                        has_timed = (
+                            ch_obj.sentence_end_ts is not None
+                            if is_sentence_end_marker
+                            else cp_idx < len(ch_obj.timestamps)
+                        )
 
-                        if ch_obj.is_line_end:
+                        if is_sentence_end_marker:
                             marker_char = "。"
                         elif cp_idx == 0:
                             marker_char = "▶" if has_timed else "▷"
@@ -1155,6 +1181,7 @@ class EditorInterface(QWidget):
         self.toolbar.undo_clicked.connect(self._on_undo)
         self.toolbar.redo_clicked.connect(self._on_redo)
         self.toolbar.bulk_change_clicked.connect(self._on_bulk_change)
+        self.toolbar.offset_changed.connect(self._on_offset_changed)
         layout.addWidget(self.toolbar)
 
         # 2) 播放控制栏
@@ -1290,12 +1317,47 @@ class EditorInterface(QWidget):
         # 应用渲染偏移（与导出偏移联动）
         render_offset = settings.get("export.offset_ms", -100)
         self.preview.set_render_offset(render_offset)
+        # 同步工具栏偏移控件
+        self.toolbar.spin_offset.blockSignals(True)
+        self.toolbar.spin_offset.setValue(render_offset)
+        self.toolbar.spin_offset.blockSignals(False)
+        # 将偏移量写入所有字符的渲染/导出时间戳
+        if self._project:
+            for sentence in self._project.sentences:
+                for ch in sentence.characters:
+                    ch.set_offsets(render_offset, render_offset)
 
     # ==================== 项目 ====================
+
+    def _on_offset_changed(self, offset_ms: int):
+        """工具栏偏移控件变更 — 更新设置、字符偏移时间戳和渲染缓存"""
+        # 写入设置（与设置页面联动）
+        try:
+            from strange_uta_game.frontend.settings.settings_interface import (
+                AppSettings,
+            )
+
+            app_settings = AppSettings()
+            app_settings.set("export.offset_ms", offset_ms)
+            app_settings.save()
+        except Exception:
+            pass
+        # 更新所有字符的偏移时间戳
+        if self._project:
+            for sentence in self._project.sentences:
+                for ch in sentence.characters:
+                    ch.set_offsets(offset_ms, offset_ms)
+        # 更新渲染
+        self.preview.set_render_offset(offset_ms)
 
     def set_project(self, project: Project):
         self._project = project
         self.preview.set_project(project)
+        # 应用当前渲染/导出偏移到新加载项目的所有字符
+        offset = self.preview._render_offset_ms
+        for sentence in project.sentences:
+            for ch in sentence.characters:
+                ch.set_offsets(offset, offset)
         self._apply_checkpoint_position(
             self._timing_service.get_current_position()
             if self._timing_service
@@ -1568,7 +1630,7 @@ class EditorInterface(QWidget):
             self._update_status()
 
     def _on_bulk_change(self):
-        """Ctrl+H — 打开批量変更对话框，自动填充当前焦点字符的连词"""
+        """Ctrl+H — 打开批量変更对话框，自动填充当前焦点字符的连词或划选区域"""
         from strange_uta_game.frontend.editor.bulk_change_dialog import BulkChangeDialog
 
         initial_word = ""
@@ -1580,8 +1642,24 @@ class EditorInterface(QWidget):
                 sentence = self._project.sentences[line_idx]
                 text = sentence.text
                 chars = sentence.characters
-                if 0 <= char_idx < len(chars):
-                    # 向前查找连词起点（使用 linked_to_next 标记）
+
+                # 优先使用划选区域（多字符选择）
+                sel_line = self.preview._sel_line_idx
+                sel_start = self.preview._sel_start_char
+                sel_end = self.preview._sel_end_char
+                if sel_line >= 0 and sel_start >= 0 and sel_line == line_idx:
+                    lo = min(sel_start, sel_end)
+                    hi = max(sel_start, sel_end)
+                    if lo < len(chars) and hi < len(chars) and hi >= lo:
+                        initial_word = text[lo : hi + 1]
+                        readings: list[str] = []
+                        for ci in range(lo, hi + 1):
+                            r = chars[ci].ruby
+                            readings.append(r.text if r else "")
+                        if any(readings):
+                            initial_reading = ",".join(readings)
+                elif 0 <= char_idx < len(chars):
+                    # 回退到连词逻辑
                     start = char_idx
                     while (
                         start > 0
@@ -1589,7 +1667,6 @@ class EditorInterface(QWidget):
                         and chars[start - 1].linked_to_next
                     ):
                         start -= 1
-                    # 向后查找连词终点
                     end = char_idx
                     while (
                         end < len(text)
@@ -1599,15 +1676,10 @@ class EditorInterface(QWidget):
                         end += 1
                     end += 1  # exclusive
                     initial_word = text[start:end]
-                    # 收集已有注音，逗号分隔
-                    readings: list[str] = []
+                    readings = []
                     for ci in range(start, end):
                         r = chars[ci].ruby
-                        if r:
-                            readings.append(r.text)
-                        else:
-                            readings.append("")
-                    # 只有至少一个有注音时才填充
+                        readings.append(r.text if r else "")
                     if any(readings):
                         initial_reading = ",".join(readings)
 
@@ -1778,10 +1850,14 @@ class EditorInterface(QWidget):
             self._update_status()
 
     def _on_char_selected(self, line_idx: int, char_idx: int):
-        """点击字符选中（不论是否有 checkpoint），允许后续 F4 增加 checkpoint"""
+        """点击字符选中 — 直接移动到该字符的第一个 checkpoint"""
         self._current_line_idx = line_idx
         self.preview.set_current_position(line_idx, char_idx)
+        # 单击即移动 checkpoint 目标到选中字符
+        if self._timing_service:
+            self._timing_service.move_to_checkpoint(line_idx, char_idx, 0)
         self._update_line_info()
+        self._update_time_tags_display()
         self._update_status()
 
     def _on_char_edit_requested(self, line_idx: int, char_idx: int):
@@ -1813,7 +1889,11 @@ class EditorInterface(QWidget):
             return
 
         ch = sentence.characters[char_idx]
-        ch.check_count = max(0, ch.check_count + delta)
+        min_count = 1 if ch.is_sentence_end else 0
+        ch.check_count = max(min_count, ch.check_count + delta)
+        if len(ch.timestamps) > ch.check_count:
+            ch.timestamps = ch.timestamps[: ch.check_count]
+            ch.push_to_ruby()
         # 重建 timing_service 的全局 checkpoint 列表
         if self._timing_service:
             self._timing_service._rebuild_global_checkpoints()
@@ -1825,8 +1905,7 @@ class EditorInterface(QWidget):
     def _toggle_line_end(self):
         """F5 切换当前字符的句尾标记 (is_line_end)。
 
-        添加句尾标记时：check_count += 1（句尾需要额外的 release checkpoint）。
-        删除句尾标记时：check_count -= 1，同时移除该字符最后一个 checkpoint 的 timetag。
+        句尾标记独立于普通 checkpoint 数量。
         """
         if not self._project:
             return
@@ -1839,19 +1918,24 @@ class EditorInterface(QWidget):
             return
 
         ch = sentence.characters[char_idx]
-        new_is_line_end = not ch.is_line_end
+        new_is_sentence_end = not ch.is_sentence_end
 
-        if new_is_line_end:
-            # 添加句尾：+1 checkpoint
-            ch.check_count += 1
+        if new_is_sentence_end:
+            if ch.check_count <= 0:
+                InfoBar.warning(
+                    title="无法设置句尾",
+                    content="句尾字符至少需要 1 个普通节奏点",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                    parent=self,
+                )
+                return
         else:
-            # 删除句尾：-1 checkpoint（最小保留 0）
-            old_last_idx = ch.check_count - 1
-            if old_last_idx >= 0:
-                ch.remove_timestamp_at(old_last_idx)
-            ch.check_count = max(0, ch.check_count - 1)
+            ch.clear_sentence_end_ts()
 
-        ch.is_line_end = new_is_line_end
+        ch.is_sentence_end = new_is_sentence_end
         if self._timing_service:
             self._timing_service._rebuild_global_checkpoints()
         self.refresh_lyric_display()
@@ -2284,7 +2368,7 @@ class EditorInterface(QWidget):
         tags_ms = []
         for sentence in self._project.sentences:
             for ch in sentence.characters:
-                for ts in ch.timestamps:
+                for ts in ch.all_timestamps:
                     tags_ms.append(ts)
         self.timeline.set_time_tags(tags_ms)
 

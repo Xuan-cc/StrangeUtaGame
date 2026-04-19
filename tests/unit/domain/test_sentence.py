@@ -18,8 +18,9 @@ class TestSentence:
         assert not s.characters[0].is_line_end
 
         assert s.characters[3].char == "词"
-        assert s.characters[3].check_count == 2
+        assert s.characters[3].check_count == 1
         assert s.characters[3].is_line_end is True
+        assert s.characters[3].is_sentence_end is True
 
     def test_validation_empty_singer(self):
         with pytest.raises(ValidationError, match="singer_id 不能为空"):
@@ -61,7 +62,7 @@ class TestSentence:
 
     def test_timing_progress(self):
         s = Sentence.from_text("ab", "s1")
-        # a: count=1, b: count=2 (total 3)
+        # a: count=1, b: count=1 + sentence_end (total 3)
         assert s.get_timing_progress() == (0, 3)
         assert not s.is_fully_timed()
 
@@ -69,7 +70,7 @@ class TestSentence:
         assert s.get_timing_progress() == (1, 3)
 
         s.characters[1].add_timestamp(2000)
-        s.characters[1].add_timestamp(3000)
+        s.characters[1].set_sentence_end_ts(3000)
         assert s.get_timing_progress() == (3, 3)
         assert s.is_fully_timed()
 
@@ -85,9 +86,11 @@ class TestSentence:
     def test_clear_all_timestamps(self):
         s = Sentence.from_text("a", "s1")
         s.characters[0].add_timestamp(1000)
+        s.characters[0].set_sentence_end_ts(1200)
         s.clear_all_timestamps()
         assert not s.has_timetags
         assert s.characters[0].timestamps == []
+        assert s.characters[0].sentence_end_ts is None
 
     def test_ruby_management(self):
         s = Sentence.from_text("abc", "s1")

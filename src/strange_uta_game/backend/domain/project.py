@@ -259,7 +259,7 @@ class Project:
         result = []
         for s_idx, sentence in enumerate(self.sentences):
             for c_idx, char in enumerate(sentence.characters):
-                for cp_idx, ts in enumerate(char.timestamps):
+                for cp_idx, ts in enumerate(char.all_timestamps):
                     result.append((sentence.id, s_idx, c_idx, cp_idx, ts))
         result.sort(key=lambda x: x[4])
         return result
@@ -268,10 +268,10 @@ class Project:
         """获取打轴统计信息"""
         total_chars = sum(len(s.characters) for s in self.sentences)
         total_timetags = sum(
-            sum(len(c.timestamps) for c in s.characters) for s in self.sentences
+            sum(len(c.all_timestamps) for c in s.characters) for s in self.sentences
         )
         total_checkpoints = sum(
-            sum(c.check_count for c in s.characters) for s in self.sentences
+            sum(c.total_timing_points for c in s.characters) for s in self.sentences
         )
 
         completed = sum(1 for s in self.sentences if s.is_fully_timed())

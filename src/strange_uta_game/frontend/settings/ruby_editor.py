@@ -84,8 +84,10 @@ def _rebuild_characters(
                 char=new_chars[j],
                 check_count=old_ch.check_count,
                 timestamps=list(old_ch.timestamps),
+                sentence_end_ts=old_ch.sentence_end_ts,
                 linked_to_next=old_ch.linked_to_next if not is_last else False,
                 is_line_end=is_last,
+                is_sentence_end=is_last or old_ch.is_sentence_end,
                 is_rest=old_ch.is_rest,
                 singer_id=old_ch.singer_id,
             )
@@ -96,10 +98,14 @@ def _rebuild_characters(
             # 新字符：默认 check_count=1，末尾字符 check_count=2
             ch = Character(
                 char=new_chars[j],
-                check_count=2 if is_last else 1,
+                check_count=1,
                 is_line_end=is_last,
+                is_sentence_end=is_last,
                 singer_id=old_sentence.singer_id,
             )
+
+        if ch.is_sentence_end and ch.check_count < 1:
+            ch.check_count = 1
 
         # 应用 ruby
         if j in ruby_map:
