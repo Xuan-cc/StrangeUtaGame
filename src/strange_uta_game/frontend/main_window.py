@@ -372,23 +372,25 @@ class MainWindow(MSFluentWindow):
     def closeEvent(self, e):
         """关闭窗口时检查未保存变更并退出"""
         if self._store.dirty:
-            reply = QMessageBox.question(
-                self,
-                "未保存的更改",
-                "项目有未保存的更改，是否在退出前保存？",
-                QMessageBox.StandardButton.Save
-                | QMessageBox.StandardButton.Discard
-                | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Save,
-            )
-            if reply == QMessageBox.StandardButton.Save:
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Question)
+            msg.setWindowTitle("未保存的更改")
+            msg.setText("项目有未保存的更改，是否在退出前保存？")
+            save_btn = msg.addButton("保存", QMessageBox.ButtonRole.AcceptRole)
+            discard_btn = msg.addButton("放弃", QMessageBox.ButtonRole.DestructiveRole)
+            cancel_btn = msg.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+            msg.setDefaultButton(save_btn)
+            msg.exec()
+            clicked = msg.clickedButton()
+            if clicked is save_btn:
                 self._on_save_project()
                 # 保存后清理临时文件
                 self._store.cleanup_temp_files()
-            elif reply == QMessageBox.StandardButton.Discard:
+            elif clicked is discard_btn:
                 # 用户主动放弃保存 → 删除临时文件
                 self._store.cleanup_temp_files()
-            elif reply == QMessageBox.StandardButton.Cancel:
+            else:
+                # 取消或关闭对话框
                 e.ignore()
                 return
         else:
