@@ -230,11 +230,20 @@ class ProjectStore(QObject):
         return _UNTITLED_TEMP
 
     def cleanup_temp_files(self) -> None:
-        """删除当前项目关联的临时文件。"""
+        """删除当前项目关联的临时文件（含 .temp 和 .autosave.sug）。"""
         temp = self.get_temp_path()
         try:
             if temp.exists():
                 temp.unlink()
+        except Exception:
+            pass
+
+        # 删除 autosave 文件（仅已保存项目才有）
+        try:
+            if self._save_path:
+                autosave = Path(self._save_path + ".autosave.sug")
+                if autosave.exists():
+                    autosave.unlink()
         except Exception:
             pass
 
