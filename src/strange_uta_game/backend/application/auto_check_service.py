@@ -76,6 +76,16 @@ class AutoCheckService:
             key=lambda x: len(x[0]),
             reverse=True,
         )
+        # pykakasi 用于无约束分区的参考读音
+        self._pykakasi_conv = None
+        try:
+            import pykakasi
+
+            kks = pykakasi.kakasi()
+            kks.setMode("J", "H")
+            self._pykakasi_conv = kks.getConverter()
+        except Exception:
+            pass
 
     def _apply_dictionary(
         self, text: str, ruby_results: List[RubyResult]
@@ -120,10 +130,11 @@ class AutoCheckService:
         return merged
 
     def _try_split_to_chars(self, word: str, reading: str) -> Optional[List[str]]:
-        """尝试将多字词的读音拆分到各字符。
+        """尝试将多字词的读音拆分到各字符（三遍策略）。
 
-        对每个字符，按优先级查找单字读音（用户字典从上到下 > 库函数常见度），
-        然后回溯搜索组合使得各字符读音拼接等于词的总读音。
+        Pass 1: 约束回溯 — 用户字典 + 库分析器 + pykakasi 候选读音
+        Pass 2: pykakasi 参考分区 — 使用 _partition_reading 三级匹配
+        Pass 3: 无约束分区 — 空参考，尝试所有可能拆分
 
         Args:
             word: 多字词
@@ -139,11 +150,15 @@ class AutoCheckService:
         if not clean_reading:
             return None
 
-        # 收集每个字符的候选读音
+        n = len(word)
+
+        # ---------- 收集每个字符的候选读音 ----------
         per_char_options: List[List[str]] = []
+        pykakasi_refs: List[str] = []
+
         for ch in word:
             options: List[str] = []
-            # 1. 用户字典单字条目（按优先级顺序，dict 中同长度条目保持原始顺序）
+            # 1. 用户字典单字条目
             for dict_word, dict_reading in self._dict:
                 if dict_word == ch and dict_reading:
                     clean = dict_reading.replace(",", "")
@@ -154,22 +169,109 @@ class AutoCheckService:
             for r in results:
                 if r.reading and r.reading != ch and r.reading not in options:
                     options.append(r.reading)
-            if not options:
-                return None
+            # 3. pykakasi 参考读音（加入候选 + 保存为 ref）
+            pyk_ref = ""
+            if self._pykakasi_conv is not None:
+                try:
+                    converted = self._pykakasi_conv.do(ch)
+                    if converted and converted != ch:
+                        pyk_ref = converted
+                        if pyk_ref not in options:
+                            options.append(pyk_ref)
+                except Exception:
+                    pass
+            pykakasi_refs.append(pyk_ref)
+
             per_char_options.append(options)
 
-        # 回溯搜索：尝试组合使得拼接等于 clean_reading
-        def backtrack(idx: int, remaining: str) -> Optional[List[str]]:
-            if idx == len(word):
-                return [] if not remaining else None
-            for opt in per_char_options[idx]:
-                if remaining.startswith(opt):
-                    sub = backtrack(idx + 1, remaining[len(opt) :])
-                    if sub is not None:
-                        return [opt] + sub
-            return None
+        # ---------- Pass 1: 约束回溯 ----------
+        has_all_options = all(len(opts) > 0 for opts in per_char_options)
+        if has_all_options:
 
-        return backtrack(0, clean_reading)
+            def backtrack(idx: int, remaining: str) -> Optional[List[str]]:
+                if idx == n:
+                    return [] if not remaining else None
+                for opt in per_char_options[idx]:
+                    if remaining.startswith(opt):
+                        sub = backtrack(idx + 1, remaining[len(opt) :])
+                        if sub is not None:
+                            return [opt] + sub
+                return None
+
+            result = backtrack(0, clean_reading)
+            if result is not None:
+                return result
+
+        # ---------- Pass 2: pykakasi 参考分区 ----------
+        if any(r for r in pykakasi_refs):
+            result = self._partition_reading(clean_reading, n, pykakasi_refs)
+            if result is not None:
+                return result
+
+        # ---------- Pass 3: 无约束分区 ----------
+        empty_refs = [""] * n
+        result = self._partition_reading(clean_reading, n, empty_refs)
+        return result
+
+    def _partition_reading(
+        self,
+        reading: str,
+        n: int,
+        ref_readings: List[str],
+        ki: int = 0,
+        ri: int = 0,
+    ) -> Optional[List[str]]:
+        """递归分区读音到 n 个字符。三级匹配策略：精确 > 前缀 > 无约束。"""
+        if ki == n:
+            return [] if ri == len(reading) else None
+        if ri >= len(reading):
+            return None
+        remaining_chars = n - ki
+        remaining_reading = len(reading) - ri
+        if remaining_reading < remaining_chars:
+            return None
+        max_len = remaining_reading - (remaining_chars - 1)
+
+        ref = ref_readings[ki] if ki < len(ref_readings) else ""
+        tried: set = set()
+
+        # 优先精确匹配
+        if ref:
+            ref_len = len(ref)
+            if ref_len <= max_len:
+                portion = reading[ri : ri + ref_len]
+                if portion == ref:
+                    rest = self._partition_reading(
+                        reading, n, ref_readings, ki + 1, ri + ref_len
+                    )
+                    if rest is not None:
+                        return [portion] + rest
+                    tried.add(ref_len)
+
+        # 前缀匹配
+        for try_len in range(1, max_len + 1):
+            if try_len in tried:
+                continue
+            portion = reading[ri : ri + try_len]
+            if ref and not ref.startswith(portion):
+                continue
+            rest = self._partition_reading(
+                reading, n, ref_readings, ki + 1, ri + try_len
+            )
+            if rest is not None:
+                return [portion] + rest
+            tried.add(try_len)
+
+        # 无约束匹配
+        for try_len in range(1, max_len + 1):
+            if try_len in tried:
+                continue
+            rest = self._partition_reading(
+                reading, n, ref_readings, ki + 1, ri + try_len
+            )
+            if rest is not None:
+                return [reading[ri : ri + try_len]] + rest
+        return None
 
     def analyze_sentence(
         self, sentence: Sentence, split_config: Optional[SplitConfig] = None

@@ -242,23 +242,31 @@ class SudachiAnalyzer(RubyAnalyzer):
 
         使用 pykakasi 的单字读音作为参考：
         - 如果单字读音恰好是复合读音的前缀，则认为分配有效
-        - 否则放弃分配，保持整块
+        - 否则放弃参考约束进行无约束分配
+        - 最终失败时放弃分配，保持整块
         """
-        if not self._pykakasi_conv:
-            return None
-
         n = len(kanji_text)
         ref_readings: List[str] = []
-        for k in kanji_text:
-            try:
-                ref = self._pykakasi_conv.do(k)
-            except Exception:
-                ref = ""
-            ref_readings.append(ref)
+        if self._pykakasi_conv:
+            for k in kanji_text:
+                try:
+                    ref = self._pykakasi_conv.do(k)
+                except Exception:
+                    ref = ""
+                ref_readings.append(ref)
+        else:
+            ref_readings = [""] * n
 
-        return self._partition_with_refs(
+        # 第一轮：使用 pykakasi 参考约束
+        result = self._partition_with_refs(
             kanji_text, compound_reading, ref_readings, 0, 0
         )
+        if result is not None:
+            return result
+
+        # 第二轮：无约束分配（参考读音全部清空）
+        empty_refs = [""] * n
+        return self._partition_with_refs(kanji_text, compound_reading, empty_refs, 0, 0)
 
     def _partition_with_refs(
         self,
@@ -268,9 +276,17 @@ class SudachiAnalyzer(RubyAnalyzer):
         ki: int,
         ri: int,
     ) -> Optional[List[Tuple[str, str]]]:
-        """递归分区：利用 pykakasi 参考读音约束搜索。"""
+        """递归分区：利用 pykakasi 参考读音约束搜索。
+
+        三级匹配策略：
+        1. 参考读音精确匹配
+        2. 参考读音前缀匹配
+        3. 无约束匹配（当参考读音不适用时，放宽限制）
+        """
         if ki == len(kanji_text):
             return [] if ri == len(reading) else None
+        if ri > len(reading):
+            return None
 
         remaining_kanji = len(kanji_text) - ki
         remaining_chars = len(reading) - ri
@@ -279,6 +295,8 @@ class SudachiAnalyzer(RubyAnalyzer):
 
         max_len = remaining_chars - (remaining_kanji - 1)
         ref = ref_readings[ki]
+
+        tried: set = set()
 
         # 优先尝试参考读音精确匹配
         if ref:
@@ -291,11 +309,12 @@ class SudachiAnalyzer(RubyAnalyzer):
                     )
                     if rest is not None:
                         return [(kanji_text[ki], portion)] + rest
+                    tried.add(ref_len)
 
         # 其次尝试前缀匹配：分配部分是参考读音的前缀
         for try_len in range(1, max_len + 1):
-            if ref and try_len == len(ref):
-                continue  # 已尝试
+            if try_len in tried:
+                continue
             portion = reading[ri : ri + try_len]
             if ref and not ref.startswith(portion):
                 continue  # 不符合参考约束
@@ -304,6 +323,17 @@ class SudachiAnalyzer(RubyAnalyzer):
             )
             if rest is not None:
                 return [(kanji_text[ki], portion)] + rest
+            tried.add(try_len)
+
+        # 最后无约束匹配：当参考读音不匹配时，尝试所有未试过的长度
+        for try_len in range(1, max_len + 1):
+            if try_len in tried:
+                continue
+            rest = self._partition_with_refs(
+                kanji_text, reading, ref_readings, ki + 1, ri + try_len
+            )
+            if rest is not None:
+                return [(kanji_text[ki], reading[ri : ri + try_len])] + rest
 
         return None
 
