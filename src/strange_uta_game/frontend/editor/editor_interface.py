@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
+    QCheckBox,
     QFileDialog,
     QFrame,
     QDialog,
@@ -203,14 +204,14 @@ class TransportBar(QFrame):
 # 工具栏
 # ──────────────────────────────────────────────
 class EditorToolBar(QFrame):
-    """编辑器工具栏 - 保存/加载音频/加载歌词/撤销/重做/批量变更/偏移调整"""
+    """编辑器工具栏 - 保存/加载音频/加载歌词/批量变更/修改字符/插入导唱符/偏移调整"""
 
     save_clicked = pyqtSignal()
     load_audio_clicked = pyqtSignal()
     load_lyrics_clicked = pyqtSignal()
-    undo_clicked = pyqtSignal()
-    redo_clicked = pyqtSignal()
     bulk_change_clicked = pyqtSignal()
+    modify_char_clicked = pyqtSignal()
+    insert_guide_clicked = pyqtSignal()
     offset_changed = pyqtSignal(int)  # 偏移量变化（毫秒）
 
     def __init__(self, parent=None):
@@ -243,17 +244,17 @@ class EditorToolBar(QFrame):
 
         layout.addSpacing(10)
 
-        self.btn_undo = PushButton("撤销", self)
-        self.btn_undo.setIcon(FIF.LEFT_ARROW)
-        self.btn_undo.setFixedHeight(32)
-        self.btn_undo.clicked.connect(self.undo_clicked.emit)
-        layout.addWidget(self.btn_undo)
+        self.btn_modify_char = PushButton("修改所选字符", self)
+        self.btn_modify_char.setIcon(FIF.EDIT)
+        self.btn_modify_char.setFixedHeight(32)
+        self.btn_modify_char.clicked.connect(self.modify_char_clicked.emit)
+        layout.addWidget(self.btn_modify_char)
 
-        self.btn_redo = PushButton("重做", self)
-        self.btn_redo.setIcon(FIF.RIGHT_ARROW)
-        self.btn_redo.setFixedHeight(32)
-        self.btn_redo.clicked.connect(self.redo_clicked.emit)
-        layout.addWidget(self.btn_redo)
+        self.btn_insert_guide = PushButton("插入导唱符", self)
+        self.btn_insert_guide.setIcon(FIF.ADD)
+        self.btn_insert_guide.setFixedHeight(32)
+        self.btn_insert_guide.clicked.connect(self.insert_guide_clicked.emit)
+        layout.addWidget(self.btn_insert_guide)
 
         layout.addSpacing(10)
 
@@ -963,6 +964,296 @@ class KaraokePreview(QWidget):
                 curr_x += char_w
 
 
+class ModifyCharacterDialog(QDialog):
+    """修改所选字符对话框 — 允许替换选中字符的文本、注音和节奏点"""
+
+    def __init__(self, sentence, start_idx, end_idx, parent=None):
+        """
+        Args:
+            sentence: Sentence object
+            start_idx: inclusive start char index
+            end_idx: inclusive end char index
+            parent: parent widget
+        """
+        super().__init__(parent)
+        self._sentence = sentence
+        self._start_idx = start_idx
+        self._end_idx = end_idx
+        self._modified = False
+
+        self.setWindowTitle("修改所选字符")
+        self.resize(420, 300)
+        self.setFont(QFont("Microsoft YaHei", 10))
+
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+
+        # Field 1: Current selected chars (readonly)
+        chars = sentence.characters[start_idx : end_idx + 1]
+        current_text = "".join(c.char for c in chars)
+        lbl_current = QLabel(current_text)
+        lbl_current.setStyleSheet("font-size: 16px; font-weight: bold;")
+        form.addRow("当前选中字符:", lbl_current)
+
+        # Field 2: New chars
+        self.edit_new_chars = QLineEdit(current_text)
+        self.edit_new_chars.setPlaceholderText("输入新字符")
+        form.addRow("新字符:", self.edit_new_chars)
+
+        # Field 3: New ruby (comma-separated for multi-char)
+        rubies = []
+        for c in chars:
+            rubies.append(c.ruby.text if c.ruby else "")
+        initial_ruby = ",".join(rubies) if any(rubies) else ""
+        self.edit_new_ruby = QLineEdit(initial_ruby)
+        self.edit_new_ruby.setPlaceholderText("注音（多字符用逗号分隔）")
+        form.addRow("新注音:", self.edit_new_ruby)
+
+        # Field 4: New check counts (comma-separated for multi-char)
+        check_counts = [str(c.check_count) for c in chars]
+        self.edit_new_checks = QLineEdit(",".join(check_counts))
+        self.edit_new_checks.setPlaceholderText("节奏点数量（多字符用逗号分隔）")
+        form.addRow("新节奏点:", self.edit_new_checks)
+
+        layout.addLayout(form)
+
+        # Checkbox: register to dictionary
+        self.chk_register = QCheckBox("将此词注册到读音词典")
+        layout.addWidget(self.chk_register)
+
+        layout.addStretch()
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_exec = PrimaryPushButton("执行", self)
+        btn_exec.clicked.connect(self._on_execute)
+        btn_layout.addWidget(btn_exec)
+        btn_close = PushButton("关闭", self)
+        btn_close.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_close)
+        layout.addLayout(btn_layout)
+
+    def _on_execute(self):
+        from strange_uta_game.backend.domain.models import Character, Ruby
+
+        new_text = self.edit_new_chars.text().strip()
+        if not new_text:
+            return
+
+        ruby_text = self.edit_new_ruby.text().strip()
+        checks_text = self.edit_new_checks.text().strip()
+
+        # Parse rubies
+        if ruby_text:
+            ruby_parts = [r.strip() for r in ruby_text.split(",")]
+        else:
+            ruby_parts = []
+
+        # Parse check counts
+        if checks_text:
+            try:
+                check_parts = [int(c.strip()) for c in checks_text.split(",")]
+            except ValueError:
+                check_parts = [1] * len(new_text)
+        else:
+            check_parts = [1] * len(new_text)
+
+        # Pad lists to match new_text length
+        while len(ruby_parts) < len(new_text):
+            ruby_parts.append("")
+        while len(check_parts) < len(new_text):
+            check_parts.append(1)
+
+        # Preserve is_sentence_end from old last char
+        old_chars = self._sentence.characters[self._start_idx : self._end_idx + 1]
+        old_last_is_sentence_end = old_chars[-1].is_sentence_end if old_chars else False
+        old_last_is_line_end = old_chars[-1].is_line_end if old_chars else False
+
+        # Inherit singer_id from first old char
+        singer_id = old_chars[0].singer_id if old_chars else ""
+
+        # Build new Character objects
+        new_chars = []
+        for i, ch_str in enumerate(new_text):
+            ruby_obj = Ruby(text=ruby_parts[i]) if ruby_parts[i] else None
+            new_ch = Character(
+                char=ch_str,
+                ruby=ruby_obj,
+                check_count=max(0, check_parts[i]),
+                singer_id=singer_id,
+                linked_to_next=False,
+                is_line_end=False,
+                is_sentence_end=False,
+            )
+            new_chars.append(new_ch)
+
+        # Transfer sentence_end / line_end to new last char
+        if old_last_is_sentence_end:
+            new_chars[-1].is_sentence_end = True
+        if old_last_is_line_end:
+            new_chars[-1].is_line_end = True
+
+        # Replace in sentence.characters list
+        self._sentence.characters[self._start_idx : self._end_idx + 1] = new_chars
+
+        # Register to dictionary if checked
+        if self.chk_register.isChecked():
+            self._register_to_dictionary(new_text, ruby_parts)
+
+        self._modified = True
+        self.accept()
+
+    def _register_to_dictionary(self, word: str, ruby_parts: list):
+        """Register word to user dictionary."""
+        try:
+            from strange_uta_game.frontend.settings.settings_interface import (
+                AppSettings,
+            )
+
+            settings = AppSettings()
+            config_dir = settings.get_config_dir()
+            dict_path = config_dir / "dictionary.json"
+            import json
+
+            if dict_path.exists():
+                data = json.loads(dict_path.read_text(encoding="utf-8"))
+            else:
+                data = []
+            reading = ",".join(r for r in ruby_parts if r)
+            # Add to top of dictionary (highest priority)
+            entry = {"word": word, "reading": reading}
+            data.insert(0, entry)
+            dict_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+    def was_modified(self) -> bool:
+        return self._modified
+
+
+class InsertGuideSymbolDialog(QDialog):
+    """插入导唱符对话框 — 在选中字符前插入导唱用字符"""
+
+    def __init__(self, sentence, char_idx, parent=None):
+        """
+        Args:
+            sentence: Sentence object
+            char_idx: current selected char index (guide symbols insert BEFORE this)
+            parent: parent widget
+        """
+        super().__init__(parent)
+        self._sentence = sentence
+        self._char_idx = char_idx
+        self._modified = False
+
+        self.setWindowTitle("插入导唱符")
+        self.resize(400, 280)
+        self.setFont(QFont("Microsoft YaHei", 10))
+
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+
+        # Field 1: Current selected char (readonly)
+        ch = sentence.characters[char_idx]
+        lbl_current = QLabel(ch.char)
+        lbl_current.setStyleSheet("font-size: 16px; font-weight: bold;")
+        form.addRow("当前选中字符:", lbl_current)
+
+        # Field 2: Guide symbol text
+        self.edit_symbol = QLineEdit("")
+        self.edit_symbol.setPlaceholderText("请填写要插入的导唱符")
+        form.addRow("导唱符:", self.edit_symbol)
+
+        # Field 3: Count
+        self.edit_count = QLineEdit("1")
+        self.edit_count.setPlaceholderText("个数")
+        form.addRow("个数:", self.edit_count)
+
+        # Field 4: Duration per symbol
+        self.edit_duration = QLineEdit("1000")
+        self.edit_duration.setPlaceholderText("每个导唱符持续时间（毫秒）")
+        form.addRow("持续时间 (ms):", self.edit_duration)
+
+        layout.addLayout(form)
+        layout.addStretch()
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_exec = PrimaryPushButton("执行", self)
+        btn_exec.clicked.connect(self._on_execute)
+        btn_layout.addWidget(btn_exec)
+        btn_close = PushButton("关闭", self)
+        btn_close.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_close)
+        layout.addLayout(btn_layout)
+
+    def _on_execute(self):
+        from strange_uta_game.backend.domain.models import Character
+
+        symbol = self.edit_symbol.text().strip()
+        if not symbol:
+            return
+
+        try:
+            count = max(1, int(self.edit_count.text().strip()))
+        except ValueError:
+            count = 1
+
+        try:
+            duration_ms = max(100, int(self.edit_duration.text().strip()))
+        except ValueError:
+            duration_ms = 1000
+
+        # Get reference char's timestamp and singer
+        ref_char = self._sentence.characters[self._char_idx]
+        singer_id = ref_char.singer_id
+
+        # Get reference timestamp (first timestamp of selected char)
+        ref_ts = ref_char.timestamps[0] if ref_char.timestamps else None
+
+        # Build guide characters
+        # Each guide symbol has linked_to_next=True (they chain), except last
+        # Actually: if symbol is multi-char, each char of the symbol is linked.
+        # If count > 1, each "symbol group" is also linked.
+        # Result: all guide chars are linked_to_next=True (chained as one word)
+        guide_chars = []
+        for i in range(count):
+            for j, ch_str in enumerate(symbol):
+                is_last_of_symbol = j == len(symbol) - 1
+                is_last_symbol = i == count - 1
+                is_last_char = is_last_of_symbol and is_last_symbol
+                new_ch = Character(
+                    char=ch_str,
+                    ruby=None,
+                    check_count=1 if is_last_of_symbol else 0,
+                    singer_id=singer_id,
+                    linked_to_next=not is_last_char,
+                )
+                # Set timestamp if reference exists
+                if ref_ts is not None and is_last_of_symbol:
+                    # For i-th symbol (0-indexed), timestamp = ref_ts - duration_ms * (count - i)
+                    ts = ref_ts - duration_ms * (count - i)
+                    if ts >= 0:
+                        new_ch.add_timestamp(ts)
+                guide_chars.append(new_ch)
+
+        # Insert guide chars BEFORE the selected char
+        for idx, gc in enumerate(guide_chars):
+            self._sentence.characters.insert(self._char_idx + idx, gc)
+
+        self._modified = True
+        self.accept()
+
+    def was_modified(self) -> bool:
+        return self._modified
+
+
 class CharEditDialog(QDialog):
     """注音编辑对话框 — 支持连词（Ruby 合并/拆分）
 
@@ -1211,8 +1502,8 @@ class EditorInterface(QWidget):
         self.toolbar.save_clicked.connect(self._on_save)
         self.toolbar.load_audio_clicked.connect(self._on_load_audio)
         self.toolbar.load_lyrics_clicked.connect(self._on_load_lyrics)
-        self.toolbar.undo_clicked.connect(self._on_undo)
-        self.toolbar.redo_clicked.connect(self._on_redo)
+        self.toolbar.modify_char_clicked.connect(self._on_modify_char)
+        self.toolbar.insert_guide_clicked.connect(self._on_insert_guide)
         self.toolbar.bulk_change_clicked.connect(self._on_bulk_change)
         self.toolbar.offset_changed.connect(self._on_offset_changed)
         layout.addWidget(self.toolbar)
@@ -1333,6 +1624,7 @@ class EditorInterface(QWidget):
             "add_checkpoint": settings.get("shortcuts.add_checkpoint", "F4"),
             "remove_checkpoint": settings.get("shortcuts.remove_checkpoint", "F5"),
             "toggle_line_end": settings.get("shortcuts.toggle_line_end", "F6"),
+            "toggle_word_join": settings.get("shortcuts.toggle_word_join", "F3"),
             "volume_up": settings.get("shortcuts.volume_up", "UP"),
             "volume_down": settings.get("shortcuts.volume_down", "DOWN"),
             "nav_prev_line": settings.get("shortcuts.nav_prev_line", "LEFT"),
@@ -1726,6 +2018,75 @@ class EditorInterface(QWidget):
             initial_reading=initial_reading,
         )
         dialog.exec()
+
+    def _on_modify_char(self):
+        """打开修改所选字符对话框"""
+        if not self._project:
+            return
+
+        # Determine selection range
+        line_idx = self.preview._current_line_idx
+        sel_line = self.preview._sel_line_idx
+        sel_start = self.preview._sel_start_char
+        sel_end = self.preview._sel_end_char
+
+        if sel_line >= 0 and sel_start >= 0:
+            # Use drag selection
+            use_line = sel_line
+            start_idx = min(sel_start, sel_end)
+            end_idx = max(sel_start, sel_end)
+        else:
+            # Use single char selection
+            use_line = line_idx
+            char_idx = self.preview._current_char_idx
+            start_idx = char_idx
+            end_idx = char_idx
+
+        if use_line < 0 or use_line >= len(self._project.sentences):
+            return
+        sentence = self._project.sentences[use_line]
+        if start_idx < 0 or end_idx >= len(sentence.characters):
+            return
+
+        dialog = ModifyCharacterDialog(sentence, start_idx, end_idx, self)
+        dialog.exec()
+
+        if dialog.was_modified():
+            # Rebuild global checkpoints
+            if self._timing_service:
+                self._timing_service._rebuild_global_checkpoints()
+            self.refresh_lyric_display()
+            self._update_time_tags_display()
+            self._update_status()
+            if hasattr(self, "_store") and self._store:
+                self._store.notify("lyrics")
+
+    def _on_insert_guide(self):
+        """打开插入导唱符对话框"""
+        if not self._project:
+            return
+
+        line_idx = self.preview._current_line_idx
+        char_idx = self.preview._current_char_idx
+
+        if line_idx < 0 or line_idx >= len(self._project.sentences):
+            return
+        sentence = self._project.sentences[line_idx]
+        if char_idx < 0 or char_idx >= len(sentence.characters):
+            return
+
+        dialog = InsertGuideSymbolDialog(sentence, char_idx, self)
+        dialog.exec()
+
+        if dialog.was_modified():
+            # Rebuild global checkpoints
+            if self._timing_service:
+                self._timing_service._rebuild_global_checkpoints()
+            self.refresh_lyric_display()
+            self._update_time_tags_display()
+            self._update_status()
+            if hasattr(self, "_store") and self._store:
+                self._store.notify("lyrics")
 
     # ==================== 音频 ====================
 

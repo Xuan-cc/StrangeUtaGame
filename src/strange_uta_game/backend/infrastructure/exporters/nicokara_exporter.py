@@ -80,11 +80,14 @@ class NicokaraExporter(BaseExporter):
         output_lines: List[str] = []
         prev_end_ms = 0
         prev_singer_id: Optional[str] = None
+        default_singer_id = self._get_default_singer_id(project)
 
         for i, sentence in enumerate(project.sentences):
             # 演唱者过滤：检查行内是否有选中的演唱者字符
             if singer_ids is not None:
-                if not self._sentence_has_singer(sentence, singer_ids):
+                if not self._sentence_has_singer(
+                    sentence, singer_ids, default_singer_id
+                ):
                     continue
 
             # 段落间距 >5 秒时插入空行
@@ -99,6 +102,7 @@ class NicokaraExporter(BaseExporter):
                 insert_singer_tags,
                 singer_map,
                 prev_singer_id,
+                default_singer_id,
             )
             output_lines.append(line_text)
 
@@ -113,14 +117,44 @@ class NicokaraExporter(BaseExporter):
         except Exception as e:
             raise ExportError(f"写入文件失败: {e}")
 
-    def _sentence_has_singer(self, sentence: Sentence, singer_ids: Set[str]) -> bool:
-        """检查行内是否有属于指定演唱者的字符"""
-        # 行级别演唱者
-        if sentence.singer_id in singer_ids:
+    @staticmethod
+    def _get_default_singer_id(project: Project) -> Optional[str]:
+        """获取项目的默认演唱者 ID"""
+        for singer in project.singers:
+            if singer.is_default:
+                return singer.id
+        if project.singers:
+            return project.singers[0].id
+        return None
+
+    @staticmethod
+    def _normalize_singer_id(
+        singer_id: Optional[str], default_singer_id: Optional[str]
+    ) -> Optional[str]:
+        """将空/未知/? 演唱者 ID 归一化为默认演唱者"""
+        if not singer_id or singer_id in ("?", "未知"):
+            return default_singer_id
+        return singer_id
+
+    def _sentence_has_singer(
+        self,
+        sentence: Sentence,
+        singer_ids: Set[str],
+        default_singer_id: Optional[str] = None,
+    ) -> bool:
+        """检查行内是否有属于指定演唱者的字符
+
+        未知/空/? 演唱者视为默认演唱者。
+        """
+        eff = self._normalize_singer_id(sentence.singer_id, default_singer_id)
+        if eff in singer_ids:
             return True
         # per-char 级别检查
         for ch in sentence.characters:
-            if ch.singer_id in singer_ids:
+            eff_ch = self._normalize_singer_id(
+                ch.singer_id or sentence.singer_id, default_singer_id
+            )
+            if eff_ch in singer_ids:
                 return True
         return False
 
@@ -131,6 +165,7 @@ class NicokaraExporter(BaseExporter):
         insert_singer_tags: bool,
         singer_map: Optional[Dict[str, str]],
         prev_singer_id: Optional[str] = None,
+        default_singer_id: Optional[str] = None,
     ) -> Tuple[str, Optional[str]]:
         """导出一行，支持演唱者过滤和标签插入
 
@@ -145,6 +180,10 @@ class NicokaraExporter(BaseExporter):
         for i, ch in enumerate(sentence.characters):
             # 有效演唱者：优先使用 per-char，回退到行级别
             effective_singer = ch.singer_id or sentence.singer_id
+            # 归一化未知演唱者为默认演唱者
+            effective_singer = self._normalize_singer_id(
+                effective_singer, default_singer_id
+            )
 
             # 演唱者过滤：跳过不属于选定演唱者的字符
             if singer_ids is not None and effective_singer not in singer_ids:
@@ -168,7 +207,9 @@ class NicokaraExporter(BaseExporter):
                 and ch.is_sentence_end
                 and ch.export_sentence_end_ts is not None
             ):
-                eff = ch.singer_id or sentence.singer_id
+                eff = self._normalize_singer_id(
+                    ch.singer_id or sentence.singer_id, default_singer_id
+                )
                 if singer_ids is None or eff in singer_ids:
                     parts.append(_format_nicokara_ts(ch.export_sentence_end_ts))
 
@@ -180,7 +221,9 @@ class NicokaraExporter(BaseExporter):
                 and last_char.export_sentence_end_ts is not None
             ):
                 # 演唱者过滤：只有该字符属于选定演唱者时才输出
-                eff = last_char.singer_id or sentence.singer_id
+                eff = self._normalize_singer_id(
+                    last_char.singer_id or sentence.singer_id, default_singer_id
+                )
                 if singer_ids is None or eff in singer_ids:
                     parts.append(_format_nicokara_ts(last_char.export_sentence_end_ts))
 
@@ -232,11 +275,14 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         output_lines: List[str] = []
         prev_end_ms = 0
         prev_singer_id: Optional[str] = None
+        default_singer_id = self._get_default_singer_id(project)
 
         for i, sentence in enumerate(project.sentences):
             # 演唱者过滤
             if singer_ids is not None:
-                if not self._sentence_has_singer(sentence, singer_ids):
+                if not self._sentence_has_singer(
+                    sentence, singer_ids, default_singer_id
+                ):
                     continue
 
             if i > 0 and sentence.has_timetags:
@@ -250,6 +296,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 insert_singer_tags,
                 singer_map,
                 prev_singer_id,
+                default_singer_id,
             )
             output_lines.append(line_text)
 
@@ -321,12 +368,15 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         Returns:
             格式: ["漢字,読み[ts],pos1,pos2", ...]
         """
+        default_singer_id = self._get_default_singer_id(project)
         # key: (kanji, reading) → List[{reading_with_ts, first_char_ts}]
         ruby_groups: OrderedDict[tuple[str, str], list[dict]] = OrderedDict()
 
         for sentence in project.sentences:
             if singer_ids is not None:
-                if not self._sentence_has_singer(sentence, singer_ids):
+                if not self._sentence_has_singer(
+                    sentence, singer_ids, default_singer_id
+                ):
                     continue
 
             char_offset = 0

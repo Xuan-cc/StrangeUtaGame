@@ -56,17 +56,19 @@
     - **TXT Exporter**：纯文本打轴数据。使用 `ch.export_timestamps`。
     - **txt2ass Exporter**：兼容特定 ASS 生成工具的中间格式。使用 `ch.export_timestamps`。
     - **ASS Exporter**：直接生成包含 Ruby 支持和样式信息的 ASS 字幕。
-    - **Nicokara Exporter**：生成符合ニコカラメーカー规范的歌词文件。使用 `ch.export_timestamps`。支持同一汉字多次出现时的独立 @Ruby 条目生成（每次出现生成独立的位置时间窗口）；支持单行内非行尾句尾的释放时间戳导出（句尾字符后插入额外时间戳）。
-    - **演唱者过滤与标签 (Nicokara)**：
-        - 过滤逻辑使用有效演唱者（优先 per-char singer_id，其次 sentence.singer_id）。
-        - 导出界面演唱者列表包含所有在 Sentence 级别或 Character 级别出现的演唱者。
-        - 演唱者切换标签（【演唱者名】）实现跨行连续性：仅在演唱者实际发生变化（对比 `prev_singer_id`）时插入标签。默认演唱者也会在首次出现时插入标签。
+        - **Nicokara Exporter**：生成符合ニコカラメーカー规范的歌词文件。使用 `ch.export_timestamps`。支持同一汉字多次出现时的独立 @Ruby 条目生成；支持单行内非行尾句尾的释放时间戳导出（句尾字符后插入额外时间戳）。
+        - **演唱者过滤与标签 (Nicokara)**：
+            - 无效演唱者归一化：未指定演唱者、未知（"?"、"未知"）或空值的句子在导出过滤时均被视为项目的默认演唱者。
+            - 过滤逻辑使用有效演唱者（优先 per-char singer_id，其次 sentence.singer_id）。
+            - 导出界面演唱者列表包含所有在 Sentence 级别或 Character 级别出现的演唱者。
+            - 演唱者切换标签（【演唱者名】）实现跨行连续性：仅在演唱者实际发生变化（对比 `prev_singer_id`）时插入标签。默认演唱者也会在首次出现时插入标签。
 
 ### AudioEngine (音频引擎)
 提供跨平台音频播放与实时处理。
 
 - **职责**：
-    - **Phase Vocoder 变速不变调**：采用 Phase Vocoder 算法实现高质量变速播放。
+    - **Phase Vocoder 变速不变调**：采用 Phase-Locked Phase Vocoder 算法实现高质量变速播放，并保持立体声相位一致性。
+        - **立体声保持**：以第 0 通道作为参考相位，其它通道通过 Phase-Locked 机制保持与参考通道的相位差，从而保留声场定位效果。
         - **原理**：STFT → 相位累积 (Phase Accumulation) → ISTFT 重叠相加 (Overlap-add)。FFT size: 2048, hop: 512。
         - **处理流程**：变速时在后台线程预处理完整音频。处理期间（约 1-2 秒）使用线性插值 (np.interp) 作为临时回退（音调会变）。处理完成后平滑切换至变速不变调音频。
         - **实现细节**：纯 numpy 实现，无外部 C 库依赖。原始数据保留在 `_original_data` 中，使用 `_stretched_speed` 和 `_stretch_version` 管理处理状态。位置追踪始终基于原始音频时间。

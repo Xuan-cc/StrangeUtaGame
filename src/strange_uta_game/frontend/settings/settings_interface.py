@@ -129,6 +129,7 @@ class AppSettings:
             "nav_next_line": "RIGHT",
             "clear_tags": "BACKSPACE",
             "toggle_line_end": "F6",
+            "toggle_word_join": "F3",
         },
     }
 
@@ -2070,6 +2071,13 @@ class SettingsInterface(ScrollArea):
             "F6",
             parent=self.shortcut_group,
         )
+        self.card_sc_toggle_word_join = ShortcutSettingCard(
+            FIF.LINK,
+            "连词",
+            "连词/取消连词",
+            "F3",
+            self.shortcut_group,
+        )
 
         self.shortcut_group.addSettingCard(self.card_sc_tag)
         self.shortcut_group.addSettingCard(self.card_sc_play_pause)
@@ -2087,6 +2095,7 @@ class SettingsInterface(ScrollArea):
         self.shortcut_group.addSettingCard(self.card_sc_nav_next)
         self.shortcut_group.addSettingCard(self.card_sc_clear)
         self.shortcut_group.addSettingCard(self.card_sc_toggle_line_end)
+        self.shortcut_group.addSettingCard(self.card_sc_toggle_word_join)
         self.expandLayout.addWidget(self.shortcut_group)
 
     def _get_all_shortcut_cards(self) -> list[tuple[str, "ShortcutSettingCard"]]:
@@ -2108,6 +2117,7 @@ class SettingsInterface(ScrollArea):
             ("下一行", self.card_sc_nav_next),
             ("清除时间标签", self.card_sc_clear),
             ("切换句尾", self.card_sc_toggle_line_end),
+            ("连词", self.card_sc_toggle_word_join),
         ]
 
     def _resolve_shortcut_conflicts(self) -> list[str]:
@@ -2440,6 +2450,9 @@ class SettingsInterface(ScrollArea):
         self.card_sc_toggle_line_end.setValue(
             self._settings.get("shortcuts.toggle_line_end", "F6")
         )
+        self.card_sc_toggle_word_join.setValue(
+            self._settings.get("shortcuts.toggle_word_join", "F3")
+        )
 
     def _collect_settings(self):
         """从 UI 控件收集所有设置并写入 AppSettings"""
@@ -2557,6 +2570,9 @@ class SettingsInterface(ScrollArea):
         self._settings.set("shortcuts.clear_tags", self.card_sc_clear.value())
         self._settings.set(
             "shortcuts.toggle_line_end", self.card_sc_toggle_line_end.value()
+        )
+        self._settings.set(
+            "shortcuts.toggle_word_join", self.card_sc_toggle_word_join.value()
         )
 
     # ==================== 操作 ====================

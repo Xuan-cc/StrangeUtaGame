@@ -78,6 +78,7 @@
     "nav_prev_line": "LEFT",
     "nav_next_line": "RIGHT",
     "clear_tags": "BACKSPACE",
-    "toggle_line_end": "F6"
+    "toggle_line_end": "F6",
+    "toggle_word_join": "F3"
   }
 }

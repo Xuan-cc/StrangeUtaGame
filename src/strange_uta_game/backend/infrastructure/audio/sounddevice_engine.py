@@ -281,7 +281,11 @@ class SoundDeviceEngine(IAudioEngine):
 
     @staticmethod
     def _time_stretch(data: np.ndarray, speed: float) -> np.ndarray:
-        """Phase Vocoder 时间拉伸：变速不变调。
+        """Phase Vocoder 时间拉伸：变速不变调（相位锁定立体声保留）。
+
+        采用 Phase-Locked Phase Vocoder 算法：以 channel 0 为参考通道
+        进行相位累积，其他通道保留与参考通道的相位差，从而维持声道间
+        相位一致性，保留立体声声场。
 
         Args:
             data: 音频数据，shape (n_samples, n_channels), float32
@@ -308,47 +312,61 @@ class SoundDeviceEngine(IAudioEngine):
         factor = hop_s / hop_a
         win_sq = window**2
 
-        result = np.zeros((out_len, n_channels), dtype=np.float32)
+        # 相位锁定：以 ch0 为参考通道，保留声道间相位差
+        prev_phase = np.zeros((n_channels, n_bins), dtype=np.float64)
+        phase_acc_ref = np.zeros(n_bins, dtype=np.float64)
 
-        for ch in range(n_channels):
-            x = data[:, ch].astype(np.float64)
-            output = np.zeros(out_len, dtype=np.float64)
-            win_sq_sum = np.zeros(out_len, dtype=np.float64)
+        output = np.zeros((out_len, n_channels), dtype=np.float64)
+        win_sq_sum = np.zeros(out_len, dtype=np.float64)
 
-            prev_phase = np.zeros(n_bins, dtype=np.float64)
-            phase_acc = np.zeros(n_bins, dtype=np.float64)
+        for i in range(n_frames):
+            start = i * hop_a
+            out_start = i * hop_s
+            out_end = out_start + n_fft
+            if out_end > out_len:
+                break
 
-            for i in range(n_frames):
-                start = i * hop_a
-                frame = x[start : start + n_fft] * window
-
+            # 分析所有通道的频谱
+            magnitudes = []
+            phases = []
+            for ch in range(n_channels):
+                frame = data[start : start + n_fft, ch].astype(np.float64) * window
                 spectrum = np.fft.rfft(frame)
-                magnitude = np.abs(spectrum)
-                phase = np.angle(spectrum)
+                magnitudes.append(np.abs(spectrum))
+                phases.append(np.angle(spectrum))
 
-                if i == 0:
-                    phase_acc[:] = phase
+            # 参考通道 (ch 0) 相位累积
+            if i == 0:
+                phase_acc_ref[:] = phases[0]
+            else:
+                dp = phases[0] - prev_phase[0] - expected
+                dp -= 2.0 * np.pi * np.round(dp / (2.0 * np.pi))
+                phase_acc_ref += (expected + dp) * factor
+
+            # 合成各通道
+            for ch in range(n_channels):
+                if ch == 0:
+                    synth_phase = phase_acc_ref
                 else:
-                    dp = phase - prev_phase - expected
-                    dp -= 2.0 * np.pi * np.round(dp / (2.0 * np.pi))
-                    phase_acc += (expected + dp) * factor
+                    # 保留与参考通道的相位差，维持立体声声场
+                    synth_phase = phase_acc_ref + (phases[ch] - phases[0])
 
-                prev_phase[:] = phase
-
-                synth_spectrum = magnitude * np.exp(1j * phase_acc)
+                synth_spectrum = magnitudes[ch] * np.exp(1j * synth_phase)
                 synth_frame = np.fft.irfft(synth_spectrum, n=n_fft).astype(np.float64)
                 synth_frame *= window
+                output[out_start:out_end, ch] += synth_frame
 
-                out_start = i * hop_s
-                out_end = out_start + n_fft
-                if out_end > out_len:
-                    break
-                output[out_start:out_end] += synth_frame
-                win_sq_sum[out_start:out_end] += win_sq
+            win_sq_sum[out_start:out_end] += win_sq
 
-            mask = win_sq_sum > 1e-8
-            output[mask] /= win_sq_sum[mask]
-            result[:, ch] = output.astype(np.float32)
+            # 保存当前帧相位
+            for ch in range(n_channels):
+                prev_phase[ch, :] = phases[ch]
+
+        # 归一化
+        mask = win_sq_sum > 1e-8
+        for ch in range(n_channels):
+            output[mask, ch] /= win_sq_sum[mask]
+        result = output.astype(np.float32)
 
         # 截取到目标长度
         target_len = max(1, round(n_samples / speed))

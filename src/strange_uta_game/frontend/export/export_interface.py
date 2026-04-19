@@ -249,16 +249,35 @@ class ExportInterface(QWidget):
             return
 
         used_singer_ids = set()
+        known_singer_ids = {s.id for s in self._project.singers}
+        # 查找默认演唱者 ID（用于归一化未知演唱者）
+        default_singer_id = None
+        for s in self._project.singers:
+            if s.is_default:
+                default_singer_id = s.id
+                break
+        if default_singer_id is None and self._project.singers:
+            default_singer_id = self._project.singers[0].id
+
         for sentence in getattr(self._project, "sentences", []) or []:
             # 行级别演唱者
             sentence_singer = getattr(sentence, "singer_id", None)
             if sentence_singer:
-                used_singer_ids.add(sentence_singer)
+                if sentence_singer in known_singer_ids:
+                    used_singer_ids.add(sentence_singer)
+                elif default_singer_id:
+                    # 未知演唱者视为默认演唱者
+                    used_singer_ids.add(default_singer_id)
+            elif default_singer_id:
+                used_singer_ids.add(default_singer_id)
             # per-char 级别演唱者
             for character in getattr(sentence, "characters", []) or []:
                 singer_id = getattr(character, "singer_id", None)
                 if singer_id:
-                    used_singer_ids.add(singer_id)
+                    if singer_id in known_singer_ids:
+                        used_singer_ids.add(singer_id)
+                    elif singer_id in ("?", "未知") and default_singer_id:
+                        used_singer_ids.add(default_singer_id)
 
         for singer in self._project.singers:
             if singer.id not in used_singer_ids:
