@@ -25,11 +25,12 @@
 
 - **职责**：
     - **SudachiPy Mode C 上下文感知分析器**：利用 SudachiPy 进行长单位（Mode C）分词，能够准确识别复合词。
-    - **假名锚点分配算法**：基于分词结果，将假名智能分配至对应的汉字。
+    - **假名锚点分配算法**：基于分词结果，将假名智能分配至对应的汉字。`_try_distribute_kanji_block` 采用两步分发策略（优先匹配 pykakasi 参考，失败则回退至无约束分发）。`_partition_with_refs` 使用三级匹配逻辑（精确匹配→前缀匹配→无约束回退）。
     - **片假名→平假名转换修复**：所有注音分析（Sudachi/Pykakasi）均会将片假名转换为平假名作为注音（包括小写片假名如 ェ），确保注音显示的一致性。
     - **pykakasi 单字参考分配**：在无法通过上下文确定读音时，使用 pykakasi 作为单字读音参考。
     - **PykakasiAnalyzer 作为回退**：若系统未安装 SudachiPy 相关依赖，自动降级至 PykakasiAnalyzer。
     - **create_analyzer() 优先级**：SudachiPy → pykakasi → DummyAnalyzer。
+    - **默认词典数据 (data/default_dictionary)**：内嵌 1757 条 RL 字典原始文本，用于在用户缺失 `dictionary.json` 时自动初始化词典数据。
 
 ### lyric_parser (歌词解析器)
 支持多种原始歌词格式的导入。
