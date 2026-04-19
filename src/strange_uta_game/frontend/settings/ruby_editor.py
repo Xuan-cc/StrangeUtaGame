@@ -406,8 +406,9 @@ class RubyInterface(QWidget):
     def _lines_to_text(self) -> str:
         """将项目歌词转为带注音标注的文本。
 
-        格式: {大冒険|だい,ぼう,けん} — 连续有注音的字符合并为一组，
-        花括号内原文|逗号分隔各字符注音。无注音的字符照常输出。
+        格式: {大冒険|だい,ぼう,けん} — 用 linked_to_next 判断连词组，
+        花括号内原文|逗号分隔各字符注音。非连词字符单独标注 {字|读音}。
+        无注音的字符照常输出。
         """
         if not self._project:
             return ""
@@ -419,10 +420,11 @@ class RubyInterface(QWidget):
             i = 0
             while i < len(chars):
                 if chars[i].ruby:
-                    # 收集连续有 ruby 的字符为一组
+                    # 收集连词组（linked_to_next 链）
                     group_start = i
-                    while i < len(chars) and chars[i].ruby:
+                    while i < len(chars) - 1 and chars[i].linked_to_next:
                         i += 1
+                    i += 1  # 包含链中最后一个字符
                     text_part = "".join(ch.char for ch in chars[group_start:i])
                     readings = ",".join(
                         ch.ruby.text if ch.ruby else "" for ch in chars[group_start:i]
@@ -504,10 +506,34 @@ class RubyInterface(QWidget):
         if not selected:
             return
 
+        # 构建扩展匹配集：勾选平假名时包含小假名(ぁぃ等)+促音(っ)，勾选片假名时包含小假名(ァィ等)+促音(ッ)
+        _SMALL_HIRAGANA = set("ぁぃぅぇぉゃゅょゎ")
+        _SMALL_KATAKANA = set("ァィゥェォャュョヮゕゖ")
+        extended = set(selected)
+        if CharType.HIRAGANA in selected:
+            extended.add(CharType.SOKUON)  # っ
+        if CharType.KATAKANA in selected:
+            extended.add(CharType.SOKUON)  # ッ
+
         removed = 0
         for sentence in self._project.sentences:
             for ch in sentence.characters:
-                if ch.ruby and get_char_type(ch.char) in selected:
+                if not ch.ruby:
+                    continue
+                ct = get_char_type(ch.char)
+                if ct in extended:
+                    # SOKUON 同时覆盖平假名/片假名两侧，需按实际字符过滤
+                    if ct == CharType.SOKUON:
+                        if ch.char == "っ" and CharType.HIRAGANA not in selected:
+                            continue
+                        if ch.char == "ッ" and CharType.KATAKANA not in selected:
+                            continue
+                    ch.set_ruby(None)
+                    removed += 1
+                elif CharType.HIRAGANA in selected and ch.char in _SMALL_HIRAGANA:
+                    ch.set_ruby(None)
+                    removed += 1
+                elif CharType.KATAKANA in selected and ch.char in _SMALL_KATAKANA:
                     ch.set_ruby(None)
                     removed += 1
 
