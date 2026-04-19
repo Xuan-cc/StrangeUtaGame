@@ -244,7 +244,7 @@ class EditorToolBar(QFrame):
         layout.addSpacing(10)
 
         # 整体时间戳偏移调整
-        lbl_offset = QLabel("偏移(ms):")
+        lbl_offset = QLabel("Karaoke渲染以及导出偏移:")
         lbl_offset.setStyleSheet("font-size: 11px;")
         layout.addWidget(lbl_offset)
         self.edit_offset = QLineEdit(self)
