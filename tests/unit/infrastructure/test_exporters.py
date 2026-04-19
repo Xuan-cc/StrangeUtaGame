@@ -440,11 +440,16 @@ class TestExporterUtils:
 
     def test_get_exporter_by_name(self):
         """测试根据名称获取导出器"""
-        exporter = get_exporter_by_name("LRC")
+        exporter = get_exporter_by_name("LRC (增强型)")
         assert isinstance(exporter, LRCExporter)
 
         exporter = get_exporter_by_name("KRA")
         assert isinstance(exporter, KRAExporter)
+
+    def test_get_exporter_by_name_legacy(self):
+        """测试旧名称 'LRC' 向后兼容"""
+        exporter = get_exporter_by_name("LRC")
+        assert isinstance(exporter, LRCExporter)
 
     def test_get_exporter_by_name_invalid(self):
         """测试获取不存在的导出器"""
@@ -454,12 +459,15 @@ class TestExporterUtils:
     def test_get_all_exporters(self):
         """测试获取所有导出器"""
         exporters = get_all_exporters()
-        assert len(exporters) >= 7
+        assert len(exporters) >= 11
 
         names = [e.name for e in exporters]
-        assert "LRC" in names
+        assert "LRC (增强型)" in names
+        assert "LRC (逐行)" in names
+        assert "LRC (逐字)" in names
         assert "KRA" in names
         assert "TXT" in names
+        assert "SRT" in names
 
 
 class TestExportService:
@@ -472,7 +480,7 @@ class TestExportService:
 
         assert len(formats) >= 7
 
-        lrc_format = next((f for f in formats if f["name"] == "LRC"), None)
+        lrc_format = next((f for f in formats if f["name"] == "LRC (增强型)"), None)
         assert lrc_format is not None
         assert lrc_format["extension"] == ".lrc"
 
@@ -494,11 +502,11 @@ class TestExportService:
         try:
             os.unlink(temp_path)  # 删除临时文件，让服务创建
 
-            result = service.export(project, "LRC", temp_path)
+            result = service.export(project, "LRC (增强型)", temp_path)
 
             assert result.success is True
             assert result.file_path == temp_path
-            assert result.format_name == "LRC"
+            assert result.format_name == "LRC (增强型)"
 
             assert os.path.exists(temp_path)
         finally:

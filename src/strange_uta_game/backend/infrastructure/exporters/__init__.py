@@ -4,17 +4,21 @@
 """
 
 from .base import IExporter, BaseExporter, ExportError
-from .lrc_exporter import LRCExporter, KRAExporter
+from .lrc_exporter import LRCExporter, LRCLineExporter, LRCWordExporter, KRAExporter
 from .txt_exporter import TXTExporter
 from .txt2ass_exporter import Txt2AssExporter, ASSDirectExporter
 from .nicokara_exporter import NicokaraExporter, NicokaraWithRubyExporter
 from .inline_exporter import InlineExporter
+from .srt_exporter import SRTExporter
 
 # 所有可用的导出器
 ALL_EXPORTERS = [
     LRCExporter,
+    LRCLineExporter,
+    LRCWordExporter,
     KRAExporter,
     TXTExporter,
+    SRTExporter,
     Txt2AssExporter,
     ASSDirectExporter,
     NicokaraExporter,
@@ -27,7 +31,7 @@ def get_exporter_by_name(name: str) -> IExporter:
     """根据名称获取导出器实例
 
     Args:
-        name: 导出器名称 ('LRC', 'KRA', 'TXT', 等)
+        name: 导出器名称 ('LRC (增強型)', 'KRA', 'TXT', 等)
 
     Returns:
         导出器实例
@@ -35,9 +39,15 @@ def get_exporter_by_name(name: str) -> IExporter:
     Raises:
         ValueError: 找不到对应名称的导出器
     """
+    # 向后兼容：旧配置中 "LRC" 映射到 "LRC (增强型)"
+    _LEGACY_NAME_MAP = {
+        "LRC": "LRC (增强型)",
+    }
+    resolved = _LEGACY_NAME_MAP.get(name, name)
+
     for exporter_class in ALL_EXPORTERS:
         exporter = exporter_class()
-        if exporter.name == name:
+        if exporter.name == resolved:
             return exporter
 
     raise ValueError(f"未知的导出器: {name}")
@@ -75,8 +85,11 @@ __all__ = [
     "BaseExporter",
     "ExportError",
     "LRCExporter",
+    "LRCLineExporter",
+    "LRCWordExporter",
     "KRAExporter",
     "TXTExporter",
+    "SRTExporter",
     "Txt2AssExporter",
     "ASSDirectExporter",
     "NicokaraExporter",

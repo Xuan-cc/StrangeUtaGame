@@ -2,6 +2,11 @@
 
 LRC 格式是通用歌词格式：
 [mm:ss.xx]歌词文本
+
+支持三种子格式：
+- LRC (逐行): [mm:ss.xx]一整行歌词
+- LRC (逐字): [mm:ss.xx]字[mm:ss.xx]字...
+- LRC (增强型): [mm:ss.xx]<mm:ss.xx>字<mm:ss.xx>字...
 """
 
 from typing import List
@@ -10,18 +15,18 @@ from strange_uta_game.backend.domain import Project, Sentence
 
 
 class LRCExporter(BaseExporter):
-    """LRC 格式导出器
+    """LRC 增强型格式导出器
 
-    导出标准 LRC 歌词格式，支持增强 LRC（逐字时间标签）。
+    导出增强型 LRC 歌词格式（逐字时间标签使用尖括号）。
     """
 
     @property
     def name(self) -> str:
-        return "LRC"
+        return "LRC (增强型)"
 
     @property
     def description(self) -> str:
-        return "通用歌词格式，支持逐字时间标签"
+        return "增强型 LRC 格式，逐字时间标签使用尖括号"
 
     @property
     def file_extension(self) -> str:
@@ -66,10 +71,10 @@ class LRCExporter(BaseExporter):
             raise ExportError(f"写入文件失败: {e}")
 
     def _export_sentence(self, sentence: Sentence) -> str:
-        """导出一行歌词
+        """导出一行歌词（增强型格式）
 
         如果该行有时间标签，使用第一个时间标签作为整行时间。
-        如果有多个时间标签，尝试生成增强 LRC 格式。
+        如果有多个时间标签，生成增强 LRC 格式。
         """
         if not sentence.has_timetags:
             # 没有时间标签，只输出文本
@@ -106,6 +111,83 @@ class LRCExporter(BaseExporter):
             time_str = time_str.replace("[", "<").replace("]", ">")
 
             # 获取对应的字符
+            if char_idx < len(sentence.characters):
+                char = sentence.characters[char_idx].char
+                result.append(time_str)
+                result.append(char)
+
+        return "".join(result)
+
+
+class LRCLineExporter(LRCExporter):
+    """LRC 逐行格式导出器
+
+    每行只有一个行级时间标签，不含逐字标签。
+    格式: [mm:ss.xx]歌词文本
+    """
+
+    @property
+    def name(self) -> str:
+        return "LRC (逐行)"
+
+    @property
+    def description(self) -> str:
+        return "LRC 逐行格式，每行一个时间标签"
+
+    def _export_sentence(self, sentence: Sentence) -> str:
+        """导出一行歌词（逐行格式，只取第一个时间标签）"""
+        if not sentence.has_timetags:
+            return sentence.text
+
+        # 找到最早的时间标签作为行时间
+        first_ts = None
+        for ch in sentence.characters:
+            for ts in ch.export_timestamps:
+                if first_ts is None or ts < first_ts:
+                    first_ts = ts
+
+        if first_ts is None:
+            return sentence.text
+
+        timestamp = self._format_timestamp(first_ts)
+        return f"{timestamp}{sentence.text}"
+
+
+class LRCWordExporter(LRCExporter):
+    """LRC 逐字格式导出器
+
+    每个字符有独立的方括号时间标签。
+    格式: [mm:ss.xx]字[mm:ss.xx]字[mm:ss.xx]字...
+    """
+
+    @property
+    def name(self) -> str:
+        return "LRC (逐字)"
+
+    @property
+    def description(self) -> str:
+        return "LRC 逐字格式，每个字符一个时间标签"
+
+    def _export_sentence(self, sentence: Sentence) -> str:
+        """导出一行歌词（逐字格式，方括号时间标签）"""
+        if not sentence.has_timetags:
+            return sentence.text
+
+        # 收集所有 (timestamp_ms, char_idx, checkpoint_idx) 并排序
+        all_tags: List[tuple[int, int, int]] = []
+        for i, ch in enumerate(sentence.characters):
+            for cp_idx, ts in enumerate(ch.export_timestamps):
+                all_tags.append((ts, i, cp_idx))
+
+        if not all_tags:
+            return sentence.text
+
+        all_tags.sort(key=lambda t: t[0])
+
+        # 逐字格式：[mm:ss.xx]字[mm:ss.xx]字...
+        result = []
+        for ts, char_idx, _cp_idx in all_tags:
+            time_str = self._format_timestamp(ts)
             if char_idx < len(sentence.characters):
                 char = sentence.characters[char_idx].char
                 result.append(time_str)

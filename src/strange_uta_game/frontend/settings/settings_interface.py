@@ -92,7 +92,7 @@ class AppSettings:
             "font_size": 24,
         },
         "export": {
-            "default_format": "LRC",
+            "default_format": "LRC (增强型)",
             "auto_add_extension": True,
             "last_export_dir": "",
             "offset_ms": -100,
@@ -1922,7 +1922,16 @@ class SettingsInterface(ScrollArea):
             FIF.SHARE,
             "默认导出格式",
             "导出歌词时的默认文件格式",
-            items=["LRC", "KRA", "TXT", "ASS", "Nicokara"],
+            items=[
+                "LRC (增强型)",
+                "LRC (逐行)",
+                "LRC (逐字)",
+                "KRA",
+                "TXT",
+                "SRT",
+                "ASS",
+                "Nicokara",
+            ],
             parent=self.export_group,
         )
         self.card_export_dir = BrowseSettingCard(
@@ -2311,8 +2320,18 @@ class SettingsInterface(ScrollArea):
         self.card_font_size.setValue(self._settings.get("ui.font_size", 24))
 
         # 导出设定
-        fmt = self._settings.get("export.default_format", "LRC")
-        fmt_idx = {"LRC": 0, "KRA": 1, "TXT": 2, "ASS": 3, "Nicokara": 4}.get(fmt, 0)
+        fmt = self._settings.get("export.default_format", "LRC (增强型)")
+        fmt_idx = {
+            "LRC (增强型)": 0,
+            "LRC (逐行)": 1,
+            "LRC (逐字)": 2,
+            "KRA": 3,
+            "TXT": 4,
+            "SRT": 5,
+            "ASS": 6,
+            "Nicokara": 7,
+            "LRC": 0,  # 旧配置兼容
+        }.get(fmt, 0)
         self.card_default_format.setCurrentIndex(fmt_idx)
         export_dir = self._settings.get("export.last_export_dir", "")
         if export_dir:
@@ -2433,10 +2452,19 @@ class SettingsInterface(ScrollArea):
         self._settings.set("ui.font_size", self.card_font_size.value())
 
         # 导出设定
-        fmt_map = {0: "LRC", 1: "KRA", 2: "TXT", 3: "ASS", 4: "Nicokara"}
+        fmt_map = {
+            0: "LRC (增强型)",
+            1: "LRC (逐行)",
+            2: "LRC (逐字)",
+            3: "KRA",
+            4: "TXT",
+            5: "SRT",
+            6: "ASS",
+            7: "Nicokara",
+        }
         self._settings.set(
             "export.default_format",
-            fmt_map.get(self.card_default_format.currentIndex(), "LRC"),
+            fmt_map.get(self.card_default_format.currentIndex(), "LRC (增强型)"),
         )
         export_dir = self.card_export_dir.text()
         if export_dir:

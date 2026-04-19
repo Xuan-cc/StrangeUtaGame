@@ -31,7 +31,6 @@ from strange_uta_game.backend.domain import Project, Sentence, Singer
 from strange_uta_game.backend.application import ProjectService, AutoCheckService
 from strange_uta_game.backend.infrastructure import SugProjectParser
 from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
-    LyricParserFactory,
     LRCParser,
     NicokaraParser,
     parse_to_sentences,
@@ -53,7 +52,7 @@ class HomeInterface(QWidget):
     project_created = pyqtSignal(Project, str)  # (project, audio_path)
     project_opened = pyqtSignal(Project, str)  # (project, file_path)
     project_save_requested = pyqtSignal()  # 请求保存当前项目
-    _LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra"}
+    _LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra", ".ass", ".srt"}
     _PROJECT_EXTENSIONS = {".sug"}
     _AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac"}
 
@@ -210,7 +209,7 @@ class HomeInterface(QWidget):
         card_layout.addWidget(title)
 
         # 歌词输入区
-        lyric_label = QLabel("歌词文本（支持粘贴或导入 LRC/TXT）")
+        lyric_label = QLabel("歌词文本（支持粘贴或导入 LRC/ASS/SRT/TXT）")
         lyric_label.setStyleSheet("font-size: 13px; color: #666;")
         card_layout.addWidget(lyric_label)
 
@@ -219,9 +218,11 @@ class HomeInterface(QWidget):
             "在此粘贴歌词文本...\n"
             "支持格式：\n"
             "- 普通文本（每行一句）\n"
-            "- LRC 格式（逐行或逐字）\n"
+            "- LRC 格式（逐行/逐字/增强型）\n"
+            "- ASS 字幕格式\n"
+            "- SRT 字幕格式\n"
             "- KRA 格式\n\n"
-            "导入文件将自动填充此区域"
+            "导入文件将自动填充此区域，创建项目时解析"
         )
         self.text_lyrics.setMinimumHeight(200)
         card_layout.addWidget(self.text_lyrics)
@@ -321,7 +322,7 @@ class HomeInterface(QWidget):
             self,
             "选择歌词文件",
             "",
-            "歌词文件 (*.lrc *.txt *.kra);;所有文件 (*.*)",
+            "歌词文件 (*.lrc *.txt *.kra *.ass *.srt);;所有文件 (*.*)",
         )
 
         if file_path:
@@ -366,6 +367,9 @@ class HomeInterface(QWidget):
             return
 
         try:
+            # 解析文本框中的原始内容
+            self._parse_text_content(text)
+
             # 创建空项目
             project = self._project_service.create_project()
             default_singer = project.get_default_singer()
@@ -485,26 +489,27 @@ class HomeInterface(QWidget):
     def _import_lyric_file(
         self, file_path: str, append: bool = False, show_feedback: bool = True
     ) -> int:
+        """导入歌词文件 — 仅读取原始内容显示到文本框，不进行解析
+
+        解析延迟到点击"创建项目"时执行。
+        """
         try:
-            lyric_lines, text_content, parsed_with_tags = self._read_lyric_file(
-                file_path
-            )
+            raw_content = self._read_raw_file(file_path)
 
-            if append and self._lyric_lines:
-                self._lyric_lines.extend(lyric_lines)
-            else:
-                self._lyric_lines = list(lyric_lines)
+            # 清除之前的解析状态（原始内容变了，旧的解析数据无效）
+            if not append:
+                self._lyric_lines = []
+                self._nicokara_singers = []
+                self._nicokara_singer_key_to_id = {}
 
-            self._set_lyrics_text(text_content, append=append)
+            self._set_lyrics_text(raw_content, append=append)
+
+            line_count = len([l for l in raw_content.split("\n") if l.strip()])
 
             if show_feedback:
                 InfoBar.success(
                     title="导入成功",
-                    content=(
-                        f"已导入 {len(lyric_lines)} 行歌词"
-                        if parsed_with_tags
-                        else f"已作为普通文本导入 {len(lyric_lines)} 行"
-                    ),
+                    content=f"已导入文件内容，共 {line_count} 行",
                     orient=Qt.Orientation.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP,
@@ -512,7 +517,7 @@ class HomeInterface(QWidget):
                     parent=self,
                 )
 
-            return len(lyric_lines)
+            return line_count
         except Exception as e:
             if show_feedback:
                 InfoBar.error(
@@ -526,35 +531,100 @@ class HomeInterface(QWidget):
                 )
             return 0
 
-    def _read_lyric_file(self, file_path: str) -> tuple[List[Sentence], str, bool]:
-        content = Path(file_path).read_text(encoding="utf-8")
+    @staticmethod
+    def _read_raw_file(file_path: str) -> str:
+        """读取文件原始内容，支持 UTF-8 和 Shift-JIS 编码回退"""
+        path = Path(file_path)
+        try:
+            return path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            try:
+                return path.read_text(encoding="shift_jis")
+            except Exception as e:
+                raise RuntimeError(f"无法解码文件: {e}")
+        except Exception as e:
+            raise RuntimeError(f"读取文件失败: {e}")
 
-        # 检测是否为 RhythmicaLyrics 内联格式（含 [N|MM:SS:cc] 标记）
+    def _detect_format(self, content: str) -> str:
+        """从文本内容自动检测歌词格式
+
+        返回格式标识: 'inline', 'nicokara', 'ass', 'srt', 'lrc', 'text'
+        """
+        import re
+
+        # 优先级: inline > nicokara > ass > srt > lrc > text
+
+        # 内联格式: [N|MM:SS:cc] 或 {字|...}
         if self._is_inline_format(content):
-            temp_singer = Singer(name="临时", is_default=True)
-            sentences = sentences_from_inline_text(content, temp_singer.id)
-            text_content = "\n".join(s.text for s in sentences)
-            return sentences, text_content, True
+            return "inline"
 
-        # 检测是否为 Nicokara 格式（含 【svN】 标签或 @Ruby/@Emoji 元数据）
+        # Nicokara 格式: 【svN】 标签或 @Ruby/@Emoji
         if NicokaraParser.is_nicokara_format(content):
-            sentences = self._parse_nicokara_content(content)
-            text_content = "\n".join(s.text for s in sentences)
-            return sentences, text_content, True
+            return "nicokara"
 
-        parsed_lines = LyricParserFactory.parse_file(file_path)
+        # ASS 格式: [Script Info] 或 Dialogue: 行
+        if re.search(r"^\[Script Info\]", content, re.MULTILINE) or re.search(
+            r"^Dialogue:\s*\d+", content, re.MULTILINE
+        ):
+            return "ass"
 
-        # 如果是 .txt 文件但内容含 LRC 时间标签，自动用 LRC 解析器重新解析
-        ext = Path(file_path).suffix.lower()
-        if ext == ".txt" and self._has_lrc_timestamps(content):
+        # SRT 格式: 含有 --> 时间戳分隔符
+        if re.search(
+            r"\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}", content
+        ):
+            return "srt"
+
+        # LRC 格式: [mm:ss.xx] 时间标签
+        if self._has_lrc_timestamps(content):
+            return "lrc"
+
+        # 纯文本
+        return "text"
+
+    def _parse_text_content(self, content: str) -> None:
+        """根据检测到的格式解析文本内容，设置 _lyric_lines 等实例变量
+
+        在创建项目时调用，将文本框中的原始内容解析为 Sentence 对象。
+        """
+        fmt = self._detect_format(content)
+        temp_singer = Singer(name="临时", is_default=True)
+
+        if fmt == "inline":
+            self._lyric_lines = sentences_from_inline_text(content, temp_singer.id)
+            return
+
+        if fmt == "nicokara":
+            self._lyric_lines = self._parse_nicokara_content(content)
+            return
+
+        if fmt == "ass":
+            from strange_uta_game.backend.infrastructure.parsers.ass_parser import (
+                ASSParser,
+            )
+
+            parser = ASSParser()
+            parsed_lines = parser.parse(content)
+            self._lyric_lines = parse_to_sentences(parsed_lines, temp_singer.id)
+            return
+
+        if fmt == "srt":
+            from strange_uta_game.backend.infrastructure.parsers.srt_parser import (
+                SRTParser,
+            )
+
+            parser = SRTParser()
+            parsed_lines = parser.parse(content)
+            self._lyric_lines = parse_to_sentences(parsed_lines, temp_singer.id)
+            return
+
+        if fmt == "lrc":
             lrc_parser = LRCParser()
             parsed_lines = lrc_parser.parse(content)
+            self._lyric_lines = parse_to_sentences(parsed_lines, temp_singer.id)
+            return
 
-        temp_singer = Singer(name="临时", is_default=True)
-        sentences = parse_to_sentences(parsed_lines, temp_singer.id)
-        text_content = "\n".join(s.text for s in sentences)
-        parsed_with_tags = any(parsed_line.timetags for parsed_line in parsed_lines)
-        return sentences, text_content, parsed_with_tags
+        # text: 纯文本，不预解析，让 _on_create_project 中的文本分行处理
+        self._lyric_lines = []
 
     def _parse_nicokara_content(self, content: str) -> List[Sentence]:
         """解析 Nicokara 格式内容，自动创建不存在的演唱者

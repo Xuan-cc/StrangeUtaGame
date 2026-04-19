@@ -36,14 +36,23 @@
 支持多种原始歌词格式的导入。
 
 - **职责**：
-    - `parse_to_sentences(content, format)`：支持 TXT, LRC, KRA 等格式。
+    - `parse_to_sentences(content, format)`：支持 TXT, LRC（逐行/逐字/增强型）, KRA, ASS, SRT 等格式。
     - 负责从原始文本中提取歌词行、注音和现有的时间标签。
+    - **增强型 LRC 支持**：解析 `<mm:ss.xx>` 尖括号逐字时间标签格式。
+    - **ASS 解析器**：解析 ASS 字幕的 `[Events]` Dialogue 行，提取 `\kf`/`\k`/`\ko` 卡拉OK时间标签（厘秒→毫秒转换）。
+    - **SRT 解析器**：解析 SRT 字幕的块结构（序号、`HH:MM:SS,mmm --> HH:MM:SS,mmm` 时间戳、文本），自动剥离 HTML 标签。
+    - **工厂模式**：`LyricParserFactory` 根据文件扩展名（.txt/.lrc/.kra/.ass/.srt）自动选择解析器。
 
 ### Exporters (导出器集合)
 为不同的播放器和编辑软件提供兼容的数据格式。
 
 - **职责**：
-    - **LRC/KRA Exporter**：通用时间标签格式。使用 `ch.export_timestamps` 和 `sentence.export_timing_start_ms`。
+    - **LRC Exporter（三种子格式）**：
+        - LRC (增强型)：`[mm:ss.xx]<mm:ss.xx>字<mm:ss.xx>字...` 尖括号逐字标签。
+        - LRC (逐行)：`[mm:ss.xx]歌词文本` 每行一个时间标签。
+        - LRC (逐字)：`[mm:ss.xx]字[mm:ss.xx]字...` 方括号逐字标签。
+    - **KRA Exporter**：同 LRC 增强型，不同扩展名。
+    - **SRT Exporter**：标准 SRT 字幕格式（序号 + 时间戳 + 文本）。
     - **TXT Exporter**：纯文本打轴数据。使用 `ch.export_timestamps`。
     - **txt2ass Exporter**：兼容特定 ASS 生成工具的中间格式。使用 `ch.export_timestamps`。
     - **ASS Exporter**：直接生成包含 Ruby 支持和样式信息的 ASS 字幕。

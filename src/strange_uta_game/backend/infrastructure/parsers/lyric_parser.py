@@ -1,6 +1,6 @@
 """歌词文件解析器
 
-支持 TXT、LRC、KRA、Nicokara 格式的解析。
+支持 TXT、LRC（逐行/逐字/增强型）、KRA、ASS、SRT、Nicokara 格式的解析。
 """
 
 import re
@@ -152,13 +152,17 @@ class LRCParser(LyricParser):
     LRC 格式: [mm:ss.xx]歌词文本
     示例: [00:12.34]歌词内容
 
-    支持逐行格式和逐字格式：
+    支持逐行格式、逐字格式和增强型格式：
     - 逐行: [00:12.34]这是一整行歌词
     - 逐字: [00:12.34]这[00:13.00]是[00:14.00]逐[00:15.00]字
+    - 增强型: [00:12.34]<00:12.34>这<00:13.00>是<00:14.00>增<00:15.00>强
     """
 
     # 标准 LRC 时间标签正则: [mm:ss.xx] 或 [mm:ss.xxx]
     TIME_TAG_PATTERN = re.compile(r"\[(\d{1,2}):(\d{2})[:.](\d{2,3})\]")
+
+    # 增强型 LRC 时间标签正则: <mm:ss.xx> 或 <mm:ss.xxx>
+    ENHANCED_TAG_PATTERN = re.compile(r"<(\d{1,2}):(\d{2})[:.](\d{2,3})>")
 
     # ID标签（元数据）: [xx:xx]
     ID_TAG_PATTERN = re.compile(r"^\[([a-zA-Z]+):(.*)\]$")
@@ -201,6 +205,16 @@ class LRCParser(LyricParser):
                 # 如果是纯文本，可以作为无时间标签的歌词行
                 if len(line_text) > 0 and not line_text.startswith("["):
                     lines.append(ParsedLine(text=line_text, timetags=[]))
+                continue
+
+            # 检查是否为增强型 LRC 格式（含 <mm:ss.xx> 标签）
+            enhanced_matches = list(self.ENHANCED_TAG_PATTERN.finditer(line_text))
+            if enhanced_matches:
+                lyric_text, timetags = self._parse_enhanced_lrc(
+                    line_text, matches, enhanced_matches
+                )
+                if lyric_text:
+                    lines.append(ParsedLine(text=lyric_text, timetags=timetags))
                 continue
 
             # 判断是逐行格式还是逐字格式
@@ -330,6 +344,71 @@ class LRCParser(LyricParser):
             millis = int(centis)
 
         return (minutes * 60 + seconds) * 1000 + millis
+
+    def _parse_enhanced_lrc(
+        self,
+        line_text: str,
+        bracket_matches: List[re.Match],
+        angle_matches: List[re.Match],
+    ) -> Tuple[str, List[Tuple[int, int]]]:
+        """解析增强型 LRC 格式
+
+        格式: [00:20.799]<00:20.799>い<00:21.367>ま<00:21.598>私...
+        [mm:ss.xx] 是行级时间标签（忽略），<mm:ss.xx> 是逐字时间标签。
+
+        Returns:
+            (歌词文本, 时间标签列表)
+        """
+        lyric_chars: List[str] = []
+        timetags: List[Tuple[int, int]] = []
+        char_idx = 0
+
+        # 合并所有标签位置（方括号和尖括号），按位置排序
+        all_tag_spans: List[Tuple[int, int]] = []
+        for m in bracket_matches:
+            all_tag_spans.append((m.start(), m.end()))
+        for m in angle_matches:
+            all_tag_spans.append((m.start(), m.end()))
+        all_tag_spans.sort(key=lambda s: s[0])
+
+        # 遍历增强标签，提取字符和时间戳
+        for i, match in enumerate(angle_matches):
+            timestamp_ms = self._parse_timestamp(match)
+
+            # 获取该标签后到下一个标签之前的文本
+            start_pos = match.end()
+            # 找到下一个任意标签的起始位置
+            end_pos = len(line_text)
+            for tag_start, _tag_end in all_tag_spans:
+                if tag_start > match.end():
+                    end_pos = tag_start
+                    break
+
+            chars = line_text[start_pos:end_pos]
+
+            if not chars:
+                # 尾部空标签（结束时间戳），跳过
+                continue
+
+            # 为第一个非空白字符添加时间标签
+            tag_assigned = False
+            for ch in chars:
+                lyric_chars.append(ch)
+                if not tag_assigned:
+                    timetags.append((char_idx, timestamp_ms))
+                    tag_assigned = True
+                char_idx += 1
+
+        lyric_text = "".join(lyric_chars).strip()
+
+        # 去除前导空白后重新计算索引
+        leading_spaces = len("".join(lyric_chars)) - len("".join(lyric_chars).lstrip())
+        if leading_spaces > 0:
+            timetags = [
+                (ci - leading_spaces, ts) for ci, ts in timetags if ci >= leading_spaces
+            ]
+
+        return lyric_text, timetags
 
 
 class KRAParser(LRCParser):
@@ -737,6 +816,14 @@ class LyricParserFactory:
             return LRCParser()
         elif ext == ".kra":
             return KRAParser()
+        elif ext == ".ass":
+            from .ass_parser import ASSParser
+
+            return ASSParser()
+        elif ext == ".srt":
+            from .srt_parser import SRTParser
+
+            return SRTParser()
         else:
             raise ParseError(f"不支持的文件格式: {ext}")
 

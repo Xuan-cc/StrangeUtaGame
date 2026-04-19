@@ -37,7 +37,7 @@
 将项目数据转换为不同的外部格式。
 
 - **职责**：
-    - 调用基础设施层的导出器生成 LRC, KRA, TXT, ASS, Nicokara 等格式。
+    - 调用基础设施层的导出器生成 LRC（增强型/逐行/逐字）, KRA, TXT, SRT, ASS, Nicokara 等格式。
     - 处理导出时的各种参数设置（如偏移值、演唱者过滤等）。导出器统一使用 `ch.export_timestamps`，故 `ExportService` 内部将导出器的 `_offset_ms` 设为 0。
 
 ### SingerService (演唱者管理服务)
