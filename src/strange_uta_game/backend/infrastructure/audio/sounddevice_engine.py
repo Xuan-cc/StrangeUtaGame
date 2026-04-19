@@ -57,6 +57,7 @@ class SoundDeviceEngine(IAudioEngine):
         # Phase Vocoder 状态
         self._stretched_speed: float = 1.0  # self._data 对应的变速倍率
         self._stretch_version: int = 0  # 防止过时的后台线程覆盖新数据
+        self._switch_fade_samples: int = 0  # 模式切换时淡入剩余采样数
 
         # 线程控制
         self._playback_thread: Optional[Thread] = None
@@ -196,9 +197,10 @@ class SoundDeviceEngine(IAudioEngine):
     def set_speed(self, speed: float) -> None:
         """设置播放速度（Phase Vocoder 变速不变调）
 
-        调用后立即在后台线程开始处理变速音频。处理完成前使用
-        线性插值回退模式（音调会变化），处理完成后无缝切换到
-        变速不变调模式。
+        调用后立即在后台线程开始处理变速音频。采用分段优先策略：
+        先处理当前播放位置附近的片段以快速切换到变速不变调模式，
+        再处理完整文件以支持任意位置拖动。切换时施加 32ms 淡入
+        以消除回退模式与预处理数据间的拼接噪声，保证音频连续性。
         """
         if not 0.5 <= speed <= 2.0:
             raise ValueError(f"速度 {speed} 超出范围 [0.5, 2.0]")
@@ -261,23 +263,78 @@ class SoundDeviceEngine(IAudioEngine):
         self._duration_ms = 0
         self._stretched_speed = 1.0
         self._stretch_version = 0
+        self._switch_fade_samples = 0
 
     # ==================== Phase Vocoder ====================
 
     def _apply_speed_stretch(self, speed: float, version: int) -> None:
-        """后台线程：用 Phase Vocoder 计算变速音频并替换播放数据。"""
+        """后台线程：用 Phase Vocoder 计算变速音频并替换播放数据。
+
+        采用分段优先策略：先处理当前播放位置附近的音频（快速切换），
+        再处理完整文件（支持任意拖动）。切换时施加短淡入以消除拼接噪声。
+        """
         if self._original_data is None:
             return
 
         if abs(speed - 1.0) < 0.001:
             new_data = self._original_data.copy()
+            if self._stretch_version == version:
+                self._data = new_data
+                self._stretched_speed = speed
+            return
+
+        # 捕获当前播放位置
+        with self._position_lock:
+            pos_ms = self._position_ms
+        current_sample = int(pos_ms / 1000 * self._sample_rate)
+        total_samples = len(self._original_data)
+
+        # ── Phase 1: 优先处理当前位置到末尾的片段 ──
+        # 从当前位置前 1 秒开始（保证上下文完整）
+        priority_start = max(0, current_sample - self._sample_rate)
+
+        if priority_start > 0:
+            # 只处理当前位置之后的片段
+            segment = self._original_data[priority_start:]
+            processed_segment = self._time_stretch(segment, speed)
+
+            if self._stretch_version != version:
+                return  # 版本已过时
+
+            # 对已播放部分用快速重采样填充（用户不会听到，仅为索引对齐）
+            before_len = max(1, round(priority_start / speed))
+            before_data = np.zeros((before_len, self._channels), dtype=np.float32)
+            indices = np.linspace(0, priority_start - 1, before_len)
+            for ch in range(self._channels):
+                before_data[:, ch] = np.interp(
+                    indices,
+                    np.arange(priority_start),
+                    self._original_data[:priority_start, ch],
+                )
+
+            new_data = np.vstack([before_data, processed_segment])
+
+            # 施加淡入以消除从回退模式切换时的拼接噪声（32ms）
+            fade_samples = int(self._sample_rate * 0.032)
+            if self._stretch_version == version:
+                self._switch_fade_samples = fade_samples
+                self._data = new_data
+                self._stretched_speed = speed
+
+            # ── Phase 2: 处理完整文件（覆盖快速重采样部分，支持拖动回退）──
+            if self._stretch_version == version:
+                full_data = self._time_stretch(self._original_data, speed)
+                if self._stretch_version == version:
+                    self._data = full_data
         else:
+            # 当前位置在起始附近，直接处理全文件
             new_data = self._time_stretch(self._original_data, speed)
 
-        # 仅当此版本仍为最新时才应用结果（防止快速连按时旧结果覆盖新结果）
-        if self._stretch_version == version:
-            self._data = new_data
-            self._stretched_speed = speed
+            if self._stretch_version == version:
+                fade_samples = int(self._sample_rate * 0.032)
+                self._switch_fade_samples = fade_samples
+                self._data = new_data
+                self._stretched_speed = speed
 
     @staticmethod
     def _time_stretch(data: np.ndarray, speed: float) -> np.ndarray:
@@ -473,6 +530,14 @@ class SoundDeviceEngine(IAudioEngine):
 
         # 应用音量
         outdata *= self._volume
+
+        # 模式切换淡入（消除从回退模式切换时的拼接噪声）
+        if self._switch_fade_samples > 0:
+            fade_len = min(actual_read, self._switch_fade_samples)
+            fade = np.linspace(0, 1, fade_len, dtype=np.float32)
+            for ch in range(outdata.shape[1]):
+                outdata[:fade_len, ch] *= fade
+            self._switch_fade_samples -= fade_len
 
         # 推进原始时间
         advanced_ms = int(actual_read * stretched_speed / self._sample_rate * 1000)

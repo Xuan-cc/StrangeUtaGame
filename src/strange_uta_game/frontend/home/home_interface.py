@@ -418,6 +418,11 @@ class HomeInterface(QWidget):
                     if not self._nicokara_singers:
                         # 非 Nicokara 导入：将演唱者 ID 替换为项目的默认演唱者
                         line.singer_id = default_singer.id
+                        # 更新每个字符的 singer_id（含注音）
+                        for char in line.characters:
+                            char.singer_id = default_singer.id
+                            if char.ruby:
+                                char.ruby.singer_id = default_singer.id
                     project.add_sentence(line)
             else:
                 # 从文本框手动输入的纯文本

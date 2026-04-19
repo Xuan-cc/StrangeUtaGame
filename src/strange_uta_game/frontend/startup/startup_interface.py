@@ -604,6 +604,11 @@ class StartupInterface(QWidget):
             for line in self._current_lines:
                 # 更新歌词行的 singer_id 为项目的演唱者
                 line.singer_id = default_singer.id
+                # 更新每个字符的 singer_id（含注音）
+                for char in line.characters:
+                    char.singer_id = default_singer.id
+                    if char.ruby:
+                        char.ruby.singer_id = default_singer.id
                 project.add_sentence(line)
 
             # 注意：音频路径不存储在项目文件中，用户每次使用需重新选择

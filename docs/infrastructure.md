@@ -70,7 +70,8 @@
     - **Phase Vocoder 变速不变调**：采用 Phase-Locked Phase Vocoder 算法实现高质量变速播放，并保持立体声相位一致性。
         - **立体声保持**：以第 0 通道作为参考相位，其它通道通过 Phase-Locked 机制保持与参考通道的相位差，从而保留声场定位效果。
         - **原理**：STFT → 相位累积 (Phase Accumulation) → ISTFT 重叠相加 (Overlap-add)。FFT size: 2048, hop: 512。
-        - **处理流程**：变速时在后台线程预处理完整音频。处理期间（约 1-2 秒）使用线性插值 (np.interp) 作为临时回退（音调会变）。处理完成后平滑切换至变速不变调音频。
-        - **实现细节**：纯 numpy 实现，无外部 C 库依赖。原始数据保留在 `_original_data` 中，使用 `_stretched_speed` 和 `_stretch_version` 管理处理状态。位置追踪始终基于原始音频时间。
+        - **分段优先处理**：变速时采用两阶段后台处理策略：Phase 1 优先处理当前播放位置到末尾的片段，以尽快切换到变速不变调模式（大幅缩短回退期）；Phase 2 再处理完整文件以支持任意位置拖动。已播放部分使用快速重采样填充，仅作索引对齐用途。
+        - **模式切换淡入**：从线性插值回退模式切换到 Phase Vocoder 模式时，施加 32ms 线性淡入以消除拼接噪声，保证音频连续性。
+        - **实现细节**：纯 numpy 实现，无外部 C 库依赖。原始数据保留在 `_original_data` 中，使用 `_stretched_speed`、`_stretch_version` 和 `_switch_fade_samples` 管理处理状态与切换平滑。位置追踪始终基于原始音频时间。
     - **低延迟播放**：使用 sounddevice (PortAudio) 提供低延迟音频输出。
     - **格式支持**：通过 soundfile 支持多种音频格式解码。
