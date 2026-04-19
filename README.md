@@ -22,7 +22,7 @@
 - **配置与自定义**：默认配置文件位于程序目录。支持通过 `.config_redirect` 文件重定向配置目录。About 界面提供「打开目录」和「更改位置」按钮，方便管理配置文件。用户字典和演唱者预设独立存储（`dictionary.json`、`singers.json`），重置配置不影响字典和演唱者数据。
 - **应用图标**：窗口左上角和 Windows 任务栏显示自定义图标，兼容开发和打包环境
 - **内嵌默认配置**：config.json、dictionary.json、singers.json 作为 package data 嵌入，打包后无需额外携带配置文件
-- **变速播放**：50%~200% 速度调节（SpinBox 显示百分比），Q/W 快捷键 ±10%
+- **变速播放**：50%~200% 速度调节（输入框显示百分比，可直接输入速度值），Q/W 快捷键 ±10%。采用 Phase Vocoder 算法，变速时自动后台预处理以实现「变速不变调」效果。
 - **快捷键自定义**：键盘监听捕获设置、支持组合键、双快捷键绑定、冲突检测、ESC 取消设置
 - **全局音频管理**：主页加载音频后自动同步到打轴界面，无需通过创建项目中转
 - **拖拽加载**：音频/歌词/项目文件直接拖入窗口即可加载
@@ -153,7 +153,7 @@ ruff check .
 
 | 按键 | 功能 |
 |------|------|
-| `Space` | 在当前位置打轴（按下即记录时间） |
+| `Space` | 在当前位置打轴（普通节奏点按下即记录时间；句尾按下开始，抬起结束） |
 | `A` | 播放/暂停 |
 | `S` | 停止播放并回到开头 |
 | `Z` | 后退 5 秒 |
@@ -401,11 +401,8 @@ pytest tests/ --cov=src --cov-report=html
 # 安装 PyInstaller
 pip install pyinstaller
 
-# 打包（Windows）
-pyinstaller --noconfirm --onefile --windowed --name "StrangeUtaGame" --icon=src/strange_uta_game/resource/icon.ico main.py
-
-# 打包（包含依赖目录）
-pyinstaller --noconfirm --onedir --windowed --name "StrangeUtaGame" main.py
+# 打包命令示例（含隐藏导入与数据收集）
+pyinstaller --noconfirm --onedir --windowed --name "StrangeUtaGame" --icon="src/strange_uta_game/resource/icon.ico" --add-data "src/strange_uta_game/config;strange_uta_game/config" --add-data "src/strange_uta_game/resource;strange_uta_game/resource" --collect-data "sudachipy" --collect-data "sudachidict_core" --collect-binaries "soundfile" --hidden-import "numpy" --hidden-import "sudachipy" --hidden-import "jaconv" main.py
 ```
 
 ### 使用打包脚本（推荐）
@@ -413,6 +410,8 @@ pyinstaller --noconfirm --onedir --windowed --name "StrangeUtaGame" main.py
 ```bash
 python build.py
 ```
+
+`build.py` 已更新，包含所有必要的 `hidden-imports` (numpy, sudachipy, jaconv 等) 和数据/二进制收集配置，并修复了 PortAudio DLL 路径检测问题。
 
 ### 打包后的文件
 

@@ -12,7 +12,7 @@
 """
 
 from collections import OrderedDict
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any, Set, Tuple
 
 from .base import BaseExporter, ExportError
 from strange_uta_game.backend.domain import Project, Sentence, Singer
@@ -79,6 +79,7 @@ class NicokaraExporter(BaseExporter):
 
         output_lines: List[str] = []
         prev_end_ms = 0
+        prev_singer_id: Optional[str] = None
 
         for i, sentence in enumerate(project.sentences):
             # 演唱者过滤：检查行内是否有选中的演唱者字符
@@ -92,11 +93,14 @@ class NicokaraExporter(BaseExporter):
                 if line_start is not None and line_start - prev_end_ms > 5000:
                     output_lines.append("")
 
-            output_lines.append(
-                self._export_sentence_with_singer(
-                    sentence, singer_ids, insert_singer_tags, singer_map
-                )
+            line_text, prev_singer_id = self._export_sentence_with_singer(
+                sentence,
+                singer_ids,
+                insert_singer_tags,
+                singer_map,
+                prev_singer_id,
             )
+            output_lines.append(line_text)
 
             if sentence.has_timetags:
                 end_ms = sentence.timing_end_ms
@@ -126,27 +130,32 @@ class NicokaraExporter(BaseExporter):
         singer_ids: Optional[Set[str]],
         insert_singer_tags: bool,
         singer_map: Optional[Dict[str, str]],
-    ) -> str:
-        """导出一行，支持演唱者过滤和标签插入"""
+        prev_singer_id: Optional[str] = None,
+    ) -> Tuple[str, Optional[str]]:
+        """导出一行，支持演唱者过滤和标签插入
+
+        Returns:
+            (行文本, 最后一个有效演唱者 ID)
+        """
         if not sentence.has_timetags or not sentence.characters:
-            return sentence.text
+            return sentence.text, prev_singer_id
 
         parts: List[str] = []
-        prev_singer_id: Optional[str] = None
 
         for i, ch in enumerate(sentence.characters):
-            char_singer = ch.singer_id
+            # 有效演唱者：优先使用 per-char，回退到行级别
+            effective_singer = ch.singer_id or sentence.singer_id
 
             # 演唱者过滤：跳过不属于选定演唱者的字符
-            if singer_ids is not None and char_singer not in singer_ids:
+            if singer_ids is not None and effective_singer not in singer_ids:
                 continue
 
             # 演唱者标签插入：在演唱者发生变化时插入标签
-            if insert_singer_tags and singer_map and char_singer != prev_singer_id:
-                singer_name = singer_map.get(char_singer, "")
+            if insert_singer_tags and singer_map and effective_singer != prev_singer_id:
+                singer_name = singer_map.get(effective_singer, "")
                 if singer_name:
                     parts.append(f"【{singer_name}】")
-                prev_singer_id = char_singer
+                prev_singer_id = effective_singer
 
             # 字符起始时间戳（第一个 checkpoint，使用导出时间戳含偏移）
             if ch.export_timestamps:
@@ -159,7 +168,8 @@ class NicokaraExporter(BaseExporter):
                 and ch.is_sentence_end
                 and ch.export_sentence_end_ts is not None
             ):
-                if singer_ids is None or ch.singer_id in singer_ids:
+                eff = ch.singer_id or sentence.singer_id
+                if singer_ids is None or eff in singer_ids:
                     parts.append(_format_nicokara_ts(ch.export_sentence_end_ts))
 
         # 行末结束时间戳（最后一个字符的 sentence-end checkpoint）
@@ -170,14 +180,16 @@ class NicokaraExporter(BaseExporter):
                 and last_char.export_sentence_end_ts is not None
             ):
                 # 演唱者过滤：只有该字符属于选定演唱者时才输出
-                if singer_ids is None or last_char.singer_id in singer_ids:
+                eff = last_char.singer_id or sentence.singer_id
+                if singer_ids is None or eff in singer_ids:
                     parts.append(_format_nicokara_ts(last_char.export_sentence_end_ts))
 
-        return "".join(parts)
+        return "".join(parts), prev_singer_id
 
     def _export_sentence(self, sentence: Sentence) -> str:
         """导出一行（向后兼容，不带演唱者过滤）"""
-        return self._export_sentence_with_singer(sentence, None, False, None)
+        text, _ = self._export_sentence_with_singer(sentence, None, False, None)
+        return text
 
 
 class NicokaraWithRubyExporter(NicokaraExporter):
@@ -219,6 +231,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
 
         output_lines: List[str] = []
         prev_end_ms = 0
+        prev_singer_id: Optional[str] = None
 
         for i, sentence in enumerate(project.sentences):
             # 演唱者过滤
@@ -231,11 +244,14 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 if line_start is not None and line_start - prev_end_ms > 5000:
                     output_lines.append("")
 
-            output_lines.append(
-                self._export_sentence_with_singer(
-                    sentence, singer_ids, insert_singer_tags, singer_map
-                )
+            line_text, prev_singer_id = self._export_sentence_with_singer(
+                sentence,
+                singer_ids,
+                insert_singer_tags,
+                singer_map,
+                prev_singer_id,
             )
+            output_lines.append(line_text)
 
             if sentence.has_timetags:
                 end_ms = sentence.timing_end_ms

@@ -250,6 +250,11 @@ class ExportInterface(QWidget):
 
         used_singer_ids = set()
         for sentence in getattr(self._project, "sentences", []) or []:
+            # 行级别演唱者
+            sentence_singer = getattr(sentence, "singer_id", None)
+            if sentence_singer:
+                used_singer_ids.add(sentence_singer)
+            # per-char 级别演唱者
             for character in getattr(sentence, "characters", []) or []:
                 singer_id = getattr(character, "singer_id", None)
                 if singer_id:

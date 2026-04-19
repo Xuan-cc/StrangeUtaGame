@@ -38,7 +38,6 @@ from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,
     Slider,
-    SpinBox,
     InfoBar,
     InfoBarPosition,
     FluentIcon as FIF,
@@ -117,20 +116,18 @@ class TransportBar(QFrame):
         self.slider_progress.sliderReleased.connect(self._on_seek)
         layout.addWidget(self.slider_progress, stretch=1)
 
-        # 速度（百分比显示，内部转换为倍率）
+        # 速度（百分比显示，输入框，内部转换为倍率）
         lbl_speed = QLabel("速度")
         lbl_speed.setStyleSheet("font-size: 11px; color: gray;")
         layout.addWidget(lbl_speed)
-        self.spin_speed = SpinBox(self)
-        self.spin_speed.setRange(50, 200)
-        self.spin_speed.setSingleStep(10)
-        self.spin_speed.setValue(100)
-        self.spin_speed.setSuffix("%")
-        self.spin_speed.setFixedWidth(90)
-        self.spin_speed.valueChanged.connect(
-            lambda v: self.speed_changed.emit(v / 100.0)
-        )
-        layout.addWidget(self.spin_speed)
+        self.edit_speed = QLineEdit(self)
+        self.edit_speed.setText("100%")
+        self.edit_speed.setFixedWidth(60)
+        self.edit_speed.setFixedHeight(32)
+        self.edit_speed.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.edit_speed.setStyleSheet("font-size: 12px;")
+        self.edit_speed.editingFinished.connect(self._on_speed_editing_finished)
+        layout.addWidget(self.edit_speed)
 
         # 音量
         lbl_vol = QLabel("音量")
@@ -175,6 +172,31 @@ class TransportBar(QFrame):
             return f"{s // 60:02d}:{s % 60:02d}.{c:02d}"
 
         self.lbl_time.setText(f"{fmt(self._current_ms)} / {fmt(self._duration_ms)}")
+
+    def _on_speed_editing_finished(self):
+        """速度输入框编辑完成 — 解析并发射信号"""
+        text = self.edit_speed.text().strip().replace("%", "")
+        try:
+            val = int(text)
+            val = max(50, min(200, val))
+        except ValueError:
+            val = 100
+        self.edit_speed.setText(f"{val}%")
+        self.speed_changed.emit(val / 100.0)
+
+    def set_speed_value(self, pct: int):
+        """设置速度值（百分比整数，如 100）"""
+        pct = max(50, min(200, pct))
+        self.edit_speed.setText(f"{pct}%")
+        self.speed_changed.emit(pct / 100.0)
+
+    def get_speed_value(self) -> int:
+        """获取当前速度值（百分比整数，如 100）"""
+        text = self.edit_speed.text().strip().replace("%", "")
+        try:
+            return max(50, min(200, int(text)))
+        except ValueError:
+            return 100
 
 
 # ──────────────────────────────────────────────
@@ -1325,7 +1347,9 @@ class EditorInterface(QWidget):
         # 应用默认速度
         default_speed = settings.get("audio.default_speed", 1.0)
         speed_pct = int(default_speed * 100)
-        self.transport.spin_speed.setValue(max(50, min(200, speed_pct)))
+        self.transport.edit_speed.blockSignals(True)
+        self.transport.edit_speed.setText(f"{max(50, min(200, speed_pct))}%")
+        self.transport.edit_speed.blockSignals(False)
         # 应用渲染偏移（与导出偏移联动）
         render_offset = settings.get("export.offset_ms", -100)
         self.preview.set_render_offset(render_offset)
@@ -2117,11 +2141,11 @@ class EditorInterface(QWidget):
                 dur = self._timing_service.get_duration_ms()
                 self._on_seek(min(dur, cur + self._fast_forward_ms))
         elif action == "speed_down":
-            v = self.transport.spin_speed.value()
-            self.transport.spin_speed.setValue(max(50, v - 10))
+            v = self.transport.get_speed_value()
+            self.transport.set_speed_value(max(50, v - 10))
         elif action == "speed_up":
-            v = self.transport.spin_speed.value()
-            self.transport.spin_speed.setValue(min(200, v + 10))
+            v = self.transport.get_speed_value()
+            self.transport.set_speed_value(min(200, v + 10))
         elif action == "volume_up":
             v = self.transport.slider_volume.value()
             self.transport.slider_volume.setValue(min(100, v + 5))

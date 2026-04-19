@@ -433,11 +433,16 @@ class TimingService:
             else:
                 self._start_line_end_recording()
         else:
-            # 普通字符 / 句尾字符的注音节奏点 - 在按键抬起时完成
-            pass
+            # 普通字符 / 句尾字符的注音节奏点 - 按下即记录时间戳
+            current_time_ms = self._audio_engine.get_position_ms()
+            timestamp_ms = max(0, current_time_ms + self._timing_offset_ms)
+            self._add_timetag_at_current_checkpoint(timestamp_ms)
+            self.move_to_next_checkpoint()
 
     def on_timing_key_released(self, key: str) -> None:
         """打轴按键抬起处理
+
+        只处理句尾长按的结束。普通 checkpoint 已在按下时完成记录。
 
         Args:
             key: 按键名称（"SPACE", "F1", "F2", ...）
@@ -445,21 +450,13 @@ class TimingService:
         if not self._project:
             return
 
-        # 获取当前音频时间
-        current_time_ms = self._audio_engine.get_position_ms()
-
-        # 应用偏移量
-        timestamp_ms = max(0, current_time_ms + self._timing_offset_ms)
-
         if self._line_end_recording:
-            # 句尾长按结束
+            # 句尾长按结束 - 记录抬起时间
+            current_time_ms = self._audio_engine.get_position_ms()
+            timestamp_ms = max(0, current_time_ms + self._timing_offset_ms)
             self._finish_line_end_recording(timestamp_ms)
-        else:
-            # 普通打轴
-            self._add_timetag_at_current_checkpoint(timestamp_ms)
-
-        # 自动移动到下一个 checkpoint
-        self.move_to_next_checkpoint()
+            self.move_to_next_checkpoint()
+        # else: 普通 checkpoint 已在 on_timing_key_pressed 中处理，无需操作
 
     def _start_line_end_recording(self) -> None:
         """开始句尾长按录制"""
