@@ -410,62 +410,72 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                     )
                 char_offset += word.char_count
 
-        entries: List[str] = []
-        for (kanji, reading), occurrences in ruby_groups.items():
-            if len(occurrences) == 1:
-                # 单次出现：直接输出，不附加位置
-                entries.append(f"{kanji},{occurrences[0]['reading_with_ts']}")
+        # --- 第二步：生成 @Ruby 条目 ---
+        # 按出现顺序收集所有条目，最终按首字符时间戳排序实现跨组交错
+        # 每个条目: (sort_key, entry_string)
+        #   sort_key = (first_char_ts, insertion_order) 用于稳定排序
+        all_entries: List[tuple[tuple[int, int], str]] = []
+        group_index = 0
+
+        for (kanji, _reading), occurrences in ruby_groups.items():
+            # 检查所有出现的 reading_with_ts 是否完全相同
+            distinct_readings = set(occ["reading_with_ts"] for occ in occurrences)
+
+            if len(distinct_readings) == 1:
+                # 所有出现读音相同 → 单条全局条目，不附加时间范围
+                r_ts = occurrences[0]["reading_with_ts"]
+                sort_ts = occurrences[0].get("first_char_ts") or 0
+                all_entries.append(((sort_ts, group_index), f"{kanji},{r_ts}"))
+                group_index += 1
             else:
-                # 多次出现：检查是否有内部相对时间戳
-                has_internal_ts = any(
-                    occ["reading_with_ts"] != reading for occ in occurrences
-                )
-                if not has_internal_ts:
-                    # 所有出现均无内部时间戳（单假名等）→ 全局条目
-                    entries.append(f"{kanji},{reading}")
-                else:
-                    # 有内部时间戳 → 每次出现独立条目
-                    n = len(occurrences)
-                    for i, occ in enumerate(occurrences):
-                        r_ts = occ["reading_with_ts"]
-                        this_ts = occ.get("first_char_ts")
-                        next_ts = (
-                            occurrences[i + 1].get("first_char_ts")
-                            if i + 1 < n
-                            else None
-                        )
+                # 不同出现有不同读音 → 需要时间范围
+                # 合并连续相同 reading_with_ts 的出现为子组
+                sub_groups: List[List[dict]] = []
+                for occ in occurrences:
+                    if (
+                        sub_groups
+                        and sub_groups[-1][0]["reading_with_ts"]
+                        == occ["reading_with_ts"]
+                    ):
+                        sub_groups[-1].append(occ)
+                    else:
+                        sub_groups.append([occ])
 
-                        if i == 0:
-                            # 首次出现：pos1 留空
-                            if next_ts is not None:
-                                entry = (
-                                    f"{kanji},{r_ts},,{_format_nicokara_ts(next_ts)}"
-                                )
-                            else:
-                                entry = f"{kanji},{r_ts}"
-                        elif i == n - 1:
-                            # 最后一次出现：仅 pos1
-                            if this_ts is not None:
-                                entry = f"{kanji},{r_ts},{_format_nicokara_ts(this_ts)}"
-                            else:
-                                entry = f"{kanji},{r_ts}"
+                n = len(sub_groups)
+                for i, sg in enumerate(sub_groups):
+                    r_ts = sg[0]["reading_with_ts"]
+                    this_ts = sg[0].get("first_char_ts")
+                    sort_ts = this_ts or 0
+
+                    if n == 1:
+                        # 合并后只剩一个子组 → 全局条目
+                        entry = f"{kanji},{r_ts}"
+                    elif i == 0:
+                        # 首个子组：省略开始时间，结束=下一子组首次出现时间
+                        next_ts = sub_groups[i + 1][0].get("first_char_ts")
+                        if next_ts is not None:
+                            entry = f"{kanji},{r_ts},,{_format_nicokara_ts(next_ts)}"
                         else:
-                            # 中间出现：两个位置
-                            p1 = (
-                                _format_nicokara_ts(this_ts)
-                                if this_ts is not None
-                                else ""
-                            )
-                            p2 = (
-                                _format_nicokara_ts(next_ts)
-                                if next_ts is not None
-                                else ""
-                            )
-                            entry = f"{kanji},{r_ts},{p1},{p2}"
+                            entry = f"{kanji},{r_ts}"
+                    elif i == n - 1:
+                        # 最后子组：开始=本子组首次出现时间，省略结束时间
+                        if this_ts is not None:
+                            entry = f"{kanji},{r_ts},{_format_nicokara_ts(this_ts)}"
+                        else:
+                            entry = f"{kanji},{r_ts}"
+                    else:
+                        # 中间子组：开始=本子组首次出现，结束=下一子组首次出现
+                        next_ts = sub_groups[i + 1][0].get("first_char_ts")
+                        p1 = _format_nicokara_ts(this_ts) if this_ts is not None else ""
+                        p2 = _format_nicokara_ts(next_ts) if next_ts is not None else ""
+                        entry = f"{kanji},{r_ts},{p1},{p2}"
 
-                        entries.append(entry)
+                    all_entries.append(((sort_ts, group_index), entry))
+                    group_index += 1
 
-        return entries
+        # 按首字符时间戳排序，同时间戳按出现顺序（insertion_order）
+        all_entries.sort(key=lambda x: x[0])
+        return [entry for _, entry in all_entries]
 
     def _build_reading_with_timestamps(
         self,
