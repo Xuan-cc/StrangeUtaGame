@@ -513,8 +513,7 @@ class SingerManagerInterface(QWidget):
                     "backend_number": s.backend_number,
                 }
             )
-        app_settings.set("singer_presets", presets)
-        app_settings.save()
+        app_settings.save_singer_presets(presets)
 
         InfoBar.success(
             title="保存成功",
@@ -543,7 +542,7 @@ class SingerManagerInterface(QWidget):
         from strange_uta_game.frontend.settings.settings_interface import AppSettings
 
         app_settings = AppSettings()
-        presets = app_settings.get("singer_presets") or []
+        presets = app_settings.load_singer_presets()
 
         if not presets:
             InfoBar.warning(

@@ -247,14 +247,14 @@ class EditorToolBar(QFrame):
         lbl_offset = QLabel("偏移(ms):")
         lbl_offset.setStyleSheet("font-size: 11px;")
         layout.addWidget(lbl_offset)
-        self.spin_offset = SpinBox(self)
-        self.spin_offset.setRange(-2000, 2000)
-        self.spin_offset.setSingleStep(10)
-        self.spin_offset.setValue(-100)
-        self.spin_offset.setFixedWidth(100)
-        self.spin_offset.setFixedHeight(32)
-        self.spin_offset.valueChanged.connect(self.offset_changed.emit)
-        layout.addWidget(self.spin_offset)
+        self.edit_offset = QLineEdit(self)
+        self.edit_offset.setText("-100")
+        self.edit_offset.setFixedWidth(80)
+        self.edit_offset.setFixedHeight(32)
+        self.edit_offset.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.edit_offset.setStyleSheet("font-size: 12px;")
+        self.edit_offset.editingFinished.connect(self._on_offset_editing_finished)
+        layout.addWidget(self.edit_offset)
 
         layout.addStretch()
 
@@ -262,6 +262,17 @@ class EditorToolBar(QFrame):
         self.lbl_audio = QLabel("未加载音频")
         self.lbl_audio.setStyleSheet("font-size: 11px; color: gray;")
         layout.addWidget(self.lbl_audio)
+
+    def _on_offset_editing_finished(self):
+        """偏移输入框编辑完成 — 解析并发射信号"""
+        text = self.edit_offset.text().strip()
+        try:
+            val = int(text)
+            val = max(-2000, min(2000, val))
+        except ValueError:
+            val = 0
+        self.edit_offset.setText(str(val))
+        self.offset_changed.emit(val)
 
 
 # ──────────────────────────────────────────────
@@ -1318,9 +1329,9 @@ class EditorInterface(QWidget):
         render_offset = settings.get("export.offset_ms", -100)
         self.preview.set_render_offset(render_offset)
         # 同步工具栏偏移控件
-        self.toolbar.spin_offset.blockSignals(True)
-        self.toolbar.spin_offset.setValue(render_offset)
-        self.toolbar.spin_offset.blockSignals(False)
+        self.toolbar.edit_offset.blockSignals(True)
+        self.toolbar.edit_offset.setText(str(render_offset))
+        self.toolbar.edit_offset.blockSignals(False)
         # 将偏移量写入所有字符的渲染/导出时间戳
         if self._project:
             for sentence in self._project.sentences:
@@ -1889,8 +1900,7 @@ class EditorInterface(QWidget):
             return
 
         ch = sentence.characters[char_idx]
-        min_count = 1 if ch.is_sentence_end else 0
-        ch.check_count = max(min_count, ch.check_count + delta)
+        ch.check_count = max(0, ch.check_count + delta)
         if len(ch.timestamps) > ch.check_count:
             ch.timestamps = ch.timestamps[: ch.check_count]
             ch.push_to_ruby()
@@ -1920,19 +1930,7 @@ class EditorInterface(QWidget):
         ch = sentence.characters[char_idx]
         new_is_sentence_end = not ch.is_sentence_end
 
-        if new_is_sentence_end:
-            if ch.check_count <= 0:
-                InfoBar.warning(
-                    title="无法设置句尾",
-                    content="句尾字符至少需要 1 个普通节奏点",
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                    parent=self,
-                )
-                return
-        else:
+        if not new_is_sentence_end:
             ch.clear_sentence_end_ts()
 
         ch.is_sentence_end = new_is_sentence_end

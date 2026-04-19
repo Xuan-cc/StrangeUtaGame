@@ -432,11 +432,7 @@ class HomeInterface(QWidget):
                 app_settings = AppSettings()
                 auto_check_flags = app_settings.get_all().get("auto_check", {})
                 if auto_check_flags.get("auto_on_load", True):
-                    user_dict = (
-                        app_settings.get_all()
-                        .get("ruby_dictionary", {})
-                        .get("entries", [])
-                    )
+                    user_dict = app_settings.load_dictionary()
                     auto_check = AutoCheckService(
                         auto_check_flags=auto_check_flags, user_dictionary=user_dict
                     )

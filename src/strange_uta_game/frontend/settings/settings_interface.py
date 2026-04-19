@@ -99,7 +99,6 @@ class AppSettings:
         },
         "ruby_dictionary": {
             "enabled": True,
-            "entries": [],
         },
         "nicokara_tags": {
             "title": "",
@@ -113,7 +112,6 @@ class AppSettings:
             "enabled": True,
             "interval_minutes": 5,
         },
-        "singer_presets": [],
         "shortcuts": {
             "play_pause": "A",
             "stop": "S",
@@ -171,7 +169,11 @@ class AppSettings:
                         pass
         else:
             self._config_path = Path(config_path)
+
+        self._dict_path = self._config_path.parent / "dictionary.json"
+        self._singers_path = self._config_path.parent / "singers.json"
         self._settings = self._load_settings()
+        self._migrate_to_separate_files()
 
     def _load_settings(self) -> Dict[str, Any]:
         if self._config_path.exists():
@@ -229,6 +231,64 @@ class AppSettings:
 
     def get_all(self) -> Dict[str, Any]:
         return self._settings.copy()
+
+    # ── 独立文件：词典 & 演唱者预设 ──
+
+    def _migrate_to_separate_files(self) -> None:
+        """将旧 config.json 中的 ruby_dictionary.entries 和 singer_presets 迁移到独立文件。"""
+        dirty = False
+        # 迁移词典条目
+        dict_data = self._settings.get("ruby_dictionary", {})
+        if isinstance(dict_data, dict) and "entries" in dict_data:
+            entries = dict_data.pop("entries", [])
+            if entries and not self._dict_path.exists():
+                self._save_json(self._dict_path, entries)
+            dirty = True
+        # 迁移演唱者预设
+        if "singer_presets" in self._settings:
+            presets = self._settings.pop("singer_presets", [])
+            if presets and not self._singers_path.exists():
+                self._save_json(self._singers_path, presets)
+            dirty = True
+        if dirty:
+            self.save()
+
+    @staticmethod
+    def _save_json(path: Path, data: Any) -> None:
+        """写入 JSON 文件。"""
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"保存文件失败 {path}: {e}")
+
+    @staticmethod
+    def _load_json(path: Path, default: Any = None) -> Any:
+        """读取 JSON 文件。"""
+        if not path.exists():
+            return default if default is not None else []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"加载文件失败 {path}: {e}")
+            return default if default is not None else []
+
+    def load_dictionary(self) -> list:
+        """从 dictionary.json 加载用户词典条目。"""
+        return self._load_json(self._dict_path, [])
+
+    def save_dictionary(self, entries: list) -> None:
+        """保存用户词典条目到 dictionary.json。"""
+        self._save_json(self._dict_path, entries)
+
+    def load_singer_presets(self) -> list:
+        """从 singers.json 加载演唱者预设。"""
+        return self._load_json(self._singers_path, [])
+
+    def save_singer_presets(self, presets: list) -> None:
+        """保存演唱者预设到 singers.json。"""
+        self._save_json(self._singers_path, presets)
 
 
 # ──────────────────────────────────────────────
@@ -590,12 +650,14 @@ class DictionaryEditDialog(QDialog):
     """用户读音词典编辑对话框
 
     三列表格：启用 | 词 | 读音
+    按从上到下排列，顶部 = 最高优先级。新条目默认添加到顶部。
+    支持导入 RL 字典文件和上下移动调整优先级。
     """
 
     def __init__(self, entries: list, parent=None):
         super().__init__(parent)
         self.setWindowTitle("读音词典")
-        self.setMinimumSize(520, 420)
+        self.setMinimumSize(560, 480)
         self._entries = [dict(e) for e in entries]  # 深拷贝
 
         layout = QVBoxLayout(self)
@@ -607,7 +669,8 @@ class DictionaryEditDialog(QDialog):
         layout.addWidget(title)
 
         desc = QLabel(
-            "设置固定读音的词汇。词典中的词将优先于自动注音（最长匹配优先）。"
+            "设置固定读音的词汇。词典中的词将优先于自动注音。\n"
+            "优先级从上到下递减，新添加的词条默认在顶部（最高优先级）。"
         )
         desc.setFont(QFont("Microsoft YaHei", 10))
         desc.setWordWrap(True)
@@ -625,7 +688,7 @@ class DictionaryEditDialog(QDialog):
 
         # 填充数据
         for entry in self._entries:
-            self._add_row(
+            self._append_row(
                 entry.get("enabled", True),
                 entry.get("word", ""),
                 entry.get("reading", ""),
@@ -637,8 +700,17 @@ class DictionaryEditDialog(QDialog):
         btn_add.clicked.connect(self._on_add)
         btn_del = PushButton("删除选中", self)
         btn_del.clicked.connect(self._on_delete)
+        btn_up = PushButton("上移", self)
+        btn_up.clicked.connect(self._on_move_up)
+        btn_down = PushButton("下移", self)
+        btn_down.clicked.connect(self._on_move_down)
+        btn_import = PushButton("导入RL字典", self)
+        btn_import.clicked.connect(self._on_import_rl)
         btn_row.addWidget(btn_add)
         btn_row.addWidget(btn_del)
+        btn_row.addWidget(btn_up)
+        btn_row.addWidget(btn_down)
+        btn_row.addWidget(btn_import)
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
@@ -653,7 +725,8 @@ class DictionaryEditDialog(QDialog):
         ok_row.addWidget(btn_cancel)
         layout.addLayout(ok_row)
 
-    def _add_row(self, enabled: bool, word: str = "", reading: str = ""):
+    def _append_row(self, enabled: bool, word: str = "", reading: str = ""):
+        """在表格末尾追加一行。"""
         row = self._table.rowCount()
         self._table.insertRow(row)
 
@@ -663,9 +736,20 @@ class DictionaryEditDialog(QDialog):
         self._table.setItem(row, 1, QTableWidgetItem(word))
         self._table.setItem(row, 2, QTableWidgetItem(reading))
 
+    def _insert_row_at(self, row: int, enabled: bool, word: str, reading: str):
+        """在指定位置插入一行。"""
+        self._table.insertRow(row)
+        chk = QTableWidgetItem()
+        chk.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+        self._table.setItem(row, 0, chk)
+        self._table.setItem(row, 1, QTableWidgetItem(word))
+        self._table.setItem(row, 2, QTableWidgetItem(reading))
+
     def _on_add(self):
-        self._add_row(True, "", "")
-        self._table.scrollToBottom()
+        # 新条目插入到顶部（最高优先级）
+        self._insert_row_at(0, True, "", "")
+        self._table.scrollToTop()
+        self._table.selectRow(0)
 
     def _on_delete(self):
         rows = sorted(
@@ -673,6 +757,103 @@ class DictionaryEditDialog(QDialog):
         )
         for row in rows:
             self._table.removeRow(row)
+
+    def _on_move_up(self):
+        """将选中行上移一位（提高优先级）。"""
+        rows = sorted(set(idx.row() for idx in self._table.selectedIndexes()))
+        if not rows or rows[0] == 0:
+            return
+        for row in rows:
+            self._swap_rows(row, row - 1)
+        # 重新选中
+        self._table.clearSelection()
+        for row in rows:
+            self._table.selectRow(row - 1)
+
+    def _on_move_down(self):
+        """将选中行下移一位（降低优先级）。"""
+        rows = sorted(
+            set(idx.row() for idx in self._table.selectedIndexes()), reverse=True
+        )
+        if not rows or rows[0] == self._table.rowCount() - 1:
+            return
+        for row in rows:
+            self._swap_rows(row, row + 1)
+        # 重新选中
+        self._table.clearSelection()
+        for row in rows:
+            self._table.selectRow(row + 1)
+
+    def _swap_rows(self, row_a: int, row_b: int):
+        """交换两行数据。"""
+        for col in range(self._table.columnCount()):
+            item_a = self._table.takeItem(row_a, col)
+            item_b = self._table.takeItem(row_b, col)
+            if item_a and item_b:
+                self._table.setItem(row_a, col, item_b)
+                self._table.setItem(row_b, col, item_a)
+
+    def _on_import_rl(self):
+        """导入 RL 字典文件。"""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择RL字典文件", "", "文本文件 (*.txt);;所有文件 (*)"
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+        except Exception as e:
+            InfoBar.warning(
+                title="读取失败",
+                content=str(e),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        new_entries = _parse_rl_dictionary(text)
+        if not new_entries:
+            InfoBar.warning(
+                title="导入失败",
+                content="未找到有效的词典条目",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        # 获取现有词汇集合，避免重复
+        existing_words = set()
+        for row in range(self._table.rowCount()):
+            item = self._table.item(row, 1)
+            if item:
+                existing_words.add(item.text().strip())
+
+        added = 0
+        for entry in new_entries:
+            word = entry["word"]
+            if word not in existing_words:
+                # 新条目插入到顶部
+                self._insert_row_at(0, True, word, entry["reading"])
+                existing_words.add(word)
+                added += 1
+
+        InfoBar.success(
+            title="导入完成",
+            content=f"已导入 {added} 个新词条（共 {len(new_entries)} 个，跳过 {len(new_entries) - added} 个重复）",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self,
+        )
 
     def get_entries(self) -> list:
         entries = []
@@ -687,6 +868,48 @@ class DictionaryEditDialog(QDialog):
             enabled = chk.checkState() == Qt.CheckState.Checked if chk else True
             entries.append({"enabled": enabled, "word": word, "reading": reading})
         return entries
+
+
+def _parse_rl_dictionary(text: str) -> list:
+    """解析 RL 字典文件格式。
+
+    格式：每行 ``[原文]\\t[注音1],[注音2]...``
+    注音中 ``＋``（全角加号）代表连词标记，解析时剥离。
+    只有 ``＋`` 的部分表示该字符无独立读音（与前字符连词）。
+
+    Returns:
+        [{"enabled": True, "word": str, "reading": str}, ...]
+    """
+    entries: list = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or "\t" not in line:
+            continue
+        parts = line.split("\t", 1)
+        if len(parts) != 2:
+            continue
+        word = parts[0].strip()
+        raw_readings = parts[1].strip()
+        if not word or not raw_readings:
+            continue
+
+        # 按逗号分隔各字符读音
+        reading_parts = raw_readings.split(",")
+        cleaned: list = []
+        for part in reading_parts:
+            part = part.strip()
+            # 剥离全角加号 ＋
+            part = part.replace("\uff0b", "")
+            cleaned.append(part)
+
+        # 去除尾部多余的空读音
+        while cleaned and not cleaned[-1]:
+            cleaned.pop()
+
+        reading = ",".join(cleaned)
+        if reading:
+            entries.append({"enabled": True, "word": word, "reading": reading})
+    return entries
 
 
 # ──────────────────────────────────────────────
@@ -1641,12 +1864,11 @@ class SettingsInterface(ScrollArea):
         self.expandLayout.addWidget(self.dictionary_group)
 
     def _on_open_dictionary(self):
-        entries = self._settings.get("ruby_dictionary.entries", [])
+        entries = self._settings.load_dictionary()
         dialog = DictionaryEditDialog(entries, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_entries = dialog.get_entries()
-            self._settings.set("ruby_dictionary.entries", new_entries)
-            self._settings.save()
+            self._settings.save_dictionary(new_entries)
 
     # ── 界面设定 ──
 
@@ -1946,6 +2168,12 @@ class SettingsInterface(ScrollArea):
 
                 new_dir_path.mkdir(exist_ok=True)
                 shutil.copy2(str(old_path), str(new_path))
+                # 同时复制词典和演唱者文件
+                for fname in ("dictionary.json", "singers.json"):
+                    old_extra = old_path.parent / fname
+                    new_extra = new_dir_path / fname
+                    if old_extra.exists() and old_extra != new_extra:
+                        shutil.copy2(str(old_extra), str(new_extra))
             except Exception as e:
                 InfoBar.warning(
                     title="配置复制失败",
@@ -1958,6 +2186,8 @@ class SettingsInterface(ScrollArea):
                 )
 
         self._settings._config_path = new_path
+        self._settings._dict_path = new_dir_path / "dictionary.json"
+        self._settings._singers_path = new_dir_path / "singers.json"
         self._path_card.setContent(str(new_path))
         InfoBar.success(
             title="配置位置已更改",
@@ -2263,7 +2493,7 @@ class SettingsInterface(ScrollArea):
         reply = QMessageBox.question(
             self,
             "确认重置",
-            "确定要将所有设置重置为默认值吗？\n这将覆盖您当前的设置。",
+            "确定要将所有设置重置为默认值吗？\n这将覆盖您当前的设置（用户词典和演唱者预设不受影响）。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
 
@@ -2271,6 +2501,7 @@ class SettingsInterface(ScrollArea):
             try:
                 if self._settings._config_path.exists():
                     self._settings._config_path.unlink()
+                # 保留 dictionary.json 和 singers.json 不删除
                 self._settings = AppSettings()
                 self._load_current_settings()
 

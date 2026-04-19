@@ -1,7 +1,7 @@
 """全文本编辑界面。
 
 全文本视图编辑歌词注音（ルビ），支持批量操作。
-格式: 漢字{かんじ} — 花括号内为注音。
+格式: {大冒険|だい,ぼう,けん} — 花括号内为原文|逗号分隔注音。
 """
 
 from PyQt6.QtWidgets import (
@@ -104,9 +104,6 @@ def _rebuild_characters(
                 singer_id=old_sentence.singer_id,
             )
 
-        if ch.is_sentence_end and ch.check_count < 1:
-            ch.check_count = 1
-
         # 应用 ruby
         if j in ruby_map:
             ch.set_ruby(Ruby(text=ruby_map[j]))
@@ -140,7 +137,8 @@ def _parse_annotated_line(
 ) -> Tuple[str, List[str], Dict[int, str]]:
     """解析带注音标注的文本行。
 
-    格式: 漢字{かんじ} — 花括号标注前面连续汉字块的读音。
+    新格式: {大冒険|だい,ぼう,けん} — 花括号内：原文|逗号分隔各字符注音。
+    兼容旧格式: 漢字{かんじ} — 花括号标注前面连续汉字块的读音。
 
     Returns:
         (原文, 字符列表, ruby_map: char_idx → ruby_text)
@@ -159,30 +157,54 @@ def _parse_annotated_line(
                 i += 1
                 continue
 
-            ruby_text = line_text[i + 1 : close]
+            content = line_text[i + 1 : close]
 
-            if ruby_text and raw_chars:
-                # 向前查找连续汉字块
-                end_idx = len(raw_chars)
-                start_idx = end_idx
-                while start_idx > 0 and _is_kanji_char(raw_chars[start_idx - 1]):
-                    start_idx -= 1
+            if "|" in content:
+                # 新格式: {text|r1,r2,...}
+                text_part, readings_part = content.split("|", 1)
+                readings = readings_part.split(",")
 
-                # 若前面没有汉字，退一格（允许给任意字符标注）
-                if start_idx == end_idx and end_idx > 0:
-                    start_idx = end_idx - 1
+                start_idx = len(raw_chars)
+                for ch in text_part:
+                    raw_chars.append(ch)
 
-                if start_idx < end_idx:
-                    # 检查是否与已有注音重叠
-                    overlap = any(ci in ruby_map for ci in range(start_idx, end_idx))
+                for j, reading in enumerate(readings):
+                    reading = reading.strip()
+                    if reading and (start_idx + j) < len(raw_chars):
+                        ruby_map[start_idx + j] = reading
+            else:
+                # 旧格式: 漢字{かんじ}
+                ruby_text = content
 
-                    if not overlap:
-                        block_len = end_idx - start_idx
-                        split_parts = split_ruby_for_checkpoints(ruby_text, block_len)
-                        for ci in range(start_idx, end_idx):
-                            part_idx = ci - start_idx
-                            if part_idx < len(split_parts) and split_parts[part_idx]:
-                                ruby_map[ci] = split_parts[part_idx]
+                if ruby_text and raw_chars:
+                    # 向前查找连续汉字块
+                    end_idx = len(raw_chars)
+                    start_idx = end_idx
+                    while start_idx > 0 and _is_kanji_char(raw_chars[start_idx - 1]):
+                        start_idx -= 1
+
+                    # 若前面没有汉字，退一格（允许给任意字符标注）
+                    if start_idx == end_idx and end_idx > 0:
+                        start_idx = end_idx - 1
+
+                    if start_idx < end_idx:
+                        # 检查是否与已有注音重叠
+                        overlap = any(
+                            ci in ruby_map for ci in range(start_idx, end_idx)
+                        )
+
+                        if not overlap:
+                            block_len = end_idx - start_idx
+                            split_parts = split_ruby_for_checkpoints(
+                                ruby_text, block_len
+                            )
+                            for ci in range(start_idx, end_idx):
+                                part_idx = ci - start_idx
+                                if (
+                                    part_idx < len(split_parts)
+                                    and split_parts[part_idx]
+                                ):
+                                    ruby_map[ci] = split_parts[part_idx]
 
             i = close + 1
         else:
@@ -384,7 +406,8 @@ class RubyInterface(QWidget):
     def _lines_to_text(self) -> str:
         """将项目歌词转为带注音标注的文本。
 
-        格式: 漢字{かんじ} — 每个字符独立输出注音，避免合并组导致解析丢失。
+        格式: {大冒険|だい,ぼう,けん} — 连续有注音的字符合并为一组，
+        花括号内原文|逗号分隔各字符注音。无注音的字符照常输出。
         """
         if not self._project:
             return ""
@@ -392,11 +415,22 @@ class RubyInterface(QWidget):
         result = []
         for sentence in self._project.sentences:
             annotated = ""
-            for ch in sentence.characters:
-                if ch.ruby:
-                    annotated += f"{ch.char}{{{ch.ruby.text}}}"
+            chars = sentence.characters
+            i = 0
+            while i < len(chars):
+                if chars[i].ruby:
+                    # 收集连续有 ruby 的字符为一组
+                    group_start = i
+                    while i < len(chars) and chars[i].ruby:
+                        i += 1
+                    text_part = "".join(ch.char for ch in chars[group_start:i])
+                    readings = ",".join(
+                        ch.ruby.text if ch.ruby else "" for ch in chars[group_start:i]
+                    )
+                    annotated += f"{{{text_part}|{readings}}}"
                 else:
-                    annotated += ch.char
+                    annotated += chars[i].char
+                    i += 1
             result.append(annotated)
         return "\n".join(result)
 
@@ -418,7 +452,7 @@ class RubyInterface(QWidget):
         app_settings = AppSettings()
         all_settings = app_settings.get_all()
         auto_check_flags = all_settings.get("auto_check", {})
-        user_dict = all_settings.get("ruby_dictionary", {}).get("entries", [])
+        user_dict = app_settings.load_dictionary()
         return AutoCheckService(
             auto_check_flags=auto_check_flags, user_dictionary=user_dict
         )
@@ -492,9 +526,16 @@ class RubyInterface(QWidget):
         )
 
     def _on_update_checkpoints(self):
-        """根据当前注音更新节奏点（不重新分析注音）"""
+        """根据当前注音更新节奏点（不重新分析注音）
+
+        先保存文本编辑框内的内容，然后再根据内容和设置更新所有节奏点。
+        """
         if not self._project:
             return
+
+        # 先将文本编辑器内容应用回项目数据
+        if self.is_dirty():
+            self._on_apply_changes()
 
         try:
             auto_check = self._create_auto_check_service()

@@ -119,6 +119,58 @@ class AutoCheckService:
         merged.sort(key=lambda r: r.start_idx)
         return merged
 
+    def _try_split_to_chars(self, word: str, reading: str) -> Optional[List[str]]:
+        """尝试将多字词的读音拆分到各字符。
+
+        对每个字符，按优先级查找单字读音（用户字典从上到下 > 库函数常见度），
+        然后回溯搜索组合使得各字符读音拼接等于词的总读音。
+
+        Args:
+            word: 多字词
+            reading: 词的总读音
+
+        Returns:
+            各字符读音列表（如果可拆分），否则 None
+        """
+        if len(word) <= 1:
+            return None
+
+        clean_reading = reading.replace(",", "")
+        if not clean_reading:
+            return None
+
+        # 收集每个字符的候选读音
+        per_char_options: List[List[str]] = []
+        for ch in word:
+            options: List[str] = []
+            # 1. 用户字典单字条目（按优先级顺序，dict 中同长度条目保持原始顺序）
+            for dict_word, dict_reading in self._dict:
+                if dict_word == ch and dict_reading:
+                    clean = dict_reading.replace(",", "")
+                    if clean and clean not in options:
+                        options.append(clean)
+            # 2. 库分析器
+            results = self._analyzer.analyze(ch)
+            for r in results:
+                if r.reading and r.reading != ch and r.reading not in options:
+                    options.append(r.reading)
+            if not options:
+                return None
+            per_char_options.append(options)
+
+        # 回溯搜索：尝试组合使得拼接等于 clean_reading
+        def backtrack(idx: int, remaining: str) -> Optional[List[str]]:
+            if idx == len(word):
+                return [] if not remaining else None
+            for opt in per_char_options[idx]:
+                if remaining.startswith(opt):
+                    sub = backtrack(idx + 1, remaining[len(opt) :])
+                    if sub is not None:
+                        return [opt] + sub
+            return None
+
+        return backtrack(0, clean_reading)
+
     def analyze_sentence(
         self, sentence: Sentence, split_config: Optional[SplitConfig] = None
     ) -> List[AutoCheckResult]:
@@ -170,8 +222,16 @@ class AutoCheckService:
                     parts.append("")
                 split_parts = parts[:block_len]
             else:
-                # 按 mora 分割 reading，为每个字符分配 ruby（包括自注音字符）
-                split_parts = split_ruby_for_checkpoints(result.reading, block_len)
+                if block_len > 1:
+                    # 尝试按单字读音拆分，不可拆分则连词
+                    char_split = self._try_split_to_chars(result.text, result.reading)
+                    if char_split is not None:
+                        split_parts = char_split
+                    else:
+                        # 连词：第一字承载全部读音，其余为空
+                        split_parts = [result.reading] + [""] * (block_len - 1)
+                else:
+                    split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
                 if idx < len(chars):
                     pos = idx - result.start_idx
@@ -197,7 +257,14 @@ class AutoCheckService:
                     parts.append("")
                 split_parts = parts[:block_len]
             else:
-                split_parts = split_ruby_for_checkpoints(result.reading, block_len)
+                if block_len > 1:
+                    char_split = self._try_split_to_chars(result.text, result.reading)
+                    if char_split is not None:
+                        split_parts = char_split
+                    else:
+                        split_parts = [result.reading] + [""] * (block_len - 1)
+                else:
+                    split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
                 if idx < len(check_counts):
                     pos = idx - result.start_idx
@@ -349,7 +416,7 @@ class AutoCheckService:
             is_sentence_end = False
             if is_last and add_line_end:
                 is_sentence_end = True
-            if is_before_space and result.check_count > 0:
+            if is_before_space:
                 is_sentence_end = True
             check_count = result.check_count
 
@@ -555,7 +622,7 @@ class AutoCheckService:
             is_sentence_end = False
             if is_last and add_line_end:
                 is_sentence_end = True
-            if is_before_space and check_counts[i] > 0:
+            if is_before_space:
                 is_sentence_end = True
             char.check_count = check_counts[i]
             char.is_line_end = is_last and add_line_end

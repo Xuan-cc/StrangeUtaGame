@@ -419,12 +419,19 @@ class TimingService:
                 return
 
         # 检查是否为句尾字符的最后一个普通节奏点（开始长按录制）
-        if (
-            char.is_sentence_end
-            and self._current_position.checkpoint_idx == char.check_count - 1
+        if char.is_sentence_end and (
+            self._current_position.checkpoint_idx == char.check_count - 1
+            or (
+                char.check_count == 0
+                and self._current_position.checkpoint_idx == char.check_count
+            )
         ):
             # 句尾长按处理 - 记录开始时间
-            self._start_line_end_recording()
+            # 当 check_count=0 时，使用前一个字符的最后时间戳作为按下时间
+            if char.check_count == 0:
+                self._start_line_end_recording_from_prev(char)
+            else:
+                self._start_line_end_recording()
         else:
             # 普通字符 / 句尾字符的注音节奏点 - 在按键抬起时完成
             pass
@@ -466,6 +473,39 @@ class TimingService:
                 self._line_end_start_time_ms,
             )
 
+    def _start_line_end_recording_from_prev(self, char: Character) -> None:
+        """当句尾字符 check_count=0 时，使用前一个字符的最后时间戳作为按下时间。
+
+        句尾字符没有普通节奏点，说明和前面字符形成连读词组，
+        以前面字符的最后一个 checkpoint 时间戳作为句尾按下-抬起的开始。
+        """
+        self._line_end_recording = True
+
+        # 查找前一个字符的最后时间戳
+        prev_ts = None
+        line_idx = self._current_position.line_idx
+        char_idx = self._current_position.char_idx
+        if self._project and line_idx < len(self._project.sentences):
+            sentence = self._project.sentences[line_idx]
+            for ci in range(char_idx - 1, -1, -1):
+                prev_ch = sentence.characters[ci]
+                if prev_ch.timestamps:
+                    prev_ts = prev_ch.timestamps[-1]
+                    break
+
+        if prev_ts is not None:
+            self._line_end_start_time_ms = prev_ts
+        else:
+            # 无前一字符时间戳，回退到当前音频时间
+            self._line_end_start_time_ms = self._audio_engine.get_position_ms()
+
+        if self._callbacks:
+            self._callbacks.on_line_end_recording_started(
+                line_idx,
+                char_idx,
+                self._line_end_start_time_ms,
+            )
+
     def _finish_line_end_recording(self, end_time_ms: int) -> None:
         """完成句尾长按录制
 
@@ -474,9 +514,9 @@ class TimingService:
         - 下一个 checkpoint_idx (= check_count): 抬起时间（end_time_ms）
         短按时两者均填 start_time_ms。
 
-        注意：对于有注音的汉字句尾（如「花」=はな，check_count=3），
-        前面的注音节奏点已在普通打轴流程中处理完毕，
-        此方法仅处理最后一个普通节奏点和句尾释放点。
+        当 check_count=0 时（句尾无普通节奏点，与前字符连读），
+        只有句尾释放点（checkpoint_idx=0 = check_count），
+        直接记录 end_time_ms 作为句尾时间戳。
 
         调用后 _current_position 停在句尾释放点，
         外层 on_timing_key_released 的 move_to_next_checkpoint() 会
@@ -502,7 +542,10 @@ class TimingService:
 
         char_idx = self._current_position.char_idx
 
-        if end_time_ms - start_time_ms < self.SHORT_PRESS_THRESHOLD_MS:
+        if char.check_count == 0:
+            # check_count=0: 只有句尾释放点，直接记录 end_time_ms
+            self._add_timetag_at_current_checkpoint(end_time_ms)
+        elif end_time_ms - start_time_ms < self.SHORT_PRESS_THRESHOLD_MS:
             # 短按 - 两个 checkpoint 都记录 start_time
             self._add_timetag_at_current_checkpoint(start_time_ms)
             self.move_to_next_checkpoint()

@@ -248,12 +248,12 @@ class BulkChangeDialog(QDialog):
                 )
 
                 app_settings = AppSettings()
-                entries = app_settings.get("ruby_dictionary.entries") or []
+                entries = app_settings.load_dictionary()
                 # 避免重复
                 entries = [e for e in entries if e.get("word") != word]
-                entries.append({"enabled": True, "word": word, "reading": reading})
-                app_settings.set("ruby_dictionary.entries", entries)
-                app_settings.save()
+                # 新条目插入到顶部（最高优先级）
+                entries.insert(0, {"enabled": True, "word": word, "reading": reading})
+                app_settings.save_dictionary(entries)
             except Exception:
                 pass
 

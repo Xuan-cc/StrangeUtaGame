@@ -50,9 +50,11 @@ class TestCharacter:
         with pytest.raises(ValidationError, match="节奏点数量不能为负数"):
             Character(char="a", check_count=-1)
 
-    def test_validation_sentence_end_requires_normal_checkpoint(self):
-        with pytest.raises(ValidationError, match="句尾字符必须至少有 1 个普通节奏点"):
-            Character(char="a", check_count=0, is_sentence_end=True)
+    def test_sentence_end_allows_zero_checkpoints(self):
+        """句尾字符允许 check_count=0（B7-7a：句尾无需普通节奏点）"""
+        ch = Character(char="a", check_count=0, is_sentence_end=True)
+        assert ch.is_sentence_end is True
+        assert ch.check_count == 0
 
     def test_push_to_ruby(self):
         ruby = Ruby(text="あか")

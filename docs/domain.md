@@ -23,7 +23,7 @@ class Ruby:
 class Character:
     char: str
     ruby: Optional[Ruby] = None
-    check_count: int = 1      # 普通节奏点数量（不含句尾释放点）
+    check_count: int = 1      # 普通节奏点数量（不含句尾释放点），句尾字符允许为 0
     timestamps: List[int] = field(default_factory=list)  # 普通节奏点时间戳
     sentence_end_ts: Optional[int] = None  # 句尾释放时间戳（独立存储）
     linked_to_next: bool = False

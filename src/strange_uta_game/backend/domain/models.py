@@ -142,8 +142,6 @@ class Character:
             raise ValidationError("字符不能为空")
         if self.check_count < 0:
             raise ValidationError(f"节奏点数量不能为负数: {self.check_count}")
-        if self.is_sentence_end and self.check_count <= 0:
-            raise ValidationError("句尾字符必须至少有 1 个普通节奏点")
         # 初始化渲染/导出偏移时间戳（确保从文件加载的 Character 也有正确的派生数据）
         self._update_offset_timestamps()
 
