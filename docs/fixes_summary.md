@@ -974,3 +974,59 @@ after seek 1500ms → 1708ms（继续推进正常）
 - .sug v0.1.0 老项目首次打开自动升级至 v0.2.0，无需用户操作
 
 ---
+
+## 第十二批修复（2026-04-21，v0.2.0 UI 层适配补丁）
+
+### 背景
+用户质疑 v0.2.0 破坏性升级后三个前端 UI 文件（`editor_interface.py` /
+`edit_interface.py` / `ruby_editor.py`）是否适配方案 B。审计结论：三个 UI
+层对 `,` 边界解析、Ruby.text 透传的工作方式，意外地**透明兼容**方案 B
+（UI 只处理 `,` 切字符，`#` 作为 Ruby.text 内原子内容流过），但发现一处
+真实 bug 和两处文案需更新。
+
+### 1. 修复 `split_ruby_for_checkpoints` fallback 路径 bug（`inline_format.py`）
+- **问题**：当 ruby_text 含 `#` 但组数与 cp 数不匹配时，回退到 mora/字符
+  均分会把 `#` 当成普通字符切出，产出 `['da', '#', 'i']` 之类。调用方
+  `Ruby(text='#')` 直接抛 `ValidationError: Ruby 分组存在空组`。
+- **修复**：fallback 前先 `replace("#", "")`，`#` 仅作分组标记，不作为
+  内容字符参与均分。
+- **影响面**：`ruby_editor._parse_annotated_line` 旧格式路径、
+  `editor_interface` 连词组编辑 fallback。
+- **回归测试**：`split_ruby_for_checkpoints('da#i', 3) == ['d','a','i']`
+  （以前是 `['da','#','i']`），所有 part 可安全传入 `Ruby(text=...)`。
+
+### 2. 更新 `ruby_editor` 界面文案（新格式提示）
+- **问题**：全文本编辑界面说明只提旧格式 `赤{あか}い花{はな}`，用户无从
+  得知新格式 `{text|r1,r2}` 和 `#` 的含义。
+- **修复**：说明文字与 placeholder 补充新格式示例
+  `{大冒険|だい,ぼう,けん}` 和多 checkpoint 单字 `{私|わ#た#し}`。
+
+### 3. 三个 UI 文件兼容性审计结论
+
+- `editor_interface.py` `ModifyCharacterDialog`（L1184-1268）：
+  - 显示：`",".join(c.ruby.text)` — Ruby.text 含 `#` 时原样透传 ✅
+  - 解析：`ruby_text.split(",")` per-char，每段经 `Ruby(text=...)` 校验 ✅
+- `edit_interface.py` `LineDetailDialog`（L219-458）：
+  - 显示：连词组 `,` 连接，单字符原样 ✅
+  - 解析：`"," in raw` → split；否则整体作 `Ruby.text` ✅
+- `ruby_editor.py` 全文本（L135-215, L466-497）：
+  - 序列化：`{text|r1,r2}` 格式 ✅
+  - 解析新格式：`readings_part.split(",")` ✅
+  - 解析旧格式：依赖已修复的 `split_ruby_for_checkpoints` ✅
+
+### 遗留：v0.2.0 commit 自带测试回归（非本批引入）
+以下 5 个 `test_inline_format.py` 测试在 HEAD=75d5d4e 就已失败，反映
+`to_inline_text` / `from_inline_text` 对"单字符多 cp + mora 级 ruby"
+的对齐尚未完全适配方案 B：
+
+- `TestToInlineText::test_ruby_single_char` — 输出 `{柔|[2|t1]やわ[t2]}`
+  但期望 `{柔|[2|t1]や[t2]わ}`（cp timestamp 需夹在 mora 边界）
+- `TestFromInlineText::test_ruby_group` / `test_multi_char_ruby` /
+  `test_mixed_line` — 解析后 `sentence.rubies[i].text` 含 mojibake，
+  连词组 ruby 合并逻辑需复核
+- `TestRoundtrip::test_ruby_roundtrip` — `Ruby(text='やわ#')` 末尾空组
+
+这些问题与本次用户询问的"三 UI 文件适配"相对独立，作为 v0.2.0 后续
+补丁（第十三批）处理。
+
+---

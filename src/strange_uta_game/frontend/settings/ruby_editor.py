@@ -296,8 +296,9 @@ class RubyInterface(QWidget):
 
         # 说明
         desc = QLabel(
-            "全文本编辑：汉字注音用 {假名} 标注，如 赤{あか}い花{はな}\n"
-            "支持增删行（换行/排版），切换标签页时自动保存修改"
+            "全文本编辑：新格式 {原文|读音1,读音2,...} 逗号分隔每字读音，\n"
+            "例：{大冒険|だい,ぼう,けん}；多 checkpoint 的单字读音用 # 分组，如 {私|わ#た#し}\n"
+            "仍兼容旧格式 赤{あか}い花{はな}。切换标签页时自动保存修改"
         )
         desc.setStyleSheet("color: gray;")
         layout.addWidget(desc)
@@ -334,7 +335,7 @@ class RubyInterface(QWidget):
         self.text_edit.setFont(QFont("Microsoft YaHei", 12))
         self.text_edit.setPlaceholderText(
             "加载项目后，歌词将以注音标注格式显示在此处...\n"
-            "示例: 赤{あか}い花{はな}が咲{さ}いた"
+            "示例: {大冒険|だい,ぼう,けん} 或 赤{あか}い花{はな}"
         )
         self.text_edit.setMinimumHeight(300)
         layout.addWidget(self.text_edit, stretch=1)

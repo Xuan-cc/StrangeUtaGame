@@ -111,24 +111,28 @@ def split_into_moras(text: str) -> List[str]:
 def split_ruby_for_checkpoints(ruby_text: str, total_cps: int) -> List[str]:
     """将 ruby 文本按 checkpoint 数量拆分。
 
-    优先按 mora 对齐；若 mora 数与 cp 数不匹配则均匀分字符。
+    优先按显式 `#` 分组；若 `#` 组数与 cp 数不匹配，回退到 mora 对齐，
+    再回退到均匀分字符。回退路径会先去掉 `#` 避免把分组标记当作字符。
     """
     if "#" in ruby_text:
         groups = ruby_text.split("#")
         if len(groups) == total_cps:
             return groups
 
-    if total_cps <= 0:
-        return [ruby_text] if ruby_text else []
-    if total_cps == 1:
-        return [ruby_text]
+    # 回退路径：`#` 仅是分组标记，此处按字符/mora 均分时应忽略它
+    plain = ruby_text.replace("#", "")
 
-    moras = split_into_moras(ruby_text)
+    if total_cps <= 0:
+        return [plain] if plain else []
+    if total_cps == 1:
+        return [plain]
+
+    moras = split_into_moras(plain)
     if len(moras) == total_cps:
         return moras
 
     # 均匀分字符
-    chars = list(ruby_text)
+    chars = list(plain)
     if len(chars) <= total_cps:
         # 字符数 ≤ cp 数: 每个 cp 分一个字符，多余 cp 分空串
         result = chars + [""] * (total_cps - len(chars))
