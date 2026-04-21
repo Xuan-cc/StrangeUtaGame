@@ -27,6 +27,21 @@ from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     split_ruby_for_checkpoints,
     split_into_moras,
 )
+from strange_uta_game.backend.infrastructure.parsers.english_ruby import (
+    EnglishRubyLookup,
+    find_english_words,
+)
+
+
+# 允许自动注音的字符类型白名单（#11）：英文字符、汉字、平假名、片假名
+_RUBY_ALLOWED_TYPES = {
+    CharType.ALPHABET,
+    CharType.KANJI,
+    CharType.HIRAGANA,
+    CharType.KATAKANA,
+    CharType.SOKUON,
+    CharType.LONG_VOWEL,
+}
 
 
 @dataclass
@@ -39,6 +54,8 @@ class AutoCheckResult:
     check_count: int
     ruby: Optional[str]
     origin_block_id: int = -1
+    # 注音来源："dict"=用户词典, "e2k"=英语词典, "library"=库函数, "self"=原字符, "none"=无注音
+    origin_source: str = "none"
 
 
 class AutoCheckService:
@@ -89,10 +106,13 @@ class AutoCheckService:
 
     def _apply_dictionary(
         self, text: str, ruby_results: List[RubyResult]
-    ) -> List[RubyResult]:
+    ) -> Tuple[List[RubyResult], set]:
         """用用户词典覆盖 ruby_results（最长匹配优先）。
 
         遍历文本，尝试将词典词条匹配到文本位置，匹配成功时替换同位置的 ruby_results。
+
+        Returns:
+            (合并后的 ruby_results, 被用户词典覆盖的字符索引集合)
         """
         covered: set[int] = set()
         overrides: List[RubyResult] = []
@@ -118,7 +138,7 @@ class AutoCheckService:
                     pos += 1
 
         if not overrides:
-            return ruby_results
+            return ruby_results, covered
 
         filtered = [
             r
@@ -127,7 +147,48 @@ class AutoCheckService:
         ]
         merged = filtered + overrides
         merged.sort(key=lambda r: r.start_idx)
-        return merged
+        return merged, covered
+
+    def _apply_english_dictionary(
+        self, text: str, ruby_results: List[RubyResult], dict_covered: set
+    ) -> Tuple[List[RubyResult], set]:
+        """在用户词典之后、库函数结果之前，尝试用 e2k 英语词典覆盖英文单词注音（#12）。
+
+        只覆盖未被用户词典占用的英文单词。
+
+        Returns:
+            (合并后的 ruby_results, 被 e2k 词典覆盖的字符索引集合)
+        """
+        lookup = EnglishRubyLookup.instance()
+        if not lookup.has():
+            return ruby_results, set()
+        e2k_covered: set[int] = set()
+        overrides: List[RubyResult] = []
+        for start, end, word in find_english_words(text):
+            span = set(range(start, end))
+            # 跳过被用户词典覆盖的范围
+            if span & dict_covered:
+                continue
+            reading = lookup.lookup(word)
+            if not reading:
+                continue
+            overrides.append(
+                RubyResult(
+                    text=word, reading=reading, start_idx=start, end_idx=end
+                )
+            )
+            e2k_covered |= span
+        if not overrides:
+            return ruby_results, e2k_covered
+        # 移除被 e2k 覆盖位置上来自库函数的结果
+        filtered = [
+            r
+            for r in ruby_results
+            if not (set(range(r.start_idx, r.end_idx)) & e2k_covered)
+        ]
+        merged = filtered + overrides
+        merged.sort(key=lambda r: r.start_idx)
+        return merged, e2k_covered
 
     def _try_split_to_chars(self, word: str, reading: str) -> Optional[List[str]]:
         """尝试将多字词的读音拆分到各字符（三遍策略）。
@@ -307,9 +368,40 @@ class AutoCheckService:
         # 分析注音
         ruby_results = self._analyzer.analyze(text)
 
-        # 应用用户词典覆盖（最长优先匹配）
+        # #11: 过滤掉符号/括号等非目标字符的注音条目
+        # 自动注音仅针对：英文字符、英文单词、汉字、日汉字、平假名、片假名
+        def _result_should_keep(r: RubyResult) -> bool:
+            if not r.text:
+                return False
+            # 检查首字符类型即可（ruby_results 的 text 通常是整词或单字符）
+            for c in r.text:
+                ct = get_char_type(c) if len(c) == 1 else CharType.OTHER
+                if ct in _RUBY_ALLOWED_TYPES:
+                    return True
+            return False
+
+        ruby_results = [r for r in ruby_results if _result_should_keep(r)]
+
+        # 应用用户词典覆盖（最长优先匹配） — 记录被用户词典覆盖的索引集合
+        dict_covered: set = set()
         if self._dict:
-            ruby_results = self._apply_dictionary(text, ruby_results)
+            ruby_results, dict_covered = self._apply_dictionary(text, ruby_results)
+
+        # #12: 应用英语词典（e2k）覆盖（用户词典之后，库函数之前的优先级）
+        ruby_results, e2k_covered = self._apply_english_dictionary(
+            text, ruby_results, dict_covered
+        )
+
+        # 记录每个块的来源（用于 #10 连词判定）
+        block_source: Dict[int, str] = {}
+        for block_id, result in enumerate(ruby_results):
+            span = set(range(result.start_idx, result.end_idx))
+            if span & dict_covered:
+                block_source[block_id] = "dict"
+            elif span & e2k_covered:
+                block_source[block_id] = "e2k"
+            else:
+                block_source[block_id] = "library"
 
         # 创建字符到注音的映射（按 mora 分割到每个字符）
         char_to_ruby: Dict[int, str] = {}
@@ -455,6 +547,11 @@ class AutoCheckService:
         # 构建结果
         results = []
         for i, (char, count) in enumerate(zip(chars, check_counts)):
+            block_id = char_to_block.get(i, -1)
+            source = block_source.get(block_id, "self" if not char_to_ruby.get(i) else "self")
+            # 无注音块时 fallback 为 "self"（由后续 per-char 自注音补上）
+            if block_id < 0:
+                source = "self"
             results.append(
                 AutoCheckResult(
                     line_idx=0,  # 将在 analyze_project 中设置
@@ -462,7 +559,8 @@ class AutoCheckService:
                     char=char,
                     check_count=count,
                     ruby=char_to_ruby.get(i),
-                    origin_block_id=char_to_block.get(i, -1),
+                    origin_block_id=block_id,
+                    origin_source=source,
                 )
             )
 
@@ -537,12 +635,26 @@ class AutoCheckService:
 
         # 设置 linked_to_next: 当下一个字符 check_count==0 时，当前字符连词到下一个
         # 空格字符不应触发连词（空格 check_count==0 是过滤规则的结果，不代表连读）
+        # #10: 仅当注音来源是「用户词典」或「e2k 英语词典」时才允许连词；
+        #      库函数（Sudachi/pykakasi）和自注音的结果一律不连词。
+        _LINKABLE_SOURCES = {"dict", "e2k"}
         for i in range(len(new_characters) - 1):
             next_ch = new_characters[i + 1]
             if next_ch.char and next_ch.char.isspace():
                 continue
             if next_ch.check_count == 0:
-                new_characters[i].linked_to_next = True
+                cur_src = results[i].origin_source if i < len(results) else "self"
+                next_src = (
+                    results[i + 1].origin_source if i + 1 < len(results) else "self"
+                )
+                # 仅可连词来源且属于同一个注音块时，才建立连词关系
+                if (
+                    cur_src in _LINKABLE_SOURCES
+                    and next_src in _LINKABLE_SOURCES
+                    and results[i].origin_block_id
+                    == results[i + 1].origin_block_id
+                ):
+                    new_characters[i].linked_to_next = True
 
         # 恢复时间标签
         if keep_existing_timetags:
@@ -732,16 +844,14 @@ class AutoCheckService:
             if not char.is_sentence_end:
                 char.clear_sentence_end_ts()
 
-        # 重置并设置 linked_to_next
-        # 空格字符不应触发连词（空格 check_count==0 是过滤规则的结果，不代表连读）
-        for char in sentence.characters:
-            char.linked_to_next = False
+        # #10: 此函数仅更新节奏点，不改变 linked_to_next。
+        # linked_to_next 已由 analyze_sentence/apply_to_sentence 根据注音来源
+        # （用户词典/e2k/库函数）正确设置，不应被此函数覆盖。
+        # 仅清理与当前 check_count 不符的连词关系（例如原本连词但下一字符 check_count 变为非0）。
         for i in range(len(sentence.characters) - 1):
             next_ch = sentence.characters[i + 1]
-            if next_ch.char and next_ch.char.isspace():
-                continue
-            if next_ch.check_count == 0:
-                sentence.characters[i].linked_to_next = True
+            if sentence.characters[i].linked_to_next and next_ch.check_count != 0:
+                sentence.characters[i].linked_to_next = False
 
     def update_checkpoints_for_project(
         self,
