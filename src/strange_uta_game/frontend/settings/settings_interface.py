@@ -2212,9 +2212,9 @@ class SettingsInterface(ScrollArea):
         ("seek_back", FIF.LEFT_ARROW, "后退", "后退跳转【仅打轴模式】", "Z", "", "timing_only", None, None),
         ("seek_forward", FIF.CHEVRON_RIGHT, "前进", "前进跳转【仅打轴模式】", "X", "", "timing_only", None, None),
         # — 两模式下按键不同 —
-        ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量", "F5", "Space", "split", "增加当前字符的节奏点数量（打轴 F5）", "增加当前字符的节奏点数量（编辑 Space）"),
-        ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量", "F6", "Backspace", "split", "减少当前字符的节奏点数量（打轴 F6）", "减少当前字符的节奏点数量（编辑 Backspace）"),
-        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记", "F4", ".", "split", "切换当前字符的句尾标记（打轴 F4）", "切换当前字符的句尾标记（编辑 句号）"),
+        ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量", "F5", "Space", "split", "增加当前字符的节奏点数量（默认 F5）", "增加当前字符的节奏点数量（默认 Space）"),
+        ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量", "F6", "Backspace", "split", "减少当前字符的节奏点数量（默认 F6）", "减少当前字符的节奏点数量（默认 Backspace）"),
+        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记", "F4", ".", "split", "切换当前字符的句尾标记（默认 F4）", "切换当前字符的句尾标记（默认 句号）"),
         ("break_line_here", FIF.RETURN, "在此处换行", "在当前字符后插入换行", "Return", "Return", "both", None, None),
         ("delete_char", FIF.DELETE, "删除字符", "删除选中字符或当前字符（删行尾时行合并）", "Delete", "Delete", "both", None, None),
     ]
