@@ -147,6 +147,10 @@ class Character:
     is_rest: bool = False
     singer_id: str = ""
 
+    # 选中的 checkpoint 索引（全局单选不变量由 Project 层管理；None = 未选中）
+    # 不参与 .sug 序列化——选中态是 UI 状态，不跨会话持久化。
+    selected_checkpoint_idx: Optional[int] = field(default=None, compare=False)
+
     # 渲染/导出偏移量（内部管理，不参与构造和序列化）
     _render_offset_ms: int = field(default=0, init=False, repr=False)
     _export_offset_ms: int = field(default=0, init=False, repr=False)

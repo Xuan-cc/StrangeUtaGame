@@ -382,6 +382,78 @@ class Project:
         """检查项目是否有效"""
         return len(self.validate()) == 0
 
+    # ==================== Checkpoint 全局选中管理 ====================
+    #
+    # 不变量（Invariants）：
+    #   I1. 全局单选：整个 Project 中所有 Character 的 selected_checkpoint_idx
+    #       非 None 的至多 1 个。
+    #   I2. 默认选中：项目非空打开/创建后，应调用 select_default_checkpoint()
+    #       选中首行首字首 cp（由 application 层负责触发）。
+    #   I3. 增删对称：每次 set_selected_checkpoint 必先清旧再设新。
+    #
+    # 选中态定位 (line_idx, char_pos, cp_idx) — cp_idx 指 all_timestamps
+    # 域（含 sentence_end 虚拟 cp），与 KaraokePreview._current_checkpoint_idx
+    # 语义一致。
+    #
+    # 不做运行时校验：cp_idx 可能因 F5/F6 增减 cp 而失效，按用户约定不校验，
+    # 由调用方（事件处理器）保证传入有效值。
+
+    def clear_selected_checkpoint(self) -> None:
+        """清除当前选中的 checkpoint（扫全局，O(N)）。"""
+        for sentence in self.sentences:
+            for char in sentence.characters:
+                if char.selected_checkpoint_idx is not None:
+                    char.selected_checkpoint_idx = None
+
+    def set_selected_checkpoint(
+        self, line_idx: int, char_pos: int, cp_idx: int
+    ) -> bool:
+        """设置全局唯一选中的 checkpoint。
+
+        先扫全局清掉旧选中，再设新选中。不做边界校验——
+        调用方需保证 (line_idx, char_pos, cp_idx) 是有效定位。
+
+        Args:
+            line_idx: 句子索引
+            char_pos: 字符索引
+            cp_idx: checkpoint 索引（all_timestamps 域）
+
+        Returns:
+            True 表示设置成功，False 表示目标无效（line/char 越界）。
+        """
+        if line_idx < 0 or line_idx >= len(self.sentences):
+            return False
+        sentence = self.sentences[line_idx]
+        if char_pos < 0 or char_pos >= len(sentence.characters):
+            return False
+
+        # 先清旧（维持 I1）
+        self.clear_selected_checkpoint()
+        # 设新
+        sentence.characters[char_pos].selected_checkpoint_idx = cp_idx
+        return True
+
+    def get_selected_checkpoint(self) -> Optional[tuple[int, int, int]]:
+        """查询当前选中 checkpoint 定位，未选中返回 None。"""
+        for line_idx, sentence in enumerate(self.sentences):
+            for char_pos, char in enumerate(sentence.characters):
+                if char.selected_checkpoint_idx is not None:
+                    return (line_idx, char_pos, char.selected_checkpoint_idx)
+        return None
+
+    def select_default_checkpoint(self) -> bool:
+        """选中首行首字的 cp 0（用于项目打开后的默认态）。
+
+        Returns:
+            True 表示成功选中，False 表示无句子/无字符。
+        """
+        if not self.sentences:
+            return False
+        first = self.sentences[0]
+        if not first.characters:
+            return False
+        return self.set_selected_checkpoint(0, 0, 0)
+
     # ==================== 内部方法 ====================
 
     def _update_timestamp(self) -> None:

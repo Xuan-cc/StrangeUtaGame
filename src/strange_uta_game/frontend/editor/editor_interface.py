@@ -831,12 +831,19 @@ class KaraokePreview(QWidget):
             )
 
             # 预计算每个字符的 per-char singer 颜色（从 Character.singer_id 读取）
-            _char_singer_colors: dict = {}  # char_idx -> QColor
+            _char_singer_colors: dict = {}  # char_idx -> QColor (基色)
+            _char_complement_colors: dict = {}  # char_idx -> QColor (选中高亮色 = 演唱者补色)
             default_singer = self._project.get_default_singer()
             for ci, char in enumerate(line.characters):
                 singer_obj = self._project.get_singer(char.singer_id)
                 singer_color = singer_obj.color if singer_obj and singer_obj.color else default_singer.color
+                comp_color = (
+                    singer_obj.complement_color
+                    if singer_obj and singer_obj.complement_color
+                    else default_singer.complement_color or singer_color
+                )
                 _char_singer_colors[ci] = QColor(singer_color)
+                _char_complement_colors[ci] = QColor(comp_color)
 
             if is_current:
                 main_font = font_current
@@ -1113,43 +1120,28 @@ class KaraokePreview(QWidget):
                     marker_y = int(y_center + main_fm.descent() + 14)
 
                     for cp_idx, (marker_char, has_timed) in enumerate(markers):
-                        char_color = _char_singer_colors.get(char_pos, highlight_color)
-                        color = char_color if has_timed else QColor("#ccc")
-                        if (
-                            is_current
-                            and char_pos == self._current_char_idx
-                            and cp_idx == self._current_checkpoint_idx
-                        ):
-                            h, s, v, a = char_color.getHsv()
-                            if h >= 0:
-                                color = QColor.fromHsv((h + 180) % 360, s, v, a)
+                        # Issue #9 第十六批架构性修复：单管道渲染，不再有"选中分支"。
+                        # 选中态由 Character.selected_checkpoint_idx 承载；渲染时
+                        # 选中 cp 直接用演唱者补色（持久化于 Singer.complement_color），
+                        # 未选中用基色。这样所有 cp 都走同一条 setPen+drawText 路径，
+                        # 从源头消除"选中后大白框"——因为不再有任何路径上的第二次
+                        # drawText、setClipRect、BGMode 切换等副作用。
+                        is_selected = (
+                            ch_obj.selected_checkpoint_idx == cp_idx
+                        )
+                        if not has_timed:
+                            color = QColor("#ccc")
+                        elif is_selected:
+                            color = _char_complement_colors.get(
+                                char_pos, _char_singer_colors.get(char_pos, highlight_color)
+                            )
+                        else:
+                            color = _char_singer_colors.get(char_pos, highlight_color)
 
                         mw = fm_checkpoint.horizontalAdvance(marker_char)
 
-                        # Issue #9 第十五批：彻底隔离 checkpoint 标记的绘制区域。
-                        # 此前"选中后产生大白框、以 checkpoint 底部为分界向上扩散"
-                        # 的现象，根因是 Windows 下 drawText 对 ▶/▮/▷/▯/。 等符号
-                        # 走 fallback 字体路径时，text-run 的 background 会清到一个
-                        # 比 glyph ink 更大的区域，露出 paintEvent 起始处 fillRect
-                        # 填的纯白背景；同时该路径对前序 setClipRect 的状态残留也
-                        # 更敏感。这里用 save/restore 包裹、显式禁用 clipping 再
-                        # 设一个严格贴合 marker 几何的本地 clip、并强制透明 BGMode，
-                        # 保证每个 checkpoint 的 drawText 永远不能影响自身 glyph 框
-                        # 之外的任何像素——满足用户"绘图框限定在字符和▮▶三个符号
-                        # 内"的不变量。
-                        draw_rect = QRect(
-                            int(mx) - 1,
-                            marker_y - fm_checkpoint.ascent() - 1,
-                            int(mw) + 2,
-                            fm_checkpoint.height() + 2,
-                        )
-                        painter.save()
-                        painter.setClipping(False)
-                        painter.setBackgroundMode(Qt.BGMode.TransparentMode)
-                        painter.setClipRect(draw_rect)
                         painter.setPen(color)
                         painter.drawText(int(mx), marker_y, marker_char)
-                        painter.restore()
 
                         # 存储 hitbox 用于点击检测
                         marker_rect = QRect(
@@ -2772,7 +2764,7 @@ class EditorInterface(QWidget):
         else:
             char_idx = 0
 
-        self.preview._current_checkpoint_idx = checkpoint_idx
+        self._update_selected_checkpoint(line_idx, char_idx, checkpoint_idx)
         self.preview.set_current_position(line_idx, char_idx)
         self._current_line_idx = line_idx
 
@@ -3518,6 +3510,33 @@ class EditorInterface(QWidget):
 
     # ==================== 辅助 ====================
 
+    def _update_selected_checkpoint(
+        self,
+        line_idx: int,
+        char_idx: int,
+        cp_idx: Optional[int],
+    ) -> None:
+        """统一入口：更新 cp 选中态（UI 状态 + domain 选中状态）。
+
+        Issue #9 第十六批架构性修复：
+        - UI 侧 preview._current_checkpoint_idx 仍维持（用于渲染判断兼容旧路径）
+        - Domain 侧 Project.set_selected_checkpoint 维持全局单选不变量 I1
+        - 渲染时 paintEvent 直接读 char.selected_checkpoint_idx → singer.complement_color
+          单管道上色，不再需要"选中分支 + HSV 运行时补色 + 额外 drawText"
+
+        调用点覆盖所有 cp 切换事件（除 F5/F6 增减 cp 外，按用户约定不触发）：
+        - _apply_checkpoint_position（TimingService 主通路）
+        - _sync_after_structure_change（结构编辑后）
+        - _on_char_selected 无 cp 分支的直接 set_current_position
+        """
+        self.preview._current_checkpoint_idx = cp_idx
+        if self._project is None or cp_idx is None:
+            # cp_idx=None 时不清 project 选中态：保持旧选中直到下次有效切换。
+            # 这是因为某些路径（空项目、无 cp 字符）传 None 只代表"当前字符没 cp"，
+            # 不代表"用户想取消选中"。
+            return
+        self._project.set_selected_checkpoint(line_idx, char_idx, cp_idx)
+
     def _apply_checkpoint_position(self, position: CheckpointPosition):
         if not self._project or not self._project.sentences:
             self._current_line_idx = 0
@@ -3527,7 +3546,7 @@ class EditorInterface(QWidget):
 
         line_idx = max(0, min(position.line_idx, len(self._project.sentences) - 1))
         self._current_line_idx = line_idx
-        self.preview._current_checkpoint_idx = position.checkpoint_idx
+        self._update_selected_checkpoint(line_idx, position.char_idx, position.checkpoint_idx)
         self.preview.set_current_position(line_idx, position.char_idx)
         self._update_line_info()
 

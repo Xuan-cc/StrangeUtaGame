@@ -3,6 +3,7 @@
 实体(Entity)具有唯一标识和生命周期，可以被创建、修改、持久化。
 """
 
+import colorsys
 from dataclasses import dataclass, field
 from typing import List, Optional
 from uuid import uuid4
@@ -14,6 +15,36 @@ from .models import (
     DomainError,
     ValidationError,
 )
+
+
+def _compute_complement_color(hex_color: str) -> str:
+    """计算 HSV 色相旋转 180° 后的补色（保持 S/V 不变）。
+
+    用于选中高亮渲染：和演唱者基础色在色相环上对立，保证对比度。
+    纯灰色（S=0）无意义色相，直接返回原色。
+
+    Args:
+        hex_color: 形如 "#RRGGBB" 的十六进制色。
+
+    Returns:
+        形如 "#RRGGBB" 的补色；若输入无效或为灰度返回原值。
+    """
+    if not hex_color or not hex_color.startswith("#") or len(hex_color) != 7:
+        return hex_color
+    try:
+        r = int(hex_color[1:3], 16) / 255.0
+        g = int(hex_color[3:5], 16) / 255.0
+        b = int(hex_color[5:7], 16) / 255.0
+    except ValueError:
+        return hex_color
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    if s <= 1e-6:
+        return hex_color
+    h2 = (h + 0.5) % 1.0
+    r2, g2, b2 = colorsys.hsv_to_rgb(h2, s, v)
+    return "#{:02X}{:02X}{:02X}".format(
+        int(round(r2 * 255)), int(round(g2 * 255)), int(round(b2 * 255))
+    )
 
 
 @dataclass
@@ -40,6 +71,7 @@ class Singer:
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = "未命名"
     color: str = "#FF6B6B"
+    complement_color: str = ""
     backend_number: int = 0
     is_default: bool = False
     display_priority: int = 0
@@ -52,6 +84,10 @@ class Singer:
             raise ValidationError("演唱者名称不能为空")
         if not self.color.startswith("#") or len(self.color) != 7:
             raise ValidationError(f"颜色格式无效: {self.color} (应为 #RRGGBB)")
+        # 自动补算补色：持久化但不强制用户可见。
+        # 仅在字段为空或与当前 color 不兼容时重算，保证 .sug 旧文件向后兼容。
+        if not self.complement_color or not self.complement_color.startswith("#") or len(self.complement_color) != 7:
+            self.complement_color = _compute_complement_color(self.color)
 
     def rename(self, new_name: str) -> None:
         """重命名演唱者"""
@@ -60,10 +96,11 @@ class Singer:
         self.name = new_name
 
     def change_color(self, new_color: str) -> None:
-        """修改显示颜色"""
+        """修改显示颜色（同步更新补色）"""
         if not new_color.startswith("#") or len(new_color) != 7:
             raise ValidationError(f"颜色格式无效: {new_color}")
         self.color = new_color
+        self.complement_color = _compute_complement_color(new_color)
 
     def set_enabled(self, enabled: bool) -> None:
         """设置启用状态"""

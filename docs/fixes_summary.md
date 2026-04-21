@@ -1276,3 +1276,135 @@ painter.restore()
 - AGENTS.md 约束全部保持（Qt 字体 YaHei、PyQt6、中文文案、PYTHONIOENCODING）
 
 ---
+
+## 第十六批修复（2026-04-22）：Issue #9 架构性根治选中高亮大白框
+
+**问题**：第十至十五批所有防御性修复（本地 clip、透明 BGMode、
+setClipping(False)、双管线隔离）均被用户实测"未修复"。第十五批的
+`save → setClipping(False) → BGMode.TransparentMode → setClipRect →
+drawText → restore` 三重防御在 Windows 符号字体 fallback 下仍无法消除
+"选中后 checkpoint 下方至行末大面积变白"现象。
+
+**用户诊断与方案（R2+R3+R4）**：
+
+> "能否不额外渲染，通过在 cp 上绑定一个是否被选中的状态，
+> 如果被选中，渲染时就调用使用演唱者的补色。"
+> "演唱者的补色新增在演唱者所属的数据结构里。"
+> "cp 是否被选中的状态传递就绑在各种 cp 切换事件上。"
+> "除了 F5/F6 增减 cp，其他都是。"
+> "全局只能选中一个 cp。添加一个必删除一个。"
+
+**根因重判**：不是绘制隔离不彻底，而是**渲染有"选中专属分支"**。只要
+paintEvent 里存在第二条代码路径（`if is_selected: color = HSV_shift(...)`），
+Windows 文本子系统就有机会在这条路径上触发 text-run 的 over-clear。
+真正的根治是**消灭分支**，让所有 checkpoint 走同一条 `setPen → drawText`
+管道。颜色选择提前到一张 LUT（演唱者基色 / 演唱者补色），选中态由数据
+承载（`Character.selected_checkpoint_idx`），不再参与运行时渲染分支。
+
+### 1. Domain 层改动
+
+**`Singer.complement_color: str`（新字段，持久化）**
+- `entities.py`：新增 `_compute_complement_color` 纯函数（HSV h+180°，
+  保持 S/V；灰度退化返回原色）
+- `__post_init__` 自动补算（向后兼容：旧 .sug 加载时字段为空→自动补）
+- `change_color` 同步更新
+
+**`Character.selected_checkpoint_idx: Optional[int] = None`（新字段，
+不持久化）**
+- `compare=False` 避免 dataclass 等值比较副作用
+- 不进 .sug：选中态是 UI 瞬态，不跨会话
+
+**`Project` 选中 API（维持三条不变量）**
+- I1 **全局单选**：`set_selected_checkpoint` 先扫全局清旧再设新
+- I2 **默认选中**：`select_default_checkpoint` 选 (0,0,0)
+- I3 **增删对称**：每次 set 必先清旧
+- 不做运行时越界校验，由调用方保证
+
+### 2. Application 层改动
+
+- `ProjectService.create_project` / `open_project` / `import_lyrics`
+  打开/加载/首次有字符时调用 `select_default_checkpoint` 维持 I2
+
+### 3. sug_parser 改动
+
+- 序列化：写入 `"complement_color"` 字段
+- 反序列化：读 `singer_data.get("complement_color", "")`——旧文件
+  返回 `""`，由 `Singer.__post_init__` 自动补算
+
+### 4. Frontend 层改动
+
+**`EditorInterface._update_selected_checkpoint(line_idx, char_idx, cp_idx)`**
+
+统一入口，同时更新两处状态：
+
+1. `preview._current_checkpoint_idx`（UI 侧，兼容旧路径）
+2. `project.set_selected_checkpoint(...)`（domain 侧，渲染真实读取源）
+
+覆盖三条 canonical cp 切换通路：
+- `_apply_checkpoint_position`（TimingService 回调主通路）
+- `_sync_after_structure_change`（结构编辑后 clamp）
+- `_on_char_selected` 间接通过 `_timing_service.move_to_checkpoint`
+  回灌（下游调 `_apply_checkpoint_position`）
+
+按用户约定，F5/F6 增减 cp 事件不触发选中变更。
+
+**`KaraokePreview.paintEvent` checkpoint 渲染（单管道）**
+
+```python
+# 第十五批（已作废）：
+painter.save()
+painter.setClipping(False)
+painter.setBackgroundMode(Qt.BGMode.TransparentMode)
+painter.setClipRect(draw_rect)
+painter.setPen(color)
+painter.drawText(int(mx), marker_y, marker_char)
+painter.restore()
+
+# 第十六批（单管道）：
+is_selected = (ch_obj.selected_checkpoint_idx == cp_idx)
+if not has_timed:
+    color = QColor("#ccc")
+elif is_selected:
+    color = _char_complement_colors.get(char_pos, ...)
+else:
+    color = _char_singer_colors.get(char_pos, ...)
+painter.setPen(color)
+painter.drawText(int(mx), marker_y, marker_char)
+```
+
+- 所有 cp 走**同一**条 `setPen → drawText`
+- 颜色在循环外已经查好（LUT：`_char_singer_colors` + `_char_complement_colors`）
+- 无 `save/restore`、无 `setClipping` / `setBackgroundMode` / `setClipRect`
+  切换、无运行时 HSV 计算、无第二次 drawText
+
+### 5. 验证
+
+- `lsp_diagnostics`：所有改动文件无 error
+- `pytest tests/unit/domain tests/unit/infrastructure`：
+  - 新增 23 tests 全部 PASSED（补色算法 6 + Singer dataclass 5 +
+    Project 选中不变量 10 + sug 向后兼容 2）
+  - 197 pre-existing tests PASSED
+  - 2 pre-existing FAILED（`test_batch_export`、
+    `test_export_ruby_relative_timestamps`）与本批无关，前批已记录
+- 手工复现指引：选中任意带 checkpoint 的字符，切换 cp 位置；
+  预期：选中 cp 以演唱者补色绘制，其他 cp 基色，**不再出现任何白框**。
+  切换演唱者颜色（change_color）时，补色自动跟随，选中色实时更新。
+
+### 6. 影响面
+
+- Domain：`entities.Singer` 增字段+自动补算；`models.Character` 增字段；
+  `project.Project` 增 4 个方法
+- Application：`project_service` 3 个入口补 `select_default_checkpoint`
+- Infrastructure：`sug_parser` 序列化 +1 字段、反序列化 +1 字段（向后兼容）
+- Frontend：`editor_interface`
+  - 新增 `_update_selected_checkpoint` 私有方法
+  - 替换 `_apply_checkpoint_position` / `_sync_after_structure_change`
+    里直接赋值 `preview._current_checkpoint_idx` 的三个点
+  - paintEvent 预计算 `_char_complement_colors` LUT
+  - paintEvent checkpoint drawText 块从 45 行（含注释）压缩为 10 行单管道
+- 废弃：第十五批三重防御、第十至十四批所有渲染分支
+- 不改：Qt 字体声明、AGENTS.md 约束、PyQt6 版本、事件接线（F5/F6 除外约定）
+
+---
+
+

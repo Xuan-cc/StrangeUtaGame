@@ -60,6 +60,9 @@ class ProjectService:
             新创建的项目
         """
         project = Project()
+        # 维持选中不变量 I2：非空项目打开即选中 (0,0,0)。
+        # 空项目此时无字符，待导入歌词后由 import_lyrics 触发。
+        project.select_default_checkpoint()
         self._current_project = project
 
         if self._callbacks.on_project_loaded:
@@ -80,6 +83,8 @@ class ProjectService:
         """
         try:
             project = SugProjectParser.load(file_path)
+            # 维持选中不变量 I2：.sug 不序列化选中态，加载后必须补选默认 cp。
+            project.select_default_checkpoint()
             self._current_project = project
 
             if self._callbacks.on_project_loaded:
@@ -159,6 +164,10 @@ class ProjectService:
             # 添加到项目
             for sentence in sentences:
                 self._current_project.add_sentence(sentence)
+
+            # 若项目此前为空（无选中态），补选首 cp。
+            if self._current_project.get_selected_checkpoint() is None:
+                self._current_project.select_default_checkpoint()
 
             return sentences
 
