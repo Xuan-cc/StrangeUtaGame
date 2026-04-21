@@ -7,6 +7,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from strange_uta_game.backend.domain import Ruby, Sentence
+from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+    split_ruby_for_checkpoints,
+)
+
 
 @dataclass
 class RubyResult:
@@ -500,3 +505,49 @@ def create_analyzer(use_pykakasi: bool = True) -> RubyAnalyzer:
 
     print("Warning: neither sudachipy nor pykakasi available, using DummyAnalyzer")
     return DummyAnalyzer()
+
+
+def _group_reading_for_character(reading: str, checkpoint_count: int) -> str:
+    """按字符 checkpoint 数量生成带 # 的 Ruby 文本。"""
+    if not reading:
+        return ""
+    if checkpoint_count <= 1:
+        return reading
+    groups = split_ruby_for_checkpoints(reading, checkpoint_count)
+    return "#".join(groups) if len(groups) > 1 else groups[0]
+
+
+def analyze_sentence_ruby(
+    sentence: Sentence,
+    analyzer: Optional[RubyAnalyzer] = None,
+) -> None:
+    """重新分析句子的 Ruby，并按 checkpoint 生成分组。"""
+    analyzer = analyzer or create_analyzer()
+
+    for char in sentence.characters:
+        char.set_ruby(None)
+
+    results = analyzer.analyze(sentence.text)
+    for result in results:
+        block_len = result.end_idx - result.start_idx
+        if block_len <= 0:
+            continue
+
+        if block_len == 1:
+            split_parts = [result.reading]
+        else:
+            split_parts = split_ruby_for_checkpoints(result.reading, block_len)
+
+        for offset in range(block_len):
+            char_idx = result.start_idx + offset
+            if char_idx >= len(sentence.characters):
+                break
+
+            part = split_parts[offset] if offset < len(split_parts) else ""
+            if not part:
+                continue
+
+            character = sentence.characters[char_idx]
+            grouped_text = _group_reading_for_character(part, character.check_count)
+            if grouped_text and grouped_text != character.char:
+                character.set_ruby(Ruby(text=grouped_text))

@@ -751,7 +751,8 @@ def _apply_ruby_entries(sentence: Sentence, ruby_entries: List[NicokaraRubyEntry
     """将 @Ruby 注音条目应用到句子
 
     通过文本匹配找到漢字在行中的位置并添加 Ruby 注音。
-    在新模型中，多字符漢字的 ruby 按字拆分为 per-char Ruby。
+    在新模型中，多字符漢字的 ruby 按字拆分为 per-char Ruby，
+    且每个字符内部按 checkpoint 用 # 分组。
     """
     from strange_uta_game.backend.infrastructure.parsers.inline_format import (
         split_ruby_for_checkpoints,
@@ -781,9 +782,11 @@ def _apply_ruby_entries(sentence: Sentence, ruby_entries: List[NicokaraRubyEntry
                 for ci in range(pos, min(end_pos, len(sentence.characters))):
                     part_idx = ci - pos
                     if part_idx < len(split_parts) and split_parts[part_idx]:
-                        sentence.characters[ci].set_ruby(
-                            Ruby(text=split_parts[part_idx])
+                        target_char = sentence.characters[ci]
+                        ruby_segments = split_ruby_for_checkpoints(
+                            split_parts[part_idx], target_char.check_count
                         )
+                        target_char.set_ruby(Ruby(text="#".join(ruby_segments)))
                 break  # 每个 entry 只匹配第一个未标注的出现
             start = end_pos
 

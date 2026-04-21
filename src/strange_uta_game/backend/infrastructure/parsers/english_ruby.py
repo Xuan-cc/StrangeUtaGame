@@ -74,10 +74,15 @@ class EnglishRubyLookup:
         return None
 
     def lookup(self, word: str) -> Optional[str]:
-        """查询单词的片假名读音，不存在返回 None。"""
+        """查询单词的片假名读音，不存在返回 None。
+
+        #11：先规范化弯引号/全角撇号为 ASCII，避免 `what\u2019s` 之类的输入
+        找不到 `what's` 条目。
+        """
         if not word:
             return None
-        return self._dict.get(word.lower())
+        key = normalize_apostrophes(word).lower()
+        return self._dict.get(key)
 
     def has(self) -> bool:
         """词典是否加载成功且非空。"""
@@ -87,14 +92,37 @@ class EnglishRubyLookup:
 # 英文单词匹配（连续英文字母，允许内部 ' 和 .）
 _ENGLISH_WORD_RE = re.compile(r"[A-Za-z]+(?:['.][A-Za-z]+)*")
 
+# #11：常见 Unicode 弯引号/全角撇号 → ASCII 撇号映射
+# 用户从富文本/网页粘贴歌词时常携带这些字符，正则和词典都只识别 ASCII。
+_APOSTROPHE_TRANSLATIONS = str.maketrans(
+    {
+        "\u2019": "'",  # RIGHT SINGLE QUOTATION MARK (’)
+        "\u2018": "'",  # LEFT SINGLE QUOTATION MARK (‘)
+        "\u02bc": "'",  # MODIFIER LETTER APOSTROPHE (ʼ)
+        "\uff07": "'",  # FULLWIDTH APOSTROPHE (＇)
+        "\u0060": "'",  # GRAVE ACCENT (`) 常被误用为 apostrophe
+    }
+)
+
+
+def normalize_apostrophes(text: str) -> str:
+    """将常见弯引号/全角撇号统一为 ASCII 撇号，便于分词与词典查询。"""
+    return text.translate(_APOSTROPHE_TRANSLATIONS)
+
 
 def find_english_words(text: str) -> List[Tuple[int, int, str]]:
     """在文本中定位所有英文单词。
 
+    #11：在分词前先把 curly/全角撇号规范化为 ASCII，保证
+    `what's`、`don't` 等缩写能被视为一个完整单词（返回的 start/end 索引
+    与 normalize 后的字符串对齐——由于 translate 是 1:1 字符映射，
+    原字符串的位置也等同有效）。
+
     Returns:
         (start_idx, end_idx, word) 元组列表（end 为 exclusive）。
     """
+    normalized = normalize_apostrophes(text)
     results = []
-    for m in _ENGLISH_WORD_RE.finditer(text):
+    for m in _ENGLISH_WORD_RE.finditer(normalized):
         results.append((m.start(), m.end(), m.group()))
     return results

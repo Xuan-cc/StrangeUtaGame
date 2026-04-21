@@ -22,6 +22,7 @@ from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
     create_analyzer,
     RubyAnalyzer,
     RubyResult,
+    _group_reading_for_character,
 )
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     split_ruby_for_checkpoints,
@@ -208,12 +209,18 @@ class AutoCheckService:
             # 跳过已被用户词典（多字符跨英/非英复合词）占用的范围
             if span & dict_covered:
                 continue
+            # #11：规范化弯引号，保证 what\u2019s 也能命中 what's 条目
+            from strange_uta_game.backend.infrastructure.parsers.english_ruby import (
+                normalize_apostrophes,
+            )
+
+            normalized_word = normalize_apostrophes(word)
             # 第十批 #5 优先级：e2k → user dict 全词 → 静态 lookup
-            reading = engine.convert(word) if has_engine else None
+            reading = engine.convert(normalized_word) if has_engine else None
             if not reading and has_user_dict:
-                reading = self._dict_map.get(word.lower())
+                reading = self._dict_map.get(normalized_word.lower())
             if not reading and has_lookup:
-                reading = lookup.lookup(word)
+                reading = lookup.lookup(normalized_word)
             if not reading:
                 continue
             overrides.append(
@@ -448,7 +455,7 @@ class AutoCheckService:
                 block_source[block_id] = "library"
 
         # 创建字符到注音的映射（按 mora 分割到每个字符）
-        char_to_ruby: Dict[int, str] = {}
+        char_to_ruby_raw: Dict[int, str] = {}
         char_to_block: Dict[int, int] = {}
         for block_id, result in enumerate(ruby_results):
             block_len = result.end_idx - result.start_idx
@@ -474,13 +481,20 @@ class AutoCheckService:
                 if idx < len(chars):
                     pos = idx - result.start_idx
                     if pos < len(split_parts) and split_parts[pos]:
-                        char_to_ruby[idx] = split_parts[pos]
+                        char_to_ruby_raw[idx] = split_parts[pos]
                     char_to_block[idx] = block_id
 
         # 未被分析器覆盖的字符使用自注音（保证所有字符都有 ruby）
+        # #11：连词块内 split_parts 为空的字符（如 e2k "hello" 的 e/l/l/o 位置）
+        # 已归属某个 block（char_to_block 中有记录），不应再 fallback 到自注音，
+        # 否则会在导出中出现 {hello|ヘロー,e,l,l,o} 的多余字符残留。
         for idx, char in enumerate(chars):
-            if idx not in char_to_ruby:
-                char_to_ruby[idx] = char
+            if idx in char_to_ruby_raw:
+                continue
+            if idx in char_to_block:
+                # 属于某连词块但自身无拆分读音（连词：读音由首字承载）
+                continue
+            char_to_ruby_raw[idx] = char
 
         # 根据注音更新 check_count（汉字按 mora 数分配节奏点）
         for result in ruby_results:
@@ -592,7 +606,7 @@ class AutoCheckService:
         results = []
         for i, (char, count) in enumerate(zip(chars, check_counts)):
             block_id = char_to_block.get(i, -1)
-            source = block_source.get(block_id, "self" if not char_to_ruby.get(i) else "self")
+            source = block_source.get(block_id, "self")
             # 无注音块时 fallback 为 "self"（由后续 per-char 自注音补上）
             if block_id < 0:
                 source = "self"
@@ -602,7 +616,14 @@ class AutoCheckService:
                     char_idx=i,
                     char=char,
                     check_count=count,
-                    ruby=char_to_ruby.get(i),
+                    ruby=(
+                        _group_reading_for_character(
+                            char_to_ruby_raw[i],
+                            check_counts[i] if i < len(check_counts) else 1,
+                        )
+                        if i in char_to_ruby_raw
+                        else None
+                    ),
                     origin_block_id=block_id,
                     origin_source=source,
                 )
@@ -665,7 +686,13 @@ class AutoCheckService:
             check_count = result.check_count
 
             # 每个字符直接携带自己的 Ruby（无需跨字符合并）
-            ruby_obj = Ruby(text=result.ruby) if result.ruby else None
+            # #11：ruby 为空、或与字符本身相同时不生成 Ruby 对象，
+            # 避免 Ruby.__post_init__ 触发空文本异常，并避免导出残留 {a|a}。
+            ruby_text = result.ruby
+            if ruby_text and ruby_text != result.char:
+                ruby_obj = Ruby(text=ruby_text)
+            else:
+                ruby_obj = None
 
             character = Character(
                 char=result.char,
@@ -781,10 +808,11 @@ class AutoCheckService:
         for i, char in enumerate(sentence.characters):
             if not char.ruby:
                 continue
-            if char.char == char.ruby.text:
+            ruby_groups = char.ruby.groups()
+            if len(ruby_groups) == 1 and char.char == ruby_groups[0]:
                 continue  # 自注音（假名等），保留默认 check_count
-            # 汉字等：按 Ruby 的 mora 数分配节奏点
-            check_counts[i] = len(split_into_moras(char.ruby.text))
+            # 汉字等：按 Ruby 分组数量/组内 mora 数分配节奏点
+            check_counts[i] = sum(len(split_into_moras(group)) for group in ruby_groups)
 
         # 应用自动打勾过滤规则（与 analyze_sentence 相同逻辑）
         chars = [c.char for c in sentence.characters]

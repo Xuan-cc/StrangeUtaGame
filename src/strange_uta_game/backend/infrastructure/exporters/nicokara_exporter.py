@@ -513,23 +513,19 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         """
         # 建立 kana → (char_idx, checkpoint_idx) 的映射
         mapping: List[tuple[str, int, int]] = []
-        reading_pos = 0
 
         for char_idx in range(start_idx, end_idx):
             if char_idx >= len(sentence.characters):
                 break
             ch = sentence.characters[char_idx]
-            effective_count = ch.check_count
+            ruby = ch.ruby
+            groups = ruby.groups() if ruby else []
 
-            for cp_idx in range(effective_count):
-                if reading_pos < len(reading):
-                    mapping.append((reading[reading_pos], char_idx, cp_idx))
-                    reading_pos += 1
+            for cp_idx, group_text in enumerate(groups):
+                mapping.append((group_text, char_idx, cp_idx))
 
-        # 补充剩余读音字符（正常情况不应发生）
-        while reading_pos < len(reading):
-            mapping.append((reading[reading_pos], -1, -1))
-            reading_pos += 1
+        if not mapping and reading:
+            mapping.append((reading, -1, -1))
 
         if not mapping:
             return reading
@@ -546,10 +542,10 @@ class NicokaraWithRubyExporter(NicokaraExporter):
 
         # 拼装读音字符 + 相对时间戳
         result: List[str] = []
-        for i, (kana, char_idx, cp_idx) in enumerate(mapping):
+        for i, (group_text, char_idx, cp_idx) in enumerate(mapping):
             if i == 0:
                 # 第一个假名不加时间戳
-                result.append(kana)
+                result.append(group_text)
                 continue
 
             if char_idx >= 0 and cp_idx >= 0:
@@ -558,6 +554,6 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                     relative_ms = ch.export_timestamps[cp_idx] - group_start_ms
                     result.append(_format_nicokara_ts(relative_ms))
 
-            result.append(kana)
+            result.append(group_text)
 
         return "".join(result)

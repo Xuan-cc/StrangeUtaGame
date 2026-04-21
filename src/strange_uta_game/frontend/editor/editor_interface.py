@@ -402,10 +402,18 @@ class KaraokePreview(QWidget):
         self._update_display()
 
     def set_current_position(self, line_idx: int, char_idx: int = 0):
+        # #9: 幂等保护 —— 多路 caller（UI 点击 + timing_service 回调）可能
+        # 在同一帧内相继调用本方法，若目标 line_idx 已是当前值，仅更新 char_idx
+        # 并触发重绘即可，避免短暂的 scroll_center 跳变导致空白行。
+        new_line = float(line_idx)
+        if new_line == self._scroll_center_line and line_idx == self._current_line_idx:
+            self._current_char_idx = char_idx
+            self._update_display()
+            return
         self._current_line_idx = line_idx
         self._current_char_idx = char_idx
-        # 自动跟随：当前行始终居中
-        self._scroll_center_line = float(line_idx)
+        # 自动跟随：当前行始终居中（强制整数，避免其他 float 路径污染）
+        self._scroll_center_line = new_line
         self._update_display()
 
     def set_current_time_ms(self, time_ms: int):
@@ -793,7 +801,7 @@ class KaraokePreview(QWidget):
         for idx in range(first_visible, last_visible + 1):
             # 行中心 y 坐标
             y_center_f = center_y + (idx - self._scroll_center_line) * line_height
-            y_center = int(y_center_f)
+            y_center = int(round(y_center_f))
 
             # 跳过完全不可见的行
             if y_center_f < -line_height or y_center_f > h + line_height:
@@ -859,14 +867,22 @@ class KaraokePreview(QWidget):
             for char_pos, ch in enumerate(line.chars):
                 char_w = char_widths[char_pos]
 
+                # 统一高亮/hitbox 矩形：clamp 到 line_height 内，避免因当前行
+                # 字体变大（22pt vs 18pt）在行间产生半像素空隙或撑开行距
+                _rect_height = min(main_fm.height() + 4, int(line_height))
+                _rect_top = max(
+                    int(y_center_f - line_height / 2),
+                    int(y_center - main_fm.ascent()) - 2,
+                )
+
                 # 当前打轴位置高亮背景
                 if is_current and char_pos == self._current_char_idx:
                     highlight_bg = QColor("#FFE0E0")
                     bg_rect = QRect(
                         int(curr_x) - 1,
-                        int(y_center - main_fm.ascent()) - 2,
+                        _rect_top,
                         int(char_w) + 2,
-                        main_fm.height() + 4,
+                        _rect_height,
                     )
                     painter.fillRect(bg_rect, highlight_bg)
 
@@ -878,18 +894,18 @@ class KaraokePreview(QWidget):
                         sel_bg = QColor("#BDE0FE")
                         sel_rect = QRect(
                             int(curr_x) - 1,
-                            int(y_center - main_fm.ascent()) - 2,
+                            _rect_top,
                             int(char_w) + 2,
-                            main_fm.height() + 4,
+                            _rect_height,
                         )
                         painter.fillRect(sel_rect, sel_bg)
 
-                # 存储字符 hitbox 用于点击检测
+                # 存储字符 hitbox 用于点击检测（与高亮矩形对齐）
                 char_rect = QRect(
                     int(curr_x),
-                    int(y_center - main_fm.ascent()),
+                    _rect_top,
                     int(char_w),
-                    main_fm.height(),
+                    _rect_height,
                 )
                 self._char_hitboxes.append((char_rect, idx, char_pos))
 
@@ -2555,8 +2571,11 @@ class EditorInterface(QWidget):
         该字符上，方便用户通过 F4 添加节奏点；内部打轴位置仍移到最近的
         下一个有效 checkpoint，确保按空格时能正确赋时间戳。
         """
+        # #9: 单一 set_current_position 入口，避免 timing_service 回调在
+        # 同帧内反复覆盖 _scroll_center_line 造成空白行抖动。仅当字符无
+        # checkpoint 时由本地直接居中；否则交给 _apply_checkpoint_position
+        # 统一处理。
         self._current_line_idx = line_idx
-        self.preview.set_current_position(line_idx, char_idx)
 
         # 判断当前字符是否有 checkpoint
         no_checkpoint = True
@@ -2566,13 +2585,24 @@ class EditorInterface(QWidget):
                 ch = sentence.characters[char_idx]
                 no_checkpoint = ch.check_count == 0 and not ch.is_sentence_end
 
-        # 单击即移动 checkpoint 目标到选中字符
+        if no_checkpoint:
+            # 无 checkpoint：直接把视觉焦点定到被点击字符
+            self.preview.set_current_position(line_idx, char_idx)
+        else:
+            # 有 checkpoint：由 timing_service 回调经 _apply_checkpoint_position
+            # 统一调用 set_current_position，避免双写 _scroll_center_line
+            if self._timing_service:
+                self._timing_service.move_to_checkpoint(line_idx, char_idx, 0)
+            else:
+                self.preview.set_current_position(line_idx, char_idx)
+            self._update_line_info()
+            self._update_time_tags_display()
+            self._update_status()
+            return
+
+        # 无 checkpoint 分支也触发 timing_service 移动（便于随后空格赋时间戳）
         if self._timing_service:
             self._timing_service.move_to_checkpoint(line_idx, char_idx, 0)
-
-        # 无 checkpoint 时恢复视觉焦点到被点击的字符
-        if no_checkpoint:
-            self.preview.set_current_position(line_idx, char_idx)
 
         self._update_line_info()
         self._update_time_tags_display()
@@ -3308,6 +3338,18 @@ class EditorInterface(QWidget):
             Qt.Key.Key_PageUp: "PAGEUP",
             Qt.Key.Key_PageDown: "PAGEDOWN",
             Qt.Key.Key_Insert: "INSERT",
+            # 标点键（#11 修复：支持字面量键名，与 _KeyCaptureButton 保持一致）
+            Qt.Key.Key_Comma: ",",
+            Qt.Key.Key_Period: ".",
+            Qt.Key.Key_Slash: "/",
+            Qt.Key.Key_Semicolon: ";",
+            Qt.Key.Key_Apostrophe: "'",
+            Qt.Key.Key_BracketLeft: "[",
+            Qt.Key.Key_BracketRight: "]",
+            Qt.Key.Key_Backslash: "\\",
+            Qt.Key.Key_Minus: "-",
+            Qt.Key.Key_Equal: "=",
+            Qt.Key.Key_QuoteLeft: "`",
         }
         if key in _key_names:
             parts.append(_key_names[key])

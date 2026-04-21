@@ -6,6 +6,7 @@ StrangeUtaGame 项目文件格式 (.sug)
 版本历史:
   - v1.0: 初始版本（lines + checkpoints + timetags + rubies 分离存储）
   - v2.0: 层次化模型（sentences + characters 一体化存储）
+  - v0.2.0: Ruby 分组模型（Ruby.text 支持 # 分组）
 """
 
 import json
@@ -71,7 +72,7 @@ class SugMigrator:
     处理不同版本之间的数据迁移。
     """
 
-    CURRENT_VERSION = "2.0"
+    CURRENT_VERSION = "0.2.0"
 
     @classmethod
     def migrate(cls, data: Dict[str, Any], from_version: str) -> Dict[str, Any]:
@@ -82,13 +83,17 @@ class SugMigrator:
             from_version: 原版本号
 
         Returns:
-            迁移后的数据（v2.0 格式字典）
+            迁移后的数据（当前版本格式字典）
         """
         if from_version == cls.CURRENT_VERSION:
             return data
 
         if from_version == "1.0":
-            return cls._migrate_v1_to_v2(data)
+            data = cls._migrate_v1_to_v2(data)
+            from_version = "2.0"
+
+        if from_version == "2.0":
+            return cls._migrate_v2_to_v0_2_0(data)
 
         # 未知版本，原样返回（由解析器尝试处理）
         return data
@@ -114,6 +119,30 @@ class SugMigrator:
             result["sentences"].append(sentence_data)
 
         return result
+
+    @classmethod
+    def _migrate_v2_to_v0_2_0(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """v2.0 → v0.2.0 迁移。
+
+        丢弃旧的 char-level Ruby，基于当前 sentence 文本和 checkpoint
+        重新分析生成带 # 分组的 Ruby 文本。
+        """
+        from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
+            analyze_sentence_ruby,
+        )
+
+        migrated = dict(data)
+        migrated["version"] = cls.CURRENT_VERSION
+
+        migrated_sentences: List[Dict[str, Any]] = []
+        for sentence_data in data.get("sentences", []):
+            sentence_dict = dict(sentence_data)
+            sentence = SugProjectParser._dict_to_sentence(sentence_dict)
+            analyze_sentence_ruby(sentence)
+            migrated_sentences.append(SugProjectParser._sentence_to_dict(sentence))
+
+        migrated["sentences"] = migrated_sentences
+        return migrated
 
     @classmethod
     def _migrate_line_to_sentence(cls, line_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -221,7 +250,7 @@ class SugProjectParser:
     """SUG 项目文件解析器
 
     负责 Project 对象的序列化和反序列化。
-    支持 v2.0 格式读写，以及 v1.0 格式向上兼容读取。
+        支持 v0.2.0 格式读写，以及 v1.0/v2.0 格式向上兼容读取。
     """
 
     @staticmethod
@@ -251,7 +280,7 @@ class SugProjectParser:
     def load(file_path: str) -> Project:
         """从 SUG 文件加载项目
 
-        支持 v1.0 和 v2.0 格式。v1.0 文件自动迁移为 v2.0 模型。
+        支持 v1.0、v2.0 和 v0.2.0 格式。旧文件会自动迁移到当前模型。
 
         Args:
             file_path: 文件路径
@@ -290,7 +319,7 @@ class SugProjectParser:
 
     @staticmethod
     def _project_to_dict(project: Project) -> Dict[str, Any]:
-        """将 Project 对象转换为 v2.0 字典"""
+        """将 Project 对象转换为当前版本字典"""
         return {
             "version": SugMigrator.CURRENT_VERSION,
             "id": project.id,
@@ -350,7 +379,7 @@ class SugProjectParser:
 
     @staticmethod
     def _dict_to_project(data: Dict[str, Any]) -> Project:
-        """将 v2.0 字典转换为 Project 对象"""
+        """将当前/兼容版本字典转换为 Project 对象"""
         # 解析元数据（安全 datetime 解析）
         metadata_data = data.get("metadata", {})
 

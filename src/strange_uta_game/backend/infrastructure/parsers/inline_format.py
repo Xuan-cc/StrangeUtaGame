@@ -113,6 +113,11 @@ def split_ruby_for_checkpoints(ruby_text: str, total_cps: int) -> List[str]:
 
     优先按 mora 对齐；若 mora 数与 cp 数不匹配则均匀分字符。
     """
+    if "#" in ruby_text:
+        groups = ruby_text.split("#")
+        if len(groups) == total_cps:
+            return groups
+
     if total_cps <= 0:
         return [ruby_text] if ruby_text else []
     if total_cps == 1:
@@ -171,8 +176,7 @@ def to_inline_text(sentence: Sentence) -> str:
 
             for c in chars[group_start:group_end]:
                 assert c.ruby is not None  # 由上方 while 条件保证
-                # 按 checkpoint 数量拆分该字符的 ruby 文本
-                ruby_segments = split_ruby_for_checkpoints(c.ruby.text, c.check_count)
+                ruby_segments = c.ruby.groups()
 
                 portion_parts: List[str] = []
                 for cp_idx in range(c.total_timing_points):
@@ -393,8 +397,8 @@ def _parse_ruby_group(
         if is_sentence_end and len(all_timestamps) > check_count:
             sentence_end_ts = all_timestamps[check_count]
 
-        # per-char ruby 文本
-        per_char_ruby = "".join(ruby_text_parts)
+        # per-char ruby 文本（保留 # 分组）
+        per_char_ruby = "#".join(ruby_text_parts)
         ruby_obj = Ruby(text=per_char_ruby) if per_char_ruby else None
 
         character = Character(

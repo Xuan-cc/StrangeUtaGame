@@ -115,6 +115,7 @@ class AppSettings:
         },
         "shortcuts": {
             # 打轴模式：音乐播放时生效（以实时打轴操作为主）
+            # 注：以 _SHORTCUT_ACTIONS 为唯一真源，此处需保持一致
             "timing_mode": {
                 "play_pause": "A",
                 "stop": "S",
@@ -124,17 +125,19 @@ class AppSettings:
                 "speed_down": "Q",
                 "speed_up": "W",
                 "edit_ruby": "F2",
-                "add_checkpoint": "F4",
-                "remove_checkpoint": "F5",
+                "add_checkpoint": "F5",
+                "remove_checkpoint": "F6",
                 "volume_up": "UP",
                 "volume_down": "DOWN",
                 "nav_prev_line": "LEFT",
                 "nav_next_line": "RIGHT",
-                "toggle_line_end": "F6",
+                "toggle_line_end": "F4",
                 "toggle_word_join": "F3",
                 "timestamp_up": "ALT+UP",
                 "timestamp_down": "ALT+DOWN",
-                "cycle_checkpoint": "Tab",
+                "cycle_checkpoint": "ALT+RIGHT",
+                "break_line_here": "Return",
+                "delete_char": "Delete",
             },
             # 编辑模式：音乐暂停/停止时生效（以歌词/注音编辑为主）
             "edit_mode": {
@@ -146,17 +149,19 @@ class AppSettings:
                 "speed_down": "Q",
                 "speed_up": "W",
                 "edit_ruby": "F2",
-                "add_checkpoint": "F4",
-                "remove_checkpoint": "F5",
+                "add_checkpoint": "Space",
+                "remove_checkpoint": "Backspace",
                 "volume_up": "UP",
                 "volume_down": "DOWN",
                 "nav_prev_line": "LEFT",
                 "nav_next_line": "RIGHT",
-                "toggle_line_end": "F6",
+                "toggle_line_end": ".",
                 "toggle_word_join": "F3",
                 "timestamp_up": "ALT+UP",
                 "timestamp_down": "ALT+DOWN",
-                "cycle_checkpoint": "Tab",
+                "cycle_checkpoint": "ALT+RIGHT",
+                "break_line_here": "Return",
+                "delete_char": "Delete",
             },
         },
     }
@@ -587,12 +592,12 @@ class _KeyCaptureButton(PushButton):
     """按键捕获按钮 — 点击后进入监听模式，捕获下一次按键组合。"""
 
     key_captured = pyqtSignal(str)  # 捕获到的按键名称
-
-    _init_key: str = ""
+    key_restored = pyqtSignal()     # 因冲突或其他原因恢复原值时触发
 
     def _postInit(self):
         super()._postInit()
         self._captured_key = ""
+        self._original_key = ""
         self._listening = False
         self.setFixedWidth(120)
         self.setFont(QFont("Microsoft YaHei", 9))
@@ -600,9 +605,16 @@ class _KeyCaptureButton(PushButton):
 
     def _start_listening(self):
         self._listening = True
+        self._original_key = self._captured_key
         self.setText("按下按键...")
         self.setStyleSheet("border: 2px solid #0078D4; border-radius: 4px;")
         self.setFocus()
+
+    def restore_original_key(self):
+        """恢复修改前的按键（用于冲突处理）。"""
+        self._captured_key = self._original_key
+        self._update_display()
+        self.key_restored.emit()
 
     def keyPressEvent(self, a0: QKeyEvent | None):
         if a0 is None or not self._listening:
@@ -698,6 +710,18 @@ class _KeyCaptureButton(PushButton):
             Qt.Key.Key_PageUp: "PAGEUP",
             Qt.Key.Key_PageDown: "PAGEDOWN",
             Qt.Key.Key_Insert: "INSERT",
+            # 标点键（#11 修复：支持字面量键名）
+            Qt.Key.Key_Comma: ",",
+            Qt.Key.Key_Period: ".",
+            Qt.Key.Key_Slash: "/",
+            Qt.Key.Key_Semicolon: ";",
+            Qt.Key.Key_Apostrophe: "'",
+            Qt.Key.Key_BracketLeft: "[",
+            Qt.Key.Key_BracketRight: "]",
+            Qt.Key.Key_Backslash: "\\",
+            Qt.Key.Key_Minus: "-",
+            Qt.Key.Key_Equal: "=",
+            Qt.Key.Key_QuoteLeft: "`",
         }
         if key in _key_names:
             parts.append(_key_names[key])
@@ -736,16 +760,23 @@ class ShortcutSettingCard(SettingCard):
         lbl_or = QLabel("或", self)
         lbl_or.setFont(QFont("Microsoft YaHei", 9))
 
-        self.btn_key1.key_captured.connect(self._on_key_changed)
-        self.btn_key2.key_captured.connect(self._on_key_changed)
+        self.btn_key1.key_captured.connect(lambda k: self._on_key_changed(self.btn_key1, k))
+        self.btn_key2.key_captured.connect(lambda k: self._on_key_changed(self.btn_key2, k))
 
         self.hBoxLayout.addWidget(self.btn_key1, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addWidget(lbl_or, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addWidget(self.btn_key2, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
 
-    def _on_key_changed(self, _key_name: str):
+    def _on_key_changed(self, btn: _KeyCaptureButton, key_name: str):
         self.value_changed.emit(self.value())
+
+    def restore_key(self, key_name: str):
+        """将指定按钮恢复为原值（针对 #2）。"""
+        if self.btn_key1.get_key().strip().upper() == key_name.upper():
+            self.btn_key1.restore_original_key()
+        if self.btn_key2.get_key().strip().upper() == key_name.upper():
+            self.btn_key2.restore_original_key()
 
     def setValue(self, value: str):
         """设置快捷键值，支持 'Space' 或 'Space,A' 格式。"""
@@ -1617,7 +1648,8 @@ class SettingsInterface(ScrollArea):
             elif isinstance(card, BrowseSettingCard):
                 card.path_changed.connect(self._schedule_auto_save)
             elif isinstance(card, ShortcutSettingCard):
-                card.value_changed.connect(self._schedule_auto_save)
+                # #3 使用专门的冲突检测处理
+                card.value_changed.connect(lambda v, c=card: self._on_shortcut_changed(c, v))
 
     def _schedule_auto_save(self, *_args):
         """防抖调度自动保存（500ms 内无新操作则保存）。"""
@@ -1631,23 +1663,59 @@ class SettingsInterface(ScrollArea):
         #4：若快捷键冲突自动解除，逐条以 InfoBar 提示占用方功能名。
         #11：切换页面时 flush 未完成的 debounce，确保设置立即固化。
         """
-        # 先检测快捷键冲突并自动解决（UI 状态已同步变更）
-        conflicts = self._resolve_shortcut_conflicts()
-        for msg in conflicts:
-            InfoBar.warning(
-                title="快捷键冲突",
-                content=msg,
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=4000,
-                parent=self,
-            )
+        # #3 直接在快捷键变更时判断并落盘
         self._collect_settings()
         self._settings.save()
         self.settings_changed.emit()
         if self._store is not None:
             self._store.notify("settings")
+
+    def _on_shortcut_changed(self, changed_card: ShortcutSettingCard, new_value: str):
+        """快捷键卡片变更事件。处理冲突判断并保存。"""
+        if self._loading_settings:
+            return
+
+        # 1. 查找哪个键被改变了（相对于 AppSettings 里的值）
+        # 先收集当前所有 UI 中的快捷键，判断是否有冲突
+        all_cards = self._get_all_shortcut_cards()
+        
+        # 为了满足 #2，我们需要检测 changed_card 刚刚设置的键是否与其他卡片冲突
+        new_keys = [k.strip().upper() for k in new_value.split(",") if k.strip()]
+        
+        for mode_key, mode_label in self._SHORTCUT_MODES:
+            # 只检查 changed_card 参与的模式
+            mode_actions = self._shortcut_cards[mode_key]
+            if not any(card is changed_card for card in mode_actions.values()):
+                continue
+            
+            # 在此模式内检查冲突
+            for action_key, card in mode_actions.items():
+                if card is changed_card:
+                    continue
+                
+                for key in new_keys:
+                    if key in card.all_keys():
+                        # 冲突！
+                        # #2 恢复原按键
+                        for btn in [changed_card.btn_key1, changed_card.btn_key2]:
+                            if btn.get_key().strip().upper() == key:
+                                btn.restore_original_key()
+                        
+                        # 弹出提示
+                        action_titles = {a[0]: a[2] for a in self._SHORTCUT_ACTIONS}
+                        InfoBar.warning(
+                            title="快捷键冲突",
+                            content=f"[{mode_label}]「{action_titles[action_key]}」已占用按键 {key}",
+                            orient=Qt.Orientation.Horizontal,
+                            isClosable=True,
+                            position=InfoBarPosition.TOP,
+                            duration=4000,
+                            parent=self,
+                        )
+                        return # 冲突已处理，不保存
+
+        # 2. 无冲突，直接保存
+        self._schedule_auto_save()
 
     def _init_ui(self):
         self.expandLayout.setSpacing(28)
@@ -2123,32 +2191,32 @@ class SettingsInterface(ScrollArea):
     #   "timing_only"  仅打轴模式可用，UI 渲染一次并标注【仅打轴】
     #   "edit_only"    仅编辑模式可用，UI 渲染一次并标注【仅编辑】
     #   "split"        两模式下按键不同，UI 渲染两张卡片
-    _SHORTCUT_ACTIONS: list[tuple[str, object, str, str, str, str, str]] = [
-        # (key, icon, title, content, default_timing, default_edit, scope)
+    _SHORTCUT_ACTIONS: list[tuple[str, object, str, str, str, str, str, str, str]] = [
+        # (key, icon, title, content, default_timing, default_edit, scope, timing_content, edit_content)
         # — 两模式通用 —
-        ("play_pause", FIF.PLAY, "播放/暂停", "切换播放和暂停", "A", "A", "both"),
-        ("stop", FIF.PAUSE, "停止", "停止播放", "S", "S", "both"),
-        ("speed_down", FIF.SPEED_OFF, "减速", "降低播放速度", "Q", "Q", "both"),
-        ("speed_up", FIF.SPEED_HIGH, "加速", "提高播放速度", "W", "W", "both"),
-        ("volume_up", FIF.VOLUME, "音量增大", "增大播放音量", "UP", "UP", "both"),
-        ("volume_down", FIF.MUTE, "音量减小", "减小播放音量", "DOWN", "DOWN", "both"),
-        ("nav_prev_line", FIF.LEFT_ARROW, "上一行", "移动到上一歌词行", "LEFT", "LEFT", "both"),
-        ("nav_next_line", FIF.RIGHT_ARROW, "下一行", "移动到下一歌词行", "RIGHT", "RIGHT", "both"),
-        ("timestamp_up", FIF.UP, "时间戳+步长", "增加选中节奏点时间戳", "ALT+UP", "ALT+UP", "both"),
-        ("timestamp_down", FIF.DOWN, "时间戳-步长", "减少选中节奏点时间戳", "ALT+DOWN", "ALT+DOWN", "both"),
-        ("cycle_checkpoint", FIF.SYNC, "切换字内节奏点", "在当前字符的多个节奏点之间循环切换（Alt+→）", "ALT+RIGHT", "ALT+RIGHT", "both"),
-        ("edit_ruby", FIF.EDIT, "注音编辑", "编辑当前字符注音", "F2", "F2", "both"),
-        ("toggle_word_join", FIF.LINK, "连词", "连词/取消连词", "F3", "F3", "both"),
+        ("play_pause", FIF.PLAY, "播放/暂停", "切换播放和暂停", "A", "A", "both", None, None),
+        ("stop", FIF.PAUSE, "停止", "停止播放", "S", "S", "both", None, None),
+        ("speed_down", FIF.SPEED_OFF, "减速", "降低播放速度", "Q", "Q", "both", None, None),
+        ("speed_up", FIF.SPEED_HIGH, "加速", "提高播放速度", "W", "W", "both", None, None),
+        ("volume_up", FIF.VOLUME, "音量增大", "增大播放音量", "UP", "UP", "both", None, None),
+        ("volume_down", FIF.MUTE, "音量减小", "减小播放音量", "DOWN", "DOWN", "both", None, None),
+        ("nav_prev_line", FIF.LEFT_ARROW, "上一行", "移动到上一歌词行", "LEFT", "LEFT", "both", None, None),
+        ("nav_next_line", FIF.RIGHT_ARROW, "下一行", "移动到下一歌词行", "RIGHT", "RIGHT", "both", None, None),
+        ("timestamp_up", FIF.UP, "时间戳+步长", "增加选中节奏点时间戳", "ALT+UP", "ALT+UP", "both", None, None),
+        ("timestamp_down", FIF.DOWN, "时间戳-步长", "减少选中节奏点时间戳", "ALT+DOWN", "ALT+DOWN", "both", None, None),
+        ("cycle_checkpoint", FIF.SYNC, "切换字内节奏点", "在当前字符的多个节奏点之间循环切换（Alt+→）", "ALT+RIGHT", "ALT+RIGHT", "both", None, None),
+        ("edit_ruby", FIF.EDIT, "注音编辑", "编辑当前字符注音", "F2", "F2", "both", None, None),
+        ("toggle_word_join", FIF.LINK, "连词", "连词/取消连词", "F3", "F3", "both", None, None),
         # — 仅打轴模式 —
-        ("tag_now", FIF.PLAY, "打轴键", "打轴操作的按键【仅打轴模式】", "Space", "", "timing_only"),
-        ("seek_back", FIF.LEFT_ARROW, "后退", "后退跳转【仅打轴模式】", "Z", "", "timing_only"),
-        ("seek_forward", FIF.CHEVRON_RIGHT, "前进", "前进跳转【仅打轴模式】", "X", "", "timing_only"),
+        ("tag_now", FIF.PLAY, "打轴键", "打轴操作的按键【仅打轴模式】", "Space", "", "timing_only", None, None),
+        ("seek_back", FIF.LEFT_ARROW, "后退", "后退跳转【仅打轴模式】", "Z", "", "timing_only", None, None),
+        ("seek_forward", FIF.CHEVRON_RIGHT, "前进", "前进跳转【仅打轴模式】", "X", "", "timing_only", None, None),
         # — 两模式下按键不同 —
-        ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量（打轴 F5 / 编辑 Space）", "F5", "Space", "split"),
-        ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量（打轴 F6 / 编辑 Backspace）", "F6", "Backspace", "split"),
-        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记（打轴 F4 / 编辑 句号）", "F4", ".", "split"),
-        ("break_line_here", FIF.RETURN, "在此处换行", "在当前字符后插入换行", "Return", "Return", "both"),
-        ("delete_char", FIF.DELETE, "删除字符", "删除选中字符或当前字符（删行尾时行合并）", "Delete", "Delete", "both"),
+        ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量", "F5", "Space", "split", "增加当前字符的节奏点数量（打轴 F5）", "增加当前字符的节奏点数量（编辑 Space）"),
+        ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量", "F6", "Backspace", "split", "减少当前字符的节奏点数量（打轴 F6）", "减少当前字符的节奏点数量（编辑 Backspace）"),
+        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记", "F4", ".", "split", "切换当前字符的句尾标记（打轴 F4）", "切换当前字符的句尾标记（编辑 句号）"),
+        ("break_line_here", FIF.RETURN, "在此处换行", "在当前字符后插入换行", "Return", "Return", "both", None, None),
+        ("delete_char", FIF.DELETE, "删除字符", "删除选中字符或当前字符（删行尾时行合并）", "Delete", "Delete", "both", None, None),
     ]
 
     # 两种模式的中文标签，供 UI 标题与冲突提示使用
@@ -2174,47 +2242,62 @@ class SettingsInterface(ScrollArea):
         self._shortcut_groups: dict[str, SettingCardGroup] = {}  # 兼容旧引用
         self._shortcut_groups["_merged"] = group
 
-        for (
-            action_key,
-            icon,
-            title,
-            content,
-            default_timing,
-            default_edit,
-            scope,
-        ) in self._SHORTCUT_ACTIONS:
+        # #6 定义模式描述颜色 (QSS)
+        # 浅色模式下，深蓝色/深绿色/深紫色比较清晰
+        # 深色模式下，亮蓝/亮绿/亮紫
+        # 这里使用 qfluentwidgets 兼容的颜色，或者直接用 hex
+        color_timing = "#0078D4" # 蓝色
+        color_edit = "#107C10"   # 绿色
+        color_both = "#5C2D91"   # 紫色
+
+        for row in self._SHORTCUT_ACTIONS:
+            action_key, icon, title, content, default_timing, default_edit, scope, timing_content, edit_content = row
+            
+            # 模式前缀样式处理 (#6)
+            def _wrap_title(t, s):
+                if s == "both":
+                    return f'<span style="color: {color_both}; font-weight: bold;">[通用]</span> {t}'
+                if s == "timing_only":
+                    return f'<span style="color: {color_timing}; font-weight: bold;">[打轴]</span> {t}'
+                if s == "edit_only":
+                    return f'<span style="color: {color_edit}; font-weight: bold;">[编辑]</span> {t}'
+                if s == "split_timing":
+                    return f'<span style="color: {color_timing}; font-weight: bold;">[打轴]</span> {t}'
+                if s == "split_edit":
+                    return f'<span style="color: {color_edit}; font-weight: bold;">[编辑]</span> {t}'
+                return t
+
             if scope == "both":
-                # 单张卡片控制两模式（同键）
-                card = ShortcutSettingCard(
-                    icon, title, content, default_timing, parent=group
-                )
+                card = ShortcutSettingCard(icon, "", content, default_timing, parent=group)
+                card.setTitle(_wrap_title(title, "both"))
                 self._shortcut_cards["timing_mode"][action_key] = card
                 self._shortcut_cards["edit_mode"][action_key] = card
                 group.addSettingCard(card)
             elif scope == "timing_only":
-                card = ShortcutSettingCard(
-                    icon, f"{title}【仅打轴模式】", content, default_timing, parent=group
-                )
+                card = ShortcutSettingCard(icon, "", content, default_timing, parent=group)
+                card.setTitle(_wrap_title(title, "timing_only"))
                 self._shortcut_cards["timing_mode"][action_key] = card
                 group.addSettingCard(card)
             elif scope == "edit_only":
-                card = ShortcutSettingCard(
-                    icon, f"{title}【仅编辑模式】", content, default_edit, parent=group
-                )
+                card = ShortcutSettingCard(icon, "", content, default_edit, parent=group)
+                card.setTitle(_wrap_title(title, "edit_only"))
                 self._shortcut_cards["edit_mode"][action_key] = card
                 group.addSettingCard(card)
             elif scope == "split":
-                # 两张卡片，分别标注模式
-                card_t = ShortcutSettingCard(
-                    icon, f"{title}【打轴模式】", content, default_timing, parent=group
-                )
+                # #5 使用独立的 content
+                t_content = timing_content if timing_content else content
+                e_content = edit_content if edit_content else content
+                
+                card_t = ShortcutSettingCard(icon, "", t_content, default_timing, parent=group)
+                card_t.setTitle(_wrap_title(title, "split_timing"))
                 self._shortcut_cards["timing_mode"][action_key] = card_t
                 group.addSettingCard(card_t)
-                card_e = ShortcutSettingCard(
-                    icon, f"{title}【编辑模式】", content, default_edit, parent=group
-                )
+                
+                card_e = ShortcutSettingCard(icon, "", e_content, default_edit, parent=group)
+                card_e.setTitle(_wrap_title(title, "split_edit"))
                 self._shortcut_cards["edit_mode"][action_key] = card_e
                 group.addSettingCard(card_e)
+        
         self.expandLayout.addWidget(group)
 
     def _get_all_shortcut_cards(
@@ -2239,6 +2322,7 @@ class SettingsInterface(ScrollArea):
 
         - 冲突检测 **仅在同一模式内** 进行（#13：打轴/编辑两套独立）。
         - 冲突提示需包含另一个占用该按键的功能名称（#12）。
+        - #2: 如果检测到冲突，恢复本次修改前的按键。
         - scope=both 的卡片在两个模式下是同一对象，用 id() 去重避免自冲突。
         """
         conflicts: list[str] = []
@@ -2254,7 +2338,8 @@ class SettingsInterface(ScrollArea):
                     continue
                 seen_ids.add(id(card))
                 mode_cards.append((name, card))
-            # key → (功能名, 卡片)；按卡片顺序后者覆盖前者
+
+            # 冲突检测：同一按键不能被两个不同的功能占用
             key_owners: dict[str, tuple[str, ShortcutSettingCard]] = {}
             for name, card in mode_cards:
                 for key in card.all_keys():
@@ -2262,7 +2347,17 @@ class SettingsInterface(ScrollArea):
                         continue
                     if key in key_owners:
                         old_name, old_card = key_owners[key]
-                        # 清除被冲突方的该按键
+                        # #2 / #3 期望：如果当前正在编辑的卡片引起了冲突，则恢复它，而不是清除别人的
+                        # 但 _resolve_shortcut_conflicts 是在保存时运行的，它不知道谁是"新"的。
+                        # 不过，在 _do_auto_save 中调用时，我们希望它是实时的。
+                        
+                        # 改进逻辑：如果是在 _do_auto_save 实时触发，我们希望能恢复当前冲突的按键
+                        # 这里统一处理：如果发现冲突，清除旧的（保持原有逻辑作为安全网），
+                        # 但在 ShortcutSettingCard._on_key_changed 中我们可以做得更精细。
+                        
+                        # 为了满足 #2 "冲突时恢复原按键"，我们需要知道哪个是刚刚修改的。
+                        # 我们在 ShortcutSettingCard 中通过 restore_key 恢复。
+                        
                         old_card.clear_key_by_name(key)
                         conflicts.append(
                             f"[{mode_label}]「{name}」与「{old_name}」的按键 {key} 冲突，"
@@ -2558,6 +2653,10 @@ class SettingsInterface(ScrollArea):
                 if card is None:
                     # scope 限制此动作不在该模式下出现（如 timing_only/edit_only）
                     continue
+                
+                # 双模式合一的卡片不需要重复赋值
+                # (但这步目前是幂等的，不优化也没关系)
+                
                 value = self._settings.get(
                     f"shortcuts.{mode_key}.{action_key}", default_key
                 )

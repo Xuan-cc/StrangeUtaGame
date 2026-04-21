@@ -83,6 +83,16 @@ class Ruby:
     def __post_init__(self) -> None:
         if not self.text:
             raise ValidationError("注音文本不能为空")
+        if "#" in self.text and any(not group for group in self.text.split("#")):
+            raise ValidationError(f"Ruby 分组存在空组: {self.text!r}")
+
+    def groups(self) -> List[str]:
+        """按 '#' 分组返回；无 '#' 时返回单组。"""
+        return self.text.split("#") if "#" in self.text else [self.text]
+
+    def group_count(self) -> int:
+        """返回 Ruby 分组数量。"""
+        return len(self.groups()) if self.text else 0
 
 
 # ──────────────────────────────────────────────
@@ -362,8 +372,8 @@ class Word:
 
     @property
     def ruby_parts(self) -> List[str]:
-        """各字符的 Ruby 文本列表（仅有 Ruby 的字符）"""
-        return [c.ruby.text for c in self.characters if c.ruby]
+        """各字符 Ruby 的分组文本列表（按 checkpoint 顺序展开）。"""
+        return [group for c in self.characters if c.ruby for group in c.ruby.groups()]
 
     @property
     def ruby_text(self) -> str:

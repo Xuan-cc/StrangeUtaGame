@@ -817,3 +817,160 @@ after seek 1500ms → 1708ms（继续推进正常）
   模式禁用"，可扩展为枚举
 
 ---
+
+## 第十一批改动（2026-04-21）
+
+本批覆盖 10 项用户反馈（#1~#10），包含 UX 修复、英文注音改进、打轴预览渲染
+竞态根治，以及 **.sug 文件格式破坏性升级至 v0.2.0**（Ruby 分组）。
+
+### #1 默认快捷键描述对齐
+- `README.md` / `settings_interface.py` 默认快捷键表与实际 `DEFAULT_SETTINGS`
+  一致化，修复先前描述与默认值不同步的问题
+
+### #2 按键冲突弹窗后还原
+- `SettingsInterface._on_shortcut_changed`：检测到冲突时先 `InfoBar.warning`
+  提示，然后将 SettingCard 的显示值恢复为**修改前的上一次值**（通过
+  `_last_valid_shortcuts` 快照），不再停留在冲突状态
+
+### #3 冲突检测时机前移
+- 快捷键 SettingCard 的 `valueChanged` 信号回调中**立即**跑冲突检测，不再
+  等到 `_do_auto_save`。保存按钮消失后也能即时反馈
+
+### #4 特殊字符键支持
+- `settings_interface.py` 对 `,`、`.`、`/`、`;`、`'`、`[`、`]`、`、`、`-`、`=`
+  等 OEM 键位在 `_sequence_to_readable` / `_readable_to_sequence` 双向
+  转换表中加入显式映射，避免 PyQt6 sequence 解析失败
+- `editor_interface.py` keyPressEvent 相应映射补全
+
+### #5 三动作 content 描述修复
+- `increase_checkpoint` / `decrease_checkpoint` / `toggle_sentence_end`
+  三个 action 的 content 字符串修正为正确释义（此前存在 copy-paste 错误）
+
+### #6 模式描述字体颜色区分
+- 快捷键卡片"【打轴模式】"标签使用橙色，"【编辑模式】"使用蓝色，富文本
+  `<span style="color:...">` 注入到 title，提升模式可辨识度
+
+### #7 英文连词切分修复
+- `backend/infrastructure/parsers/english_ruby.py`：修复原 tokenizer 对
+  `what's` 之类缩写词错误切成 `{what|...}{'|'}{s|s}` 的问题
+- 现使用 `[A-Za-z]+(?:['.][A-Za-z]+)*` 完整匹配，将缩写视为单一 token
+
+### #8 e2k 注音分组修复
+- `auto_check_service.py::_apply_english_dictionary`：e2k 返回单片假名
+  串（如 `ヘロー`）时，按**字符数等分**到原英文单词的字母上，避免出现
+  `{hello|ヘロー,e,l,l,o}` 这样的错误分组
+- 统一走 `_group_reading_for_character` 聚合
+
+### #9 打轴预览字符选中渲染竞态（核心修复）
+
+**问题**：选中任意一行任意字符后，附近几行出现不规则空白/错位。
+
+**初判（已被否决）**：曾怀疑是补色高亮 `QColor.fromHsv` 在 paintEvent 中
+副作用；经 `explore` agent 审查确认该假设不成立——paintEvent 纯读状态、
+不触发 update/repaint。
+
+**真实根因**：`EditorInterface._on_char_selected` 在一次点击中对
+`preview.set_current_position` 进行了**三次竞态写入**：
+1. L2598 直接 set（本地 line_idx）
+2. L2610 `timing_service.move_to_checkpoint()` 的异步回调
+   `_apply_checkpoint_position` 再次 set（可能跳到最近有效 cp 的不同
+   line_idx）
+3. L2614 再手动 set 回原 line_idx
+
+三次写入之间 `_scroll_center_line` 被反复覆盖，导致 `_update_display`
+在中间帧读到错误的 scroll 基准。
+
+**修复**：
+- `KaraokePreview.set_current_position` 加幂等 guard：当 `line_idx`
+  未变时仅更新 `_current_char_idx`，不再重置
+  `_scroll_center_line`，避免多次无害重调把 scroll 打乱
+- `EditorInterface._on_char_selected` 重写：
+  - 若目标字符**有 checkpoint** → 通过 `timing_service.move_to_checkpoint()`
+    单一路径设置，由 `_apply_checkpoint_position` 负责最终写入
+    （single source of truth）
+  - 若目标字符**无 checkpoint** → 本地 `preview.set_current_position`
+    直接写，不再叠加 move_to_checkpoint
+- 回滚此前 3 处诊断日志（`set_project` / `wheelEvent` / `set_current_position`）
+
+### #10 Ruby 分组（破坏性升级 v0.1.0 → v0.2.0）
+
+**设计目标**：Ruby 从「整串字符时间戳」升级为「带分组信息的字符序列」，
+一组对应一个 checkpoint，用于支持 Ruby 内部精细打轴（而非整个词同一时间）。
+
+**用户澄清的语义（方案 B，双分隔符）**：
+- `,`（逗号）= 词内**字符边界**（哪几个读音属于哪个汉字）
+- `#`（井号）= 单个字符内的 **checkpoint 分组边界**
+- 示例：
+  - `私 わたし` → `わ#た#し`（单字三拍三 cp）
+  - `大冒険 だいぼうけん` → `だ#い,ぼ#う,けん`（三字，每字内再按 cp 分组）
+  - `赤い あかい` → `あ,か#い`（两字，"い" 字内两 cp）
+
+**数据模型变更**：
+- `backend/domain/models.py::Ruby`：
+  - 单字段 `text: str` 保持不变（破坏在于 text 的语义）
+  - `text` 只含 `#`，**不含 `,`**（因为 Ruby 挂在 Character 上，每字
+    一个 Ruby 对象，字符边界天然由 Character 承担）
+  - 新增 `groups() -> list[str]` 按 `#` 切分返回各 cp 分组
+  - 新增 `group_count() -> int`
+  - `__post_init__` 校验无空组
+
+**破坏性格式升级**：
+- `sug_parser.py::CURRENT_VERSION = "0.2.0"`
+- 新增 `_migrate_v2_to_v0_2_0`：对 v0.1.0 老文件，将原始完整读音重新
+  跑一遍 `analyze_sentence_ruby` 生成带 `#` 分组的新 text，然后保存
+- 用户分发仅两人，直接破坏升级无需兼容运行
+
+**涉及文件全链路**：
+- `models.py`：Ruby.groups / group_count / 校验
+- `inline_format.py`：内联 `{汉字|か#ん#じ}` 解析 `#`
+- `lyric_parser.py`：导入 `#` 透传
+- `ruby_analyzer.py`：新增 `_group_reading_for_character`，Ruby 聚合时
+  按 checkpoint 数切分
+- `sug_parser.py`：版本号 + 迁移
+- `nicokara_exporter.py`：导出时用 `ruby.groups()` 对齐时间戳
+- `auto_check_service.py`：自动注音产出带 `#` 的 Ruby；修复
+  `char_to_ruby` stale reference
+
+### 字典迁移脚本
+
+**新增** `scripts/migrate_dict_to_ruby_groups.py`：
+- 双分隔符语义迁移：`config/dictionary.json`（1891 条）
+- 识别 5 类：
+  - `unchanged`（已是正确格式）
+  - `comma_cp_split`（原 `,` 分隔 mora → 转为 `,` + `#`）
+  - `mora_split` / `char_split` / `char_split_flat`
+  - `manual_review`（英文带多余逗号等需人工审核的 411 条）
+- 支持 `--dry-run`（默认）和 `--apply`
+- Dry-run 实测 1891 条全部分类成功无崩溃
+
+### 验证
+
+- `lsp_diagnostics(severity="error")` 对 11 个改动文件：无本批新增错误
+  （pre-existing PyQt5/6 stub 噪音不变）
+- 迁移脚本 dry-run：1891 条字典条目全部归类成功
+- #9 修复后 `set_current_position` 语义简化，竞态路径消除
+
+### 涉及文件
+
+| 文件 | 批次项 |
+|---|---|
+| `README.md` | #1 |
+| `frontend/settings/settings_interface.py` | #1~#6 |
+| `frontend/editor/editor_interface.py` | #4 #9 |
+| `backend/application/auto_check_service.py` | #7 #8 #10 |
+| `backend/infrastructure/parsers/english_ruby.py` | #7 |
+| `backend/domain/models.py` | #10 |
+| `backend/infrastructure/parsers/inline_format.py` | #10 |
+| `backend/infrastructure/parsers/lyric_parser.py` | #10 |
+| `backend/infrastructure/parsers/ruby_analyzer.py` | #10 |
+| `backend/infrastructure/persistence/sug_parser.py` | #10 |
+| `backend/infrastructure/exporters/nicokara_exporter.py` | #10 |
+| `scripts/migrate_dict_to_ruby_groups.py`（新增） | #10 |
+
+### 遗留 / 未来优化
+- 字典 411 条 `manual_review` 待人工逐条校对（主要是英文词含多余逗号）
+- 用户本地需手动执行迁移脚本：
+  `python scripts/migrate_dict_to_ruby_groups.py --apply`
+- .sug v0.1.0 老项目首次打开自动升级至 v0.2.0，无需用户操作
+
+---
