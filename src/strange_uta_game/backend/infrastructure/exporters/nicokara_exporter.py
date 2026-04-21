@@ -11,11 +11,14 @@
 - 演唱者标签：在演唱者切换处自动插入【演唱者名】标签
 """
 
+import re
 from collections import OrderedDict
 from typing import List, Optional, Dict, Any, Set, Tuple
 
 from .base import BaseExporter, ExportError
 from strange_uta_game.backend.domain import Project, Sentence, Singer
+
+_NICOKARA_TS_RE = re.compile(r'\[\d+:\d+\.\d+\]')
 
 
 def _format_nicokara_ts(timestamp_ms: int, offset_ms: int = 0) -> str:
@@ -104,6 +107,11 @@ class NicokaraExporter(BaseExporter):
                 prev_singer_id,
                 default_singer_id,
             )
+            # 演唱者过滤后可能产生无实际字符的空行，跳过
+            stripped = line_text.strip()
+            content_only = _NICOKARA_TS_RE.sub('', stripped)
+            if singer_ids is not None and not content_only.strip():
+                continue
             output_lines.append(line_text)
 
             if sentence.has_timetags:
@@ -298,6 +306,11 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 prev_singer_id,
                 default_singer_id,
             )
+            # 演唱者过滤后可能产生无实际字符的空行，跳过
+            stripped = line_text.strip()
+            content_only = _NICOKARA_TS_RE.sub('', stripped)
+            if singer_ids is not None and not content_only.strip():
+                continue
             output_lines.append(line_text)
 
             if sentence.has_timetags:

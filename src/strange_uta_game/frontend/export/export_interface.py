@@ -172,12 +172,6 @@ class ExportInterface(QWidget):
         self.btn_export.clicked.connect(self._on_export)
         right_layout.addWidget(self.btn_export)
 
-        # 批量导出
-        self.btn_batch = PushButton("批量导出（全部格式）", self)
-        self.btn_batch.setIcon(FIF.FOLDER)
-        self.btn_batch.clicked.connect(self._on_batch_export)
-        right_layout.addWidget(self.btn_batch)
-
         content.addWidget(right_card, 1)
 
         layout.addLayout(content, 1)
@@ -414,50 +408,3 @@ class ExportInterface(QWidget):
                 duration=5000,
                 parent=self,
             )
-
-    def _on_batch_export(self):
-        if not self._project:
-            InfoBar.warning(
-                title="无项目",
-                content="请先创建或打开项目",
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=3000,
-                parent=self,
-            )
-            return
-
-        output_dir = self.line_output.text()
-        if not output_dir:
-            output_dir = QFileDialog.getExistingDirectory(self, "选择导出目录", "")
-            if not output_dir:
-                return
-            self.line_output.setText(output_dir)
-
-        formats = self._export_service.get_available_formats()
-        format_names = [fmt["name"] for fmt in formats]
-        base_name = (
-            self.line_filename.text().strip()
-            or self._project.metadata.title
-            or "untitled"
-        )
-
-        results = self._export_service.batch_export(
-            self._project,
-            format_names,
-            output_dir,
-            base_name,
-            offset_ms=self._get_export_offset(),
-        )
-        success_count = sum(1 for r in results if r.success)
-
-        InfoBar.success(
-            title="批量导出完成",
-            content=f"成功导出 {success_count}/{len(format_names)} 种格式",
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=5000,
-            parent=self,
-        )

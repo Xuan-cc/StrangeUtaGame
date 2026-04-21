@@ -153,60 +153,6 @@ class ExportService:
                 error_message=f"未知错误: {e}",
             )
 
-    def batch_export(
-        self,
-        project: Project,
-        formats: List[str],
-        output_dir: str,
-        base_name: str,
-        offset_ms: int = 0,
-    ) -> List[ExportResult]:
-        """批量导出到多种格式
-
-        Args:
-            project: 项目对象
-            formats: 格式名称列表
-            output_dir: 输出目录
-            base_name: 基本文件名（不含扩展名）
-
-        Returns:
-            导出结果列表
-        """
-        results = []
-        total = len(formats)
-
-        for i, format_name in enumerate(formats):
-            # 获取导出器以确定扩展名
-            try:
-                exporter = get_exporter_by_name(format_name)
-                ext = exporter.file_extension
-            except ValueError:
-                results.append(
-                    ExportResult(
-                        success=False,
-                        error_message=f"未知的格式: {format_name}",
-                    )
-                )
-                continue
-
-            # 构建文件路径
-            file_path = Path(output_dir) / f"{base_name}{ext}"
-
-            # 报告进度
-            if self._progress_callback:
-                progress = int((i / total) * 100)
-                self._progress_callback(progress, f"正在导出 {format_name}...")
-
-            # 执行导出
-            result = self.export(project, format_name, str(file_path), offset_ms)
-            results.append(result)
-
-        # 报告完成
-        if self._progress_callback:
-            self._progress_callback(100, "批量导出完成")
-
-        return results
-
     def validate_before_export(self, project: Project) -> List[str]:
         """验证项目是否可以导出
 
