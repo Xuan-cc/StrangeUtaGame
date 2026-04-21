@@ -31,6 +31,9 @@ from strange_uta_game.backend.infrastructure.parsers.english_ruby import (
     EnglishRubyLookup,
     find_english_words,
 )
+from strange_uta_game.backend.infrastructure.parsers.e2k_engine import (
+    EnglishToKanaEngine,
+)
 
 
 # 允许自动注音的字符类型白名单（#11）：英文字符、汉字、平假名、片假名
@@ -152,15 +155,22 @@ class AutoCheckService:
     def _apply_english_dictionary(
         self, text: str, ruby_results: List[RubyResult], dict_covered: set
     ) -> Tuple[List[RubyResult], set]:
-        """在用户词典之后、库函数结果之前，尝试用 e2k 英语词典覆盖英文单词注音（#12）。
+        """对英文单词应用自动注音（#12 / 第八批 #9）。
+
+        优先级（针对英文单词）：
+          1. e2k 规则引擎（基于 CMU Pronouncing Dictionary 的音素规则转换）
+          2. e2k.txt 词表（作为引擎失败时的 fallback）
 
         只覆盖未被用户词典占用的英文单词。
 
         Returns:
-            (合并后的 ruby_results, 被 e2k 词典覆盖的字符索引集合)
+            (合并后的 ruby_results, 被英文注音覆盖的字符索引集合)
         """
+        engine = EnglishToKanaEngine.instance()
         lookup = EnglishRubyLookup.instance()
-        if not lookup.has():
+        has_engine = engine.has()
+        has_lookup = lookup.has()
+        if not has_engine and not has_lookup:
             return ruby_results, set()
         e2k_covered: set[int] = set()
         overrides: List[RubyResult] = []
@@ -169,7 +179,11 @@ class AutoCheckService:
             # 跳过被用户词典覆盖的范围
             if span & dict_covered:
                 continue
-            reading = lookup.lookup(word)
+            # 优先使用规则引擎
+            reading = engine.convert(word) if has_engine else None
+            # 引擎未命中则回退到静态词表
+            if not reading and has_lookup:
+                reading = lookup.lookup(word)
             if not reading:
                 continue
             overrides.append(
@@ -180,7 +194,7 @@ class AutoCheckService:
             e2k_covered |= span
         if not overrides:
             return ruby_results, e2k_covered
-        # 移除被 e2k 覆盖位置上来自库函数的结果
+        # 移除被英文注音覆盖位置上来自库函数的结果
         filtered = [
             r
             for r in ruby_results

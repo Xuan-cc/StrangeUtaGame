@@ -63,8 +63,12 @@ class EnglishRubyLookup:
             p = Path(base) / "strange_uta_game" / "config" / "e2k.txt"
             if p.exists():
                 return p
-        # 开发环境
-        dev_path = Path(__file__).resolve().parent.parent.parent / "config" / "e2k.txt"
+        # 开发环境 (parsers/ → infrastructure/ → backend/ → strange_uta_game/)
+        dev_path = (
+            Path(__file__).resolve().parent.parent.parent.parent
+            / "config"
+            / "e2k.txt"
+        )
         if dev_path.exists():
             return dev_path
         return None

@@ -50,6 +50,7 @@ args = [
     "--add-data=src/strange_uta_game/config/dictionary.json;strange_uta_game/config",  # 默认字典
     "--add-data=src/strange_uta_game/config/singers.json;strange_uta_game/config",  # 默认演唱者
     "--add-data=src/strange_uta_game/config/e2k.txt;strange_uta_game/config",  # 英语注音词典 (CMU-based)
+    "--add-data=src/strange_uta_game/config/cmudict-0.7b;strange_uta_game/config",  # CMU Pronouncing Dictionary (e2k 引擎数据源)
     # ── 隐藏导入（PyInstaller 可能检测不到的模块） ──
     # 音频
     "--hidden-import=sounddevice",
