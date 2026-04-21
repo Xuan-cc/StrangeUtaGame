@@ -5,7 +5,7 @@
 ## 功能概览
 
 - **精准打轴** — 类似节奏游戏的打轴体验，空格键 + 功能键一气呵成
-- **变速播放** — 50%~200% 速度调节，Phase Vocoder 变速不变调，立体声保持
+- **变速播放** — 50%~200% 速度调节，WSOLA 流式变速不变调，实时拖动无爆音
 - **日语注音** — 基于 SudachiPy 的上下文感知自动注音，内置 1757 条常用词典
 - **多格式支持** — 导入/导出 LRC、ASS、SRT、TXT、KRA、Nicokara 等格式
 - **多演唱者** — 逐字级别演唱者指定，颜色区分，拖拽划词选择
@@ -104,7 +104,7 @@ python build.py
 在设置 → Offset 校准中使用可视化校准工具调整偏移量。
 
 **Q: 变速后声音有杂音？**
-变速时会有极短的过渡期（<1秒），之后自动切换到变速不变调模式。
+调速瞬间由 audiotsm WSOLA 状态机平滑衔接，立体声相位一致，正常情况下不会有爆音。如遇异常请截取片段反馈。
 
 **Q: 如何使用已有的 RhythmicaLyrics 字典？**
 在设置 → 用户字典中点击「导入 RL 字典」。
@@ -115,7 +115,7 @@ python build.py
 ## 技术栈
 
 - UI 框架：PyQt6 + PyQt-Fluent-Widgets
-- 音频处理：sounddevice + soundfile
+- 音频处理：sounddevice + soundfile + audiotsm (WSOLA)
 - 日语处理：SudachiPy + pykakasi + jaconv
 - 架构：分层架构（Domain / Application / Infrastructure / Presentation）
 

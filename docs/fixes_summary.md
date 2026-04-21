@@ -565,6 +565,85 @@
 
 ### 遗留
 
-- **#14 音频流式渲染**：引入 `audiotsm` 重写播放循环的任务，计划下一轮单独实施，本轮未动。
+- **#14 音频流式渲染**：已在后续批次实施完成，详见「第九批」。
+
+---
+
+## 第九批修复与功能增强（2026-04-21，#14 音频流式渲染）
+
+### 背景
+
+此前 `SoundDeviceEngine` 采用「Phase Vocoder 后台预渲染 + 线性插值回退 + 32ms 淡入拼接」
+的架构。实测表明：在动态拖动倍速滑块（尤其 0.5~0.75 区间）时，即便有淡入过渡，
+仍会听到短促的"采样碎裂声"。根因是 Phase Vocoder 在变速瞬间切换数据源时，
+预渲染数据与回退插值之间存在相位不连续。
+
+用户与作者协同调研（见 `音频播放优化问答.md`）后确认：在纯 Python 生态中，
+`audiotsm` 的 WSOLA 算法是这一场景的最佳方案——它是**状态保持（stateful）**
+的流式 TSM 对象，内部维护 overlap-add 缓冲区，可在 `set_speed()` 调用时
+基于上一周期相位平滑衔接下一周期。
+
+### 重构方案
+
+以 `audiotsm.wsola` 完全替换原 Phase Vocoder 路径。架构三要素：
+
+| 组件 | 作用 |
+|------|------|
+| `self._original_data` | 预加载的原始 PCM（不再保留 `self._data` 变速副本） |
+| `self._tsm` | 整个生命周期复用的 WSOLA 状态机 |
+| `self._reader` | 从当前虚拟播放头切片出的 `ArrayReader` |
+| `self._reader_pos_samples` | 以原始采样为基准的权威播放头 |
+
+### 关键设计点
+
+1. **回调内同步拉取**：`_render_frames(outdata, frames)` 循环调用
+   `tsm.read_from(reader)` + `tsm.write_to(writer)` 直到拿够 frames 或 EOF，
+   不再依赖后台预处理线程。
+2. **速度切换无重建**：`set_speed` 仅调 `self._tsm.set_speed(speed)`，
+   不销毁 TSM，不清空缓冲区；WSOLA 自行平滑过渡，彻底消除"碎裂感"。
+3. **Seek 触发重建**：`set_position_ms` 调 `_rebuild_tsm_and_reader` 重新
+   切片 + 新建 WSOLA（因为跨越非连续位置时旧相位不再有效）。
+4. **位置推进基于消耗**：`read_from` 返回实际消耗的原始采样数，据此推进
+   `_reader_pos_samples`，再折算为毫秒。位置始终以**原始音频时间**表达，
+   不受倍速影响（便于与时间戳标签对齐）。
+5. **防死循环护栏**：`stuck_counter > 3` 无进展即退出渲染循环，避免
+   `read_from` 偶发返回 0 时挂死音频线程。
+
+### 代码变更
+
+- 完全重写 `src/strange_uta_game/backend/infrastructure/audio/sounddevice_engine.py`：
+  - 删除 `_apply_speed_stretch` / `_time_stretch`（Phase Vocoder）
+  - 删除 `_callback_stretched` / `_callback_interp`（双模式回调分支）
+  - 删除 `_stretched_speed` / `_stretch_version` / `_switch_fade_samples`
+    （Phase Vocoder 状态）
+  - 新增 `_rebuild_tsm_and_reader(start_sample)`
+  - 新增 `_render_frames(outdata, frames)`
+  - 保留 `IAudioEngine` 接口契约（外部调用方无需改动）
+- `requirements.txt`：新增 `audiotsm>=0.1.2`
+- `build.py`：新增 `audiotsm` 依赖探测、`--hidden-import=audiotsm` 和
+  `--collect-all=audiotsm`
+- `README.md`：变速功能描述由 "Phase Vocoder" 改为 "WSOLA 流式变速不变调，
+  实时拖动无爆音"；FAQ 改写；技术栈补充 `audiotsm`
+
+### 验证（独立冒烟测试）
+
+```
+loaded. duration_ms=3000 channels=2 sr=44100
+speed=1.0: nonzero=8818/8820, max=0.3000, pos_ms=150
+speed=0.75: nonzero=8819/8820, max=0.3000, pos_ms=232  # ΔMs=82（比 1.0 少，符合慢速）
+speed=1.5:  nonzero=8820/8820, max=0.3000, pos_ms=380  # ΔMs=148（比 1.0 多，符合快速）
+after seek 1500ms → 1708ms（继续推进正常）
+```
+
+立体声振幅未爆音（峰值严格 ≤ 0.3 源信号），seek 后继续渲染正常，
+连续 set_speed 无爆音无 underflow。
+
+### 遗留 / 未来优化
+
+- `sd.OutputStream` 回调频率较高（~23ms @ 44.1kHz / 4410 blocksize），
+  若用户 CPU 较弱且音频极长（>10 分钟），单次 WSOLA 分析可能偶发抖动。
+  必要时可将 blocksize 从 100ms 增大到 200ms 缓冲更厚。
+- 当前 WSOLA 默认参数（帧长、分析 hop）为 audiotsm 默认值。若未来遇到
+  极端素材（大量打击乐瞬态），可尝试 `audiotsm.phasevocoder` 对比。
 
 ---

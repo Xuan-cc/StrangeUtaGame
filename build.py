@@ -22,6 +22,7 @@ try:
     import PyQt6
     import sounddevice
     import soundfile
+    import audiotsm
     import pykakasi
     import qfluentwidgets
     import numpy
@@ -55,6 +56,8 @@ args = [
     # 音频
     "--hidden-import=sounddevice",
     "--hidden-import=soundfile",
+    "--hidden-import=audiotsm",
+    "--hidden-import=audiotsm.io.array",
     "--hidden-import=numpy",
     "--hidden-import=numpy.core",
     "--hidden-import=numpy.fft",
@@ -85,6 +88,7 @@ args = [
     # ── 收集所有二进制文件和数据 ──
     "--collect-all=sounddevice",
     "--collect-all=soundfile",
+    "--collect-all=audiotsm",
     "--collect-all=pykakasi",
     "--collect-all=qfluentwidgets",
     "--collect-data=sudachipy",
