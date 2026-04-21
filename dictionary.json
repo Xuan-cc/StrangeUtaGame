@@ -1,6 +1,671 @@
 [
   {
     "enabled": true,
+    "word": "立た",
+    "reading": "た,た"
+  },
+  {
+    "enabled": true,
+    "word": "微笑ん",
+    "reading": "ほほ,え,ん"
+  },
+  {
+    "enabled": true,
+    "word": "微笑め",
+    "reading": "ほほ,え,め"
+  },
+  {
+    "enabled": true,
+    "word": "微笑む",
+    "reading": "ほほ,え,む"
+  },
+  {
+    "enabled": true,
+    "word": "微笑ま",
+    "reading": "ほほ,え,ま"
+  },
+  {
+    "enabled": true,
+    "word": "荒ら",
+    "reading": "あ,ら"
+  },
+  {
+    "enabled": true,
+    "word": "木霊",
+    "reading": "こだま"
+  },
+  {
+    "enabled": true,
+    "word": "真夏",
+    "reading": "ま,なつ"
+  },
+  {
+    "enabled": true,
+    "word": "気怠",
+    "reading": "け,だる"
+  },
+  {
+    "enabled": true,
+    "word": "メモリ",
+    "reading": "me,mo,ry"
+  },
+  {
+    "enabled": true,
+    "word": "背影",
+    "reading": "はい,えい"
+  },
+  {
+    "enabled": true,
+    "word": "リズム",
+    "reading": "rhy,th,m"
+  },
+  {
+    "enabled": true,
+    "word": "カスタム",
+    "reading": "cu,s,to,m"
+  },
+  {
+    "enabled": true,
+    "word": "ラブドール",
+    "reading": "lo,ve,do,,ll"
+  },
+  {
+    "enabled": true,
+    "word": "ベル",
+    "reading": "be,ll"
+  },
+  {
+    "enabled": true,
+    "word": "パズル",
+    "reading": "pu,zz,le"
+  },
+  {
+    "enabled": true,
+    "word": "ゲーム",
+    "reading": "ga,,me"
+  },
+  {
+    "enabled": true,
+    "word": "シリコン",
+    "reading": "si,li,co,n"
+  },
+  {
+    "enabled": true,
+    "word": "ピュア",
+    "reading": "pu,,re"
+  },
+  {
+    "enabled": true,
+    "word": "ハート",
+    "reading": "hear,,t"
+  },
+  {
+    "enabled": true,
+    "word": "エキストラ",
+    "reading": "e,x,1,t,ra"
+  },
+  {
+    "enabled": true,
+    "word": "夢中",
+    "reading": "む,ちゅう"
+  },
+  {
+    "enabled": true,
+    "word": "リボン",
+    "reading": "ri,bb,on"
+  },
+  {
+    "enabled": true,
+    "word": "メロディ",
+    "reading": "me,lo,dy"
+  },
+  {
+    "enabled": true,
+    "word": "キャンバス",
+    "reading": "ca,,n,va,s"
+  },
+  {
+    "enabled": true,
+    "word": "三人",
+    "reading": "さん,にん"
+  },
+  {
+    "enabled": true,
+    "word": "メモリー",
+    "reading": "me,mo,ry"
+  },
+  {
+    "enabled": true,
+    "word": "ドレス",
+    "reading": "d,re,ss"
+  },
+  {
+    "enabled": true,
+    "word": "マイ",
+    "reading": "my"
+  },
+  {
+    "enabled": true,
+    "word": "ダーリン",
+    "reading": "dar,,li,ng"
+  },
+  {
+    "enabled": true,
+    "word": "スタート",
+    "reading": "s,tar,,t"
+  },
+  {
+    "enabled": true,
+    "word": "ライン",
+    "reading": "l,i,ne"
+  },
+  {
+    "enabled": true,
+    "word": "レシピ",
+    "reading": "re,ci,pe"
+  },
+  {
+    "enabled": true,
+    "word": "ハーモニー",
+    "reading": "har,,mo,ny"
+  },
+  {
+    "enabled": true,
+    "word": "タイミング",
+    "reading": "ti,,min,,g"
+  },
+  {
+    "enabled": true,
+    "word": "ハッピー",
+    "reading": "ha,,ppy"
+  },
+  {
+    "enabled": true,
+    "word": "ドリーム",
+    "reading": "d,rea,,m"
+  },
+  {
+    "enabled": true,
+    "word": "クリーム",
+    "reading": "cr,ee,,m"
+  },
+  {
+    "enabled": true,
+    "word": "メッセージ",
+    "reading": "me,,ssa,,ge"
+  },
+  {
+    "enabled": true,
+    "word": "シンフォニー",
+    "reading": "sym,,pho,,ny"
+  },
+  {
+    "enabled": true,
+    "word": "カラフル",
+    "reading": "co,lor,fu,l"
+  },
+  {
+    "enabled": true,
+    "word": "スリル",
+    "reading": "th,ri,ll"
+  },
+  {
+    "enabled": true,
+    "word": "スマイル",
+    "reading": "s,mi,,le"
+  },
+  {
+    "enabled": true,
+    "word": "スイーツ",
+    "reading": "s,wee,,ts"
+  },
+  {
+    "enabled": true,
+    "word": "パッケージ",
+    "reading": "pac,,ka,,ge"
+  },
+  {
+    "enabled": true,
+    "word": "カップ",
+    "reading": "cu,,p"
+  },
+  {
+    "enabled": true,
+    "word": "コーヒー",
+    "reading": "c,o,ff,ee"
+  },
+  {
+    "enabled": true,
+    "word": "ラッキー",
+    "reading": "luc,,ky"
+  },
+  {
+    "enabled": true,
+    "word": "デコレーション",
+    "reading": "de,co,r,a,tion"
+  },
+  {
+    "enabled": true,
+    "word": "メリーゴーランド",
+    "reading": "me,rry-,,go-,,round"
+  },
+  {
+    "enabled": true,
+    "word": "ファンファーレ",
+    "reading": "fan,,,fa,,,re"
+  },
+  {
+    "enabled": true,
+    "word": "トレーニング",
+    "reading": "t,rai,,nin,,g"
+  },
+  {
+    "enabled": true,
+    "word": "リレー",
+    "reading": "re,lay"
+  },
+  {
+    "enabled": true,
+    "word": "クラス",
+    "reading": "c,la,ss"
+  },
+  {
+    "enabled": true,
+    "word": "アンカー",
+    "reading": "an,,chor"
+  },
+  {
+    "enabled": true,
+    "word": "バトン",
+    "reading": "ba,ton"
+  },
+  {
+    "enabled": true,
+    "word": "スパート",
+    "reading": "s,pur,,t"
+  },
+  {
+    "enabled": true,
+    "word": "リード",
+    "reading": "lea,,d"
+  },
+  {
+    "enabled": true,
+    "word": "スナイパー",
+    "reading": "s,n,i,per"
+  },
+  {
+    "enabled": true,
+    "word": "ディレイ",
+    "reading": "de,,lay2"
+  },
+  {
+    "enabled": true,
+    "word": "ループ",
+    "reading": "loo,,p"
+  },
+  {
+    "enabled": true,
+    "word": "レコード",
+    "reading": "re,co,,rd"
+  },
+  {
+    "enabled": true,
+    "word": "ドラマ",
+    "reading": "d,ra,ma"
+  },
+  {
+    "enabled": true,
+    "word": "ラテ",
+    "reading": "la,tte"
+  },
+  {
+    "enabled": true,
+    "word": "ショート",
+    "reading": "shor,,,t"
+  },
+  {
+    "enabled": true,
+    "word": "セーブ",
+    "reading": "sa,,ve"
+  },
+  {
+    "enabled": true,
+    "word": "サイコ",
+    "reading": "psy,,cho"
+  },
+  {
+    "enabled": true,
+    "word": "ラブ",
+    "reading": "lo,ve"
+  },
+  {
+    "enabled": true,
+    "word": "ホメオシス",
+    "reading": "ho,me,o,sta,sis"
+  },
+  {
+    "enabled": true,
+    "word": "ネクロシス",
+    "reading": "ne,cr,o,si,s"
+  },
+  {
+    "enabled": true,
+    "word": "アンバー",
+    "reading": "a,n,ber"
+  },
+  {
+    "enabled": true,
+    "word": "オーバーヒート",
+    "reading": "ov,,er,,heat"
+  },
+  {
+    "enabled": true,
+    "word": "カーテン",
+    "reading": "cur,,tain"
+  },
+  {
+    "enabled": true,
+    "word": "コール",
+    "reading": "call"
+  },
+  {
+    "enabled": true,
+    "word": "フル",
+    "reading": "fu,ll"
+  },
+  {
+    "enabled": true,
+    "word": "アンチ",
+    "reading": "an,,ti"
+  },
+  {
+    "enabled": true,
+    "word": "クロス",
+    "reading": "c,ro,ss"
+  },
+  {
+    "enabled": true,
+    "word": "ミニ",
+    "reading": "mi,ni"
+  },
+  {
+    "enabled": true,
+    "word": "キス",
+    "reading": "ki,ss"
+  },
+  {
+    "enabled": true,
+    "word": "コンボ",
+    "reading": "com,,bo"
+  },
+  {
+    "enabled": true,
+    "word": "エンヴィー",
+    "reading": "en,,vy"
+  },
+  {
+    "enabled": true,
+    "word": "ピース",
+    "reading": "pie,,ce"
+  },
+  {
+    "enabled": true,
+    "word": "プリキュア",
+    "reading": "p,re,cu,,re"
+  },
+  {
+    "enabled": true,
+    "word": "ヒント",
+    "reading": "hi,n,t"
+  },
+  {
+    "enabled": true,
+    "word": "トリック",
+    "reading": "t,ri,,ck"
+  },
+  {
+    "enabled": true,
+    "word": "ジュエル",
+    "reading": "jew,,e,l"
+  },
+  {
+    "enabled": true,
+    "word": "ミステリー",
+    "reading": "my,s,te,ry"
+  },
+  {
+    "enabled": true,
+    "word": "ポイント",
+    "reading": "po,in,,t"
+  },
+  {
+    "enabled": true,
+    "word": "キー",
+    "reading": "key"
+  },
+  {
+    "enabled": true,
+    "word": "シグナル",
+    "reading": "si,g,na,l"
+  },
+  {
+    "enabled": true,
+    "word": "ジュリエット",
+    "reading": "Ju,,li,e,,t"
+  },
+  {
+    "enabled": true,
+    "word": "ロミオ",
+    "reading": "Ro,me,o"
+  },
+  {
+    "enabled": true,
+    "word": "パノラマ",
+    "reading": "pa,no,ra,ma"
+  },
+  {
+    "enabled": true,
+    "word": "デネブ",
+    "reading": "De,ne,b"
+  },
+  {
+    "enabled": true,
+    "word": "スピカ",
+    "reading": "S,pi,ca"
+  },
+  {
+    "enabled": true,
+    "word": "ページ",
+    "reading": "pa,,ge"
+  },
+  {
+    "enabled": true,
+    "word": "ドア",
+    "reading": "doo,r"
+  },
+  {
+    "enabled": true,
+    "word": "ライオン",
+    "reading": "li,,o,n"
+  },
+  {
+    "enabled": true,
+    "word": "アラーム",
+    "reading": "a,la,r,m"
+  },
+  {
+    "enabled": true,
+    "word": "サイレン",
+    "reading": "si,,ren"
+  },
+  {
+    "enabled": true,
+    "word": "デート",
+    "reading": "da,,te"
+  },
+  {
+    "enabled": true,
+    "word": "メランコリ",
+    "reading": "me,lan,,cho,ly"
+  },
+  {
+    "enabled": true,
+    "word": "イルミネーション",
+    "reading": "il,lu,mi,n,a,tion"
+  },
+  {
+    "enabled": true,
+    "word": "マフラー",
+    "reading": "mu,ff,ler"
+  },
+  {
+    "enabled": true,
+    "word": "空っぽ",
+    "reading": "から"
+  },
+  {
+    "enabled": true,
+    "word": "ピースフル",
+    "reading": "pea,,ce,fu,l"
+  },
+  {
+    "enabled": true,
+    "word": "すろーりー",
+    "reading": "slow,,,ly"
+  },
+  {
+    "enabled": true,
+    "word": "独り言",
+    "reading": "ひと,1,ごと"
+  },
+  {
+    "enabled": true,
+    "word": "クローバー",
+    "reading": "c,lo,,ver"
+  },
+  {
+    "enabled": true,
+    "word": "ナンセンス",
+    "reading": "non,,sense"
+  },
+  {
+    "enabled": true,
+    "word": "ノスタルジー",
+    "reading": "no,s,ta,l,gia"
+  },
+  {
+    "enabled": true,
+    "word": "1人",
+    "reading": "ひとり"
+  },
+  {
+    "enabled": true,
+    "word": "クリア",
+    "reading": "c,le,ar"
+  },
+  {
+    "enabled": true,
+    "word": "コンティニュー",
+    "reading": "con,,ti,,nue"
+  },
+  {
+    "enabled": true,
+    "word": "オーバー",
+    "reading": "ov,,er"
+  },
+  {
+    "enabled": true,
+    "word": "サイト",
+    "reading": "s,i,te"
+  },
+  {
+    "enabled": true,
+    "word": "バイ",
+    "reading": "by,e"
+  },
+  {
+    "enabled": true,
+    "word": "ピンク",
+    "reading": "pi,n,k"
+  },
+  {
+    "enabled": true,
+    "word": "スカート",
+    "reading": "s,kir,,t"
+  },
+  {
+    "enabled": true,
+    "word": "メルト",
+    "reading": "me,l,t"
+  },
+  {
+    "enabled": true,
+    "word": "トレイラー",
+    "reading": "t,rai,,ler"
+  },
+  {
+    "enabled": true,
+    "word": "イントロ",
+    "reading": "in,,t,ro"
+  },
+  {
+    "enabled": true,
+    "word": "アウトロ",
+    "reading": "o,u,t,ro"
+  },
+  {
+    "enabled": true,
+    "word": "フィラメント",
+    "reading": "fi,,la,me,n,t"
+  },
+  {
+    "enabled": true,
+    "word": "ビート",
+    "reading": "bea,,t"
+  },
+  {
+    "enabled": true,
+    "word": "アンストッパブル",
+    "reading": "un,,s,to,,ppa,b,le"
+  },
+  {
+    "enabled": true,
+    "word": "パルス",
+    "reading": "pu,l,se"
+  },
+  {
+    "enabled": true,
+    "word": "マイク",
+    "reading": "mi,,c"
+  },
+  {
+    "enabled": true,
+    "word": "テスト",
+    "reading": "te,s,t"
+  },
+  {
+    "enabled": true,
+    "word": "アノマリー",
+    "reading": "a,no,ma,ly"
+  },
+  {
+    "enabled": true,
+    "word": "ギター",
+    "reading": "gui,ta,r"
+  },
+  {
+    "enabled": true,
+    "word": "スパイス",
+    "reading": "s,pi,,ce"
+  },
+  {
+    "enabled": true,
+    "word": "バケット",
+    "reading": "bu,cke,,t"
+  },
+  {
+    "enabled": true,
     "word": "自由",
     "reading": "じ,ゆう"
   },

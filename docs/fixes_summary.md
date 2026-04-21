@@ -443,3 +443,56 @@
 | 8 | KaraokePreview 渲染逻辑修复 | 直接使用 render_timestamps 消除渲染时的手动时间偏移计算。 | editor_interface.py |
 
 ---
+
+## 第七批修复与功能增强（2026-04-21）
+
+用户反馈的 14 条问题，集中修复 UI 交互、注音质量和导出清洁度。
+
+### 配色与主题（#1、#2）
+
+**问题**: 深色模式配色异常；界面配色模式只在启动时更新，无法实时切换。
+
+**修复**: 删除「随系统」与「深色」主题选项，固定为浅色主题。设置页面新增提示「暂仅支持浅色主题，自定义配色将在后续版本更新」。
+
+- `main_window.py` 启动默认主题改为 `Theme.LIGHT`
+- `settings_interface.py` 主题下拉菜单仅保留「浅色」，theme_map 缩减为 `{0: "light"}`
+
+### 打轴界面改进（#3、#4、#5、#6、#7、#8、#9）
+
+- **#3 行号显示**: `KaraokePreview.paintEvent` 在左侧 45px 边距内绘制每行的行号（1-based），当前行使用高亮色，便于快速定位。文本居中起点相应右移 `_line_number_margin`。
+- **#4 行编辑界面行号重复**: 隐藏 `TableWidget.verticalHeader()`，仅保留自定义「行号」列（Column 0）。
+- **#5 打轴↔行编辑跳转**: `MainWindow.switchTo` 检测 `editorInterface → editViewInterface` 切换，自动调用 `EditInterface.scroll_to_line(current_line_idx)` 跳转到当前行并居中显示。
+- **#6 时间戳显示**: `_update_line_info` 读取选中字符的 `timestamps` 与 `sentence_end_ts`，在底部状态栏显示为 `MM:SS.mmm` 格式；未打轴字符显示「未打轴」。
+- **#7 移除清除标签快捷键**: 从 `DEFAULT_SETTINGS.shortcuts` 与 `_init_shortcut_group` 中删除 `clear_tags` 条目；按钮「清除当前行标签」保留但移除快捷键提示。
+- **#8 快捷键提示动态化**: 新增 `_update_shortcut_hint(shortcut_actions)` 方法，每次 `_apply_settings()` 时从当前 key_map 重新生成提示字符串，不再硬编码。
+- **#9 时间戳微调快捷键**: 新增 `timestamp_up`/`timestamp_down` 两个默认为 `ALT+UP`/`ALT+DOWN` 的快捷键，调用 `_adjust_current_timestamp(±1ms)` 直接修改当前 checkpoint 对应的时间戳（普通 `timestamps[cp_idx]` 或 `sentence_end_ts`）并触发 `push_to_ruby` + store 通知。
+
+### 注音逻辑重设计（#10、#11、#12）
+
+- **#10 连词来源限定**: `AutoCheckResult` 新增 `origin_source` 字段（`"dict"`/`"e2k"`/`"library"`/`"self"`/`"none"`）。`apply_to_sentence` 生成 `linked_to_next` 时仅当两字符来源均为「用户词典」或「e2k 英语词典」且属同一 block 才连词；库函数（Sudachi/pykakasi）和自注音结果一律不连词。`update_checkpoints_from_rubies` 不再重建连词关系，仅清理与 check_count 不一致的残留。
+- **#11 括号排除注音**: 在 `analyze_sentence` 中新增 `_RUBY_ALLOWED_TYPES` 白名单（`ALPHABET`/`KANJI`/`HIRAGANA`/`KATAKANA`/`SOKUON`/`LONG_VOWEL`），过滤不属于注音目标的字符（日语括号、符号等）。
+- **#12 英语注音 e2k 支持**:
+  - 新增 `infrastructure/parsers/english_ruby.py`，加载 CMU-based `e2k.txt` 为 `{小写单词: カタカナ}` 字典（单例加载，3.2MB）。
+  - `_apply_english_dictionary` 在用户词典之后、库函数之前执行，按单词边界（`[A-Za-z]+(['.][A-Za-z]+)*`）匹配覆盖英文字段。
+  - 优先级链: 用户字典 → e2k 词典 → 库函数（Sudachi/pykakasi）。
+  - `build.py` 增加 `e2k.txt` 到 PyInstaller 数据文件；`src/strange_uta_game/config/e2k.txt` 随包分发。
+
+### 导出清洁度（#13、#14）
+
+- **#13 Nicokara 空行跳过**: `NicokaraExporter.export` 与 `NicokaraWithRubyExporter.export` 在 `_export_sentence_with_singer` 产出后，正则 `_NICOKARA_TS_RE` 去除所有时间戳标记，检查剩余文本是否为空；演唱者过滤模式下如果剩余为空则跳过该行，避免输出纯时间戳占位行。
+- **#14 移除批量导出**:
+  - 删除 `export_interface.py` 的「批量导出（全部格式）」按钮与 `_on_batch_export` 处理器。
+  - 删除 `ExportService.batch_export` 方法。
+
+### 涉及文件
+
+| 类别 | 文件 |
+|------|------|
+| 前端 | main_window.py, settings_interface.py, editor_interface.py, edit_interface.py, export_interface.py |
+| 后端 | auto_check_service.py, export_service.py |
+| 解析器 | english_ruby.py (新增), text_splitter.py |
+| 导出器 | nicokara_exporter.py |
+| 打包 | build.py |
+| 资源 | src/strange_uta_game/config/e2k.txt, e2k_readme.txt |
+
+---
