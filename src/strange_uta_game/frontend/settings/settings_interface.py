@@ -63,6 +63,7 @@ class AppSettings:
             "fast_forward_ms": 5000,
             "rewind_ms": 5000,
             "jump_before_ms": 3000,
+            "timing_adjust_step_ms": 10,
         },
         "auto_check": {
             "hiragana": True,
@@ -113,24 +114,50 @@ class AppSettings:
             "interval_minutes": 5,
         },
         "shortcuts": {
-            "play_pause": "A",
-            "stop": "S",
-            "tag_now": "Space",
-            "seek_back": "Z",
-            "seek_forward": "X",
-            "speed_down": "Q",
-            "speed_up": "W",
-            "edit_ruby": "F2",
-            "add_checkpoint": "F4",
-            "remove_checkpoint": "F5",
-            "volume_up": "UP",
-            "volume_down": "DOWN",
-            "nav_prev_line": "LEFT",
-            "nav_next_line": "RIGHT",
-            "toggle_line_end": "F6",
-            "toggle_word_join": "F3",
-            "timestamp_up": "ALT+UP",
-            "timestamp_down": "ALT+DOWN",
+            # 打轴模式：音乐播放时生效（以实时打轴操作为主）
+            "timing_mode": {
+                "play_pause": "A",
+                "stop": "S",
+                "tag_now": "Space",
+                "seek_back": "Z",
+                "seek_forward": "X",
+                "speed_down": "Q",
+                "speed_up": "W",
+                "edit_ruby": "F2",
+                "add_checkpoint": "F4",
+                "remove_checkpoint": "F5",
+                "volume_up": "UP",
+                "volume_down": "DOWN",
+                "nav_prev_line": "LEFT",
+                "nav_next_line": "RIGHT",
+                "toggle_line_end": "F6",
+                "toggle_word_join": "F3",
+                "timestamp_up": "ALT+UP",
+                "timestamp_down": "ALT+DOWN",
+                "cycle_checkpoint": "Tab",
+            },
+            # 编辑模式：音乐暂停/停止时生效（以歌词/注音编辑为主）
+            "edit_mode": {
+                "play_pause": "A",
+                "stop": "S",
+                "tag_now": "Space",
+                "seek_back": "Z",
+                "seek_forward": "X",
+                "speed_down": "Q",
+                "speed_up": "W",
+                "edit_ruby": "F2",
+                "add_checkpoint": "F4",
+                "remove_checkpoint": "F5",
+                "volume_up": "UP",
+                "volume_down": "DOWN",
+                "nav_prev_line": "LEFT",
+                "nav_next_line": "RIGHT",
+                "toggle_line_end": "F6",
+                "toggle_word_join": "F3",
+                "timestamp_up": "ALT+UP",
+                "timestamp_down": "ALT+DOWN",
+                "cycle_checkpoint": "Tab",
+            },
         },
     }
 
@@ -1683,11 +1710,22 @@ class SettingsInterface(ScrollArea):
             suffix=" ms",
             parent=self.timing_group,
         )
+        self.card_timing_step = SpinSettingCard(
+            FIF.UP,
+            "微调时间戳步长",
+            "Alt+↑/Alt+↓ 微调选中节奏点时间戳的步长",
+            min_val=1,
+            max_val=500,
+            step=1,
+            suffix=" ms",
+            parent=self.timing_group,
+        )
 
         self.timing_group.addSettingCard(self.card_offset)
         self.timing_group.addSettingCard(self.card_speed_correction)
         self.timing_group.addSettingCard(self.card_preview_lines)
         self.timing_group.addSettingCard(self.card_export_offset)
+        self.timing_group.addSettingCard(self.card_timing_step)
         self.expandLayout.addWidget(self.timing_group)
 
     def _init_calibration_group(self):
@@ -2001,157 +2039,95 @@ class SettingsInterface(ScrollArea):
 
     # ── 快捷键 ──
 
+    # 统一维护两种模式下的动作元数据，避免 UI/加载/保存三处重复写死。
+    # 结构: (action_key, 图标, 标题, 描述, 默认按键)
+    _SHORTCUT_ACTIONS: list[tuple[str, object, str, str, str]] = [
+        ("tag_now", FIF.PLAY, "打轴键", "打轴操作的按键", "Space"),
+        ("play_pause", FIF.PLAY, "播放/暂停", "切换播放和暂停", "A"),
+        ("stop", FIF.PAUSE, "停止", "停止播放", "S"),
+        ("seek_back", FIF.LEFT_ARROW, "后退", "后退跳转", "Z"),
+        ("seek_forward", FIF.CHEVRON_RIGHT, "前进", "前进跳转", "X"),
+        ("speed_down", FIF.SPEED_OFF, "减速", "降低播放速度", "Q"),
+        ("speed_up", FIF.SPEED_HIGH, "加速", "提高播放速度", "W"),
+        ("edit_ruby", FIF.EDIT, "注音编辑", "编辑当前字符注音", "F2"),
+        ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量", "F4"),
+        ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量（最小为0）", "F5"),
+        ("volume_up", FIF.VOLUME, "音量增大", "增大播放音量", "UP"),
+        ("volume_down", FIF.MUTE, "音量减小", "减小播放音量", "DOWN"),
+        ("nav_prev_line", FIF.LEFT_ARROW, "上一行", "移动到上一歌词行", "LEFT"),
+        ("nav_next_line", FIF.RIGHT_ARROW, "下一行", "移动到下一歌词行", "RIGHT"),
+        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记", "F6"),
+        ("toggle_word_join", FIF.LINK, "连词", "连词/取消连词", "F3"),
+        ("timestamp_up", FIF.UP, "时间戳+步长", "增加选中节奏点时间戳", "ALT+UP"),
+        ("timestamp_down", FIF.DOWN, "时间戳-步长", "减少选中节奏点时间戳", "ALT+DOWN"),
+        ("cycle_checkpoint", FIF.SYNC, "切换节奏点", "在当前字符的节奏点之间循环切换", "Tab"),
+    ]
+
+    # 两种模式的中文标签，供 UI 标题与冲突提示使用
+    _SHORTCUT_MODES: list[tuple[str, str]] = [
+        ("timing_mode", "打轴模式（音乐播放时）"),
+        ("edit_mode", "编辑模式（音乐暂停时）"),
+    ]
+
     def _init_shortcut_group(self):
-        self.shortcut_group = SettingCardGroup("快捷键", self.scrollWidget)
+        # 为两种模式分别创建独立的 SettingCardGroup，避免视觉混淆
+        # self._shortcut_cards[mode_key][action_key] -> ShortcutSettingCard
+        self._shortcut_cards: dict[str, dict[str, ShortcutSettingCard]] = {}
+        self._shortcut_groups: dict[str, SettingCardGroup] = {}
 
-        self.card_sc_tag = ShortcutSettingCard(
-            FIF.PLAY, "打轴键", "打轴操作的按键", "Space", parent=self.shortcut_group
-        )
-        self.card_sc_play_pause = ShortcutSettingCard(
-            FIF.PLAY, "播放/暂停", "切换播放和暂停", "A", parent=self.shortcut_group
-        )
-        self.card_sc_stop = ShortcutSettingCard(
-            FIF.PAUSE, "停止", "停止播放", "S", parent=self.shortcut_group
-        )
-        self.card_sc_seek_back = ShortcutSettingCard(
-            FIF.LEFT_ARROW, "后退", "后退跳转", "Z", parent=self.shortcut_group
-        )
-        self.card_sc_seek_forward = ShortcutSettingCard(
-            FIF.CHEVRON_RIGHT, "前进", "前进跳转", "X", parent=self.shortcut_group
-        )
-        self.card_sc_speed_down = ShortcutSettingCard(
-            FIF.SPEED_OFF, "减速", "降低播放速度", "Q", parent=self.shortcut_group
-        )
-        self.card_sc_speed_up = ShortcutSettingCard(
-            FIF.SPEED_HIGH, "加速", "提高播放速度", "W", parent=self.shortcut_group
-        )
-        self.card_sc_edit_ruby = ShortcutSettingCard(
-            FIF.EDIT, "注音编辑", "编辑当前字符注音", "F2", parent=self.shortcut_group
-        )
-        self.card_sc_toggle_cp = ShortcutSettingCard(
-            FIF.PIN,
-            "增加节奏点",
-            "增加当前字符的节奏点数量",
-            "F4",
-            parent=self.shortcut_group,
-        )
-        self.card_sc_remove_cp = ShortcutSettingCard(
-            FIF.REMOVE,
-            "删除节奏点",
-            "减少当前字符的节奏点数量（最小为0）",
-            "F5",
-            parent=self.shortcut_group,
-        )
-        self.card_sc_volume_up = ShortcutSettingCard(
-            FIF.VOLUME, "音量增大", "增大播放音量", "UP", parent=self.shortcut_group
-        )
-        self.card_sc_volume_down = ShortcutSettingCard(
-            FIF.MUTE, "音量减小", "减小播放音量", "DOWN", parent=self.shortcut_group
-        )
-        self.card_sc_nav_prev = ShortcutSettingCard(
-            FIF.LEFT_ARROW,
-            "上一行",
-            "移动到上一歌词行",
-            "LEFT",
-            parent=self.shortcut_group,
-        )
-        self.card_sc_nav_next = ShortcutSettingCard(
-            FIF.RIGHT_ARROW,
-            "下一行",
-            "移动到下一歌词行",
-            "RIGHT",
-            parent=self.shortcut_group,
-        )
-        self.card_sc_toggle_line_end = ShortcutSettingCard(
-            FIF.TAG,
-            "切换句尾",
-            "切换当前字符的句尾标记",
-            "F6",
-            parent=self.shortcut_group,
-        )
-        self.card_sc_toggle_word_join = ShortcutSettingCard(
-            FIF.LINK,
-            "连词",
-            "连词/取消连词",
-            "F3",
-            self.shortcut_group,
-        )
-        self.card_sc_timestamp_up = ShortcutSettingCard(
-            FIF.UP,
-            "时间戳+1ms",
-            "增加当前对音字符时间戳1毫秒",
-            "ALT+UP",
-            parent=self.shortcut_group,
-        )
-        self.card_sc_timestamp_down = ShortcutSettingCard(
-            FIF.DOWN,
-            "时间戳-1ms",
-            "减少当前对音字符时间戳1毫秒",
-            "ALT+DOWN",
-            parent=self.shortcut_group,
-        )
+        for mode_key, mode_label in self._SHORTCUT_MODES:
+            group = SettingCardGroup(f"快捷键 · {mode_label}", self.scrollWidget)
+            self._shortcut_groups[mode_key] = group
+            self._shortcut_cards[mode_key] = {}
+            for action_key, icon, title, content, default_key in self._SHORTCUT_ACTIONS:
+                card = ShortcutSettingCard(
+                    icon, title, content, default_key, parent=group
+                )
+                self._shortcut_cards[mode_key][action_key] = card
+                group.addSettingCard(card)
+            self.expandLayout.addWidget(group)
 
-        self.shortcut_group.addSettingCard(self.card_sc_tag)
-        self.shortcut_group.addSettingCard(self.card_sc_play_pause)
-        self.shortcut_group.addSettingCard(self.card_sc_stop)
-        self.shortcut_group.addSettingCard(self.card_sc_seek_back)
-        self.shortcut_group.addSettingCard(self.card_sc_seek_forward)
-        self.shortcut_group.addSettingCard(self.card_sc_speed_down)
-        self.shortcut_group.addSettingCard(self.card_sc_speed_up)
-        self.shortcut_group.addSettingCard(self.card_sc_edit_ruby)
-        self.shortcut_group.addSettingCard(self.card_sc_toggle_cp)
-        self.shortcut_group.addSettingCard(self.card_sc_remove_cp)
-        self.shortcut_group.addSettingCard(self.card_sc_volume_up)
-        self.shortcut_group.addSettingCard(self.card_sc_volume_down)
-        self.shortcut_group.addSettingCard(self.card_sc_nav_prev)
-        self.shortcut_group.addSettingCard(self.card_sc_nav_next)
-        self.shortcut_group.addSettingCard(self.card_sc_toggle_line_end)
-        self.shortcut_group.addSettingCard(self.card_sc_toggle_word_join)
-        self.shortcut_group.addSettingCard(self.card_sc_timestamp_up)
-        self.shortcut_group.addSettingCard(self.card_sc_timestamp_down)
-        self.expandLayout.addWidget(self.shortcut_group)
-
-    def _get_all_shortcut_cards(self) -> list[tuple[str, "ShortcutSettingCard"]]:
-        """返回 (功能名称, 卡片) 列表。"""
-        return [
-            ("打轴键", self.card_sc_tag),
-            ("播放/暂停", self.card_sc_play_pause),
-            ("停止", self.card_sc_stop),
-            ("后退", self.card_sc_seek_back),
-            ("前进", self.card_sc_seek_forward),
-            ("减速", self.card_sc_speed_down),
-            ("加速", self.card_sc_speed_up),
-            ("注音编辑", self.card_sc_edit_ruby),
-            ("增加节奏点", self.card_sc_toggle_cp),
-            ("删除节奏点", self.card_sc_remove_cp),
-            ("音量增大", self.card_sc_volume_up),
-            ("音量减小", self.card_sc_volume_down),
-            ("上一行", self.card_sc_nav_prev),
-            ("下一行", self.card_sc_nav_next),
-            ("切换句尾", self.card_sc_toggle_line_end),
-            ("连词", self.card_sc_toggle_word_join),
-            ("时间戳+1ms", self.card_sc_timestamp_up),
-            ("时间戳-1ms", self.card_sc_timestamp_down),
-        ]
+    def _get_all_shortcut_cards(
+        self,
+    ) -> list[tuple[str, str, str, "ShortcutSettingCard"]]:
+        """返回 (模式键, 模式标签, 功能名称, 卡片) 列表。"""
+        action_titles = {a[0]: a[2] for a in self._SHORTCUT_ACTIONS}
+        result: list[tuple[str, str, str, ShortcutSettingCard]] = []
+        for mode_key, mode_label in self._SHORTCUT_MODES:
+            for action_key, card in self._shortcut_cards[mode_key].items():
+                result.append(
+                    (mode_key, mode_label, action_titles[action_key], card)
+                )
+        return result
 
     def _resolve_shortcut_conflicts(self) -> list[str]:
-        """检测并解决快捷键冲突。返回冲突描述列表。"""
-        cards = self._get_all_shortcut_cards()
-        # 构建 key → (功能名, 卡片) 映射，按卡片顺序后者覆盖前者
-        key_owners: dict[str, tuple[str, ShortcutSettingCard]] = {}
+        """检测并解决快捷键冲突。
+
+        - 冲突检测 **仅在同一模式内** 进行（#13：打轴/编辑两套独立）。
+        - 冲突提示需包含另一个占用该按键的功能名称（#12）。
+        """
         conflicts: list[str] = []
-        for name, card in cards:
-            for key in card.all_keys():
-                if not key:
-                    continue
-                if key in key_owners:
-                    old_name, old_card = key_owners[key]
-                    # 清除被冲突方的该按键
-                    old_card.clear_key_by_name(key)
-                    conflicts.append(
-                        f"「{name}」占用了按键 {key}，「{old_name}」的该按键已被清除"
-                    )
-                key_owners[key] = (name, card)
+        cards = self._get_all_shortcut_cards()
+        # 以模式为粒度独立检测冲突
+        for mode_key, mode_label in self._SHORTCUT_MODES:
+            mode_cards = [
+                (name, card) for m, _, name, card in cards if m == mode_key
+            ]
+            # key → (功能名, 卡片)；按卡片顺序后者覆盖前者
+            key_owners: dict[str, tuple[str, ShortcutSettingCard]] = {}
+            for name, card in mode_cards:
+                for key in card.all_keys():
+                    if not key:
+                        continue
+                    if key in key_owners:
+                        old_name, old_card = key_owners[key]
+                        # 清除被冲突方的该按键
+                        old_card.clear_key_by_name(key)
+                        conflicts.append(
+                            f"[{mode_label}]「{name}」与「{old_name}」的按键 {key} 冲突，"
+                            f"已清除「{old_name}」上的该按键"
+                        )
+                    key_owners[key] = (name, card)
         return conflicts
 
     # ── 操作按钮 ──
@@ -2339,6 +2315,9 @@ class SettingsInterface(ScrollArea):
         self.card_preview_lines.setValue(
             self._settings.get("timing.show_preview_lines", 5)
         )
+        self.card_timing_step.setValue(
+            self._settings.get("timing.timing_adjust_step_ms", 10)
+        )
 
         # Auto Check
         self.card_check_hiragana.setChecked(
@@ -2427,49 +2406,14 @@ class SettingsInterface(ScrollArea):
             self._settings.get("auto_save.interval_minutes", 5)
         )
 
-        # 快捷键
-        self.card_sc_tag.setValue(self._settings.get("shortcuts.tag_now", "Space"))
-        self.card_sc_play_pause.setValue(
-            self._settings.get("shortcuts.play_pause", "A")
-        )
-        self.card_sc_stop.setValue(self._settings.get("shortcuts.stop", "S"))
-        self.card_sc_seek_back.setValue(self._settings.get("shortcuts.seek_back", "Z"))
-        self.card_sc_seek_forward.setValue(
-            self._settings.get("shortcuts.seek_forward", "X")
-        )
-        self.card_sc_speed_down.setValue(
-            self._settings.get("shortcuts.speed_down", "Q")
-        )
-        self.card_sc_speed_up.setValue(self._settings.get("shortcuts.speed_up", "W"))
-        self.card_sc_edit_ruby.setValue(self._settings.get("shortcuts.edit_ruby", "F2"))
-        self.card_sc_toggle_cp.setValue(
-            self._settings.get("shortcuts.add_checkpoint", "F4")
-        )
-        self.card_sc_remove_cp.setValue(
-            self._settings.get("shortcuts.remove_checkpoint", "F5")
-        )
-        self.card_sc_volume_up.setValue(self._settings.get("shortcuts.volume_up", "UP"))
-        self.card_sc_volume_down.setValue(
-            self._settings.get("shortcuts.volume_down", "DOWN")
-        )
-        self.card_sc_nav_prev.setValue(
-            self._settings.get("shortcuts.nav_prev_line", "LEFT")
-        )
-        self.card_sc_nav_next.setValue(
-            self._settings.get("shortcuts.nav_next_line", "RIGHT")
-        )
-        self.card_sc_toggle_line_end.setValue(
-            self._settings.get("shortcuts.toggle_line_end", "F6")
-        )
-        self.card_sc_toggle_word_join.setValue(
-            self._settings.get("shortcuts.toggle_word_join", "F3")
-        )
-        self.card_sc_timestamp_up.setValue(
-            self._settings.get("shortcuts.timestamp_up", "ALT+UP")
-        )
-        self.card_sc_timestamp_down.setValue(
-            self._settings.get("shortcuts.timestamp_down", "ALT+DOWN")
-        )
+        # 快捷键（双模式）
+        for mode_key, _ in self._SHORTCUT_MODES:
+            for action_key, _icon, _title, _content, default_key in self._SHORTCUT_ACTIONS:
+                card = self._shortcut_cards[mode_key][action_key]
+                value = self._settings.get(
+                    f"shortcuts.{mode_key}.{action_key}", default_key
+                )
+                card.setValue(value)
 
     def _collect_settings(self):
         """从 UI 控件收集所有设置并写入 AppSettings"""
@@ -2487,6 +2431,9 @@ class SettingsInterface(ScrollArea):
             "timing.speed_correction", self.card_speed_correction.value()
         )
         self._settings.set("timing.show_preview_lines", self.card_preview_lines.value())
+        self._settings.set(
+            "timing.timing_adjust_step_ms", self.card_timing_step.value()
+        )
 
         # Auto Check
         self._settings.set("auto_check.hiragana", self.card_check_hiragana.isChecked())
@@ -2567,35 +2514,13 @@ class SettingsInterface(ScrollArea):
             "auto_save.interval_minutes", self.card_auto_save_interval.value()
         )
 
-        # 快捷键
-        self._settings.set("shortcuts.tag_now", self.card_sc_tag.value())
-        self._settings.set("shortcuts.play_pause", self.card_sc_play_pause.value())
-        self._settings.set("shortcuts.stop", self.card_sc_stop.value())
-        self._settings.set("shortcuts.seek_back", self.card_sc_seek_back.value())
-        self._settings.set("shortcuts.seek_forward", self.card_sc_seek_forward.value())
-        self._settings.set("shortcuts.speed_down", self.card_sc_speed_down.value())
-        self._settings.set("shortcuts.speed_up", self.card_sc_speed_up.value())
-        self._settings.set("shortcuts.edit_ruby", self.card_sc_edit_ruby.value())
-        self._settings.set("shortcuts.add_checkpoint", self.card_sc_toggle_cp.value())
-        self._settings.set(
-            "shortcuts.remove_checkpoint", self.card_sc_remove_cp.value()
-        )
-        self._settings.set("shortcuts.volume_up", self.card_sc_volume_up.value())
-        self._settings.set("shortcuts.volume_down", self.card_sc_volume_down.value())
-        self._settings.set("shortcuts.nav_prev_line", self.card_sc_nav_prev.value())
-        self._settings.set("shortcuts.nav_next_line", self.card_sc_nav_next.value())
-        self._settings.set(
-            "shortcuts.toggle_line_end", self.card_sc_toggle_line_end.value()
-        )
-        self._settings.set(
-            "shortcuts.toggle_word_join", self.card_sc_toggle_word_join.value()
-        )
-        self._settings.set(
-            "shortcuts.timestamp_up", self.card_sc_timestamp_up.value()
-        )
-        self._settings.set(
-            "shortcuts.timestamp_down", self.card_sc_timestamp_down.value()
-        )
+        # 快捷键（双模式）
+        for mode_key, _ in self._SHORTCUT_MODES:
+            for action_key, *_ in self._SHORTCUT_ACTIONS:
+                card = self._shortcut_cards[mode_key][action_key]
+                self._settings.set(
+                    f"shortcuts.{mode_key}.{action_key}", card.value()
+                )
 
     # ==================== 操作 ====================
 
