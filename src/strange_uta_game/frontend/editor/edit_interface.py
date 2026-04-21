@@ -668,6 +668,10 @@ class EditInterface(QWidget):
         )
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        # 隐藏Qt默认行号表头，避免与自定义行号列重复
+        v_header = self.table.verticalHeader()
+        if v_header is not None:
+            v_header.setVisible(False)
 
         # Column Resizing
         header = self.table.horizontalHeader()
@@ -680,6 +684,17 @@ class EditInterface(QWidget):
     def set_project(self, project: Project):
         self.project = project
         self._update_table()
+
+    def scroll_to_line(self, line_idx: int):
+        """滚动表格并选中指定行（用于从打轴界面自动跳转）"""
+        if not self.project or not (0 <= line_idx < len(self.project.sentences)):
+            return
+        self.table.selectRow(line_idx)
+        item = self.table.item(line_idx, 0)
+        if item is not None:
+            self.table.scrollToItem(
+                item, QAbstractItemView.ScrollHint.PositionAtCenter
+            )
 
     def set_store(self, store):
         """接入 ProjectStore 统一数据中心。"""

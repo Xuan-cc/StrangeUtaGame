@@ -84,7 +84,7 @@ class MainWindow(MSFluentWindow):
     def _init_window(self):
         """初始化窗口属性"""
         setThemeColor("#FF6B6B", lazy=True)
-        setTheme(Theme.AUTO, lazy=True)
+        setTheme(Theme.LIGHT, lazy=True)
 
         self.setWindowTitle("StrangeUtaGame - 歌词打轴工具")
         self.setMinimumSize(1200, 800)
@@ -192,6 +192,15 @@ class MainWindow(MSFluentWindow):
         # 切换到设置界面时从磁盘重新加载配置（用户可能通过其他途径修改了配置）
         if hasattr(self, "settingInterface") and interface is self.settingInterface:
             self.settingInterface.reload_from_disk()
+        # 从打轴界面切换到行编辑界面时，自动跳转到当前行
+        if (
+            hasattr(self, "editorInterface")
+            and hasattr(self, "editViewInterface")
+            and self._current_interface is self.editorInterface
+            and interface is self.editViewInterface
+        ):
+            line_idx = self.editorInterface._current_line_idx
+            self.editViewInterface.scroll_to_line(line_idx)
         self._current_interface = interface
         super().switchTo(interface)
 

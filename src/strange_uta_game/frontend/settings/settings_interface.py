@@ -127,9 +127,10 @@ class AppSettings:
             "volume_down": "DOWN",
             "nav_prev_line": "LEFT",
             "nav_next_line": "RIGHT",
-            "clear_tags": "BACKSPACE",
             "toggle_line_end": "F6",
             "toggle_word_join": "F3",
+            "timestamp_up": "ALT+UP",
+            "timestamp_down": "ALT+DOWN",
         },
     }
 
@@ -1944,9 +1945,12 @@ class SettingsInterface(ScrollArea):
             FIF.BRUSH,
             "主题",
             "切换应用主题颜色方案",
-            items=["浅色", "深色", "自动"],
+            items=["浅色"],
             parent=self.ui_group,
         )
+        self.theme_hint = QLabel("暂仅支持浅色主题，自定义配色将在后续版本更新", self.ui_group)
+        self.theme_hint.setWordWrap(True)
+        self.theme_hint.setStyleSheet("color: rgba(0, 0, 0, 0.6);")
         self.card_font_size = SpinSettingCard(
             FIF.FONT_SIZE,
             "歌词字体大小",
@@ -1959,6 +1963,7 @@ class SettingsInterface(ScrollArea):
         )
 
         self.ui_group.addSettingCard(self.card_theme)
+        self.ui_group.layout().addWidget(self.theme_hint)
         self.ui_group.addSettingCard(self.card_font_size)
         self.expandLayout.addWidget(self.ui_group)
 
@@ -2057,13 +2062,6 @@ class SettingsInterface(ScrollArea):
             "RIGHT",
             parent=self.shortcut_group,
         )
-        self.card_sc_clear = ShortcutSettingCard(
-            FIF.DELETE,
-            "清除时间标签",
-            "清除当前行时间标签",
-            "BACKSPACE",
-            parent=self.shortcut_group,
-        )
         self.card_sc_toggle_line_end = ShortcutSettingCard(
             FIF.TAG,
             "切换句尾",
@@ -2077,6 +2075,20 @@ class SettingsInterface(ScrollArea):
             "连词/取消连词",
             "F3",
             self.shortcut_group,
+        )
+        self.card_sc_timestamp_up = ShortcutSettingCard(
+            FIF.UP,
+            "时间戳+1ms",
+            "增加当前对音字符时间戳1毫秒",
+            "ALT+UP",
+            parent=self.shortcut_group,
+        )
+        self.card_sc_timestamp_down = ShortcutSettingCard(
+            FIF.DOWN,
+            "时间戳-1ms",
+            "减少当前对音字符时间戳1毫秒",
+            "ALT+DOWN",
+            parent=self.shortcut_group,
         )
 
         self.shortcut_group.addSettingCard(self.card_sc_tag)
@@ -2093,9 +2105,10 @@ class SettingsInterface(ScrollArea):
         self.shortcut_group.addSettingCard(self.card_sc_volume_down)
         self.shortcut_group.addSettingCard(self.card_sc_nav_prev)
         self.shortcut_group.addSettingCard(self.card_sc_nav_next)
-        self.shortcut_group.addSettingCard(self.card_sc_clear)
         self.shortcut_group.addSettingCard(self.card_sc_toggle_line_end)
         self.shortcut_group.addSettingCard(self.card_sc_toggle_word_join)
+        self.shortcut_group.addSettingCard(self.card_sc_timestamp_up)
+        self.shortcut_group.addSettingCard(self.card_sc_timestamp_down)
         self.expandLayout.addWidget(self.shortcut_group)
 
     def _get_all_shortcut_cards(self) -> list[tuple[str, "ShortcutSettingCard"]]:
@@ -2115,9 +2128,10 @@ class SettingsInterface(ScrollArea):
             ("音量减小", self.card_sc_volume_down),
             ("上一行", self.card_sc_nav_prev),
             ("下一行", self.card_sc_nav_next),
-            ("清除时间标签", self.card_sc_clear),
             ("切换句尾", self.card_sc_toggle_line_end),
             ("连词", self.card_sc_toggle_word_join),
+            ("时间戳+1ms", self.card_sc_timestamp_up),
+            ("时间戳-1ms", self.card_sc_timestamp_down),
         ]
 
     def _resolve_shortcut_conflicts(self) -> list[str]:
@@ -2382,7 +2396,7 @@ class SettingsInterface(ScrollArea):
 
         # 界面设定
         theme = self._settings.get("ui.theme", "light")
-        theme_idx = {"light": 0, "dark": 1, "auto": 2}.get(theme, 0)
+        theme_idx = {"light": 0}.get(theme, 0)
         self.card_theme.setCurrentIndex(theme_idx)
         self.card_font_size.setValue(self._settings.get("ui.font_size", 24))
 
@@ -2444,14 +2458,17 @@ class SettingsInterface(ScrollArea):
         self.card_sc_nav_next.setValue(
             self._settings.get("shortcuts.nav_next_line", "RIGHT")
         )
-        self.card_sc_clear.setValue(
-            self._settings.get("shortcuts.clear_tags", "BACKSPACE")
-        )
         self.card_sc_toggle_line_end.setValue(
             self._settings.get("shortcuts.toggle_line_end", "F6")
         )
         self.card_sc_toggle_word_join.setValue(
             self._settings.get("shortcuts.toggle_word_join", "F3")
+        )
+        self.card_sc_timestamp_up.setValue(
+            self._settings.get("shortcuts.timestamp_up", "ALT+UP")
+        )
+        self.card_sc_timestamp_down.setValue(
+            self._settings.get("shortcuts.timestamp_down", "ALT+DOWN")
         )
 
     def _collect_settings(self):
@@ -2518,7 +2535,7 @@ class SettingsInterface(ScrollArea):
         )
 
         # 界面设定
-        theme_map = {0: "light", 1: "dark", 2: "auto"}
+        theme_map = {0: "light"}
         self._settings.set(
             "ui.theme", theme_map.get(self.card_theme.currentIndex(), "light")
         )
@@ -2567,12 +2584,17 @@ class SettingsInterface(ScrollArea):
         self._settings.set("shortcuts.volume_down", self.card_sc_volume_down.value())
         self._settings.set("shortcuts.nav_prev_line", self.card_sc_nav_prev.value())
         self._settings.set("shortcuts.nav_next_line", self.card_sc_nav_next.value())
-        self._settings.set("shortcuts.clear_tags", self.card_sc_clear.value())
         self._settings.set(
             "shortcuts.toggle_line_end", self.card_sc_toggle_line_end.value()
         )
         self._settings.set(
             "shortcuts.toggle_word_join", self.card_sc_toggle_word_join.value()
+        )
+        self._settings.set(
+            "shortcuts.timestamp_up", self.card_sc_timestamp_up.value()
+        )
+        self._settings.set(
+            "shortcuts.timestamp_down", self.card_sc_timestamp_down.value()
         )
 
     # ==================== 操作 ====================

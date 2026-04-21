@@ -344,10 +344,13 @@ class KaraokePreview(QWidget):
         self._font_context = QFont("Microsoft YaHei", 18)
         self._font_ruby = QFont("Microsoft YaHei", 10)
         self._font_checkpoint = QFont("Microsoft YaHei", 10)
+        self._font_line_number = QFont("Microsoft YaHei", 10)
         self._fm_current = QFontMetrics(self._font_current)
         self._fm_context = QFontMetrics(self._font_context)
         self._fm_ruby = QFontMetrics(self._font_ruby)
         self._fm_checkpoint = QFontMetrics(self._font_checkpoint)
+        self._fm_line_number = QFontMetrics(self._font_line_number)
+        self._line_number_margin = 45  # 行号左侧区域宽度
 
         # 逐句渲染数据缓存（避免每帧重复计算）
         self._sentence_cache: dict = {}
@@ -659,6 +662,18 @@ class KaraokePreview(QWidget):
             line = self._project.sentences[idx]
             is_current = idx == self._current_line_idx
 
+            # 绘制行号（左侧固定区域）
+            painter.setFont(self._font_line_number)
+            line_num_color = QColor("#FF6B6B") if is_current else QColor("#aaa")
+            painter.setPen(line_num_color)
+            line_num_text = str(idx + 1)
+            line_num_w = self._fm_line_number.horizontalAdvance(line_num_text)
+            painter.drawText(
+                int(self._line_number_margin - line_num_w - 5),
+                int(y_center),
+                line_num_text,
+            )
+
             # 根据演唱者获取行级别默认高亮颜色
             singer = (
                 self._project.get_singer(line.singer_id) if line.singer_id else None
@@ -698,7 +713,7 @@ class KaraokePreview(QWidget):
             _linked_leader_groups = _rd["linked_leader_groups"]
             _linked_non_leader = _rd["linked_non_leader"]
 
-            start_x = (w - total_text_width) // 2
+            start_x = self._line_number_margin + (w - self._line_number_margin - total_text_width) // 2
             curr_x = start_x
 
             for char_pos, ch in enumerate(line.chars):
@@ -1548,19 +1563,17 @@ class EditorInterface(QWidget):
         self.btn_tag.clicked.connect(self._on_tag_now)
         bottom.addWidget(self.btn_tag)
 
-        self.btn_clear_tags = PushButton("清除当前行标签 (Backspace)", self)
+        self.btn_clear_tags = PushButton("清除当前行标签", self)
         self.btn_clear_tags.setIcon(FIF.DELETE)
         self.btn_clear_tags.clicked.connect(self._on_clear_current_line_tags)
         bottom.addWidget(self.btn_clear_tags)
 
         bottom.addStretch()
 
-        # 快捷键提示
-        shortcut_hint = QLabel(
-            "A播放 S停止 Z/X跳转 Q/W变速 F2注音 F3连词 F4增加节奏点 F5删除节奏点 F6句尾 Ctrl+H批量"
-        )
-        shortcut_hint.setStyleSheet("font-size: 11px; color: gray;")
-        bottom.addWidget(shortcut_hint)
+        # 快捷键提示（动态跟随设置）
+        self.lbl_shortcut_hint = QLabel("")
+        self.lbl_shortcut_hint.setStyleSheet("font-size: 11px; color: gray;")
+        bottom.addWidget(self.lbl_shortcut_hint)
 
         layout.addLayout(bottom)
 
@@ -1629,7 +1642,8 @@ class EditorInterface(QWidget):
             "volume_down": settings.get("shortcuts.volume_down", "DOWN"),
             "nav_prev_line": settings.get("shortcuts.nav_prev_line", "LEFT"),
             "nav_next_line": settings.get("shortcuts.nav_next_line", "RIGHT"),
-            "clear_tags": settings.get("shortcuts.clear_tags", "BACKSPACE"),
+            "timestamp_up": settings.get("shortcuts.timestamp_up", "ALT+UP"),
+            "timestamp_down": settings.get("shortcuts.timestamp_down", "ALT+DOWN"),
         }
         for action, key_str in shortcut_actions.items():
             # 支持双键位：值可能是 "Space,A" 格式
@@ -1654,6 +1668,36 @@ class EditorInterface(QWidget):
             for sentence in self._project.sentences:
                 for ch in sentence.characters:
                     ch.set_offsets(render_offset, render_offset)
+        # 更新快捷键提示
+        self._update_shortcut_hint(shortcut_actions)
+
+    def _update_shortcut_hint(self, shortcut_actions: dict):
+        """根据当前设置的快捷键映射，动态更新底部提示。"""
+        action_labels = [
+            ("play_pause", "播放"),
+            ("stop", "停止"),
+            ("seek_back", "后退"),
+            ("seek_forward", "前进"),
+            ("speed_down", "减速"),
+            ("speed_up", "加速"),
+            ("edit_ruby", "注音"),
+            ("toggle_word_join", "连词"),
+            ("add_checkpoint", "加节奏点"),
+            ("remove_checkpoint", "减节奏点"),
+            ("toggle_line_end", "句尾"),
+            ("timestamp_up", "时间+1ms"),
+            ("timestamp_down", "时间-1ms"),
+        ]
+        parts = []
+        for action, label in action_labels:
+            key = shortcut_actions.get(action, "")
+            if key:
+                # 仅取第一个键位显示
+                first_key = key.split(",")[0].strip()
+                parts.append(f"{first_key}{label}")
+        parts.append("Ctrl+H批量")
+        if hasattr(self, "lbl_shortcut_hint"):
+            self.lbl_shortcut_hint.setText(" ".join(parts))
 
     # ==================== 项目 ====================
 
@@ -2300,6 +2344,37 @@ class EditorInterface(QWidget):
         """F5 删除当前字符节奏点 (-1)，最小为 0。"""
         self._change_checkpoint(delta=-1)
 
+    def _adjust_current_timestamp(self, delta_ms: int):
+        """Alt+↑/↓ 微调当前打轴位置对应 checkpoint 的时间戳 (±1ms)。"""
+        if not self._project or not self._timing_service:
+            return
+        pos = self._timing_service.get_current_position()
+        line_idx = pos.line_idx
+        char_idx = pos.char_idx
+        cp_idx = pos.checkpoint_idx
+        if line_idx >= len(self._project.sentences):
+            return
+        sentence = self._project.sentences[line_idx]
+        if char_idx >= len(sentence.characters):
+            return
+        ch = sentence.characters[char_idx]
+        # 判断是句尾 checkpoint 还是普通 checkpoint
+        if ch.is_sentence_end and cp_idx == ch.check_count:
+            if ch.sentence_end_ts is None:
+                return
+            ch.set_sentence_end_ts(max(0, ch.sentence_end_ts + delta_ms))
+        else:
+            if cp_idx >= len(ch.timestamps):
+                return
+            new_ts = max(0, ch.timestamps[cp_idx] + delta_ms)
+            ch.timestamps[cp_idx] = new_ts
+            ch.push_to_ruby()
+        self._update_time_tags_display()
+        self.refresh_lyric_display()
+        self._update_line_info()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("timetags")
+
     def _change_checkpoint(self, delta: int):
         """增加或减少当前字符的节奏点数量。"""
         if not self._project:
@@ -2521,8 +2596,14 @@ class EditorInterface(QWidget):
             self._on_nav_line(1)
             a0.accept()
             return
-        elif action == "clear_tags":
-            self._on_clear_current_line_tags()
+        elif action == "timestamp_up":
+            self._adjust_current_timestamp(1)
+            a0.accept()
+            return
+        elif action == "timestamp_down":
+            self._adjust_current_timestamp(-1)
+            a0.accept()
+            return
         elif action == "edit_ruby":
             if self._project:
                 line_idx = self._current_line_idx
@@ -2636,7 +2717,6 @@ class EditorInterface(QWidget):
             "X": "seek_forward",
             "Q": "speed_down",
             "W": "speed_up",
-            "BACKSPACE": "clear_tags",
             "F2": "edit_ruby",
             "F3": "toggle_word_join",
             "F4": "add_checkpoint",
@@ -2646,6 +2726,8 @@ class EditorInterface(QWidget):
             "DOWN": "volume_down",
             "LEFT": "nav_prev_line",
             "RIGHT": "nav_next_line",
+            "ALT+UP": "timestamp_up",
+            "ALT+DOWN": "timestamp_down",
         }
         return defaults.get(key_name.upper())
 
@@ -2767,7 +2849,27 @@ class EditorInterface(QWidget):
             idx = min(self._current_line_idx, total - 1)
             text = self._project.sentences[idx].text
             preview = text[:30] + "..." if len(text) > 30 else text
-            self.lbl_line_info.setText(f"行 {idx + 1}/{total}: {preview}")
+            # 显示选中字符的时间戳信息
+            char_info = ""
+            char_idx = self.preview._current_char_idx
+            sentence = self._project.sentences[idx]
+            if 0 <= char_idx < len(sentence.characters):
+                ch = sentence.characters[char_idx]
+                ts_parts = []
+                for ts in ch.timestamps:
+                    m, s = divmod(ts // 1000, 60)
+                    ms = ts % 1000
+                    ts_parts.append(f"{m:02d}:{s:02d}.{ms:03d}")
+                if ch.is_sentence_end and ch.sentence_end_ts is not None:
+                    ets = ch.sentence_end_ts
+                    m, s = divmod(ets // 1000, 60)
+                    ms = ets % 1000
+                    ts_parts.append(f"句尾{m:02d}:{s:02d}.{ms:03d}")
+                if ts_parts:
+                    char_info = f" | 「{ch.char}」 {', '.join(ts_parts)}"
+                else:
+                    char_info = f" | 「{ch.char}」 未打轴"
+            self.lbl_line_info.setText(f"行 {idx + 1}/{total}: {preview}{char_info}")
         else:
             self.lbl_line_info.setText("当前行: -")
 
