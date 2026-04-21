@@ -78,11 +78,20 @@ def _rebuild_characters(
         is_last = j == len(new_chars) - 1
         old_idx = new_to_old.get(j)
 
+        # 全文本编辑界面：以 ruby_map 中 '#' 数反推 check_count（用户规则）
+        # - 若该位置有 ruby 且含 '#': cc = groups 数（句尾不额外 +1，句尾 cp 不在 ruby 层体现）
+        # - 否则沿用旧值（old 存在时）或默认 1
+        derived_cc: Optional[int] = None
+        raw_ruby_for_j = ruby_map.get(j)
+        if raw_ruby_for_j and "#" in raw_ruby_for_j:
+            derived_cc = raw_ruby_for_j.count("#") + 1
+
         if old_idx is not None:
             old_ch = old_sentence.characters[old_idx]
+            cc = derived_cc if derived_cc is not None else old_ch.check_count
             ch = Character(
                 char=new_chars[j],
-                check_count=old_ch.check_count,
+                check_count=cc,
                 timestamps=list(old_ch.timestamps),
                 sentence_end_ts=old_ch.sentence_end_ts,
                 linked_to_next=old_ch.linked_to_next if not is_last else False,
@@ -95,10 +104,11 @@ def _rebuild_characters(
             if old_ch.ruby:
                 ch.set_ruby(Ruby(text=old_ch.ruby.text))
         else:
-            # 新字符：默认 check_count=1，末尾字符 check_count=2
+            # 新字符：默认 check_count=1；若 ruby_map 给出 '#' 分组则以分组数反推
+            cc = derived_cc if derived_cc is not None else 1
             ch = Character(
                 char=new_chars[j],
-                check_count=1,
+                check_count=cc,
                 is_line_end=is_last,
                 is_sentence_end=is_last,
                 singer_id=old_sentence.singer_id,

@@ -26,6 +26,9 @@ from strange_uta_game.backend.domain import (
     Character,
     Ruby,
 )
+from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+    align_ruby_to_checkpoints,
+)
 import re
 
 
@@ -132,7 +135,9 @@ class LineDetailDialog(QDialog):
         hint = QLabel(
             "连词合并为一行，注音/Checkpoint/演唱者用逗号分隔对应各字符\n"
             "双击可编辑「字符」「注音」「Checkpoint数」「句尾」「时间标签」「演唱者」列\n"
-            "句尾列填写「是」标记为句尾（独立记录释放时间），留空取消"
+            "句尾列填写「是」标记为句尾（独立记录释放时间），留空取消\n"
+            "注音列：同字符内多节奏点可用 # 分组（如 わ#た#し，对应 Checkpoint 数=3）；"
+            "分组数不匹配 Checkpoint 时会自动合并/补空格，不会报错"
         )
         hint.setStyleSheet("color: gray; font-size: 11px;")
         self.vbox.addWidget(hint)
@@ -431,7 +436,16 @@ class LineDetailDialog(QDialog):
                         new_r_text = parts[k].strip() if k < len(parts) else ""
                         if new_r_text:
                             try:
-                                characters[ci].set_ruby(Ruby(text=new_r_text))
+                                tgt = characters[ci]
+                                aligned = align_ruby_to_checkpoints(
+                                    new_r_text,
+                                    tgt.check_count,
+                                    tgt.is_sentence_end,
+                                )
+                                if aligned:
+                                    tgt.set_ruby(Ruby(text=aligned))
+                                else:
+                                    tgt.set_ruby(None)
                             except Exception as e:
                                 errors.append(f"字符 {ci + 1}: 注音错误 {e}")
                         else:
@@ -441,13 +455,27 @@ class LineDetailDialog(QDialog):
                     if raw:
                         if g_len == 1:
                             try:
-                                characters[group[0]].set_ruby(Ruby(text=raw))
+                                tgt = characters[group[0]]
+                                aligned = align_ruby_to_checkpoints(
+                                    raw, tgt.check_count, tgt.is_sentence_end
+                                )
+                                if aligned:
+                                    tgt.set_ruby(Ruby(text=aligned))
+                                else:
+                                    tgt.set_ruby(None)
                             except Exception as e:
                                 errors.append(f"字符 {group[0] + 1}: 注音错误 {e}")
                         else:
                             # 多字符无逗号：整体 ruby 分配到第一个字符
                             try:
-                                characters[group[0]].set_ruby(Ruby(text=raw))
+                                tgt = characters[group[0]]
+                                aligned = align_ruby_to_checkpoints(
+                                    raw, tgt.check_count, tgt.is_sentence_end
+                                )
+                                if aligned:
+                                    tgt.set_ruby(Ruby(text=aligned))
+                                else:
+                                    tgt.set_ruby(None)
                             except Exception as e:
                                 errors.append(f"字符 {group[0] + 1}: 注音错误 {e}")
                             for ci in group[1:]:

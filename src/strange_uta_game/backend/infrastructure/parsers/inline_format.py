@@ -150,6 +150,48 @@ def split_ruby_for_checkpoints(ruby_text: str, total_cps: int) -> List[str]:
     return result
 
 
+def align_ruby_to_checkpoints(
+    ruby_text: str, check_count: int, is_sentence_end: bool = False
+) -> str:
+    """将 ruby 文本按 check_count 对齐生成合法的 Ruby.text（cp 主导策略）。
+
+    用户规则（重要）：
+      - check_count < 2: 不分组，返回剥离 '#' 的整串（cp=1 也不分组）
+      - is_sentence_end 为 True: 句尾 cp 不计入分组，按不分组返回
+      - check_count >= 2: 按 '#' 切分后，
+          * 多余组合并到最后一组
+          * 缺失组以空格 ' ' 填充（避免 Ruby 空组报错）
+          * 永不抛异常
+
+    返回值是**可直接传给 `Ruby(text=...)`** 的字符串（不含空组 / 满足校验）。
+    """
+    if not ruby_text:
+        return ruby_text
+
+    # cp<2 或句尾 → 不分组
+    if check_count < 2 or is_sentence_end:
+        return ruby_text.replace("#", "")
+
+    # cp>=2 → 按 # 切分，严格对齐到 check_count
+    groups = ruby_text.split("#") if "#" in ruby_text else [ruby_text]
+    n = len(groups)
+    if n == check_count:
+        # 已对齐，但仍需处理空组（全空 → 直接返回空串前的 '#'.join 会失败）
+        groups = [g if g else " " for g in groups]
+    elif n > check_count:
+        # 多余组合并到末组
+        head = groups[: check_count - 1]
+        tail = "".join(groups[check_count - 1 :])
+        groups = head + [tail if tail else " "]
+        groups = [g if g else " " for g in groups]
+    else:
+        # 缺失组以空格填充
+        groups = [g if g else " " for g in groups]
+        groups = groups + [" "] * (check_count - n)
+
+    return "#".join(groups)
+
+
 # ──────────────────────────────────────────────
 # 序列化: Sentence → 内联文本
 # ──────────────────────────────────────────────

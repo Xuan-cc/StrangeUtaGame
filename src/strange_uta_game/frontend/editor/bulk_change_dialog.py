@@ -23,6 +23,7 @@ from typing import Optional
 from strange_uta_game.backend.domain import Project, Ruby
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     split_ruby_for_checkpoints,
+    align_ruby_to_checkpoints,
 )
 
 
@@ -81,7 +82,9 @@ class BulkChangeDialog(QDialog):
         lbl2.setFont(QFont("Microsoft YaHei", 10))
         lbl2.setFixedWidth(100)
         self.edit_reading = LineEdit()
-        self.edit_reading.setPlaceholderText("留空将删除注音（假名，逗号分隔多段）")
+        self.edit_reading.setPlaceholderText(
+            "留空将删除注音（假名，逗号分隔多段；同字符内多节奏点可用 # 分组，如 わ#た#し）"
+        )
         self.edit_reading.setFont(QFont("Microsoft YaHei", 10))
         if initial_reading:
             self.edit_reading.setText(initial_reading)
@@ -198,9 +201,16 @@ class BulkChangeDialog(QDialog):
                                             parts[k].strip() if k < len(parts) else ""
                                         )
                                         if part:
-                                            sentence.characters[ci].set_ruby(
-                                                Ruby(text=part)
+                                            tgt = sentence.characters[ci]
+                                            aligned = align_ruby_to_checkpoints(
+                                                part,
+                                                tgt.check_count,
+                                                tgt.is_sentence_end,
                                             )
+                                            if aligned:
+                                                tgt.set_ruby(Ruby(text=aligned))
+                                            else:
+                                                tgt.set_ruby(None)
                                         else:
                                             sentence.characters[ci].set_ruby(None)
                             else:
@@ -212,9 +222,16 @@ class BulkChangeDialog(QDialog):
                                     ci = pos + k
                                     if ci < len(sentence.characters):
                                         if k < len(split_parts) and split_parts[k]:
-                                            sentence.characters[ci].set_ruby(
-                                                Ruby(text=split_parts[k])
+                                            tgt = sentence.characters[ci]
+                                            aligned = align_ruby_to_checkpoints(
+                                                split_parts[k],
+                                                tgt.check_count,
+                                                tgt.is_sentence_end,
                                             )
+                                            if aligned:
+                                                tgt.set_ruby(Ruby(text=aligned))
+                                            else:
+                                                tgt.set_ruby(None)
                                         else:
                                             sentence.characters[ci].set_ruby(None)
                         else:

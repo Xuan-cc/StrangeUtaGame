@@ -79,6 +79,11 @@ def _moras_to_cp_groups(reading: str) -> str:
     return "#".join(moras)
 
 
+def _has_ascii_letter(s: str) -> bool:
+    """判断字符串是否含 ASCII 英文字母（用于识别英文罗马字读音）。"""
+    return any(("a" <= c <= "z") or ("A" <= c <= "Z") for c in s)
+
+
 def _migrate_reading(
     word: str,
     reading: str,
@@ -87,7 +92,7 @@ def _migrate_reading(
     """返回 (new_reading, status)。
 
     status:
-      unchanged       - 原样保留（已是新格式或单 mora）
+      unchanged       - 原样保留（已是新格式 / 单 mora / 含英文跳过）
       normalized      - 仅规整空白
       comma_cp_split  - 保留 ','，每段内部 mora→'#'
       mora_split      - 单字符词按 mora→'#'
@@ -99,6 +104,10 @@ def _migrate_reading(
         return reading, "unchanged"
 
     raw = reading.strip()
+
+    # 含英文字母（罗马字/英文读音）：无法区分字符边界，原样保留给用户自行修改
+    if _has_ascii_letter(raw):
+        return reading, "unchanged"
 
     # 1. 已含 '#' → 仅规整空白
     if "#" in raw:

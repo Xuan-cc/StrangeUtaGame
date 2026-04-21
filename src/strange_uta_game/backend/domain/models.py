@@ -94,6 +94,16 @@ class Ruby:
         """返回 Ruby 分组数量。"""
         return len(self.groups()) if self.text else 0
 
+    def display_text(self) -> str:
+        """渲染/导出层使用的用户可见文本（剥离内部 '#' 分组标记）。
+
+        '#' 仅是内部存储用于标记 checkpoint 切分的分组分隔符，
+        任何面向用户的场景（karaoke 预览、playback 高亮、tooltip、
+        导入预览表格、Nicokara/txt 导出等）都应使用本方法而非直接读 text。
+        仅 inline_format 导出与编辑对话框原样保留 '#'。
+        """
+        return self.text.replace("#", "")
+
 
 # ──────────────────────────────────────────────
 # Character — 主要数据结构单元

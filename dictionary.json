@@ -7,22 +7,22 @@
   {
     "enabled": true,
     "word": "微笑ん",
-    "reading": "ほほ,え,ん"
+    "reading": "ほ#ほ,え,ん"
   },
   {
     "enabled": true,
     "word": "微笑め",
-    "reading": "ほほ,え,め"
+    "reading": "ほ#ほ,え,め"
   },
   {
     "enabled": true,
     "word": "微笑む",
-    "reading": "ほほ,え,む"
+    "reading": "ほ#ほ,え,む"
   },
   {
     "enabled": true,
     "word": "微笑ま",
-    "reading": "ほほ,え,ま"
+    "reading": "ほ#ほ,え,ま"
   },
   {
     "enabled": true,
@@ -32,17 +32,17 @@
   {
     "enabled": true,
     "word": "木霊",
-    "reading": "こだま"
+    "reading": "こ,だ#ま"
   },
   {
     "enabled": true,
     "word": "真夏",
-    "reading": "ま,なつ"
+    "reading": "ま,な#つ"
   },
   {
     "enabled": true,
     "word": "気怠",
-    "reading": "け,だる"
+    "reading": "け,だ#る"
   },
   {
     "enabled": true,
@@ -52,7 +52,7 @@
   {
     "enabled": true,
     "word": "背影",
-    "reading": "はい,えい"
+    "reading": "は#い,え#い"
   },
   {
     "enabled": true,
@@ -107,7 +107,7 @@
   {
     "enabled": true,
     "word": "夢中",
-    "reading": "む,ちゅう"
+    "reading": "む,ちゅ#う"
   },
   {
     "enabled": true,
@@ -127,7 +127,7 @@
   {
     "enabled": true,
     "word": "三人",
-    "reading": "さん,にん"
+    "reading": "さ#ん,に#ん"
   },
   {
     "enabled": true,
@@ -537,7 +537,7 @@
   {
     "enabled": true,
     "word": "独り言",
-    "reading": "ひと,1,ごと"
+    "reading": "ひ#と,1,ご#と"
   },
   {
     "enabled": true,
@@ -557,7 +557,7 @@
   {
     "enabled": true,
     "word": "1人",
-    "reading": "ひとり"
+    "reading": "ひ,と#り"
   },
   {
     "enabled": true,
@@ -667,12 +667,12 @@
   {
     "enabled": true,
     "word": "自由",
-    "reading": "じ,ゆう"
+    "reading": "じ,ゆ#う"
   },
   {
     "enabled": true,
     "word": "大空",
-    "reading": "おお,そら"
+    "reading": "お#お,そ#ら"
   },
   {
     "enabled": true,
@@ -687,7 +687,7 @@
   {
     "enabled": true,
     "word": "to",
-    "reading": "トゥ"
+    "reading": "ト,ゥ"
   },
   {
     "enabled": true,
@@ -707,7 +707,7 @@
   {
     "enabled": true,
     "word": "only",
-    "reading": "オンリー"
+    "reading": "オ,ン,リ,ー"
   },
   {
     "enabled": true,
@@ -722,7 +722,7 @@
   {
     "enabled": true,
     "word": "can",
-    "reading": "キャン"
+    "reading": "キ,ャ,ン"
   },
   {
     "enabled": true,
@@ -737,12 +737,12 @@
   {
     "enabled": true,
     "word": "water",
-    "reading": "ウォーター"
+    "reading": "ウ,ォ,ー,タ,ー"
   },
   {
     "enabled": true,
     "word": "fall",
-    "reading": "フォール"
+    "reading": "フ,ォ,ー,ル"
   },
   {
     "enabled": true,
@@ -762,7 +762,7 @@
   {
     "enabled": true,
     "word": "waters",
-    "reading": "ウォーターズ"
+    "reading": "ウ,ォ,ー,タ,ー,ズ"
   },
   {
     "enabled": true,
@@ -792,7 +792,7 @@
   {
     "enabled": true,
     "word": "hero",
-    "reading": "ヒーロー"
+    "reading": "ヒ,ー,ロ,ー"
   },
   {
     "enabled": true,
@@ -807,7 +807,7 @@
   {
     "enabled": true,
     "word": "too",
-    "reading": "トゥー"
+    "reading": "ト,ゥ,ー"
   },
   {
     "enabled": true,
@@ -822,7 +822,7 @@
   {
     "enabled": true,
     "word": "into",
-    "reading": "イントゥー"
+    "reading": "イ,ン,ト,ゥー"
   },
   {
     "enabled": true,
@@ -932,7 +932,7 @@
   {
     "enabled": true,
     "word": "all",
-    "reading": "オール"
+    "reading": "オ,ー,ル"
   },
   {
     "enabled": true,
@@ -947,12 +947,12 @@
   {
     "enabled": true,
     "word": "new",
-    "reading": "ニュー"
+    "reading": "ニ,ュ,ー"
   },
   {
     "enabled": true,
     "word": "true",
-    "reading": "トゥルー"
+    "reading": "ト,ゥ,ル,ー"
   },
   {
     "enabled": true,
@@ -1002,7 +1002,7 @@
   {
     "enabled": true,
     "word": "or",
-    "reading": "オア"
+    "reading": "オ,ア"
   },
   {
     "enabled": true,
@@ -1042,7 +1042,7 @@
   {
     "enabled": true,
     "word": "didn't",
-    "reading": "ディドゥント"
+    "reading": "デ,ィ,ド,ゥ,ン,ト"
   },
   {
     "enabled": true,
@@ -1062,7 +1062,7 @@
   {
     "enabled": true,
     "word": "wish",
-    "reading": "ウィッシュ"
+    "reading": "ウ,ィ,ッ,シュ"
   },
   {
     "enabled": true,
@@ -1077,7 +1077,7 @@
   {
     "enabled": true,
     "word": "sweet",
-    "reading": "ス,ウィート"
+    "reading": "ス,ウィー#ト"
   },
   {
     "enabled": true,
@@ -1092,7 +1092,7 @@
   {
     "enabled": true,
     "word": "it",
-    "reading": "イット"
+    "reading": "イ,ッ#ト"
   },
   {
     "enabled": true,
@@ -1107,7 +1107,7 @@
   {
     "enabled": true,
     "word": "i",
-    "reading": "アイ"
+    "reading": "ア#イ"
   },
   {
     "enabled": true,
@@ -1142,7 +1142,7 @@
   {
     "enabled": true,
     "word": "in",
-    "reading": "イン"
+    "reading": "イ,ン"
   },
   {
     "enabled": true,
@@ -1157,17 +1157,17 @@
   {
     "enabled": true,
     "word": "i'm",
-    "reading": "アイム"
+    "reading": "ア,イ,ム"
   },
   {
     "enabled": true,
     "word": "be",
-    "reading": "ビー"
+    "reading": "ビ,ー"
   },
   {
     "enabled": true,
     "word": "afraid",
-    "reading": "ア,フレイド"
+    "reading": "ア,フ#レ#イ#ド"
   },
   {
     "enabled": true,
@@ -1192,7 +1192,7 @@
   {
     "enabled": true,
     "word": "get",
-    "reading": "ゲット"
+    "reading": "ゲ,ッ,ト"
   },
   {
     "enabled": true,
@@ -1202,7 +1202,7 @@
   {
     "enabled": true,
     "word": "let",
-    "reading": "レット"
+    "reading": "レ,ッ,ト"
   },
   {
     "enabled": true,
@@ -1227,7 +1227,7 @@
   {
     "enabled": true,
     "word": "on",
-    "reading": "オン"
+    "reading": "オ,ン"
   },
   {
     "enabled": true,
@@ -1242,12 +1242,12 @@
   {
     "enabled": true,
     "word": "my",
-    "reading": "マイ"
+    "reading": "マ,イ"
   },
   {
     "enabled": true,
     "word": "why",
-    "reading": "ホワイ"
+    "reading": "ホ,ワ,イ"
   },
   {
     "enabled": true,
@@ -1262,7 +1262,7 @@
   {
     "enabled": true,
     "word": "so",
-    "reading": "ソー"
+    "reading": "ソ,ー"
   },
   {
     "enabled": true,
@@ -1272,12 +1272,12 @@
   {
     "enabled": true,
     "word": "空却",
-    "reading": "くう,こう"
+    "reading": "く#う,こ#う"
   },
   {
     "enabled": true,
     "word": "生き様",
-    "reading": "い,き,ざま"
+    "reading": "い,き,ざ#ま"
   },
   {
     "enabled": true,
@@ -1287,7 +1287,7 @@
   {
     "enabled": true,
     "word": "music",
-    "reading": "ミュージック"
+    "reading": "ミ,ュ,ー,ジ,ッ#ク"
   },
   {
     "enabled": true,
@@ -1307,17 +1307,17 @@
   {
     "enabled": true,
     "word": "sns",
-    "reading": "エスエヌエス"
+    "reading": "エ,ス,エ#ヌ#エ#ス"
   },
   {
     "enabled": true,
     "word": "解き放",
-    "reading": "と,き,はな"
+    "reading": "と,き,は#な"
   },
   {
     "enabled": true,
     "word": "ぶっ放す",
-    "reading": "ぶ,っ,ぱな,す"
+    "reading": "ぶ,っ,ぱ#な,す"
   },
   {
     "enabled": true,
@@ -1337,17 +1337,17 @@
   {
     "enabled": true,
     "word": "運心",
-    "reading": "うん,しん"
+    "reading": "う#ん,し#ん"
   },
   {
     "enabled": true,
     "word": "ブッ放",
-    "reading": "ぶ,っ,ぱな"
+    "reading": "ぶ,っ,ぱ#な"
   },
   {
     "enabled": true,
     "word": "excited",
-    "reading": "エキサイテッド"
+    "reading": "エ,キ,サ,イ,テ,ッ,ド"
   },
   {
     "enabled": true,
@@ -1362,17 +1362,17 @@
   {
     "enabled": true,
     "word": "知勇",
-    "reading": "ち,ゆう"
+    "reading": "ち,ゆ#う"
   },
   {
     "enabled": true,
     "word": "天下",
-    "reading": "てん,か"
+    "reading": "て#ん,か"
   },
   {
     "enabled": true,
     "word": "swag",
-    "reading": "スワッグ"
+    "reading": "ス,ワ,ッ,グ"
   },
   {
     "enabled": true,
@@ -1397,17 +1397,17 @@
   {
     "enabled": true,
     "word": "何時何分",
-    "reading": "なん,じ,なん,ぷん"
+    "reading": "な#ん,じ,な#ん,ぷ#ん"
   },
   {
     "enabled": true,
     "word": "going",
-    "reading": "ゴーイング"
+    "reading": "ゴ,ー,イ,ン,グ"
   },
   {
     "enabled": true,
     "word": "下手",
-    "reading": "へた"
+    "reading": "へ,た"
   },
   {
     "enabled": true,
@@ -1417,7 +1417,7 @@
   {
     "enabled": true,
     "word": "思い出",
-    "reading": "おも,い,で"
+    "reading": "お#も,い,で"
   },
   {
     "enabled": true,
@@ -1427,7 +1427,7 @@
   {
     "enabled": true,
     "word": "空気",
-    "reading": "くう,き"
+    "reading": "く#う,き"
   },
   {
     "enabled": true,
@@ -1442,7 +1442,7 @@
   {
     "enabled": true,
     "word": "iron",
-    "reading": "アイアン"
+    "reading": "ア,イ,ア,ン"
   },
   {
     "enabled": true,
@@ -1452,27 +1452,27 @@
   {
     "enabled": true,
     "word": "希望",
-    "reading": "き,ぼう"
+    "reading": "き,ぼ#う"
   },
   {
     "enabled": true,
     "word": "彷徨",
-    "reading": "さまよ"
+    "reading": "さ,ま#よ"
   },
   {
     "enabled": true,
     "word": "行方",
-    "reading": "ゆくえ"
+    "reading": "ゆ,く#え"
   },
   {
     "enabled": true,
     "word": "○",
-    "reading": "まる"
+    "reading": "ま#る"
   },
   {
     "enabled": true,
     "word": "×",
-    "reading": "ばつ"
+    "reading": "ば#つ"
   },
   {
     "enabled": true,
@@ -1492,12 +1492,12 @@
   {
     "enabled": true,
     "word": "even",
-    "reading": "イーヴン"
+    "reading": "イ,ー,ヴ,ン"
   },
   {
     "enabled": true,
     "word": "what",
-    "reading": "ホワット"
+    "reading": "ホ,ワ,ッ,ト"
   },
   {
     "enabled": true,
@@ -1527,7 +1527,7 @@
   {
     "enabled": true,
     "word": "blat",
-    "reading": "ブラット"
+    "reading": "ブ,ラ,ッ,ト"
   },
   {
     "enabled": true,
@@ -1547,12 +1547,12 @@
   {
     "enabled": true,
     "word": "tastin",
-    "reading": "テイスティン"
+    "reading": "テ,イ,ス,テ,ィ,ン"
   },
   {
     "enabled": true,
     "word": "ive",
-    "reading": "アイヴ"
+    "reading": "ア,イ,ヴ"
   },
   {
     "enabled": true,
@@ -1567,7 +1567,7 @@
   {
     "enabled": true,
     "word": "overall",
-    "reading": "オーヴァーオール"
+    "reading": "オ,ー,ヴ,ァ,ー,オ,ー#ル"
   },
   {
     "enabled": true,
@@ -1582,17 +1582,17 @@
   {
     "enabled": true,
     "word": "do",
-    "reading": "ドゥ"
+    "reading": "ド,ゥ"
   },
   {
     "enabled": true,
     "word": "一人",
-    "reading": "ひとり"
+    "reading": "ひ,と#り"
   },
   {
     "enabled": true,
     "word": "裸足",
-    "reading": "はだし"
+    "reading": "は,だ#し"
   },
   {
     "enabled": true,
@@ -1602,7 +1602,7 @@
   {
     "enabled": true,
     "word": "真理",
-    "reading": "しん,り"
+    "reading": "し#ん,り"
   },
   {
     "enabled": true,
@@ -1612,7 +1612,7 @@
   {
     "enabled": true,
     "word": "神話",
-    "reading": "しん,わ"
+    "reading": "し#ん,わ"
   },
   {
     "enabled": true,
@@ -1627,12 +1627,12 @@
   {
     "enabled": true,
     "word": "ace",
-    "reading": "エース"
+    "reading": "エ,ー,ス"
   },
   {
     "enabled": true,
     "word": "伸び代",
-    "reading": "の,び,しろ"
+    "reading": "の,び,し#ろ"
   },
   {
     "enabled": true,
@@ -1647,27 +1647,27 @@
   {
     "enabled": true,
     "word": "思い出す",
-    "reading": "おも,い,だ,す"
+    "reading": "お#も,い,だ,す"
   },
   {
     "enabled": true,
     "word": "思い出し",
-    "reading": "おも,い,だ,し"
+    "reading": "お#も,い,だ,し"
   },
   {
     "enabled": true,
     "word": "思い出せ",
-    "reading": "おも,い,だ,せ"
+    "reading": "お#も,い,だ,せ"
   },
   {
     "enabled": true,
     "word": "二人",
-    "reading": "ふたり"
+    "reading": "ふ,た#り"
   },
   {
     "enabled": true,
     "word": "open",
-    "reading": "オープン"
+    "reading": "オ,ー,プ,ン"
   },
   {
     "enabled": true,
@@ -1712,7 +1712,7 @@
   {
     "enabled": true,
     "word": "我が物顔",
-    "reading": "わ,が,もの,がお"
+    "reading": "わ,が,も#の,が#お"
   },
   {
     "enabled": true,
@@ -1732,7 +1732,7 @@
   {
     "enabled": true,
     "word": "剣の舞",
-    "reading": "つるぎ,の,まい"
+    "reading": "つ#る#ぎ,の,ま#い"
   },
   {
     "enabled": true,
@@ -1752,7 +1752,7 @@
   {
     "enabled": true,
     "word": "no.",
-    "reading": "ナンバー"
+    "reading": "ナ,ン,バー"
   },
   {
     "enabled": true,
@@ -1762,17 +1762,17 @@
   {
     "enabled": true,
     "word": "duel",
-    "reading": "デュエル"
+    "reading": "デ,ュ,エ,ル"
   },
   {
     "enabled": true,
     "word": "中坊",
-    "reading": "ちゅう,ぼう"
+    "reading": "ちゅ#う,ぼ#う"
   },
   {
     "enabled": true,
     "word": "思考",
-    "reading": "し,こう"
+    "reading": "し,こ#う"
   },
   {
     "enabled": true,
@@ -1782,37 +1782,37 @@
   {
     "enabled": true,
     "word": "wow",
-    "reading": "ウォウ"
+    "reading": "ウ,ォ,ウ"
   },
   {
     "enabled": true,
     "word": "完全",
-    "reading": "かん,ぜん"
+    "reading": "か#ん,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "人生",
-    "reading": "じん,せい"
+    "reading": "じ#ん,せ#い"
   },
   {
     "enabled": true,
     "word": "本物",
-    "reading": "ほん,もの"
+    "reading": "ほ#ん,も#の"
   },
   {
     "enabled": true,
     "word": "自分",
-    "reading": "じ,ぶん"
+    "reading": "じ,ぶ#ん"
   },
   {
     "enabled": true,
     "word": "未来",
-    "reading": "み,らい"
+    "reading": "み,ら#い"
   },
   {
     "enabled": true,
     "word": "進化",
-    "reading": "しん,か"
+    "reading": "し#ん,か"
   },
   {
     "enabled": true,
@@ -1822,42 +1822,42 @@
   {
     "enabled": true,
     "word": "一瞬",
-    "reading": "いっ,しゅん"
+    "reading": "いっ,しゅ#ん"
   },
   {
     "enabled": true,
     "word": "残像",
-    "reading": "ざん,ぞう"
+    "reading": "ざ#ん,ぞ#う"
   },
   {
     "enabled": true,
     "word": "本当",
-    "reading": "ほん,とう"
+    "reading": "ほ#ん,と#う"
   },
   {
     "enabled": true,
     "word": "悪戯",
-    "reading": "いた,ずら"
+    "reading": "い#た,ず#ら"
   },
   {
     "enabled": true,
     "word": "言葉",
-    "reading": "こと,ば"
+    "reading": "こ#と,ば"
   },
   {
     "enabled": true,
     "word": "陳腐",
-    "reading": "ちん,ぷ"
+    "reading": "ち#ん,ぷ"
   },
   {
     "enabled": true,
     "word": "電車",
-    "reading": "でん,しゃ"
+    "reading": "で#ん,しゃ"
   },
   {
     "enabled": true,
     "word": "夕陽",
-    "reading": "ゆう,ひ"
+    "reading": "ゆ#う,ひ"
   },
   {
     "enabled": true,
@@ -1867,17 +1867,17 @@
   {
     "enabled": true,
     "word": "雑踏",
-    "reading": "ざっ,とう"
+    "reading": "ざっ,と#う"
   },
   {
     "enabled": true,
     "word": "自信",
-    "reading": "じ,しん"
+    "reading": "じ,し#ん"
   },
   {
     "enabled": true,
     "word": "躊躇う",
-    "reading": "ため,ら,う"
+    "reading": "た#め,ら,う"
   },
   {
     "enabled": true,
@@ -1887,142 +1887,142 @@
   {
     "enabled": true,
     "word": "動脈",
-    "reading": "どう,みゃく"
+    "reading": "ど#う,みゃ#く"
   },
   {
     "enabled": true,
     "word": "細胞",
-    "reading": "さい,ぼう"
+    "reading": "さ#い,ぼ#う"
   },
   {
     "enabled": true,
     "word": "合図",
-    "reading": "あい,ず"
+    "reading": "あ#い,ず"
   },
   {
     "enabled": true,
     "word": "接近",
-    "reading": "せっ,きん"
+    "reading": "せっ,き#ん"
   },
   {
     "enabled": true,
     "word": "現実",
-    "reading": "げん,じつ"
+    "reading": "げ#ん,じ#つ"
   },
   {
     "enabled": true,
     "word": "未熟",
-    "reading": "み,じゅく"
+    "reading": "み,じゅ#く"
   },
   {
     "enabled": true,
     "word": "時間",
-    "reading": "じ,かん"
+    "reading": "じ,か#ん"
   },
   {
     "enabled": true,
     "word": "心地",
-    "reading": "ここ,ち"
+    "reading": "こ#こ,ち"
   },
   {
     "enabled": true,
     "word": "週末",
-    "reading": "しゅう,まつ"
+    "reading": "しゅ#う,ま#つ"
   },
   {
     "enabled": true,
     "word": "口数",
-    "reading": "くち,かず"
+    "reading": "く#ち,か#ず"
   },
   {
     "enabled": true,
     "word": "建物",
-    "reading": "たて,もの"
+    "reading": "た#て,も#の"
   },
   {
     "enabled": true,
     "word": "会話",
-    "reading": "かい,わ"
+    "reading": "か#い,わ"
   },
   {
     "enabled": true,
     "word": "轟音",
-    "reading": "ごう,おん"
+    "reading": "ご#う,お#ん"
   },
   {
     "enabled": true,
     "word": "暴走",
-    "reading": "ぼう,そう"
+    "reading": "ぼ#う,そ#う"
   },
   {
     "enabled": true,
     "word": "大物",
-    "reading": "おお,もの"
+    "reading": "お#お,も#の"
   },
   {
     "enabled": true,
     "word": "呆然",
-    "reading": "ぼう,ぜん"
+    "reading": "ぼ#う,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "総立ち",
-    "reading": "そう,だ,ち"
+    "reading": "そ#う,だ,ち"
   },
   {
     "enabled": true,
     "word": "商売",
-    "reading": "しょう,ばい"
+    "reading": "しょ#う,ば#い"
   },
   {
     "enabled": true,
     "word": "崩壊",
-    "reading": "ほう,かい"
+    "reading": "ほ#う,か#い"
   },
   {
     "enabled": true,
     "word": "問題",
-    "reading": "もん,だい"
+    "reading": "も#ん,だ#い"
   },
   {
     "enabled": true,
     "word": "堂々",
-    "reading": "どう,どう"
+    "reading": "ど#う,ど#う"
   },
   {
     "enabled": true,
     "word": "問答",
-    "reading": "もん,どう"
+    "reading": "も#ん,ど#う"
   },
   {
     "enabled": true,
     "word": "本性",
-    "reading": "ほん,しょう"
+    "reading": "ほ#ん,しょ#う"
   },
   {
     "enabled": true,
     "word": "頂戴",
-    "reading": "ちょう,だい"
+    "reading": "ちょ#う,だ#い"
   },
   {
     "enabled": true,
     "word": "上々",
-    "reading": "じょう,じょう"
+    "reading": "じょ#う,じょ#う"
   },
   {
     "enabled": true,
     "word": "音響",
-    "reading": "おん,きょう"
+    "reading": "お#ん,きょ#う"
   },
   {
     "enabled": true,
     "word": "放送",
-    "reading": "ほう,そう"
+    "reading": "ほ#う,そ#う"
   },
   {
     "enabled": true,
     "word": "爽快",
-    "reading": "そう,かい"
+    "reading": "そ#う,か#い"
   },
   {
     "enabled": true,
@@ -2032,12 +2032,12 @@
   {
     "enabled": true,
     "word": "後悔",
-    "reading": "こう,かい"
+    "reading": "こ#う,か#い"
   },
   {
     "enabled": true,
     "word": "全部",
-    "reading": "ぜん,ぶ"
+    "reading": "ぜ#ん,ぶ"
   },
   {
     "enabled": true,
@@ -2047,217 +2047,217 @@
   {
     "enabled": true,
     "word": "沢山",
-    "reading": "たく,さん"
+    "reading": "た#く,さ#ん"
   },
   {
     "enabled": true,
     "word": "毎晩",
-    "reading": "まい,ばん"
+    "reading": "ま#い,ば#ん"
   },
   {
     "enabled": true,
     "word": "廃棄",
-    "reading": "はい,き"
+    "reading": "は#い,き"
   },
   {
     "enabled": true,
     "word": "半歩",
-    "reading": "はん,ぽ"
+    "reading": "は#ん,ぽ"
   },
   {
     "enabled": true,
     "word": "贅沢",
-    "reading": "ぜい,たく"
+    "reading": "ぜ#い,た#く"
   },
   {
     "enabled": true,
     "word": "興味",
-    "reading": "きょう,み"
+    "reading": "きょ#う,み"
   },
   {
     "enabled": true,
     "word": "退勤",
-    "reading": "たい,きん"
+    "reading": "た#い,き#ん"
   },
   {
     "enabled": true,
     "word": "大事",
-    "reading": "だい,じ"
+    "reading": "だ#い,じ"
   },
   {
     "enabled": true,
     "word": "迷惑",
-    "reading": "めい,わく"
+    "reading": "め#い,わ#く"
   },
   {
     "enabled": true,
     "word": "無計画",
-    "reading": "む,けい,かく"
+    "reading": "む,け#い,か#く"
   },
   {
     "enabled": true,
     "word": "性格",
-    "reading": "せい,かく"
+    "reading": "せ#い,か#く"
   },
   {
     "enabled": true,
     "word": "提案",
-    "reading": "てい,あん"
+    "reading": "て#い,あ#ん"
   },
   {
     "enabled": true,
     "word": "指先",
-    "reading": "ゆび,さき"
+    "reading": "ゆ#び,さ#き"
   },
   {
     "enabled": true,
     "word": "透明",
-    "reading": "とう,めい"
+    "reading": "と#う,め#い"
   },
   {
     "enabled": true,
     "word": "運命",
-    "reading": "うん,めい"
+    "reading": "う#ん,め#い"
   },
   {
     "enabled": true,
     "word": "飛行船",
-    "reading": "ひ,こう,せん"
+    "reading": "ひ,こ#う,せ#ん"
   },
   {
     "enabled": true,
     "word": "名前",
-    "reading": "な,まえ"
+    "reading": "な,ま#え"
   },
   {
     "enabled": true,
     "word": "季節",
-    "reading": "き,せつ"
+    "reading": "き,せ#つ"
   },
   {
     "enabled": true,
     "word": "奇跡",
-    "reading": "き,せき"
+    "reading": "き,せ#き"
   },
   {
     "enabled": true,
     "word": "地平線",
-    "reading": "ち,へい,せん"
+    "reading": "ち,へ#い,せ#ん"
   },
   {
     "enabled": true,
     "word": "夜空",
-    "reading": "よ,ぞら"
+    "reading": "よ,ぞ#ら"
   },
   {
     "enabled": true,
     "word": "不安",
-    "reading": "ふ,あん"
+    "reading": "ふ,あ#ん"
   },
   {
     "enabled": true,
     "word": "境界線",
-    "reading": "きょう,かい,せん"
+    "reading": "きょ#う,か#い,せ#ん"
   },
   {
     "enabled": true,
     "word": "流星",
-    "reading": "りゅう,せい"
+    "reading": "りゅ#う,せ#い"
   },
   {
     "enabled": true,
     "word": "七色",
-    "reading": "なな,いろ"
+    "reading": "な#な,い#ろ"
   },
   {
     "enabled": true,
     "word": "世界",
-    "reading": "せ,かい"
+    "reading": "せ,か#い"
   },
   {
     "enabled": true,
     "word": "束の間",
-    "reading": "つか,の,ま"
+    "reading": "つ#か,の,ま"
   },
   {
     "enabled": true,
     "word": "明日",
-    "reading": "あした"
+    "reading": "あ,し#た"
   },
   {
     "enabled": true,
     "word": "幽霊船",
-    "reading": "ゆう,れい,せん"
+    "reading": "ゆ#う,れ#い,せ#ん"
   },
   {
     "enabled": true,
     "word": "静寂",
-    "reading": "せい,じゃく"
+    "reading": "せ#い,じゃ#く"
   },
   {
     "enabled": true,
     "word": "空想",
-    "reading": "くう,そう"
+    "reading": "く#う,そ#う"
   },
   {
     "enabled": true,
     "word": "未踏",
-    "reading": "み,とう"
+    "reading": "み,と#う"
   },
   {
     "enabled": true,
     "word": "心臓",
-    "reading": "しん,ぞう"
+    "reading": "し#ん,ぞ#う"
   },
   {
     "enabled": true,
     "word": "脊髄",
-    "reading": "せき,ずい"
+    "reading": "せ#き,ず#い"
   },
   {
     "enabled": true,
     "word": "記憶",
-    "reading": "き,おく"
+    "reading": "き,お#く"
   },
   {
     "enabled": true,
     "word": "航路",
-    "reading": "こう,ろ"
+    "reading": "こ#う,ろ"
   },
   {
     "enabled": true,
     "word": "重力",
-    "reading": "じゅう,りょく"
+    "reading": "じゅ#う,りょ#く"
   },
   {
     "enabled": true,
     "word": "摩天楼",
-    "reading": "ま,てん,ろう"
+    "reading": "ま,て#ん,ろ#う"
   },
   {
     "enabled": true,
     "word": "未練",
-    "reading": "み,れん"
+    "reading": "み,れ#ん"
   },
   {
     "enabled": true,
     "word": "一杯",
-    "reading": "いっ,ぱい"
+    "reading": "いっ,ぱ#い"
   },
   {
     "enabled": true,
     "word": "水平線",
-    "reading": "すい,へい,せん"
+    "reading": "す#い,へ#い,せ#ん"
   },
   {
     "enabled": true,
     "word": "昨日",
-    "reading": "きのう"
+    "reading": "き,の#う"
   },
   {
     "enabled": true,
     "word": "泡沫",
-    "reading": "うた,かた"
+    "reading": "う#た,か#た"
   },
   {
     "enabled": true,
@@ -2267,22 +2267,22 @@
   {
     "enabled": true,
     "word": "何度",
-    "reading": "なん,ど"
+    "reading": "な#ん,ど"
   },
   {
     "enabled": true,
     "word": "創世",
-    "reading": "そう,せい"
+    "reading": "そ#う,せ#い"
   },
   {
     "enabled": true,
     "word": "騒然",
-    "reading": "そう,ぜん"
+    "reading": "そ#う,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "平等",
-    "reading": "びょう,どう"
+    "reading": "びょ#う,ど#う"
   },
   {
     "enabled": true,
@@ -2292,52 +2292,52 @@
   {
     "enabled": true,
     "word": "自身",
-    "reading": "じ,しん"
+    "reading": "じ,し#ん"
   },
   {
     "enabled": true,
     "word": "徒然",
-    "reading": "つれ,づれ"
+    "reading": "つ#れ,づ#れ"
   },
   {
     "enabled": true,
     "word": "感情",
-    "reading": "かん,じょう"
+    "reading": "か#ん,じょ#う"
   },
   {
     "enabled": true,
     "word": "当然",
-    "reading": "とう,ぜん"
+    "reading": "と#う,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "小石",
-    "reading": "こ,いし"
+    "reading": "こ,い#し"
   },
   {
     "enabled": true,
     "word": "隙間",
-    "reading": "すき,ま"
+    "reading": "す#き,ま"
   },
   {
     "enabled": true,
     "word": "友達",
-    "reading": "とも,だち"
+    "reading": "と#も,だ#ち"
   },
   {
     "enabled": true,
     "word": "方程式",
-    "reading": "ほう,てい,しき"
+    "reading": "ほ#う,て#い,し#き"
   },
   {
     "enabled": true,
     "word": "最高",
-    "reading": "さい,こう"
+    "reading": "さ#い,こ#う"
   },
   {
     "enabled": true,
     "word": "陰口",
-    "reading": "かげ,ぐち"
+    "reading": "か#げ,ぐ#ち"
   },
   {
     "enabled": true,
@@ -2352,62 +2352,62 @@
   {
     "enabled": true,
     "word": "秘密",
-    "reading": "ひ,みつ"
+    "reading": "ひ,み#つ"
   },
   {
     "enabled": true,
     "word": "暗闇",
-    "reading": "くら,やみ"
+    "reading": "く#ら,や#み"
   },
   {
     "enabled": true,
     "word": "傷跡",
-    "reading": "きず,あと"
+    "reading": "き#ず,あ#と"
   },
   {
     "enabled": true,
     "word": "贖罪",
-    "reading": "しょく,ざい"
+    "reading": "しょ#く,ざ#い"
   },
   {
     "enabled": true,
     "word": "舗装",
-    "reading": "ほ,そう"
+    "reading": "ほ,そ#う"
   },
   {
     "enabled": true,
     "word": "回転",
-    "reading": "かい,てん"
+    "reading": "か#い,て#ん"
   },
   {
     "enabled": true,
     "word": "一切",
-    "reading": "いっ,さい"
+    "reading": "いっ,さ#い"
   },
   {
     "enabled": true,
     "word": "展開",
-    "reading": "てん,かい"
+    "reading": "て#ん,か#い"
   },
   {
     "enabled": true,
     "word": "羽虫",
-    "reading": "は,むし"
+    "reading": "は,む#し"
   },
   {
     "enabled": true,
     "word": "送電塔",
-    "reading": "そう,でん,とう"
+    "reading": "そ#う,で#ん,と#う"
   },
   {
     "enabled": true,
     "word": "太陽",
-    "reading": "たい,よう"
+    "reading": "た#い,よ#う"
   },
   {
     "enabled": true,
     "word": "孤独",
-    "reading": "こ,どく"
+    "reading": "こ,ど#く"
   },
   {
     "enabled": true,
@@ -2422,7 +2422,7 @@
   {
     "enabled": true,
     "word": "案の定",
-    "reading": "あん,の,じょう"
+    "reading": "あ#ん,の,じょ#う"
   },
   {
     "enabled": true,
@@ -2437,7 +2437,7 @@
   {
     "enabled": true,
     "word": "見逃",
-    "reading": "み,のが"
+    "reading": "み,の#が"
   },
   {
     "enabled": true,
@@ -2472,7 +2472,7 @@
   {
     "enabled": true,
     "word": "dirty",
-    "reading": "ダーティー"
+    "reading": "ダ,ー,テ,ィ,ー"
   },
   {
     "enabled": true,
@@ -2517,7 +2517,7 @@
   {
     "enabled": true,
     "word": "god",
-    "reading": "ゴッド"
+    "reading": "ゴ,ッ,ド"
   },
   {
     "enabled": true,
@@ -2527,12 +2527,12 @@
   {
     "enabled": true,
     "word": "field",
-    "reading": "フィールド"
+    "reading": "フ,ィ,ー,ル,ド"
   },
   {
     "enabled": true,
     "word": "bag",
-    "reading": "バッグ"
+    "reading": "バ,ッ,グ"
   },
   {
     "enabled": true,
@@ -2542,12 +2542,12 @@
   {
     "enabled": true,
     "word": "mc",
-    "reading": "エムシー"
+    "reading": "エ,ム#シー"
   },
   {
     "enabled": true,
     "word": "fake",
-    "reading": "フェイク"
+    "reading": "フ,ェ,イ,ク"
   },
   {
     "enabled": true,
@@ -2567,7 +2567,7 @@
   {
     "enabled": true,
     "word": "bad",
-    "reading": "バッド"
+    "reading": "バ,ッ,ド"
   },
   {
     "enabled": true,
@@ -2587,17 +2587,17 @@
   {
     "enabled": true,
     "word": "yes",
-    "reading": "イエス"
+    "reading": "イ,エ,ス"
   },
   {
     "enabled": true,
     "word": "hip",
-    "reading": "ヒップ"
+    "reading": "ヒ,ッ,プ"
   },
   {
     "enabled": true,
     "word": "hop",
-    "reading": "ホップ"
+    "reading": "ホ,ッ,プ"
   },
   {
     "enabled": true,
@@ -2612,7 +2612,7 @@
   {
     "enabled": true,
     "word": "clap",
-    "reading": "クラップ"
+    "reading": "ク,ラ,ッ,プ"
   },
   {
     "enabled": true,
@@ -2652,7 +2652,7 @@
   {
     "enabled": true,
     "word": "最高峰",
-    "reading": "さい,こう,ほう"
+    "reading": "さ#い,こ#う,ほ#う"
   },
   {
     "enabled": true,
@@ -2667,7 +2667,7 @@
   {
     "enabled": true,
     "word": "as",
-    "reading": "アズ"
+    "reading": "ア,ズ"
   },
   {
     "enabled": true,
@@ -2707,12 +2707,12 @@
   {
     "enabled": true,
     "word": "栄華",
-    "reading": "えい,が"
+    "reading": "え#い,が"
   },
   {
     "enabled": true,
     "word": "微笑み",
-    "reading": "ほほ,え,み"
+    "reading": "ほ#ほ,え,み"
   },
   {
     "enabled": true,
@@ -2722,17 +2722,17 @@
   {
     "enabled": true,
     "word": "痛ましい",
-    "reading": "いた,ま,し,い"
+    "reading": "い#た,ま,し,い"
   },
   {
     "enabled": true,
     "word": "尖らせ",
-    "reading": "とが,ら,せ"
+    "reading": "と#が,ら,せ"
   },
   {
     "enabled": true,
     "word": "思想",
-    "reading": "し,そう"
+    "reading": "し,そ#う"
   },
   {
     "enabled": true,
@@ -2742,27 +2742,27 @@
   {
     "enabled": true,
     "word": "勇気",
-    "reading": "ゆう,き"
+    "reading": "ゆ#う,き"
   },
   {
     "enabled": true,
     "word": "描い",
-    "reading": "えが,い"
+    "reading": "え#が,い"
   },
   {
     "enabled": true,
     "word": "描き",
-    "reading": "えが,き"
+    "reading": "え#が,き"
   },
   {
     "enabled": true,
     "word": "苦し",
-    "reading": "くる,し"
+    "reading": "く#る,し"
   },
   {
     "enabled": true,
     "word": "流る",
-    "reading": "なが,る"
+    "reading": "な#が,る"
   },
   {
     "enabled": true,
@@ -2777,7 +2777,7 @@
   {
     "enabled": true,
     "word": "居心地",
-    "reading": "い,ごこ,ち"
+    "reading": "い,ご#こ,ち"
   },
   {
     "enabled": true,
@@ -2792,7 +2792,7 @@
   {
     "enabled": true,
     "word": "華",
-    "reading": "はな"
+    "reading": "は#な"
   },
   {
     "enabled": true,
@@ -2807,7 +2807,7 @@
   {
     "enabled": true,
     "word": "今宵",
-    "reading": "こ,よい"
+    "reading": "こ,よ#い"
   },
   {
     "enabled": true,
@@ -2822,7 +2822,7 @@
   {
     "enabled": true,
     "word": "空想癖",
-    "reading": "くう,そう,へき"
+    "reading": "く#う,そ#う,へ#き"
   },
   {
     "enabled": true,
@@ -2867,17 +2867,17 @@
   {
     "enabled": true,
     "word": "we",
-    "reading": "ウィー"
+    "reading": "ウ,ィー"
   },
   {
     "enabled": true,
     "word": "三位一体",
-    "reading": "さん,み,いっ,たい"
+    "reading": "さ#ん,み,いっ,た#い"
   },
   {
     "enabled": true,
     "word": "basic",
-    "reading": "ベーシック"
+    "reading": "ベ,ー,シ,ッ,ク"
   },
   {
     "enabled": true,
@@ -2887,67 +2887,67 @@
   {
     "enabled": true,
     "word": "厭穢欣浄",
-    "reading": "えん,え,ごん,じょう"
+    "reading": "え#ん,え,ご#ん,じょ#う"
   },
   {
     "enabled": true,
     "word": "司る",
-    "reading": "つかさど,る"
+    "reading": "つ#か#さ#ど,る"
   },
   {
     "enabled": true,
     "word": "言い訳",
-    "reading": "い,い,わけ"
+    "reading": "い,い,わ#け"
   },
   {
     "enabled": true,
     "word": "捲土",
-    "reading": "けん,ど"
+    "reading": "け#ん,ど"
   },
   {
     "enabled": true,
     "word": "朧月夜",
-    "reading": "おぼろ,づき,よ"
+    "reading": "お#ぼ#ろ,づ#き,よ"
   },
   {
     "enabled": true,
     "word": "蜃気楼",
-    "reading": "しん,き,ろう"
+    "reading": "し#ん,き,ろ#う"
   },
   {
     "enabled": true,
     "word": "因数",
-    "reading": "いん,すう"
+    "reading": "い#ん,す#う"
   },
   {
     "enabled": true,
     "word": "逃げ道",
-    "reading": "に,げ,みち"
+    "reading": "に,げ,み#ち"
   },
   {
     "enabled": true,
     "word": "小遣い",
-    "reading": "こ,づか,い"
+    "reading": "こ,づ#か,い"
   },
   {
     "enabled": true,
     "word": "丁半",
-    "reading": "ちょう,はん"
+    "reading": "ちょ#う,は#ん"
   },
   {
     "enabled": true,
     "word": "祭囃子",
-    "reading": "まつり,ばや,し"
+    "reading": "ま#つ#り,ば#や,し"
   },
   {
     "enabled": true,
     "word": "言の葉",
-    "reading": "こと,の,は"
+    "reading": "こ#と,の,は"
   },
   {
     "enabled": true,
     "word": "相乗効果",
-    "reading": "そう,じょう,こう,か"
+    "reading": "そ#う,じょ#う,こ#う,か"
   },
   {
     "enabled": true,
@@ -2972,27 +2972,27 @@
   {
     "enabled": true,
     "word": "秘か",
-    "reading": "ひそ,か"
+    "reading": "ひ#そ,か"
   },
   {
     "enabled": true,
     "word": "景色",
-    "reading": "け,しき"
+    "reading": "け,し#き"
   },
   {
     "enabled": true,
     "word": "翡翠",
-    "reading": "ひ,すい"
+    "reading": "ひ,す#い"
   },
   {
     "enabled": true,
     "word": "見失",
-    "reading": "み,うしな"
+    "reading": "み,う#し#な"
   },
   {
     "enabled": true,
     "word": "時計",
-    "reading": "と,けい"
+    "reading": "と,け#い"
   },
   {
     "enabled": true,
@@ -3007,17 +3007,17 @@
   {
     "enabled": true,
     "word": "繋ぐ",
-    "reading": "つな,ぐ"
+    "reading": "つ#な,ぐ"
   },
   {
     "enabled": true,
     "word": "繋いで",
-    "reading": "つな,い,で"
+    "reading": "つ#な,い,で"
   },
   {
     "enabled": true,
     "word": "悔しく",
-    "reading": "くや,し,く"
+    "reading": "く#や,し,く"
   },
   {
     "enabled": true,
@@ -3027,62 +3027,62 @@
   {
     "enabled": true,
     "word": "呟いた",
-    "reading": "つぶや,い,た"
+    "reading": "つ#ぶ#や,い,た"
   },
   {
     "enabled": true,
     "word": "叩いた",
-    "reading": "たた,い,た"
+    "reading": "た#た,い,た"
   },
   {
     "enabled": true,
     "word": "叩いて",
-    "reading": "たた,い,て"
+    "reading": "た#た,い,て"
   },
   {
     "enabled": true,
     "word": "掴む",
-    "reading": "つか,む"
+    "reading": "つ#か,む"
   },
   {
     "enabled": true,
     "word": "掴んだ",
-    "reading": "つか,ん,だ"
+    "reading": "つ#か,ん,だ"
   },
   {
     "enabled": true,
     "word": "掴んで",
-    "reading": "つか,ん,で"
+    "reading": "つ#か,ん,で"
   },
   {
     "enabled": true,
     "word": "掴め",
-    "reading": "つか,め"
+    "reading": "つ#か,め"
   },
   {
     "enabled": true,
     "word": "綻び",
-    "reading": "ほころ,び"
+    "reading": "ほ#こ#ろ,び"
   },
   {
     "enabled": true,
     "word": "潰して",
-    "reading": "つぶ,し,て"
+    "reading": "つ#ぶ,し,て"
   },
   {
     "enabled": true,
     "word": "潰した",
-    "reading": "つぶ,し,た"
+    "reading": "つ#ぶ,し,た"
   },
   {
     "enabled": true,
     "word": "潰せ",
-    "reading": "つぶ,せ"
+    "reading": "つ#ぶ,せ"
   },
   {
     "enabled": true,
     "word": "潰さ",
-    "reading": "つぶ,さ"
+    "reading": "つ#ぶ,さ"
   },
   {
     "enabled": true,
@@ -3107,17 +3107,17 @@
   {
     "enabled": true,
     "word": "眩んだ",
-    "reading": "くら,ん,だ"
+    "reading": "く#ら,ん,だ"
   },
   {
     "enabled": true,
     "word": "眩んで",
-    "reading": "くら,ん,で"
+    "reading": "く#ら,ん,で"
   },
   {
     "enabled": true,
     "word": "繋いだ",
-    "reading": "つな,い,だ"
+    "reading": "つ#な,い,だ"
   },
   {
     "enabled": true,
@@ -3137,37 +3137,37 @@
   {
     "enabled": true,
     "word": "眩む",
-    "reading": "くら,む"
+    "reading": "く#ら,む"
   },
   {
     "enabled": true,
     "word": "儚い",
-    "reading": "はかな,い"
+    "reading": "は#か#な,い"
   },
   {
     "enabled": true,
     "word": "挟み",
-    "reading": "はさ,み"
+    "reading": "は#さ,み"
   },
   {
     "enabled": true,
     "word": "挟め",
-    "reading": "はさ,め"
+    "reading": "は#さ,め"
   },
   {
     "enabled": true,
     "word": "挟も",
-    "reading": "はさ,も"
+    "reading": "は#さ,も"
   },
   {
     "enabled": true,
     "word": "挟ん",
-    "reading": "はさ,ん"
+    "reading": "は#さ,ん"
   },
   {
     "enabled": true,
     "word": "挟ま",
-    "reading": "はさ,ま"
+    "reading": "は#さ,ま"
   },
   {
     "enabled": true,
@@ -3187,32 +3187,32 @@
   {
     "enabled": true,
     "word": "儚く",
-    "reading": "はかな,く"
+    "reading": "は#か#な,く"
   },
   {
     "enabled": true,
     "word": "眩しい",
-    "reading": "まぶ,し,い"
+    "reading": "ま#ぶ,し,い"
   },
   {
     "enabled": true,
     "word": "繋がる",
-    "reading": "つな,が,る"
+    "reading": "つ#な,が,る"
   },
   {
     "enabled": true,
     "word": "繋げる",
-    "reading": "つな,げ,る"
+    "reading": "つ#な,げ,る"
   },
   {
     "enabled": true,
     "word": "繋ごう",
-    "reading": "つな,ご,う"
+    "reading": "つ#な,ご,う"
   },
   {
     "enabled": true,
     "word": "誘なう",
-    "reading": "いざ,な,う"
+    "reading": "い#ざ,な,う"
   },
   {
     "enabled": true,
@@ -3227,7 +3227,7 @@
   {
     "enabled": true,
     "word": "腹上",
-    "reading": "ふく,じょう"
+    "reading": "ふ#く,じょ#う"
   },
   {
     "enabled": true,
@@ -3252,27 +3252,27 @@
   {
     "enabled": true,
     "word": "帝国華撃団",
-    "reading": "てい,こく,か,げき,だん"
+    "reading": "て#い,こ#く,か,げ#き,だ#ん"
   },
   {
     "enabled": true,
     "word": "巡る",
-    "reading": "めぐ,る"
+    "reading": "め#ぐ,る"
   },
   {
     "enabled": true,
     "word": "本能",
-    "reading": "ほん,のう"
+    "reading": "ほ#ん,の#う"
   },
   {
     "enabled": true,
     "word": "生命",
-    "reading": "せい,めい"
+    "reading": "せ#い,め#い"
   },
   {
     "enabled": true,
     "word": "絶唱",
-    "reading": "ぜっ,しょう"
+    "reading": "ぜっ,しょ#う"
   },
   {
     "enabled": true,
@@ -3282,12 +3282,12 @@
   {
     "enabled": true,
     "word": "苦しい",
-    "reading": "くる,し,い"
+    "reading": "く#る,し,い"
   },
   {
     "enabled": true,
     "word": "体中",
-    "reading": "からだ,じゅう"
+    "reading": "か#ら#だ,じゅ#う"
   },
   {
     "enabled": true,
@@ -3307,7 +3307,7 @@
   {
     "enabled": true,
     "word": "熱戦",
-    "reading": "ねっ,せん"
+    "reading": "ねっ,せ#ん"
   },
   {
     "enabled": true,
@@ -3317,57 +3317,57 @@
   {
     "enabled": true,
     "word": "狭間",
-    "reading": "はざ,ま"
+    "reading": "は#ざ,ま"
   },
   {
     "enabled": true,
     "word": "理性",
-    "reading": "り,せい"
+    "reading": "り,せ#い"
   },
   {
     "enabled": true,
     "word": "荒野",
-    "reading": "こう,や"
+    "reading": "こ#う,や"
   },
   {
     "enabled": true,
     "word": "無意識",
-    "reading": "む,い,しき"
+    "reading": "む,い,し#き"
   },
   {
     "enabled": true,
     "word": "初めて",
-    "reading": "はじ,め,て"
+    "reading": "は#じ,め,て"
   },
   {
     "enabled": true,
     "word": "全霊",
-    "reading": "ぜん,れい"
+    "reading": "ぜ#ん,れ#い"
   },
   {
     "enabled": true,
     "word": "森羅",
-    "reading": "しん,ら"
+    "reading": "し#ん,ら"
   },
   {
     "enabled": true,
     "word": "万象",
-    "reading": "ばん,しょう"
+    "reading": "ば#ん,しょ#う"
   },
   {
     "enabled": true,
     "word": "遺伝子",
-    "reading": "い,でん,し"
+    "reading": "い,で#ん,し"
   },
   {
     "enabled": true,
     "word": "終焉",
-    "reading": "しゅう,えん"
+    "reading": "しゅ#う,え#ん"
   },
   {
     "enabled": true,
     "word": "真紅",
-    "reading": "しん,く"
+    "reading": "し#ん,く"
   },
   {
     "enabled": true,
@@ -3387,12 +3387,12 @@
   {
     "enabled": true,
     "word": "pig",
-    "reading": "ピッグ"
+    "reading": "ピ,ッ,グ"
   },
   {
     "enabled": true,
     "word": "safety",
-    "reading": "セーフティー"
+    "reading": "セ,ー,フ,テ,ィ,ー"
   },
   {
     "enabled": true,
@@ -3402,7 +3402,7 @@
   {
     "enabled": true,
     "word": "angel",
-    "reading": "エンジェル"
+    "reading": "エ,ン,ジ,ェ,ル"
   },
   {
     "enabled": true,
@@ -3412,12 +3412,12 @@
   {
     "enabled": true,
     "word": "took",
-    "reading": "トゥック"
+    "reading": "ト,ゥ,ッ,ク"
   },
   {
     "enabled": true,
     "word": "big",
-    "reading": "ビッグ"
+    "reading": "ビ,ッ,グ"
   },
   {
     "enabled": true,
@@ -3427,7 +3427,7 @@
   {
     "enabled": true,
     "word": "fairy",
-    "reading": "フェアリー"
+    "reading": "フ,ェ,ア,リ,ー"
   },
   {
     "enabled": true,
@@ -3437,37 +3437,37 @@
   {
     "enabled": true,
     "word": "以上",
-    "reading": "い,じょう"
+    "reading": "い,じょ#う"
   },
   {
     "enabled": true,
     "word": "星屑",
-    "reading": "ほし,くず"
+    "reading": "ほ#し,く#ず"
   },
   {
     "enabled": true,
     "word": "呪文",
-    "reading": "じゅ,もん"
+    "reading": "じゅ,も#ん"
   },
   {
     "enabled": true,
     "word": "sweetie",
-    "reading": "スウィーティー"
+    "reading": "ス,ウ,ィ,ー,テ,ィ,ー"
   },
   {
     "enabled": true,
     "word": "sweety",
-    "reading": "スウィーティー"
+    "reading": "ス,ウ,ィ,ー,テ,ィー"
   },
   {
     "enabled": true,
     "word": "beauty",
-    "reading": "ビューティー"
+    "reading": "ビ,ュ,ー,テ,ィ,ー"
   },
   {
     "enabled": true,
     "word": "大人",
-    "reading": "お,とな"
+    "reading": "お,と#な"
   },
   {
     "enabled": true,
@@ -3477,12 +3477,12 @@
   {
     "enabled": true,
     "word": "食材",
-    "reading": "しょく,ざい"
+    "reading": "しょ#く,ざ#い"
   },
   {
     "enabled": true,
     "word": "dash",
-    "reading": "ダッシュ"
+    "reading": "ダ,ッ,シ,ュ"
   },
   {
     "enabled": true,
@@ -3497,102 +3497,102 @@
   {
     "enabled": true,
     "word": "胃袋",
-    "reading": "い,ぶくろ"
+    "reading": "い,ぶ#く#ろ"
   },
   {
     "enabled": true,
     "word": "迂闊",
-    "reading": "う,かつ"
+    "reading": "う,か#つ"
   },
   {
     "enabled": true,
     "word": "精査",
-    "reading": "せい,さ"
+    "reading": "せ#い,さ"
   },
   {
     "enabled": true,
     "word": "可能性",
-    "reading": "か,のう,せい"
+    "reading": "か,の#う,せ#い"
   },
   {
     "enabled": true,
     "word": "一時",
-    "reading": "いち,じ"
+    "reading": "い#ち,じ"
   },
   {
     "enabled": true,
     "word": "感傷",
-    "reading": "かん,しょう"
+    "reading": "か#ん,しょ#う"
   },
   {
     "enabled": true,
     "word": "一時的",
-    "reading": "いち,じ,てき"
+    "reading": "い#ち,じ,て#き"
   },
   {
     "enabled": true,
     "word": "手順",
-    "reading": "て,じゅん"
+    "reading": "て,じゅ#ん"
   },
   {
     "enabled": true,
     "word": "些細",
-    "reading": "さ,さい"
+    "reading": "さ,さ#い"
   },
   {
     "enabled": true,
     "word": "精一杯",
-    "reading": "せい,いっ,ぱい"
+    "reading": "せ#い,いっ,ぱ#い"
   },
   {
     "enabled": true,
     "word": "迷路",
-    "reading": "めい,ろ"
+    "reading": "め#い,ろ"
   },
   {
     "enabled": true,
     "word": "結末",
-    "reading": "けつ,まつ"
+    "reading": "け#つ,ま#つ"
   },
   {
     "enabled": true,
     "word": "空欄",
-    "reading": "くう,らん"
+    "reading": "く#う,ら#ん"
   },
   {
     "enabled": true,
     "word": "普遍",
-    "reading": "ふ,へん"
+    "reading": "ふ,へ#ん"
   },
   {
     "enabled": true,
     "word": "声明",
-    "reading": "せい,めい"
+    "reading": "せ#い,め#い"
   },
   {
     "enabled": true,
     "word": "開拓",
-    "reading": "かい,たく"
+    "reading": "か#い,た#く"
   },
   {
     "enabled": true,
     "word": "全力",
-    "reading": "ぜん,りょく"
+    "reading": "ぜ#ん,りょ#く"
   },
   {
     "enabled": true,
     "word": "空論",
-    "reading": "くう,ろん"
+    "reading": "く#う,ろ#ん"
   },
   {
     "enabled": true,
     "word": "成功",
-    "reading": "せい,こう"
+    "reading": "せ#い,こ#う"
   },
   {
     "enabled": true,
     "word": "確率",
-    "reading": "かく,りつ"
+    "reading": "か#く,り#つ"
   },
   {
     "enabled": true,
@@ -3602,27 +3602,27 @@
   {
     "enabled": true,
     "word": "喧騒",
-    "reading": "けん,そう"
+    "reading": "け#ん,そ#う"
   },
   {
     "enabled": true,
     "word": "身体中",
-    "reading": "から,だ,じゅう"
+    "reading": "か#ら,だ,じゅ#う"
   },
   {
     "enabled": true,
     "word": "最期",
-    "reading": "さい,ご"
+    "reading": "さ#い,ご"
   },
   {
     "enabled": true,
     "word": "蒼穹",
-    "reading": "そう,きゅう"
+    "reading": "そ#う,きゅ#う"
   },
   {
     "enabled": true,
     "word": "女神",
-    "reading": "め,がみ"
+    "reading": "め,が#み"
   },
   {
     "enabled": true,
@@ -3667,37 +3667,37 @@
   {
     "enabled": true,
     "word": "歯車",
-    "reading": "は,ぐるま"
+    "reading": "は,ぐ#る#ま"
   },
   {
     "enabled": true,
     "word": "何気",
-    "reading": "なに,げ"
+    "reading": "な#に,げ"
   },
   {
     "enabled": true,
     "word": "片隅",
-    "reading": "かた,すみ"
+    "reading": "か#た,す#み"
   },
   {
     "enabled": true,
     "word": "覚悟",
-    "reading": "かく,ご"
+    "reading": "か#く,ご"
   },
   {
     "enabled": true,
     "word": "面影",
-    "reading": "おも,かげ"
+    "reading": "お#も,か#げ"
   },
   {
     "enabled": true,
     "word": "理由",
-    "reading": "り,ゆう"
+    "reading": "り,ゆ#う"
   },
   {
     "enabled": true,
     "word": "法則",
-    "reading": "ほう,そく"
+    "reading": "ほ#う,そ#く"
   },
   {
     "enabled": true,
@@ -3707,97 +3707,97 @@
   {
     "enabled": true,
     "word": "人形",
-    "reading": "にん,ぎょう"
+    "reading": "に#ん,ぎょ#う"
   },
   {
     "enabled": true,
     "word": "up",
-    "reading": "アップ"
+    "reading": "ア,ッ#プ"
   },
   {
     "enabled": true,
     "word": "使命",
-    "reading": "し,めい"
+    "reading": "し,め#い"
   },
   {
     "enabled": true,
     "word": "爆竜",
-    "reading": "ばく,りゅう"
+    "reading": "ば#く,りゅ#う"
   },
   {
     "enabled": true,
     "word": "戦隊",
-    "reading": "せん,たい"
+    "reading": "せ#ん,た#い"
   },
   {
     "enabled": true,
     "word": "dna",
-    "reading": "ディー,エヌ,エー"
+    "reading": "ディー,エ#ヌ,エー"
   },
   {
     "enabled": true,
     "word": "退屈",
-    "reading": "たい,くつ"
+    "reading": "た#い,く#つ"
   },
   {
     "enabled": true,
     "word": "巨大",
-    "reading": "きょ,だい"
+    "reading": "きょ,だ#い"
   },
   {
     "enabled": true,
     "word": "怪獣",
-    "reading": "かい,じゅう"
+    "reading": "か#い,じゅ#う"
   },
   {
     "enabled": true,
     "word": "戦争",
-    "reading": "せん,そう"
+    "reading": "せ#ん,そ#う"
   },
   {
     "enabled": true,
     "word": "承認",
-    "reading": "しょう,にん"
+    "reading": "しょ#う,に#ん"
   },
   {
     "enabled": true,
     "word": "合体",
-    "reading": "がっ,たい"
+    "reading": "がっ,た#い"
   },
   {
     "enabled": true,
     "word": "空間",
-    "reading": "くう,かん"
+    "reading": "く#う,か#ん"
   },
   {
     "enabled": true,
     "word": "湾曲",
-    "reading": "わん,きょく"
+    "reading": "わ#ん,きょ#く"
   },
   {
     "enabled": true,
     "word": "誕生",
-    "reading": "たん,じょう"
+    "reading": "た#ん,じょ#う"
   },
   {
     "enabled": true,
     "word": "守護神",
-    "reading": "しゅ,ご,しん"
+    "reading": "しゅ,ご,し#ん"
   },
   {
     "enabled": true,
     "word": "勇者王",
-    "reading": "ゆう,しゃ,おう"
+    "reading": "ゆ#う,しゃ,お#う"
   },
   {
     "enabled": true,
     "word": "軍団",
-    "reading": "ぐん,だん"
+    "reading": "ぐ#ん,だ#ん"
   },
   {
     "enabled": true,
     "word": "頑強",
-    "reading": "がん,きょう"
+    "reading": "が#ん,きょ#う"
   },
   {
     "enabled": true,
@@ -3807,32 +3807,32 @@
   {
     "enabled": true,
     "word": "発進",
-    "reading": "はっ,しん"
+    "reading": "はっ,し#ん"
   },
   {
     "enabled": true,
     "word": "粉砕",
-    "reading": "ふん,さい"
+    "reading": "ふ#ん,さ#い"
   },
   {
     "enabled": true,
     "word": "巨神",
-    "reading": "きょ,しん"
+    "reading": "きょ,し#ん"
   },
   {
     "enabled": true,
     "word": "超力",
-    "reading": "ちょう,りょく"
+    "reading": "ちょ#う,りょ#く"
   },
   {
     "enabled": true,
     "word": "魔力",
-    "reading": "ま,りょく"
+    "reading": "ま,りょ#く"
   },
   {
     "enabled": true,
     "word": "気力",
-    "reading": "き,りょく"
+    "reading": "き,りょ#く"
   },
   {
     "enabled": true,
@@ -3842,7 +3842,7 @@
   {
     "enabled": true,
     "word": "夢幻",
-    "reading": "む,げん"
+    "reading": "む,げ#ん"
   },
   {
     "enabled": true,
@@ -3852,12 +3852,12 @@
   {
     "enabled": true,
     "word": "一度",
-    "reading": "いち,ど"
+    "reading": "い#ち,ど"
   },
   {
     "enabled": true,
     "word": "努力",
-    "reading": "ど,りょく"
+    "reading": "ど,りょ#く"
   },
   {
     "enabled": true,
@@ -3867,112 +3867,112 @@
   {
     "enabled": true,
     "word": "冒険",
-    "reading": "ぼう,けん"
+    "reading": "ぼ#う,け#ん"
   },
   {
     "enabled": true,
     "word": "千年",
-    "reading": "せん,ねん"
+    "reading": "せ#ん,ね#ん"
   },
   {
     "enabled": true,
     "word": "失敗",
-    "reading": "しっ,ぱい"
+    "reading": "しっ,ぱ#い"
   },
   {
     "enabled": true,
     "word": "捕獲",
-    "reading": "ほ,かく"
+    "reading": "ほ,か#く"
   },
   {
     "enabled": true,
     "word": "美食",
-    "reading": "び,しょく"
+    "reading": "び,しょ#く"
   },
   {
     "enabled": true,
     "word": "氷河",
-    "reading": "ひょう,が"
+    "reading": "ひょ#う,が"
   },
   {
     "enabled": true,
     "word": "感謝",
-    "reading": "かん,しゃ"
+    "reading": "か#ん,しゃ"
   },
   {
     "enabled": true,
     "word": "連発",
-    "reading": "れん,ぱつ"
+    "reading": "れ#ん,ぱ#つ"
   },
   {
     "enabled": true,
     "word": "吉日",
-    "reading": "きち,じつ"
+    "reading": "き#ち,じ#つ"
   },
   {
     "enabled": true,
     "word": "渋滞",
-    "reading": "じゅう,たい"
+    "reading": "じゅ#う,た#い"
   },
   {
     "enabled": true,
     "word": "伝説",
-    "reading": "でん,せつ"
+    "reading": "で#ん,せ#つ"
   },
   {
     "enabled": true,
     "word": "個人",
-    "reading": "こ,じん"
+    "reading": "こ,じ#ん"
   },
   {
     "enabled": true,
     "word": "個人的",
-    "reading": "こ,じん,てき"
+    "reading": "こ,じ#ん,て#き"
   },
   {
     "enabled": true,
     "word": "今度",
-    "reading": "こん,ど"
+    "reading": "こ#ん,ど"
   },
   {
     "enabled": true,
     "word": "過剩",
-    "reading": "か,じょう"
+    "reading": "か,じょ#う"
   },
   {
     "enabled": true,
     "word": "宝箱",
-    "reading": "たから,ばこ"
+    "reading": "た#か#ら,ば#こ"
   },
   {
     "enabled": true,
     "word": "歩道",
-    "reading": "ほ,どう"
+    "reading": "ほ,ど#う"
   },
   {
     "enabled": true,
     "word": "世界中",
-    "reading": "せ,かい,じゅう"
+    "reading": "せ,か#い,じゅ#う"
   },
   {
     "enabled": true,
     "word": "気配",
-    "reading": "け,はい"
+    "reading": "け,は#い"
   },
   {
     "enabled": true,
     "word": "alone",
-    "reading": "ア,ローン"
+    "reading": "ア,ロー#ン"
   },
   {
     "enabled": true,
     "word": "無惨",
-    "reading": "む,ざん"
+    "reading": "む,ざ#ん"
   },
   {
     "enabled": true,
     "word": "事実",
-    "reading": "じ,じつ"
+    "reading": "じ,じ#つ"
   },
   {
     "enabled": true,
@@ -3992,77 +3992,77 @@
   {
     "enabled": true,
     "word": "証明",
-    "reading": "しょう,めい"
+    "reading": "しょ#う,め#い"
   },
   {
     "enabled": true,
     "word": "歴史",
-    "reading": "れき,し"
+    "reading": "れ#き,し"
   },
   {
     "enabled": true,
     "word": "神秘",
-    "reading": "し,んぴ"
+    "reading": "し,ん#ぴ"
   },
   {
     "enabled": true,
     "word": "天声",
-    "reading": "てん,せい"
+    "reading": "て#ん,せ#い"
   },
   {
     "enabled": true,
     "word": "胎動",
-    "reading": "たい,どう"
+    "reading": "た#い,ど#う"
   },
   {
     "enabled": true,
     "word": "紀元",
-    "reading": "き,げん"
+    "reading": "き,げ#ん"
   },
   {
     "enabled": true,
     "word": "創造",
-    "reading": "そう,ぞう"
+    "reading": "そ#う,ぞ#う"
   },
   {
     "enabled": true,
     "word": "極上",
-    "reading": "ごく,じょう"
+    "reading": "ご#く,じょ#う"
   },
   {
     "enabled": true,
     "word": "飴色",
-    "reading": "あめ,いろ"
+    "reading": "あ#め,い#ろ"
   },
   {
     "enabled": true,
     "word": "争鳴",
-    "reading": "そう,めい"
+    "reading": "そ#う,め#い"
   },
   {
     "enabled": true,
     "word": "軌道",
-    "reading": "き,どう"
+    "reading": "き,ど#う"
   },
   {
     "enabled": true,
     "word": "必然",
-    "reading": "ひつ,ぜん"
+    "reading": "ひ#つ,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "天上",
-    "reading": "てん,じょう"
+    "reading": "て#ん,じょ#う"
   },
   {
     "enabled": true,
     "word": "想像",
-    "reading": "そう,ぞう"
+    "reading": "そ#う,ぞ#う"
   },
   {
     "enabled": true,
     "word": "宵闇",
-    "reading": "よい,やみ"
+    "reading": "よ#い,や#み"
   },
   {
     "enabled": true,
@@ -4072,7 +4072,7 @@
   {
     "enabled": true,
     "word": "雨宿",
-    "reading": "あま,やど"
+    "reading": "あ#ま,や#ど"
   },
   {
     "enabled": true,
@@ -4082,17 +4082,17 @@
   {
     "enabled": true,
     "word": "紅色",
-    "reading": "べに,いろ"
+    "reading": "べ#に,い#ろ"
   },
   {
     "enabled": true,
     "word": "薄紅色",
-    "reading": "うす,べに,いろ"
+    "reading": "う#す,べ#に,い#ろ"
   },
   {
     "enabled": true,
     "word": "頑張",
-    "reading": "がん,ば"
+    "reading": "が#ん,ば"
   },
   {
     "enabled": true,
@@ -4102,22 +4102,22 @@
   {
     "enabled": true,
     "word": "別々",
-    "reading": "べつ,べつ"
+    "reading": "べ#つ,べ#つ"
   },
   {
     "enabled": true,
     "word": "不純",
-    "reading": "ふ,じゅん"
+    "reading": "ふ,じゅ#ん"
   },
   {
     "enabled": true,
     "word": "速度",
-    "reading": "そく,ど"
+    "reading": "そ#く,ど"
   },
   {
     "enabled": true,
     "word": "全開",
-    "reading": "ぜん,かい"
+    "reading": "ぜ#ん,か#い"
   },
   {
     "enabled": true,
@@ -4127,32 +4127,32 @@
   {
     "enabled": true,
     "word": "不解",
-    "reading": "ふ,かい"
+    "reading": "ふ,か#い"
   },
   {
     "enabled": true,
     "word": "手当",
-    "reading": "て,あて"
+    "reading": "て,あ#て"
   },
   {
     "enabled": true,
     "word": "微熱",
-    "reading": "び,ねつ"
+    "reading": "び,ね#つ"
   },
   {
     "enabled": true,
     "word": "意識",
-    "reading": "い,しき"
+    "reading": "い,し#き"
   },
   {
     "enabled": true,
     "word": "全身",
-    "reading": "ぜん,しん"
+    "reading": "ぜ#ん,し#ん"
   },
   {
     "enabled": true,
     "word": "覚醒",
-    "reading": "かく,せい"
+    "reading": "か#く,せ#い"
   },
   {
     "enabled": true,
@@ -4162,7 +4162,7 @@
   {
     "enabled": true,
     "word": "仲間",
-    "reading": "なか,ま"
+    "reading": "な#か,ま"
   },
   {
     "enabled": true,
@@ -4177,7 +4177,7 @@
   {
     "enabled": true,
     "word": "惑星",
-    "reading": "わく,せい"
+    "reading": "わ#く,せ#い"
   },
   {
     "enabled": true,
@@ -4192,7 +4192,7 @@
   {
     "enabled": true,
     "word": "決意",
-    "reading": "けつ,い"
+    "reading": "け#つ,い"
   },
   {
     "enabled": true,
@@ -4202,17 +4202,17 @@
   {
     "enabled": true,
     "word": "強者",
-    "reading": "つわ,もの"
+    "reading": "つ#わ,も#の"
   },
   {
     "enabled": true,
     "word": "事態",
-    "reading": "じ,たい"
+    "reading": "じ,た#い"
   },
   {
     "enabled": true,
     "word": "異常",
-    "reading": "い,じょう"
+    "reading": "い,じょ#う"
   },
   {
     "enabled": true,
@@ -4222,7 +4222,7 @@
   {
     "enabled": true,
     "word": "時代",
-    "reading": "じ,だい"
+    "reading": "じ,だ#い"
   },
   {
     "enabled": true,
@@ -4232,17 +4232,17 @@
   {
     "enabled": true,
     "word": "四面",
-    "reading": "し,めん"
+    "reading": "し,め#ん"
   },
   {
     "enabled": true,
     "word": "布告",
-    "reading": "ふ,こく"
+    "reading": "ふ,こ#く"
   },
   {
     "enabled": true,
     "word": "宣戦",
-    "reading": "せん,せん"
+    "reading": "せ#ん,せ#ん"
   },
   {
     "enabled": true,
@@ -4252,17 +4252,17 @@
   {
     "enabled": true,
     "word": "無情",
-    "reading": "む,じょう"
+    "reading": "む,じょ#う"
   },
   {
     "enabled": true,
     "word": "ever",
-    "reading": "エヴァー"
+    "reading": "エ,ヴ,ァ,ー"
   },
   {
     "enabled": true,
     "word": "状態",
-    "reading": "じょう,たい"
+    "reading": "じょ#う,た#い"
   },
   {
     "enabled": true,
@@ -4272,82 +4272,82 @@
   {
     "enabled": true,
     "word": "究極",
-    "reading": "きゅう,きょく"
+    "reading": "きゅ#う,きょ#く"
   },
   {
     "enabled": true,
     "word": "複雑",
-    "reading": "ふく,ざつ"
+    "reading": "ふ#く,ざ#つ"
   },
   {
     "enabled": true,
     "word": "混沌",
-    "reading": "こん,とん"
+    "reading": "こ#ん,と#ん"
   },
   {
     "enabled": true,
     "word": "車輪",
-    "reading": "しゃ,りん"
+    "reading": "しゃ,り#ん"
   },
   {
     "enabled": true,
     "word": "歌声",
-    "reading": "うた,ごえ"
+    "reading": "う#た,ご#え"
   },
   {
     "enabled": true,
     "word": "獰猛",
-    "reading": "どう,もう"
+    "reading": "ど#う,も#う"
   },
   {
     "enabled": true,
     "word": "常闇",
-    "reading": "とこ,やみ"
+    "reading": "と#こ,や#み"
   },
   {
     "enabled": true,
     "word": "紅",
-    "reading": "くれない"
+    "reading": "く#れ#な#い"
   },
   {
     "enabled": true,
     "word": "地平",
-    "reading": "ち,へい"
+    "reading": "ち,へ#い"
   },
   {
     "enabled": true,
     "word": "能力",
-    "reading": "のう,りょく"
+    "reading": "の#う,りょ#く"
   },
   {
     "enabled": true,
     "word": "予感",
-    "reading": "よ,かん"
+    "reading": "よ,か#ん"
   },
   {
     "enabled": true,
     "word": "放物線",
-    "reading": "ほう,ぶつ,せん"
+    "reading": "ほ#う,ぶ#つ,せ#ん"
   },
   {
     "enabled": true,
     "word": "desire",
-    "reading": "ディザイアー"
+    "reading": "デ,ィ,ザ,イ,ア,ー"
   },
   {
     "enabled": true,
     "word": "両手",
-    "reading": "りょう,て"
+    "reading": "りょ#う,て"
   },
   {
     "enabled": true,
     "word": "無数",
-    "reading": "む,すう"
+    "reading": "む,す#う"
   },
   {
     "enabled": true,
     "word": "絶望",
-    "reading": "ぜつ,ぼう"
+    "reading": "ぜ#つ,ぼ#う"
   },
   {
     "enabled": true,
@@ -4362,32 +4362,32 @@
   {
     "enabled": true,
     "word": "手配",
-    "reading": "て,はい"
+    "reading": "て,は#い"
   },
   {
     "enabled": true,
     "word": "指名",
-    "reading": "し,めい"
+    "reading": "し,め#い"
   },
   {
     "enabled": true,
     "word": "調和",
-    "reading": "ちょう,わ"
+    "reading": "ちょ#う,わ"
   },
   {
     "enabled": true,
     "word": "予定",
-    "reading": "よ,てい"
+    "reading": "よ,て#い"
   },
   {
     "enabled": true,
     "word": "肝心",
-    "reading": "かん,じん"
+    "reading": "か#ん,じ#ん"
   },
   {
     "enabled": true,
     "word": "原理",
-    "reading": "げん,り"
+    "reading": "げ#ん,り"
   },
   {
     "enabled": true,
@@ -4397,7 +4397,7 @@
   {
     "enabled": true,
     "word": "前進",
-    "reading": "ぜん,しん"
+    "reading": "ぜ#ん,し#ん"
   },
   {
     "enabled": true,
@@ -4407,7 +4407,7 @@
   {
     "enabled": true,
     "word": "羅針盤",
-    "reading": "ら,しん,ばん"
+    "reading": "ら,し#ん,ば#ん"
   },
   {
     "enabled": true,
@@ -4417,37 +4417,37 @@
   {
     "enabled": true,
     "word": "波風",
-    "reading": "なみ,かぜ"
+    "reading": "な#み,か#ぜ"
   },
   {
     "enabled": true,
     "word": "勝負",
-    "reading": "しょう,ぶ"
+    "reading": "しょ#う,ぶ"
   },
   {
     "enabled": true,
     "word": "選択肢",
-    "reading": "せん,たく,し"
+    "reading": "せ#ん,た#く,し"
   },
   {
     "enabled": true,
     "word": "証拠",
-    "reading": "しょう,こ"
+    "reading": "しょ#う,こ"
   },
   {
     "enabled": true,
     "word": "相手",
-    "reading": "あい,て"
+    "reading": "あ#い,て"
   },
   {
     "enabled": true,
     "word": "足跡",
-    "reading": "あし,あと"
+    "reading": "あ#し,あ#と"
   },
   {
     "enabled": true,
     "word": "難易度",
-    "reading": "なん,い,ど"
+    "reading": "な#ん,い,ど"
   },
   {
     "enabled": true,
@@ -4457,37 +4457,37 @@
   {
     "enabled": true,
     "word": "順位",
-    "reading": "じゅん,い"
+    "reading": "じゅ#ん,い"
   },
   {
     "enabled": true,
     "word": "針路",
-    "reading": "しん,ろ"
+    "reading": "し#ん,ろ"
   },
   {
     "enabled": true,
     "word": "刺激",
-    "reading": "し,げき"
+    "reading": "し,げ#き"
   },
   {
     "enabled": true,
     "word": "原動力",
-    "reading": "げん,どう,りょく"
+    "reading": "げ#ん,ど#う,りょ#く"
   },
   {
     "enabled": true,
     "word": "直前",
-    "reading": "ちょく,ぜん"
+    "reading": "ちょ#く,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "注目度",
-    "reading": "ちゅう,もく,ど"
+    "reading": "ちゅ#う,も#く,ど"
   },
   {
     "enabled": true,
     "word": "準備",
-    "reading": "じゅん,び"
+    "reading": "じゅ#ん,び"
   },
   {
     "enabled": true,
@@ -4502,27 +4502,27 @@
   {
     "enabled": true,
     "word": "次元",
-    "reading": "じ,げん"
+    "reading": "じ,げ#ん"
   },
   {
     "enabled": true,
     "word": "野生",
-    "reading": "や,せい"
+    "reading": "や,せ#い"
   },
   {
     "enabled": true,
     "word": "攻略",
-    "reading": "こう,りゃく"
+    "reading": "こ#う,りゃ#く"
   },
   {
     "enabled": true,
     "word": "戦略",
-    "reading": "せん,りゃく"
+    "reading": "せ#ん,りゃ#く"
   },
   {
     "enabled": true,
     "word": "根拠",
-    "reading": "こん,きょ"
+    "reading": "こ#ん,きょ"
   },
   {
     "enabled": true,
@@ -4532,7 +4532,7 @@
   {
     "enabled": true,
     "word": "深紅",
-    "reading": "しん,く"
+    "reading": "し#ん,く"
   },
   {
     "enabled": true,
@@ -4542,7 +4542,7 @@
   {
     "enabled": true,
     "word": "猜疑心",
-    "reading": "さい,ぎ,しん"
+    "reading": "さ#い,ぎ,し#ん"
   },
   {
     "enabled": true,
@@ -4552,7 +4552,7 @@
   {
     "enabled": true,
     "word": "悲嘆",
-    "reading": "ひ,たん"
+    "reading": "ひ,た#ん"
   },
   {
     "enabled": true,
@@ -4567,17 +4567,17 @@
   {
     "enabled": true,
     "word": "抱かれて",
-    "reading": "いだ,か,れ,て"
+    "reading": "い#だ,か,れ,て"
   },
   {
     "enabled": true,
     "word": "虚構",
-    "reading": "きょ,こう"
+    "reading": "きょ,こ#う"
   },
   {
     "enabled": true,
     "word": "軌跡",
-    "reading": "き,せき"
+    "reading": "き,せ#き"
   },
   {
     "enabled": true,
@@ -4592,37 +4592,37 @@
   {
     "enabled": true,
     "word": "瑪瑙",
-    "reading": "め,のう"
+    "reading": "め,の#う"
   },
   {
     "enabled": true,
     "word": "野心",
-    "reading": "や,しん"
+    "reading": "や,し#ん"
   },
   {
     "enabled": true,
     "word": "花園",
-    "reading": "はな,ぞの"
+    "reading": "は#な,ぞ#の"
   },
   {
     "enabled": true,
     "word": "毒蜂",
-    "reading": "どく,ばち"
+    "reading": "ど#く,ば#ち"
   },
   {
     "enabled": true,
     "word": "仮面",
-    "reading": "か,めん"
+    "reading": "か,め#ん"
   },
   {
     "enabled": true,
     "word": "番犬",
-    "reading": "ばん,けん"
+    "reading": "ば#ん,け#ん"
   },
   {
     "enabled": true,
     "word": "堕天使",
-    "reading": "だ,てん,し"
+    "reading": "だ,て#ん,し"
   },
   {
     "enabled": true,
@@ -4632,42 +4632,42 @@
   {
     "enabled": true,
     "word": "鋼鉄",
-    "reading": "こう,てつ"
+    "reading": "こ#う,て#つ"
   },
   {
     "enabled": true,
     "word": "弐式",
-    "reading": "に,しき"
+    "reading": "に,し#き"
   },
   {
     "enabled": true,
     "word": "闘志",
-    "reading": "とう,し"
+    "reading": "と#う,し"
   },
   {
     "enabled": true,
     "word": "必中",
-    "reading": "ひっ,ちゅう"
+    "reading": "ひっ,ちゅ#う"
   },
   {
     "enabled": true,
     "word": "撃破",
-    "reading": "げき,は"
+    "reading": "げ#き,は"
   },
   {
     "enabled": true,
     "word": "指令",
-    "reading": "し,れい"
+    "reading": "し,れ#い"
   },
   {
     "enabled": true,
     "word": "銀河",
-    "reading": "ぎん,が"
+    "reading": "ぎ#ん,が"
   },
   {
     "enabled": true,
     "word": "闘士",
-    "reading": "とう,し"
+    "reading": "と#う,し"
   },
   {
     "enabled": true,
@@ -4677,27 +4677,27 @@
   {
     "enabled": true,
     "word": "必殺",
-    "reading": "ひっ,さつ"
+    "reading": "ひっ,さ#つ"
   },
   {
     "enabled": true,
     "word": "青春",
-    "reading": "せい,しゅん"
+    "reading": "せ#い,しゅ#ん"
   },
   {
     "enabled": true,
     "word": "巨人",
-    "reading": "きょ,じん"
+    "reading": "きょ,じ#ん"
   },
   {
     "enabled": true,
     "word": "試練",
-    "reading": "し,れん"
+    "reading": "し,れ#ん"
   },
   {
     "enabled": true,
     "word": "旅路",
-    "reading": "たび,じ"
+    "reading": "た#び,じ"
   },
   {
     "enabled": true,
@@ -4712,12 +4712,12 @@
   {
     "enabled": true,
     "word": "私達",
-    "reading": "わたし,たち"
+    "reading": "わ#た#し,た#ち"
   },
   {
     "enabled": true,
     "word": "松前",
-    "reading": "まつ,まえ"
+    "reading": "ま#つ,ま#え"
   },
   {
     "enabled": true,
@@ -4742,57 +4742,57 @@
   {
     "enabled": true,
     "word": "痛まない",
-    "reading": "いた,ま,な,い"
+    "reading": "い#た,ま,な,い"
   },
   {
     "enabled": true,
     "word": "恨む",
-    "reading": "うら,む"
+    "reading": "う#ら,む"
   },
   {
     "enabled": true,
     "word": "繋がれ",
-    "reading": "つな,が,れ"
+    "reading": "つ#な,が,れ"
   },
   {
     "enabled": true,
     "word": "痛い",
-    "reading": "いた,い"
+    "reading": "い#た,い"
   },
   {
     "enabled": true,
     "word": "痛み",
-    "reading": "いた,み"
+    "reading": "い#た,み"
   },
   {
     "enabled": true,
     "word": "痛む",
-    "reading": "いた,む"
+    "reading": "い#た,む"
   },
   {
     "enabled": true,
     "word": "怖く",
-    "reading": "こわ,く"
+    "reading": "こ#わ,く"
   },
   {
     "enabled": true,
     "word": "繋ぎ",
-    "reading": "つな,ぎ"
+    "reading": "つ#な,ぎ"
   },
   {
     "enabled": true,
     "word": "痛く",
-    "reading": "いた,く"
+    "reading": "い#た,く"
   },
   {
     "enabled": true,
     "word": "壊した",
-    "reading": "こわ,し,た"
+    "reading": "こ#わ,し,た"
   },
   {
     "enabled": true,
     "word": "壊し",
-    "reading": "こわ,し"
+    "reading": "こ#わ,し"
   },
   {
     "enabled": true,
@@ -4817,7 +4817,7 @@
   {
     "enabled": true,
     "word": "壊れた",
-    "reading": "こわ,れ,た"
+    "reading": "こ#わ,れ,た"
   },
   {
     "enabled": true,
@@ -4837,7 +4837,7 @@
   {
     "enabled": true,
     "word": "電信",
-    "reading": "でん,しん"
+    "reading": "で#ん,し#ん"
   },
   {
     "enabled": true,
@@ -4847,52 +4847,52 @@
   {
     "enabled": true,
     "word": "以心",
-    "reading": "い,しん"
+    "reading": "い,し#ん"
   },
   {
     "enabled": true,
     "word": "最新",
-    "reading": "さい,しん"
+    "reading": "さ#い,し#ん"
   },
   {
     "enabled": true,
     "word": "伝心",
-    "reading": "でん,しん"
+    "reading": "で#ん,し#ん"
   },
   {
     "enabled": true,
     "word": "童話",
-    "reading": "どう,わ"
+    "reading": "ど#う,わ"
   },
   {
     "enabled": true,
     "word": "基準",
-    "reading": "き,じゅん"
+    "reading": "き,じゅ#ん"
   },
   {
     "enabled": true,
     "word": "一匙",
-    "reading": "ひと,さじ"
+    "reading": "ひ#と,さ#じ"
   },
   {
     "enabled": true,
     "word": "謎色",
-    "reading": "なぞ,いろ"
+    "reading": "な#ぞ,い#ろ"
   },
   {
     "enabled": true,
     "word": "手袋",
-    "reading": "て,ぶくろ"
+    "reading": "て,ぶ#く#ろ"
   },
   {
     "enabled": true,
     "word": "買い物",
-    "reading": "か,い,もの"
+    "reading": "か,い,も#の"
   },
   {
     "enabled": true,
     "word": "smily",
-    "reading": "スマイリー"
+    "reading": "ス,マ,イ,リ,ー"
   },
   {
     "enabled": true,
@@ -4907,107 +4907,107 @@
   {
     "enabled": true,
     "word": "岸辺",
-    "reading": "きし,べ"
+    "reading": "き#し,べ"
   },
   {
     "enabled": true,
     "word": "海辺",
-    "reading": "うみ,べ"
+    "reading": "う#み,べ"
   },
   {
     "enabled": true,
     "word": "連続",
-    "reading": "れん,ぞく"
+    "reading": "れ#ん,ぞ#く"
   },
   {
     "enabled": true,
     "word": "復活",
-    "reading": "ふっ,かつ"
+    "reading": "ふっ,か#つ"
   },
   {
     "enabled": true,
     "word": "二転",
-    "reading": "に,てん"
+    "reading": "に,て#ん"
   },
   {
     "enabled": true,
     "word": "三転",
-    "reading": "さん,てん"
+    "reading": "さ#ん,て#ん"
   },
   {
     "enabled": true,
     "word": "送信",
-    "reading": "そう,しん"
+    "reading": "そ#う,し#ん"
   },
   {
     "enabled": true,
     "word": "未遂",
-    "reading": "み,すい"
+    "reading": "み,す#い"
   },
   {
     "enabled": true,
     "word": "強化",
-    "reading": "きょう,か"
+    "reading": "きょ#う,か"
   },
   {
     "enabled": true,
     "word": "成長",
-    "reading": "せい,ちょう"
+    "reading": "せ#い,ちょ#う"
   },
   {
     "enabled": true,
     "word": "新鮮",
-    "reading": "しん,せん"
+    "reading": "し#ん,せ#ん"
   },
   {
     "enabled": true,
     "word": "黙秘",
-    "reading": "もく,ひ"
+    "reading": "も#く,ひ"
   },
   {
     "enabled": true,
     "word": "毎回",
-    "reading": "まい,かい"
+    "reading": "ま#い,か#い"
   },
   {
     "enabled": true,
     "word": "朝昼",
-    "reading": "あさ,ひる"
+    "reading": "あ#さ,ひ#る"
   },
   {
     "enabled": true,
     "word": "時々",
-    "reading": "とき,どき"
+    "reading": "と#き,ど#き"
   },
   {
     "enabled": true,
     "word": "充電",
-    "reading": "じゅう,でん"
+    "reading": "じゅ#う,で#ん"
   },
   {
     "enabled": true,
     "word": "毎週",
-    "reading": "まい,しゅう"
+    "reading": "ま#い,しゅ#う"
   },
   {
     "enabled": true,
     "word": "分担",
-    "reading": "ぶん,たん"
+    "reading": "ぶ#ん,た#ん"
   },
   {
     "enabled": true,
     "word": "役割",
-    "reading": "やく,わり"
+    "reading": "や#く,わ#り"
   },
   {
     "enabled": true,
     "word": "原作",
-    "reading": "げん,さく"
+    "reading": "げ#ん,さ#く"
   },
   {
     "enabled": true,
     "word": "毎年",
-    "reading": "まい,とし"
+    "reading": "ま#い,と#し"
   },
   {
     "enabled": true,
@@ -5017,62 +5017,62 @@
   {
     "enabled": true,
     "word": "宿題",
-    "reading": "しゅく,だい"
+    "reading": "しゅ#く,だ#い"
   },
   {
     "enabled": true,
     "word": "人",
-    "reading": "ひと,り"
+    "reading": "ひ#と#,#り"
   },
   {
     "enabled": true,
     "word": "理論",
-    "reading": "り,ろん"
+    "reading": "り,ろ#ん"
   },
   {
     "enabled": true,
     "word": "挑発",
-    "reading": "ちょう,はつ"
+    "reading": "ちょ#う,は#つ"
   },
   {
     "enabled": true,
     "word": "命運",
-    "reading": "めい,うん"
+    "reading": "め#い,う#ん"
   },
   {
     "enabled": true,
     "word": "引力",
-    "reading": "いん,りょく"
+    "reading": "い#ん,りょ#く"
   },
   {
     "enabled": true,
     "word": "不要",
-    "reading": "ふ,よう"
+    "reading": "ふ,よ#う"
   },
   {
     "enabled": true,
     "word": "目眩",
-    "reading": "め,まい"
+    "reading": "め,ま#い"
   },
   {
     "enabled": true,
     "word": "世界一",
-    "reading": "せ,かい,いち"
+    "reading": "せ,か#い,い#ち"
   },
   {
     "enabled": true,
     "word": "何万回",
-    "reading": "なん,まん,かい"
+    "reading": "な#ん,ま#ん,か#い"
   },
   {
     "enabled": true,
     "word": "帽子",
-    "reading": "ぼう,し"
+    "reading": "ぼ#う,し"
   },
   {
     "enabled": true,
     "word": "幾千万",
-    "reading": "いく,せん,まん"
+    "reading": "い#く,せ#ん,ま#ん"
   },
   {
     "enabled": true,
@@ -5082,12 +5082,12 @@
   {
     "enabled": true,
     "word": "万華鏡",
-    "reading": "まん,げ,きょう"
+    "reading": "ま#ん,げ,きょ#う"
   },
   {
     "enabled": true,
     "word": "寸前",
-    "reading": "すん,ぜん"
+    "reading": "す#ん,ぜ#ん"
   },
   {
     "enabled": true,
@@ -5097,57 +5097,57 @@
   {
     "enabled": true,
     "word": "大海原",
-    "reading": "おお,うな,ばら"
+    "reading": "お#お,う#な,ば#ら"
   },
   {
     "enabled": true,
     "word": "魅惑",
-    "reading": "み,わく"
+    "reading": "み,わ#く"
   },
   {
     "enabled": true,
     "word": "時刻",
-    "reading": "じ,こく"
+    "reading": "じ,こ#く"
   },
   {
     "enabled": true,
     "word": "白々",
-    "reading": "しら,じら"
+    "reading": "し#ら,じ#ら"
   },
   {
     "enabled": true,
     "word": "星影",
-    "reading": "ほし,かげ"
+    "reading": "ほ#し,か#げ"
   },
   {
     "enabled": true,
     "word": "散歩",
-    "reading": "さん,ぽ"
+    "reading": "さ#ん,ぽ"
   },
   {
     "enabled": true,
     "word": "宝石",
-    "reading": "ほう,せき"
+    "reading": "ほ#う,せ#き"
   },
   {
     "enabled": true,
     "word": "真夜中",
-    "reading": "ま,よ,なか"
+    "reading": "ま,よ,な#か"
   },
   {
     "enabled": true,
     "word": "絹糸",
-    "reading": "きぬ,いと"
+    "reading": "き#ぬ,い#と"
   },
   {
     "enabled": true,
     "word": "amulet",
-    "reading": "アミュレット"
+    "reading": "ア,ミ,ュ,レ,ッ,ト"
   },
   {
     "enabled": true,
     "word": "場面",
-    "reading": "ば,めん"
+    "reading": "ば,め#ん"
   },
   {
     "enabled": true,
@@ -5157,42 +5157,42 @@
   {
     "enabled": true,
     "word": "寝息",
-    "reading": "ね,いき"
+    "reading": "ね,い#き"
   },
   {
     "enabled": true,
     "word": "段階",
-    "reading": "だん,かい"
+    "reading": "だ#ん,か#い"
   },
   {
     "enabled": true,
     "word": "統合",
-    "reading": "とう,ごう"
+    "reading": "と#う,ご#う"
   },
   {
     "enabled": true,
     "word": "有機",
-    "reading": "ゆう,き"
+    "reading": "ゆ#う,き"
   },
   {
     "enabled": true,
     "word": "生命体",
-    "reading": "せい,めい,たい"
+    "reading": "せ#い,め#い,た#い"
   },
   {
     "enabled": true,
     "word": "統括",
-    "reading": "とう,かつ"
+    "reading": "と#う,か#つ"
   },
   {
     "enabled": true,
     "word": "思念",
-    "reading": "し,ねん"
+    "reading": "し,ね#ん"
   },
   {
     "enabled": true,
     "word": "思念体",
-    "reading": "し,ねん,たい"
+    "reading": "し,ね#ん,た#い"
   },
   {
     "enabled": true,
@@ -5202,97 +5202,97 @@
   {
     "enabled": true,
     "word": "伝達",
-    "reading": "でん,たつ"
+    "reading": "で#ん,た#つ"
   },
   {
     "enabled": true,
     "word": "発生",
-    "reading": "はっ,せい"
+    "reading": "はっ,せ#い"
   },
   {
     "enabled": true,
     "word": "光景",
-    "reading": "こう,けい"
+    "reading": "こ#う,け#い"
   },
   {
     "enabled": true,
     "word": "船出",
-    "reading": "ふな,で"
+    "reading": "ふ#な,で"
   },
   {
     "enabled": true,
     "word": "幻想曲",
-    "reading": "げん,そう,きょく"
+    "reading": "げ#ん,そ#う,きょ#く"
   },
   {
     "enabled": true,
     "word": "boy",
-    "reading": "ボーイ"
+    "reading": "ボ,ー,イ"
   },
   {
     "enabled": true,
     "word": "結構",
-    "reading": "けっ,こう"
+    "reading": "けっ,こ#う"
   },
   {
     "enabled": true,
     "word": "新聞",
-    "reading": "しん,ぶん"
+    "reading": "し#ん,ぶ#ん"
   },
   {
     "enabled": true,
     "word": "最近",
-    "reading": "さい,きん"
+    "reading": "さ#い,き#ん"
   },
   {
     "enabled": true,
     "word": "調子",
-    "reading": "ちょう,し"
+    "reading": "ちょ#う,し"
   },
   {
     "enabled": true,
     "word": "経験値",
-    "reading": "けい,けん,ち"
+    "reading": "け#い,け#ん,ち"
   },
   {
     "enabled": true,
     "word": "灯火",
-    "reading": "とう,か"
+    "reading": "と#う,か"
   },
   {
     "enabled": true,
     "word": "随分",
-    "reading": "ずい,ぶん"
+    "reading": "ず#い,ぶ#ん"
   },
   {
     "enabled": true,
     "word": "自体",
-    "reading": "じ,たい"
+    "reading": "じ,た#い"
   },
   {
     "enabled": true,
     "word": "大変",
-    "reading": "たい,へん"
+    "reading": "た#い,へ#ん"
   },
   {
     "enabled": true,
     "word": "閉鎖",
-    "reading": "へい,さ"
+    "reading": "へ#い,さ"
   },
   {
     "enabled": true,
     "word": "安堵",
-    "reading": "あん,ど"
+    "reading": "あ#ん,ど"
   },
   {
     "enabled": true,
     "word": "納得",
-    "reading": "なっ,とく"
+    "reading": "なっ,と#く"
   },
   {
     "enabled": true,
     "word": "現象",
-    "reading": "げん,しょう"
+    "reading": "げ#ん,しょ#う"
   },
   {
     "enabled": true,
@@ -5302,22 +5302,22 @@
   {
     "enabled": true,
     "word": "一晩",
-    "reading": "ひと,ばん"
+    "reading": "ひ#と,ば#ん"
   },
   {
     "enabled": true,
     "word": "溜息",
-    "reading": "ため,いき"
+    "reading": "た#め,い#き"
   },
   {
     "enabled": true,
     "word": "放題",
-    "reading": "ほう,だい"
+    "reading": "ほ#う,だ#い"
   },
   {
     "enabled": true,
     "word": "洋服",
-    "reading": "よう,ふく"
+    "reading": "よ#う,ふ#く"
   },
   {
     "enabled": true,
@@ -5327,67 +5327,67 @@
   {
     "enabled": true,
     "word": "千円",
-    "reading": "せん,えん"
+    "reading": "せ#ん,え#ん"
   },
   {
     "enabled": true,
     "word": "徹夜",
-    "reading": "てつ,や"
+    "reading": "て#つ,や"
   },
   {
     "enabled": true,
     "word": "変顔",
-    "reading": "へん,がお"
+    "reading": "へ#ん,が#お"
   },
   {
     "enabled": true,
     "word": "虫歯",
-    "reading": "むし,ば"
+    "reading": "む#し,ば"
   },
   {
     "enabled": true,
     "word": "斜塔",
-    "reading": "しゃ,とう"
+    "reading": "しゃ,と#う"
   },
   {
     "enabled": true,
     "word": "内緒",
-    "reading": "ない,しょ"
+    "reading": "な#い,しょ"
   },
   {
     "enabled": true,
     "word": "満足",
-    "reading": "まん,ぞく"
+    "reading": "ま#ん,ぞ#く"
   },
   {
     "enabled": true,
     "word": "人魚",
-    "reading": "にん,ぎょ"
+    "reading": "に#ん,ぎょ"
   },
   {
     "enabled": true,
     "word": "無口",
-    "reading": "む,くち"
+    "reading": "む,く#ち"
   },
   {
     "enabled": true,
     "word": "鱗粉",
-    "reading": "りん,ぷん"
+    "reading": "り#ん,ぷ#ん"
   },
   {
     "enabled": true,
     "word": "何千里",
-    "reading": "なん,ぜん,り"
+    "reading": "な#ん,ぜ#ん,り"
   },
   {
     "enabled": true,
     "word": "恋路",
-    "reading": "こい,じ"
+    "reading": "こ#い,じ"
   },
   {
     "enabled": true,
     "word": "脇目",
-    "reading": "わき,め"
+    "reading": "わ#き,め"
   },
   {
     "enabled": true,
@@ -5402,32 +5402,32 @@
   {
     "enabled": true,
     "word": "神風",
-    "reading": "かみ,かぜ"
+    "reading": "か#み,か#ぜ"
   },
   {
     "enabled": true,
     "word": "戦火",
-    "reading": "せん,か"
+    "reading": "せ#ん,か"
   },
   {
     "enabled": true,
     "word": "最悪",
-    "reading": "さい,あく"
+    "reading": "さ#い,あ#く"
   },
   {
     "enabled": true,
     "word": "極限",
-    "reading": "きょく,げん"
+    "reading": "きょ#く,げ#ん"
   },
   {
     "enabled": true,
     "word": "支配",
-    "reading": "し,はい"
+    "reading": "し,は#い"
   },
   {
     "enabled": true,
     "word": "一撃",
-    "reading": "いち,げき"
+    "reading": "い#ち,げ#き"
   },
   {
     "enabled": true,
@@ -5437,17 +5437,17 @@
   {
     "enabled": true,
     "word": "冷徹",
-    "reading": "れい,てつ"
+    "reading": "れ#い,て#つ"
   },
   {
     "enabled": true,
     "word": "最大",
-    "reading": "さい,だい"
+    "reading": "さ#い,だ#い"
   },
   {
     "enabled": true,
     "word": "最大級",
-    "reading": "さい,だい,きゅう"
+    "reading": "さ#い,だ#い,きゅ#う"
   },
   {
     "enabled": true,
@@ -5457,7 +5457,7 @@
   {
     "enabled": true,
     "word": "五感",
-    "reading": "ご,かん"
+    "reading": "ご,か#ん"
   },
   {
     "enabled": true,
@@ -5472,12 +5472,12 @@
   {
     "enabled": true,
     "word": "云々",
-    "reading": "うん,ぬん"
+    "reading": "う#ん,ぬ#ん"
   },
   {
     "enabled": true,
     "word": "愛情",
-    "reading": "あい,じょう"
+    "reading": "あ#い,じょ#う"
   },
   {
     "enabled": true,
@@ -5487,17 +5487,17 @@
   {
     "enabled": true,
     "word": "羽撃",
-    "reading": "は,ばた"
+    "reading": "は,ば#た"
   },
   {
     "enabled": true,
     "word": "理想郷",
-    "reading": "り,そう,きょう"
+    "reading": "り,そ#う,きょ#う"
   },
   {
     "enabled": true,
     "word": "創始",
-    "reading": "そう,し"
+    "reading": "そ#う,し"
   },
   {
     "enabled": true,
@@ -5507,37 +5507,37 @@
   {
     "enabled": true,
     "word": "翻弄",
-    "reading": "ほん,ろう"
+    "reading": "ほ#ん,ろ#う"
   },
   {
     "enabled": true,
     "word": "何億年",
-    "reading": "なん,おく,ねん"
+    "reading": "な#ん,お#く,ね#ん"
   },
   {
     "enabled": true,
     "word": "発症",
-    "reading": "はっ,しょう"
+    "reading": "はっ,しょ#う"
   },
   {
     "enabled": true,
     "word": "退路",
-    "reading": "たい,ろ"
+    "reading": "た#い,ろ"
   },
   {
     "enabled": true,
     "word": "剪定",
-    "reading": "せん,てい"
+    "reading": "せ#ん,て#い"
   },
   {
     "enabled": true,
     "word": "絶体",
-    "reading": "ぜっ,たい"
+    "reading": "ぜっ,た#い"
   },
   {
     "enabled": true,
     "word": "絶命",
-    "reading": "ぜつ,めい"
+    "reading": "ぜ#つ,め#い"
   },
   {
     "enabled": true,
@@ -5547,17 +5547,17 @@
   {
     "enabled": true,
     "word": "警報",
-    "reading": "けい,ほう"
+    "reading": "け#い,ほ#う"
   },
   {
     "enabled": true,
     "word": "氾濫",
-    "reading": "はん,らん"
+    "reading": "は#ん,ら#ん"
   },
   {
     "enabled": true,
     "word": "反抗",
-    "reading": "はん,こう"
+    "reading": "は#ん,こ#う"
   },
   {
     "enabled": true,
@@ -5567,67 +5567,67 @@
   {
     "enabled": true,
     "word": "火花",
-    "reading": "ひ,ばな"
+    "reading": "ひ,ば#な"
   },
   {
     "enabled": true,
     "word": "仕草",
-    "reading": "し,ぐさ"
+    "reading": "し,ぐ#さ"
   },
   {
     "enabled": true,
     "word": "愛罪",
-    "reading": "あい,ざい"
+    "reading": "あ#い,ざ#い"
   },
   {
     "enabled": true,
     "word": "woh",
-    "reading": "ウォー"
+    "reading": "ウ,ォ,ー"
   },
   {
     "enabled": true,
     "word": "主役",
-    "reading": "しゅ,やく"
+    "reading": "しゅ,や#く"
   },
   {
     "enabled": true,
     "word": "舞台",
-    "reading": "ぶ,たい"
+    "reading": "ぶ,た#い"
   },
   {
     "enabled": true,
     "word": "祝祭",
-    "reading": "しゅく,さい"
+    "reading": "しゅ#く,さ#い"
   },
   {
     "enabled": true,
     "word": "両目",
-    "reading": "りょう,め"
+    "reading": "りょ#う,め"
   },
   {
     "enabled": true,
     "word": "家族",
-    "reading": "か,ぞく"
+    "reading": "か,ぞ#く"
   },
   {
     "enabled": true,
     "word": "朝日",
-    "reading": "あさ,ひ"
+    "reading": "あ#さ,ひ"
   },
   {
     "enabled": true,
     "word": "閃光",
-    "reading": "せん,こう"
+    "reading": "せ#ん,こ#う"
   },
   {
     "enabled": true,
     "word": "上層",
-    "reading": "じょう,そう"
+    "reading": "じょ#う,そ#う"
   },
   {
     "enabled": true,
     "word": "全速",
-    "reading": "ぜん,そく"
+    "reading": "ぜ#ん,そ#く"
   },
   {
     "enabled": true,
@@ -5637,72 +5637,72 @@
   {
     "enabled": true,
     "word": "実際",
-    "reading": "じっ,さい"
+    "reading": "じっ,さ#い"
   },
   {
     "enabled": true,
     "word": "解除",
-    "reading": "かい,じょ"
+    "reading": "か#い,じょ"
   },
   {
     "enabled": true,
     "word": "月夜",
-    "reading": "つき,よ"
+    "reading": "つ#き,よ"
   },
   {
     "enabled": true,
     "word": "耳元",
-    "reading": "みみ,もと"
+    "reading": "み#み,も#と"
   },
   {
     "enabled": true,
     "word": "光速",
-    "reading": "こう,そく"
+    "reading": "こ#う,そ#く"
   },
   {
     "enabled": true,
     "word": "一番星",
-    "reading": "いち,ばん,ぼし"
+    "reading": "い#ち,ば#ん,ぼ#し"
   },
   {
     "enabled": true,
     "word": "流れ星",
-    "reading": "なが,れ,ぼし"
+    "reading": "な#が,れ,ぼ#し"
   },
   {
     "enabled": true,
     "word": "出発",
-    "reading": "しゅっ,ぱつ"
+    "reading": "しゅっ,ぱ#つ"
   },
   {
     "enabled": true,
     "word": "失恋",
-    "reading": "しつ,れん"
+    "reading": "し#つ,れ#ん"
   },
   {
     "enabled": true,
     "word": "見事",
-    "reading": "み,ごと"
+    "reading": "み,ご#と"
   },
   {
     "enabled": true,
     "word": "途上",
-    "reading": "と,じょう"
+    "reading": "と,じょ#う"
   },
   {
     "enabled": true,
     "word": "案内",
-    "reading": "あん,ない"
+    "reading": "あ#ん,な#い"
   },
   {
     "enabled": true,
     "word": "窓際",
-    "reading": "まど,ぎわ"
+    "reading": "ま#ど,ぎ#わ"
   },
   {
     "enabled": true,
     "word": "休憩",
-    "reading": "きゅう,けい"
+    "reading": "きゅ#う,け#い"
   },
   {
     "enabled": true,
@@ -5712,12 +5712,12 @@
   {
     "enabled": true,
     "word": "用意",
-    "reading": "よう,い"
+    "reading": "よ#う,い"
   },
   {
     "enabled": true,
     "word": "壁時計",
-    "reading": "かべ,ど,けい"
+    "reading": "か#べ,ど,け#い"
   },
   {
     "enabled": true,
@@ -5747,17 +5747,17 @@
   {
     "enabled": true,
     "word": "不条理",
-    "reading": "ふ,じょう,り"
+    "reading": "ふ,じょ#う,り"
   },
   {
     "enabled": true,
     "word": "妖怪",
-    "reading": "よう,かい"
+    "reading": "よ#う,か#い"
   },
   {
     "enabled": true,
     "word": "魔物",
-    "reading": "ま,もの"
+    "reading": "ま,も#の"
   },
   {
     "enabled": true,
@@ -5767,72 +5767,72 @@
   {
     "enabled": true,
     "word": "野良犬",
-    "reading": "の,ら,いぬ"
+    "reading": "の,ら,い#ぬ"
   },
   {
     "enabled": true,
     "word": "毒牙",
-    "reading": "どく,が"
+    "reading": "ど#く,が"
   },
   {
     "enabled": true,
     "word": "囁き",
-    "reading": "ささや,き"
+    "reading": "さ#さ#や,き"
   },
   {
     "enabled": true,
     "word": "囁いて",
-    "reading": "ささや,い,て"
+    "reading": "さ#さ#や,い,て"
   },
   {
     "enabled": true,
     "word": "囁いた",
-    "reading": "ささや,い,た"
+    "reading": "さ#さ#や,い,た"
   },
   {
     "enabled": true,
     "word": "囁く",
-    "reading": "ささや,く"
+    "reading": "さ#さ#や,く"
   },
   {
     "enabled": true,
     "word": "思っ",
-    "reading": "おも,っ"
+    "reading": "お#も,っ"
   },
   {
     "enabled": true,
     "word": "思う",
-    "reading": "おも,う"
+    "reading": "お#も,う"
   },
   {
     "enabled": true,
     "word": "昏い",
-    "reading": "くら,い"
+    "reading": "く#ら,い"
   },
   {
     "enabled": true,
     "word": "呟き",
-    "reading": "つぶや,き"
+    "reading": "つ#ぶ#や,き"
   },
   {
     "enabled": true,
     "word": "呟い",
-    "reading": "つぶや,い"
+    "reading": "つ#ぶ#や,い"
   },
   {
     "enabled": true,
     "word": "憎しみ",
-    "reading": "にく,し,み"
+    "reading": "に#く,し,み"
   },
   {
     "enabled": true,
     "word": "ah",
-    "reading": "アー"
+    "reading": "ア,ー"
   },
   {
     "enabled": true,
     "word": "大丈夫",
-    "reading": "だい,じょう,ぶ"
+    "reading": "だ#い,じょ#う,ぶ"
   },
   {
     "enabled": true,
@@ -5842,7 +5842,7 @@
   {
     "enabled": true,
     "word": "光",
-    "reading": "ひかり"
+    "reading": "ひ#か#り"
   },
   {
     "enabled": true,
@@ -5852,7 +5852,7 @@
   {
     "enabled": true,
     "word": "空白",
-    "reading": "くう,はく"
+    "reading": "く#う,は#く"
   },
   {
     "enabled": true,
@@ -5862,7 +5862,7 @@
   {
     "enabled": true,
     "word": "合言葉",
-    "reading": "あい,こと,ば"
+    "reading": "あ#い,こ#と,ば"
   },
   {
     "enabled": true,
@@ -5872,22 +5872,22 @@
   {
     "enabled": true,
     "word": "咎人",
-    "reading": "とが,びと"
+    "reading": "と#が,び#と"
   },
   {
     "enabled": true,
     "word": "最奥",
-    "reading": "さい,おう"
+    "reading": "さ#い,お#う"
   },
   {
     "enabled": true,
     "word": "垣間見",
-    "reading": "かい,ま,み"
+    "reading": "か#い,ま,み"
   },
   {
     "enabled": true,
     "word": "星空",
-    "reading": "ほし,ぞら"
+    "reading": "ほ#し,ぞ#ら"
   },
   {
     "enabled": true,
@@ -5897,12 +5897,12 @@
   {
     "enabled": true,
     "word": "覗く",
-    "reading": "のぞ,く"
+    "reading": "の#ぞ,く"
   },
   {
     "enabled": true,
     "word": "逆撫で",
-    "reading": "さか,な,で"
+    "reading": "さ#か,な,で"
   },
   {
     "enabled": true,
@@ -5912,12 +5912,12 @@
   {
     "enabled": true,
     "word": "清ら",
-    "reading": "きよ,ら"
+    "reading": "き#よ,ら"
   },
   {
     "enabled": true,
     "word": "潤す",
-    "reading": "うるお,す"
+    "reading": "う#る#お,す"
   },
   {
     "enabled": true,
@@ -5927,7 +5927,7 @@
   {
     "enabled": true,
     "word": "緋く",
-    "reading": "あか,く"
+    "reading": "あ#か,く"
   },
   {
     "enabled": true,
@@ -5942,42 +5942,42 @@
   {
     "enabled": true,
     "word": "夜の帳",
-    "reading": "よる,の,とばり"
+    "reading": "よ#る,の,と#ば#り"
   },
   {
     "enabled": true,
     "word": "虚空",
-    "reading": "こ,くう"
+    "reading": "こ,く#う"
   },
   {
     "enabled": true,
     "word": "硝子",
-    "reading": "ガラ,ス"
+    "reading": "ガ#ラ,ス"
   },
   {
     "enabled": true,
     "word": "天",
-    "reading": "てん"
+    "reading": "て#ん"
   },
   {
     "enabled": true,
     "word": "滲",
-    "reading": "にじ"
+    "reading": "に#じ"
   },
   {
     "enabled": true,
     "word": "宝物",
-    "reading": "たから,もの"
+    "reading": "た#か#ら,も#の"
   },
   {
     "enabled": true,
     "word": "貴女",
-    "reading": "あなた"
+    "reading": "あ,な#た"
   },
   {
     "enabled": true,
     "word": "怯え",
-    "reading": "おび,え"
+    "reading": "お#び,え"
   },
   {
     "enabled": true,
@@ -5997,12 +5997,12 @@
   {
     "enabled": true,
     "word": "燈し",
-    "reading": "とも,し"
+    "reading": "と#も,し"
   },
   {
     "enabled": true,
     "word": "燈す",
-    "reading": "とも,す"
+    "reading": "と#も,す"
   },
   {
     "enabled": true,
@@ -6017,32 +6017,32 @@
   {
     "enabled": true,
     "word": "深呼吸",
-    "reading": "しん,こ,きゅう"
+    "reading": "し#ん,こ,きゅ#う"
   },
   {
     "enabled": true,
     "word": "道標",
-    "reading": "みち,しるべ"
+    "reading": "み#ち,し#る#べ"
   },
   {
     "enabled": true,
     "word": "大好き",
-    "reading": "だい,す,き"
+    "reading": "だ#い,す,き"
   },
   {
     "enabled": true,
     "word": "生意気",
-    "reading": "なま,い,き"
+    "reading": "な#ま,い,き"
   },
   {
     "enabled": true,
     "word": "彼方",
-    "reading": "かな,た"
+    "reading": "か#な,た"
   },
   {
     "enabled": true,
     "word": "笑顔",
-    "reading": "え,がお"
+    "reading": "え,が#お"
   },
   {
     "enabled": true,
@@ -6057,57 +6057,57 @@
   {
     "enabled": true,
     "word": "嬉し",
-    "reading": "うれ,し"
+    "reading": "う#れ,し"
   },
   {
     "enabled": true,
     "word": "真ん中",
-    "reading": "ま,ん,なか"
+    "reading": "ま,ん,な#か"
   },
   {
     "enabled": true,
     "word": "檸檬",
-    "reading": "れ,もん"
+    "reading": "れ,も#ん"
   },
   {
     "enabled": true,
     "word": "幼子",
-    "reading": "おさな,ご"
+    "reading": "お#さ#な,ご"
   },
   {
     "enabled": true,
     "word": "彷徨っ",
-    "reading": "さ,まよ,っ"
+    "reading": "さ,ま#よ,っ"
   },
   {
     "enabled": true,
     "word": "身体",
-    "reading": "からだ"
+    "reading": "か,ら#だ"
   },
   {
     "enabled": true,
     "word": "並べ",
-    "reading": "なら,べ"
+    "reading": "な#ら,べ"
   },
   {
     "enabled": true,
     "word": "数字",
-    "reading": "すう,じ"
+    "reading": "す#う,じ"
   },
   {
     "enabled": true,
     "word": "後ろ髪",
-    "reading": "うし,ろ,がみ"
+    "reading": "う#し,ろ,が#み"
   },
   {
     "enabled": true,
     "word": "平和",
-    "reading": "へい,わ"
+    "reading": "へ#い,わ"
   },
   {
     "enabled": true,
     "word": "風化",
-    "reading": "ふう,か"
+    "reading": "ふ#う,か"
   },
   {
     "enabled": true,
@@ -6117,17 +6117,17 @@
   {
     "enabled": true,
     "word": "天使",
-    "reading": "てん,し"
+    "reading": "て#ん,し"
   },
   {
     "enabled": true,
     "word": "綺麗",
-    "reading": "き,れい"
+    "reading": "き,れ#い"
   },
   {
     "enabled": true,
     "word": "昇華",
-    "reading": "しょう,か"
+    "reading": "しょ#う,か"
   },
   {
     "enabled": true,
@@ -6142,17 +6142,17 @@
   {
     "enabled": true,
     "word": "貴方",
-    "reading": "あなた"
+    "reading": "あ,な#た"
   },
   {
     "enabled": true,
     "word": "残り香",
-    "reading": "のこ,り,が"
+    "reading": "の#こ,り,が"
   },
   {
     "enabled": true,
     "word": "din",
-    "reading": "ディン"
+    "reading": "デ,ィ,ン"
   },
   {
     "enabled": true,
@@ -6162,7 +6162,7 @@
   {
     "enabled": true,
     "word": "伽藍洞",
-    "reading": "が,らん,どう"
+    "reading": "が,ら#ん,ど#う"
   },
   {
     "enabled": true,
@@ -6182,137 +6182,137 @@
   {
     "enabled": true,
     "word": "光る",
-    "reading": "ひか,る"
+    "reading": "ひ#か,る"
   },
   {
     "enabled": true,
     "word": "微笑も",
-    "reading": "ほほ,え,も"
+    "reading": "ほ#ほ,え,も"
   },
   {
     "enabled": true,
     "word": "新大陸",
-    "reading": "しん,たい,りく"
+    "reading": "し#ん,た#い,り#く"
   },
   {
     "enabled": true,
     "word": "冷酷",
-    "reading": "れい,こく"
+    "reading": "れ#い,こ#く"
   },
   {
     "enabled": true,
     "word": "遺言",
-    "reading": "ゆい,ごん"
+    "reading": "ゆ#い,ご#ん"
   },
   {
     "enabled": true,
     "word": "青葉",
-    "reading": "あお,ば"
+    "reading": "あ#お,ば"
   },
   {
     "enabled": true,
     "word": "構造",
-    "reading": "こう,ぞう"
+    "reading": "こ#う,ぞ#う"
   },
   {
     "enabled": true,
     "word": "水着",
-    "reading": "みず,ぎ"
+    "reading": "み#ず,ぎ"
   },
   {
     "enabled": true,
     "word": "褒美",
-    "reading": "ほう,び"
+    "reading": "ほ#う,び"
   },
   {
     "enabled": true,
     "word": "目玉",
-    "reading": "め,だま"
+    "reading": "め,だ#ま"
   },
   {
     "enabled": true,
     "word": "野原",
-    "reading": "の,はら"
+    "reading": "の,は#ら"
   },
   {
     "enabled": true,
     "word": "凶悪",
-    "reading": "きょう,あく"
+    "reading": "きょ#う,あ#く"
   },
   {
     "enabled": true,
     "word": "隊員",
-    "reading": "たい,いん"
+    "reading": "た#い,い#ん"
   },
   {
     "enabled": true,
     "word": "大陸",
-    "reading": "たい,りく"
+    "reading": "た#い,り#く"
   },
   {
     "enabled": true,
     "word": "新体操",
-    "reading": "しん,たい,そう"
+    "reading": "し#ん,た#い,そ#う"
   },
   {
     "enabled": true,
     "word": "拳法",
-    "reading": "けん,ぽう"
+    "reading": "け#ん,ぽ#う"
   },
   {
     "enabled": true,
     "word": "武闘",
-    "reading": "ぶ,とう"
+    "reading": "ぶ,と#う"
   },
   {
     "enabled": true,
     "word": "自動車",
-    "reading": "じ,どう,しゃ"
+    "reading": "じ,ど#う,しゃ"
   },
   {
     "enabled": true,
     "word": "交通",
-    "reading": "こう,つう"
+    "reading": "こ#う,つ#う"
   },
   {
     "enabled": true,
     "word": "前髪",
-    "reading": "まえ,がみ"
+    "reading": "ま#え,が#み"
   },
   {
     "enabled": true,
     "word": "浜辺",
-    "reading": "はま,べ"
+    "reading": "は#ま,べ"
   },
   {
     "enabled": true,
     "word": "貧乏",
-    "reading": "びん,ぼう"
+    "reading": "び#ん,ぼ#う"
   },
   {
     "enabled": true,
     "word": "節約",
-    "reading": "せつ,やく"
+    "reading": "せ#つ,や#く"
   },
   {
     "enabled": true,
     "word": "豆腐",
-    "reading": "とう,ふ"
+    "reading": "と#う,ふ"
   },
   {
     "enabled": true,
     "word": "消化",
-    "reading": "しょう,か"
+    "reading": "しょ#う,か"
   },
   {
     "enabled": true,
     "word": "右往左往",
-    "reading": "う,おう,さ,おう"
+    "reading": "う,お#う,さ,お#う"
   },
   {
     "enabled": true,
     "word": "牝馬",
-    "reading": "ひん,ば"
+    "reading": "ひ#ん,ば"
   },
   {
     "enabled": true,
@@ -6322,97 +6322,97 @@
   {
     "enabled": true,
     "word": "有馬",
-    "reading": "あ,りま"
+    "reading": "あ,り#ま"
   },
   {
     "enabled": true,
     "word": "新種",
-    "reading": "しん,しゅ"
+    "reading": "し#ん,しゅ"
   },
   {
     "enabled": true,
     "word": "毒虫",
-    "reading": "どく,むし"
+    "reading": "ど#く,む#し"
   },
   {
     "enabled": true,
     "word": "毛虫",
-    "reading": "け,むし"
+    "reading": "け,む#し"
   },
   {
     "enabled": true,
     "word": "合神",
-    "reading": "がっ,しん"
+    "reading": "がっ,し#ん"
   },
   {
     "enabled": true,
     "word": "有意義",
-    "reading": "ゆう,い,ぎ"
+    "reading": "ゆ#う,い,ぎ"
   },
   {
     "enabled": true,
     "word": "搭乗",
-    "reading": "とう,じょう"
+    "reading": "と#う,じょ#う"
   },
   {
     "enabled": true,
     "word": "非公認",
-    "reading": "ひ,こう,にん"
+    "reading": "ひ,こ#う,に#ん"
   },
   {
     "enabled": true,
     "word": "爆笑",
-    "reading": "ばく,しょう"
+    "reading": "ば#く,しょ#う"
   },
   {
     "enabled": true,
     "word": "真白",
-    "reading": "まっ,しろ"
+    "reading": "まっ,し#ろ"
   },
   {
     "enabled": true,
     "word": "芝居",
-    "reading": "しば,い"
+    "reading": "し#ば,い"
   },
   {
     "enabled": true,
     "word": "御満悦",
-    "reading": "ご,まん,えつ"
+    "reading": "ご,ま#ん,え#つ"
   },
   {
     "enabled": true,
     "word": "裏庭",
-    "reading": "うら,にわ"
+    "reading": "う#ら,に#わ"
   },
   {
     "enabled": true,
     "word": "紙芝居",
-    "reading": "かみ,しば,い"
+    "reading": "か#み,し#ば,い"
   },
   {
     "enabled": true,
     "word": "名人",
-    "reading": "めい,じん"
+    "reading": "め#い,じ#ん"
   },
   {
     "enabled": true,
     "word": "夕飯",
-    "reading": "ゆう,はん"
+    "reading": "ゆ#う,は#ん"
   },
   {
     "enabled": true,
     "word": "御自慢",
-    "reading": "ご,じ,まん"
+    "reading": "ご,じ,ま#ん"
   },
   {
     "enabled": true,
     "word": "地面",
-    "reading": "じ,めん"
+    "reading": "じ,め#ん"
   },
   {
     "enabled": true,
     "word": "casting",
-    "reading": "キャスティング"
+    "reading": "キ,ャ,ス,テ,ィ,ン,グ"
   },
   {
     "enabled": true,
@@ -6427,17 +6427,17 @@
   {
     "enabled": true,
     "word": "丸裸",
-    "reading": "まる,はだか"
+    "reading": "ま#る,は#だ#か"
   },
   {
     "enabled": true,
     "word": "遭難",
-    "reading": "そう,なん"
+    "reading": "そ#う,な#ん"
   },
   {
     "enabled": true,
     "word": "土壇場",
-    "reading": "ど,たん,ば"
+    "reading": "ど,た#ん,ば"
   },
   {
     "enabled": true,
@@ -6447,57 +6447,57 @@
   {
     "enabled": true,
     "word": "総称",
-    "reading": "そう,しょう"
+    "reading": "そ#う,しょ#う"
   },
   {
     "enabled": true,
     "word": "回帰",
-    "reading": "かい,き"
+    "reading": "か#い,き"
   },
   {
     "enabled": true,
     "word": "摩擦",
-    "reading": "ま,さつ"
+    "reading": "ま,さ#つ"
   },
   {
     "enabled": true,
     "word": "愛車",
-    "reading": "あい,しゃ"
+    "reading": "あ#い,しゃ"
   },
   {
     "enabled": true,
     "word": "claxon",
-    "reading": "クラクション"
+    "reading": "ク,ラ,ク,シ,ョ,ン"
   },
   {
     "enabled": true,
     "word": "悪事",
-    "reading": "あく,じ"
+    "reading": "あ#く,じ"
   },
   {
     "enabled": true,
     "word": "果汁",
-    "reading": "か,じゅう"
+    "reading": "か,じゅ#う"
   },
   {
     "enabled": true,
     "word": "茘枝",
-    "reading": "ライチ"
+    "reading": "ラ,イ#チ"
   },
   {
     "enabled": true,
     "word": "新生",
-    "reading": "しん,せい"
+    "reading": "し#ん,せ#い"
   },
   {
     "enabled": true,
     "word": "激烈",
-    "reading": "げき,れつ"
+    "reading": "げ#き,れ#つ"
   },
   {
     "enabled": true,
     "word": "根源",
-    "reading": "こん,げん"
+    "reading": "こ#ん,げ#ん"
   },
   {
     "enabled": true,
@@ -6507,17 +6507,17 @@
   {
     "enabled": true,
     "word": "心拍数",
-    "reading": "しん,ぱく,すう"
+    "reading": "し#ん,ぱ#く,す#う"
   },
   {
     "enabled": true,
     "word": "実社会",
-    "reading": "じつ,しゃ,かい"
+    "reading": "じ#つ,しゃ,か#い"
   },
   {
     "enabled": true,
     "word": "軽快",
-    "reading": "けい,かい"
+    "reading": "け#い,か#い"
   },
   {
     "enabled": true,
@@ -6527,7 +6527,7 @@
   {
     "enabled": true,
     "word": "卒業式",
-    "reading": "そつ,ぎょう,しき"
+    "reading": "そ#つ,ぎょ#う,し#き"
   },
   {
     "enabled": true,
@@ -6542,22 +6542,22 @@
   {
     "enabled": true,
     "word": "ladie",
-    "reading": "レディーズ"
+    "reading": "レ,デ,ィ,ー,ズ"
   },
   {
     "enabled": true,
     "word": "案内人",
-    "reading": "あん,ない,にん"
+    "reading": "あ#ん,な#い,に#ん"
   },
   {
     "enabled": true,
     "word": "弁士",
-    "reading": "べん,し"
+    "reading": "べ#ん,し"
   },
   {
     "enabled": true,
     "word": "劇中",
-    "reading": "げき,ちゅう"
+    "reading": "げ#き,ちゅ#う"
   },
   {
     "enabled": true,
@@ -6572,42 +6572,42 @@
   {
     "enabled": true,
     "word": "総統",
-    "reading": "そう,とう"
+    "reading": "そ#う,と#う"
   },
   {
     "enabled": true,
     "word": "順調",
-    "reading": "じゅん,ちょう"
+    "reading": "じゅ#ん,ちょ#う"
   },
   {
     "enabled": true,
     "word": "鉄砲",
-    "reading": "てっ,ぽう"
+    "reading": "てっ,ぽ#う"
   },
   {
     "enabled": true,
     "word": "無鉄砲",
-    "reading": "む,てっ,ぽう"
+    "reading": "む,てっ,ぽ#う"
   },
   {
     "enabled": true,
     "word": "樹海",
-    "reading": "じゅ,かい"
+    "reading": "じゅ,か#い"
   },
   {
     "enabled": true,
     "word": "大怪獣",
-    "reading": "だい,かい,じゅう"
+    "reading": "だ#い,か#い,じゅ#う"
   },
   {
     "enabled": true,
     "word": "聖獣",
-    "reading": "せい,じゅう"
+    "reading": "せ#い,じゅ#う"
   },
   {
     "enabled": true,
     "word": "邪心",
-    "reading": "じゃ,しん"
+    "reading": "じゃ,し#ん"
   },
   {
     "enabled": true,
@@ -6617,17 +6617,17 @@
   {
     "enabled": true,
     "word": "玲瓏",
-    "reading": "れい,ろう"
+    "reading": "れ#い,ろ#う"
   },
   {
     "enabled": true,
     "word": "回転数",
-    "reading": "かい,てん,すう"
+    "reading": "か#い,て#ん,す#う"
   },
   {
     "enabled": true,
     "word": "最上級",
-    "reading": "さい,じょう,きゅう"
+    "reading": "さ#い,じょ#う,きゅ#う"
   },
   {
     "enabled": true,
@@ -6642,7 +6642,7 @@
   {
     "enabled": true,
     "word": "先頭",
-    "reading": "せん,とう"
+    "reading": "せ#ん,と#う"
   },
   {
     "enabled": true,
@@ -6667,47 +6667,47 @@
   {
     "enabled": true,
     "word": "蒸発",
-    "reading": "じょう,はつ"
+    "reading": "じょ#う,は#つ"
   },
   {
     "enabled": true,
     "word": "平熱",
-    "reading": "へい,ねつ"
+    "reading": "へ#い,ね#つ"
   },
   {
     "enabled": true,
     "word": "気温",
-    "reading": "き,おん"
+    "reading": "き,お#ん"
   },
   {
     "enabled": true,
     "word": "共犯",
-    "reading": "きょう,はん"
+    "reading": "きょ#う,は#ん"
   },
   {
     "enabled": true,
     "word": "反面",
-    "reading": "はん,めん"
+    "reading": "は#ん,め#ん"
   },
   {
     "enabled": true,
     "word": "儀式",
-    "reading": "ぎ,しき"
+    "reading": "ぎ,し#き"
   },
   {
     "enabled": true,
     "word": "照射",
-    "reading": "しょう,しゃ"
+    "reading": "しょ#う,しゃ"
   },
   {
     "enabled": true,
     "word": "進化前",
-    "reading": "しん,か,まえ"
+    "reading": "し#ん,か,ま#え"
   },
   {
     "enabled": true,
     "word": "tear",
-    "reading": "ティアー"
+    "reading": "テ,ィ,ア,ー"
   },
   {
     "enabled": true,
@@ -6717,57 +6717,57 @@
   {
     "enabled": true,
     "word": "集束",
-    "reading": "しゅう,そく"
+    "reading": "しゅ#う,そ#く"
   },
   {
     "enabled": true,
     "word": "廃材",
-    "reading": "はい,ざい"
+    "reading": "は#い,ざ#い"
   },
   {
     "enabled": true,
     "word": "絵画",
-    "reading": "かい,が"
+    "reading": "か#い,が"
   },
   {
     "enabled": true,
     "word": "注射",
-    "reading": "ちゅう,しゃ"
+    "reading": "ちゅ#う,しゃ"
   },
   {
     "enabled": true,
     "word": "金属",
-    "reading": "きん,ぞく"
+    "reading": "き#ん,ぞ#く"
   },
   {
     "enabled": true,
     "word": "蒸気",
-    "reading": "じょう,き"
+    "reading": "じょ#う,き"
   },
   {
     "enabled": true,
     "word": "三遊間",
-    "reading": "さん,ゆう,かん"
+    "reading": "さ#ん,ゆ#う,か#ん"
   },
   {
     "enabled": true,
     "word": "暴言",
-    "reading": "ぼう,げん"
+    "reading": "ぼ#う,げ#ん"
   },
   {
     "enabled": true,
     "word": "相場",
-    "reading": "そう,ば"
+    "reading": "そ#う,ば"
   },
   {
     "enabled": true,
     "word": "一粒",
-    "reading": "ひと,つぶ"
+    "reading": "ひ#と,つ#ぶ"
   },
   {
     "enabled": true,
     "word": "純真",
-    "reading": "じゅん,しん"
+    "reading": "じゅ#ん,し#ん"
   },
   {
     "enabled": true,
@@ -6777,22 +6777,22 @@
   {
     "enabled": true,
     "word": "通過",
-    "reading": "つう,か"
+    "reading": "つ#う,か"
   },
   {
     "enabled": true,
     "word": "定形",
-    "reading": "てい,けい"
+    "reading": "て#い,け#い"
   },
   {
     "enabled": true,
     "word": "不定形",
-    "reading": "ふ,てい,けい"
+    "reading": "ふ,て#い,け#い"
   },
   {
     "enabled": true,
     "word": "暫定",
-    "reading": "ざん,てい"
+    "reading": "ざ#ん,て#い"
   },
   {
     "enabled": true,
@@ -6802,7 +6802,7 @@
   {
     "enabled": true,
     "word": "細波",
-    "reading": "さざ,なみ"
+    "reading": "さ#ざ,な#み"
   },
   {
     "enabled": true,
@@ -6812,72 +6812,72 @@
   {
     "enabled": true,
     "word": "蝋人形",
-    "reading": "ろう,にん,ぎょう"
+    "reading": "ろ#う,に#ん,ぎょ#う"
   },
   {
     "enabled": true,
     "word": "生贄",
-    "reading": "いけ,にえ"
+    "reading": "い#け,に#え"
   },
   {
     "enabled": true,
     "word": "手足",
-    "reading": "て,あし"
+    "reading": "て,あ#し"
   },
   {
     "enabled": true,
     "word": "老人",
-    "reading": "ろう,じん"
+    "reading": "ろ#う,じ#ん"
   },
   {
     "enabled": true,
     "word": "芸術",
-    "reading": "げい,じゅつ"
+    "reading": "げ#い,じゅ#つ"
   },
   {
     "enabled": true,
     "word": "真上",
-    "reading": "ま,うえ"
+    "reading": "ま,う#え"
   },
   {
     "enabled": true,
     "word": "勇士",
-    "reading": "ゆう,し"
+    "reading": "ゆ#う,し"
   },
   {
     "enabled": true,
     "word": "残業",
-    "reading": "ざん,ぎょう"
+    "reading": "ざ#ん,ぎょ#う"
   },
   {
     "enabled": true,
     "word": "我社",
-    "reading": "わが,しゃ"
+    "reading": "わ#が,しゃ"
   },
   {
     "enabled": true,
     "word": "社員",
-    "reading": "しゃ,いん"
+    "reading": "しゃ,い#ん"
   },
   {
     "enabled": true,
     "word": "小学生",
-    "reading": "しょう,がく,せい"
+    "reading": "しょ#う,が#く,せ#い"
   },
   {
     "enabled": true,
     "word": "社長",
-    "reading": "しゃ,ちょう"
+    "reading": "しゃ,ちょ#う"
   },
   {
     "enabled": true,
     "word": "竹尾",
-    "reading": "たけ,お"
+    "reading": "た#け,お"
   },
   {
     "enabled": true,
     "word": "金庫",
-    "reading": "きん,こ"
+    "reading": "き#ん,こ"
   },
   {
     "enabled": true,
@@ -6887,37 +6887,37 @@
   {
     "enabled": true,
     "word": "年中",
-    "reading": "ねん,じゅう"
+    "reading": "ね#ん,じゅ#う"
   },
   {
     "enabled": true,
     "word": "状況",
-    "reading": "じょう,きょう"
+    "reading": "じょ#う,きょ#う"
   },
   {
     "enabled": true,
     "word": "潮騒",
-    "reading": "しお,さい"
+    "reading": "し#お,さ#い"
   },
   {
     "enabled": true,
     "word": "錯誤",
-    "reading": "さく,ご"
+    "reading": "さ#く,ご"
   },
   {
     "enabled": true,
     "word": "伏線",
-    "reading": "ふく,せん"
+    "reading": "ふ#く,せ#ん"
   },
   {
     "enabled": true,
     "word": "数奇",
-    "reading": "すう,き"
+    "reading": "す#う,き"
   },
   {
     "enabled": true,
     "word": "犯罪",
-    "reading": "はん,ざい"
+    "reading": "は#ん,ざ#い"
   },
   {
     "enabled": true,
@@ -6927,7 +6927,7 @@
   {
     "enabled": true,
     "word": "捜索",
-    "reading": "そう,さく"
+    "reading": "そ#う,さ#く"
   },
   {
     "enabled": true,
@@ -6947,7 +6947,7 @@
   {
     "enabled": true,
     "word": "抵抗",
-    "reading": "てい,こう"
+    "reading": "て#い,こ#う"
   },
   {
     "enabled": true,
@@ -6962,12 +6962,12 @@
   {
     "enabled": true,
     "word": "一掃",
-    "reading": "いっ,そう"
+    "reading": "いっ,そ#う"
   },
   {
     "enabled": true,
     "word": "快調",
-    "reading": "かい,ちょう"
+    "reading": "か#い,ちょ#う"
   },
   {
     "enabled": true,
@@ -6977,67 +6977,67 @@
   {
     "enabled": true,
     "word": "跳躍",
-    "reading": "ちょう,やく"
+    "reading": "ちょ#う,や#く"
   },
   {
     "enabled": true,
     "word": "白昼",
-    "reading": "はく,ちゅう"
+    "reading": "は#く,ちゅ#う"
   },
   {
     "enabled": true,
     "word": "凌駕",
-    "reading": "りょう,が"
+    "reading": "りょ#う,が"
   },
   {
     "enabled": true,
     "word": "題名",
-    "reading": "だい,めい"
+    "reading": "だ#い,め#い"
   },
   {
     "enabled": true,
     "word": "団体",
-    "reading": "だん,たい"
+    "reading": "だ#ん,た#い"
   },
   {
     "enabled": true,
     "word": "男優",
-    "reading": "だん,ゆう"
+    "reading": "だ#ん,ゆ#う"
   },
   {
     "enabled": true,
     "word": "抽象的",
-    "reading": "ちゅう,しょう,てき"
+    "reading": "ちゅ#う,しょ#う,て#き"
   },
   {
     "enabled": true,
     "word": "調査",
-    "reading": "ちょう,さ"
+    "reading": "ちょ#う,さ"
   },
   {
     "enabled": true,
     "word": "適性",
-    "reading": "てき,せい"
+    "reading": "て#き,せ#い"
   },
   {
     "enabled": true,
     "word": "転職",
-    "reading": "てん,しょく"
+    "reading": "て#ん,しょ#く"
   },
   {
     "enabled": true,
     "word": "哲学者",
-    "reading": "てつ,がく,しゃ"
+    "reading": "て#つ,が#く,しゃ"
   },
   {
     "enabled": true,
     "word": "同僚",
-    "reading": "どう,りょう"
+    "reading": "ど#う,りょ#う"
   },
   {
     "enabled": true,
     "word": "読書",
-    "reading": "どく,しょ"
+    "reading": "ど#く,しょ"
   },
   {
     "enabled": true,
@@ -7047,37 +7047,37 @@
   {
     "enabled": true,
     "word": "日本海",
-    "reading": "に,ほん,かい"
+    "reading": "に,ほ#ん,か#い"
   },
   {
     "enabled": true,
     "word": "悲観的",
-    "reading": "ひ,かん,てき"
+    "reading": "ひ,か#ん,て#き"
   },
   {
     "enabled": true,
     "word": "美容師",
-    "reading": "び,よう,し"
+    "reading": "び,よ#う,し"
   },
   {
     "enabled": true,
     "word": "老婆",
-    "reading": "ろう,ば"
+    "reading": "ろ#う,ば"
   },
   {
     "enabled": true,
     "word": "連想",
-    "reading": "れん,そう"
+    "reading": "れ#ん,そ#う"
   },
   {
     "enabled": true,
     "word": "落石",
-    "reading": "らく,せき"
+    "reading": "ら#く,せ#き"
   },
   {
     "enabled": true,
     "word": "予防",
-    "reading": "よ,ぼう"
+    "reading": "よ,ぼ#う"
   },
   {
     "enabled": true,
@@ -7092,12 +7092,12 @@
   {
     "enabled": true,
     "word": "予選",
-    "reading": "よ,せん"
+    "reading": "よ,せ#ん"
   },
   {
     "enabled": true,
     "word": "要素",
-    "reading": "よう,そ"
+    "reading": "よ#う,そ"
   },
   {
     "enabled": true,
@@ -7112,12 +7112,12 @@
   {
     "enabled": true,
     "word": "拍子",
-    "reading": "ひょう,し"
+    "reading": "ひょ#う,し"
   },
   {
     "enabled": true,
     "word": "紅葉",
-    "reading": "もみじ"
+    "reading": "も,み#じ"
   },
   {
     "enabled": true,
@@ -7137,7 +7137,7 @@
   {
     "enabled": true,
     "word": "東京",
-    "reading": "とう,きょう"
+    "reading": "と#う,きょ#う"
   },
   {
     "enabled": true,
@@ -7147,7 +7147,7 @@
   {
     "enabled": true,
     "word": "許可局",
-    "reading": "きょ,か,きょく"
+    "reading": "きょ,か,きょ#く"
   },
   {
     "enabled": true,
@@ -7157,7 +7157,7 @@
   {
     "enabled": true,
     "word": "ok",
-    "reading": "オーケイ"
+    "reading": "オ,ー#ケ#イ"
   },
   {
     "enabled": true,
@@ -7177,12 +7177,12 @@
   {
     "enabled": true,
     "word": "金狼",
-    "reading": "きん,ろう"
+    "reading": "き#ん,ろ#う"
   },
   {
     "enabled": true,
     "word": "極点",
-    "reading": "きょく,てん"
+    "reading": "きょ#く,て#ん"
   },
   {
     "enabled": true,
@@ -7192,37 +7192,37 @@
   {
     "enabled": true,
     "word": "血肉",
-    "reading": "ち,にく"
+    "reading": "ち,に#く"
   },
   {
     "enabled": true,
     "word": "対峙",
-    "reading": "たい,じ"
+    "reading": "た#い,じ"
   },
   {
     "enabled": true,
     "word": "薄墨色",
-    "reading": "うす,ずみ,いろ"
+    "reading": "う#す,ず#み,い#ろ"
   },
   {
     "enabled": true,
     "word": "啓示",
-    "reading": "けい,じ"
+    "reading": "け#い,じ"
   },
   {
     "enabled": true,
     "word": "堂堂",
-    "reading": "どう,どう"
+    "reading": "ど#う,ど#う"
   },
   {
     "enabled": true,
     "word": "孤軍",
-    "reading": "こ,ぐん"
+    "reading": "こ,ぐ#ん"
   },
   {
     "enabled": true,
     "word": "奮闘",
-    "reading": "ふん,とう"
+    "reading": "ふ#ん,と#う"
   },
   {
     "enabled": true,
@@ -7232,22 +7232,22 @@
   {
     "enabled": true,
     "word": "怨嗟",
-    "reading": "えん,さ"
+    "reading": "え#ん,さ"
   },
   {
     "enabled": true,
     "word": "savior",
-    "reading": "セイヴィアー"
+    "reading": "セ,イ,ヴ,ィ,ア,ー"
   },
   {
     "enabled": true,
     "word": "脈絡",
-    "reading": "みゃく,らく"
+    "reading": "みゃ#く,ら#く"
   },
   {
     "enabled": true,
     "word": "爪牙",
-    "reading": "そう,が"
+    "reading": "そ#う,が"
   },
   {
     "enabled": true,
@@ -7257,52 +7257,52 @@
   {
     "enabled": true,
     "word": "一刀",
-    "reading": "いっ,とう"
+    "reading": "いっ,と#う"
   },
   {
     "enabled": true,
     "word": "漠然",
-    "reading": "ばく,ぜん"
+    "reading": "ば#く,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "意図的",
-    "reading": "い,と,てき"
+    "reading": "い,と,て#き"
   },
   {
     "enabled": true,
     "word": "伏目",
-    "reading": "ふし,め"
+    "reading": "ふ#し,め"
   },
   {
     "enabled": true,
     "word": "遅刻",
-    "reading": "ち,こく"
+    "reading": "ち,こ#く"
   },
   {
     "enabled": true,
     "word": "連絡",
-    "reading": "れん,らく"
+    "reading": "れ#ん,ら#く"
   },
   {
     "enabled": true,
     "word": "連中",
-    "reading": "れん,ちゅう"
+    "reading": "れ#ん,ちゅ#う"
   },
   {
     "enabled": true,
     "word": "二子橋",
-    "reading": "ふた,ご,ばし"
+    "reading": "ふ#た,ご,ば#し"
   },
   {
     "enabled": true,
     "word": "六畳間",
-    "reading": "ろく,じょう,ま"
+    "reading": "ろ#く,じょ#う,ま"
   },
   {
     "enabled": true,
     "word": "河川",
-    "reading": "か,せん"
+    "reading": "か,せ#ん"
   },
   {
     "enabled": true,
@@ -7312,47 +7312,47 @@
   {
     "enabled": true,
     "word": "多摩川",
-    "reading": "た,ま,がわ"
+    "reading": "た,ま,が#わ"
   },
   {
     "enabled": true,
     "word": "心得",
-    "reading": "こころ,え"
+    "reading": "こ#こ#ろ,え"
   },
   {
     "enabled": true,
     "word": "次回",
-    "reading": "じ,かい"
+    "reading": "じ,か#い"
   },
   {
     "enabled": true,
     "word": "科目",
-    "reading": "か,もく"
+    "reading": "か,も#く"
   },
   {
     "enabled": true,
     "word": "録画",
-    "reading": "ろく,が"
+    "reading": "ろ#く,が"
   },
   {
     "enabled": true,
     "word": "依然",
-    "reading": "い,ぜん"
+    "reading": "い,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "平均",
-    "reading": "へい,きん"
+    "reading": "へ#い,き#ん"
   },
   {
     "enabled": true,
     "word": "盤上",
-    "reading": "ばん,じょう"
+    "reading": "ば#ん,じょ#う"
   },
   {
     "enabled": true,
     "word": "上辺",
-    "reading": "うわ,べ"
+    "reading": "う#わ,べ"
   },
   {
     "enabled": true,
@@ -7372,47 +7372,47 @@
   {
     "enabled": true,
     "word": "平行",
-    "reading": "へい,こう"
+    "reading": "へ#い,こ#う"
   },
   {
     "enabled": true,
     "word": "平行線",
-    "reading": "へい,こう,せん"
+    "reading": "へ#い,こ#う,せ#ん"
   },
   {
     "enabled": true,
     "word": "大勢",
-    "reading": "おお,ぜい"
+    "reading": "お#お,ぜ#い"
   },
   {
     "enabled": true,
     "word": "牽制",
-    "reading": "けん,せい"
+    "reading": "け#ん,せ#い"
   },
   {
     "enabled": true,
     "word": "試合",
-    "reading": "し,あい"
+    "reading": "し,あ#い"
   },
   {
     "enabled": true,
     "word": "静観",
-    "reading": "せい,かん"
+    "reading": "せ#い,か#ん"
   },
   {
     "enabled": true,
     "word": "放棄",
-    "reading": "ほう,き"
+    "reading": "ほ#う,き"
   },
   {
     "enabled": true,
     "word": "最愛",
-    "reading": "さい,あい"
+    "reading": "さ#い,あ#い"
   },
   {
     "enabled": true,
     "word": "志望",
-    "reading": "し,ぼう"
+    "reading": "し,ぼ#う"
   },
   {
     "enabled": true,
@@ -7422,197 +7422,197 @@
   {
     "enabled": true,
     "word": "条約",
-    "reading": "じょう,やく"
+    "reading": "じょ#う,や#く"
   },
   {
     "enabled": true,
     "word": "友好",
-    "reading": "ゆう,こう"
+    "reading": "ゆ#う,こ#う"
   },
   {
     "enabled": true,
     "word": "矢印",
-    "reading": "や,じるし"
+    "reading": "や,じ#る#し"
   },
   {
     "enabled": true,
     "word": "多忙",
-    "reading": "た,ぼう"
+    "reading": "た,ぼ#う"
   },
   {
     "enabled": true,
     "word": "高校",
-    "reading": "こう,こう"
+    "reading": "こ#う,こ#う"
   },
   {
     "enabled": true,
     "word": "高校生",
-    "reading": "こう,こう,せい"
+    "reading": "こ#う,こ#う,せ#い"
   },
   {
     "enabled": true,
     "word": "割合",
-    "reading": "わり,あい"
+    "reading": "わ#り,あ#い"
   },
   {
     "enabled": true,
     "word": "老後",
-    "reading": "ろう,ご"
+    "reading": "ろ#う,ご"
   },
   {
     "enabled": true,
     "word": "楽観的",
-    "reading": "らっ,かん,てき"
+    "reading": "らっ,か#ん,て#き"
   },
   {
     "enabled": true,
     "word": "落語",
-    "reading": "らく,ご"
+    "reading": "ら#く,ご"
   },
   {
     "enabled": true,
     "word": "雪国",
-    "reading": "ゆき,ぐに"
+    "reading": "ゆ#き,ぐ#に"
   },
   {
     "enabled": true,
     "word": "役者",
-    "reading": "やく,しゃ"
+    "reading": "や#く,しゃ"
   },
   {
     "enabled": true,
     "word": "野党",
-    "reading": "や,とう"
+    "reading": "や,と#う"
   },
   {
     "enabled": true,
     "word": "免疫",
-    "reading": "めん,えき"
+    "reading": "め#ん,え#き"
   },
   {
     "enabled": true,
     "word": "免疫力",
-    "reading": "めん,えき,りょく"
+    "reading": "め#ん,え#き,りょ#く"
   },
   {
     "enabled": true,
     "word": "名言",
-    "reading": "めい,げん"
+    "reading": "め#い,げ#ん"
   },
   {
     "enabled": true,
     "word": "漫才",
-    "reading": "まん,ざい"
+    "reading": "ま#ん,ざ#い"
   },
   {
     "enabled": true,
     "word": "文集",
-    "reading": "ぶん,しゅう"
+    "reading": "ぶ#ん,しゅ#う"
   },
   {
     "enabled": true,
     "word": "物理",
-    "reading": "ぶつ,り"
+    "reading": "ぶ#つ,り"
   },
   {
     "enabled": true,
     "word": "居酒屋",
-    "reading": "い,ざか,や"
+    "reading": "い,ざ#か,や"
   },
   {
     "enabled": true,
     "word": "一層",
-    "reading": "いっ,そう"
+    "reading": "いっ,そ#う"
   },
   {
     "enabled": true,
     "word": "一般",
-    "reading": "いっ,ぱん"
+    "reading": "いっ,ぱ#ん"
   },
   {
     "enabled": true,
     "word": "一般的",
-    "reading": "いっ,ぱん,てき"
+    "reading": "いっ,ぱ#ん,て#き"
   },
   {
     "enabled": true,
     "word": "一方",
-    "reading": "いっ,ぽう"
+    "reading": "いっ,ぽ#う"
   },
   {
     "enabled": true,
     "word": "演技",
-    "reading": "えん,ぎ"
+    "reading": "え#ん,ぎ"
   },
   {
     "enabled": true,
     "word": "海水",
-    "reading": "かい,すい"
+    "reading": "か#い,す#い"
   },
   {
     "enabled": true,
     "word": "調味料",
-    "reading": "ちょう,み,りょう"
+    "reading": "ちょ#う,み,りょ#う"
   },
   {
     "enabled": true,
     "word": "格言",
-    "reading": "かく,げん"
+    "reading": "か#く,げ#ん"
   },
   {
     "enabled": true,
     "word": "格闘",
-    "reading": "かく,とう"
+    "reading": "か#く,と#う"
   },
   {
     "enabled": true,
     "word": "格闘技",
-    "reading": "かく,とう,ぎ"
+    "reading": "か#く,と#う,ぎ"
   },
   {
     "enabled": true,
     "word": "活発",
-    "reading": "かっ,ぱつ"
+    "reading": "かっ,ぱ#つ"
   },
   {
     "enabled": true,
     "word": "下流",
-    "reading": "か,りゅう"
+    "reading": "か,りゅ#う"
   },
   {
     "enabled": true,
     "word": "観光",
-    "reading": "かん,こう"
+    "reading": "か#ん,こ#う"
   },
   {
     "enabled": true,
     "word": "観光地",
-    "reading": "かん,こう,ち"
+    "reading": "か#ん,こ#う,ち"
   },
   {
     "enabled": true,
     "word": "看護",
-    "reading": "かん,ご"
+    "reading": "か#ん,ご"
   },
   {
     "enabled": true,
     "word": "看護婦",
-    "reading": "かん,ご,ふ"
+    "reading": "か#ん,ご,ふ"
   },
   {
     "enabled": true,
     "word": "感想",
-    "reading": "かん,そう"
+    "reading": "か#ん,そ#う"
   },
   {
     "enabled": true,
     "word": "感想文",
-    "reading": "かん,そう,ぶん"
+    "reading": "か#ん,そ#う,ぶ#ん"
   },
   {
     "enabled": true,
     "word": "企業",
-    "reading": "き,ぎょう"
+    "reading": "き,ぎょ#う"
   },
   {
     "enabled": true,
@@ -7622,97 +7622,97 @@
   {
     "enabled": true,
     "word": "帰宅",
-    "reading": "き,たく"
+    "reading": "き,た#く"
   },
   {
     "enabled": true,
     "word": "教授",
-    "reading": "きょう,じゅ"
+    "reading": "きょ#う,じゅ"
   },
   {
     "enabled": true,
     "word": "工夫",
-    "reading": "く,ふう"
+    "reading": "く,ふ#う"
   },
   {
     "enabled": true,
     "word": "減少",
-    "reading": "げん,しょう"
+    "reading": "げ#ん,しょ#う"
   },
   {
     "enabled": true,
     "word": "後半",
-    "reading": "こう,はん"
+    "reading": "こ#う,は#ん"
   },
   {
     "enabled": true,
     "word": "後輩",
-    "reading": "こう,はい"
+    "reading": "こ#う,は#い"
   },
   {
     "enabled": true,
     "word": "校長",
-    "reading": "こう,ちょう"
+    "reading": "こ#う,ちょ#う"
   },
   {
     "enabled": true,
     "word": "後者",
-    "reading": "こう,しゃ"
+    "reading": "こ#う,しゃ"
   },
   {
     "enabled": true,
     "word": "航海",
-    "reading": "こう,かい"
+    "reading": "こ#う,か#い"
   },
   {
     "enabled": true,
     "word": "国民",
-    "reading": "こく,みん"
+    "reading": "こ#く,み#ん"
   },
   {
     "enabled": true,
     "word": "作詞",
-    "reading": "さく,し"
+    "reading": "さ#く,し"
   },
   {
     "enabled": true,
     "word": "作詞家",
-    "reading": "さく,し,か"
+    "reading": "さ#く,し,か"
   },
   {
     "enabled": true,
     "word": "作曲家",
-    "reading": "さっ,きょく,か"
+    "reading": "さっ,きょ#く,か"
   },
   {
     "enabled": true,
     "word": "作曲",
-    "reading": "さっ,きょく"
+    "reading": "さっ,きょ#く"
   },
   {
     "enabled": true,
     "word": "左右",
-    "reading": "さ,ゆう"
+    "reading": "さ,ゆ#う"
   },
   {
     "enabled": true,
     "word": "実現",
-    "reading": "じつ,げん"
+    "reading": "じ#つ,げ#ん"
   },
   {
     "enabled": true,
     "word": "出産",
-    "reading": "しゅっ,さん"
+    "reading": "しゅっ,さ#ん"
   },
   {
     "enabled": true,
     "word": "週刊",
-    "reading": "しゅう,かん"
+    "reading": "しゅ#う,か#ん"
   },
   {
     "enabled": true,
     "word": "週刊誌",
-    "reading": "しゅう,かん,し"
+    "reading": "しゅ#う,か#ん,し"
   },
   {
     "enabled": true,
@@ -7722,97 +7722,97 @@
   {
     "enabled": true,
     "word": "上位",
-    "reading": "じょう,い"
+    "reading": "じょ#う,い"
   },
   {
     "enabled": true,
     "word": "消極的",
-    "reading": "しょう,きょく,てき"
+    "reading": "しょ#う,きょ#く,て#き"
   },
   {
     "enabled": true,
     "word": "上司",
-    "reading": "じょう,し"
+    "reading": "じょ#う,し"
   },
   {
     "enabled": true,
     "word": "昇進",
-    "reading": "しょう,しん"
+    "reading": "しょ#う,し#ん"
   },
   {
     "enabled": true,
     "word": "上流",
-    "reading": "じょう,りゅう"
+    "reading": "じょ#う,りゅ#う"
   },
   {
     "enabled": true,
     "word": "女優",
-    "reading": "じょ,ゆう"
+    "reading": "じょ,ゆ#う"
   },
   {
     "enabled": true,
     "word": "進学",
-    "reading": "しん,がく"
+    "reading": "し#ん,が#く"
   },
   {
     "enabled": true,
     "word": "生産",
-    "reading": "せい,さん"
+    "reading": "せ#い,さ#ん"
   },
   {
     "enabled": true,
     "word": "成人",
-    "reading": "せい,じん"
+    "reading": "せ#い,じ#ん"
   },
   {
     "enabled": true,
     "word": "成人式",
-    "reading": "せい,じん,しき"
+    "reading": "せ#い,じ#ん,し#き"
   },
   {
     "enabled": true,
     "word": "生年月日",
-    "reading": "せい,ねん,がっ,ぴ"
+    "reading": "せ#い,ね#ん,がっ,ぴ"
   },
   {
     "enabled": true,
     "word": "成分",
-    "reading": "せい,ぶん"
+    "reading": "せ#い,ぶ#ん"
   },
   {
     "enabled": true,
     "word": "選挙",
-    "reading": "せん,きょ"
+    "reading": "せ#ん,きょ"
   },
   {
     "enabled": true,
     "word": "宣伝",
-    "reading": "せん,でん"
+    "reading": "せ#ん,で#ん"
   },
   {
     "enabled": true,
     "word": "前半",
-    "reading": "ぜん,はん"
+    "reading": "ぜ#ん,は#ん"
   },
   {
     "enabled": true,
     "word": "増加",
-    "reading": "ぞう,か"
+    "reading": "ぞ#う,か"
   },
   {
     "enabled": true,
     "word": "退職",
-    "reading": "たい,しょく"
+    "reading": "た#い,しょ#く"
   },
   {
     "enabled": true,
     "word": "太平洋",
-    "reading": "たい,へい,よう"
+    "reading": "た#い,へ#い,よ#う"
   },
   {
     "enabled": true,
     "word": "代表的",
-    "reading": "だい,ひょう,てき"
+    "reading": "だ#い,ひょ#う,て#き"
   },
   {
     "enabled": true,
@@ -7822,12 +7822,12 @@
   {
     "enabled": true,
     "word": "毛布",
-    "reading": "もう,ふ"
+    "reading": "も#う,ふ"
   },
   {
     "enabled": true,
     "word": "予行",
-    "reading": "よ,こう"
+    "reading": "よ,こ#う"
   },
   {
     "enabled": true,
@@ -7837,32 +7837,32 @@
   {
     "enabled": true,
     "word": "映画館",
-    "reading": "えい,が,かん"
+    "reading": "え#い,が,か#ん"
   },
   {
     "enabled": true,
     "word": "公園",
-    "reading": "こう,えん"
+    "reading": "こ#う,え#ん"
   },
   {
     "enabled": true,
     "word": "百回",
-    "reading": "ひゃっ,かい"
+    "reading": "ひゃっ,か#い"
   },
   {
     "enabled": true,
     "word": "衝天",
-    "reading": "しょう,てん"
+    "reading": "しょ#う,て#ん"
   },
   {
     "enabled": true,
     "word": "一文字",
-    "reading": "ひと,も,じ"
+    "reading": "ひ#と,も,じ"
   },
   {
     "enabled": true,
     "word": "devotion",
-    "reading": "ディヴォーション"
+    "reading": "デ,ィ,ヴ,ォ,ー,シ,ョ,ン"
   },
   {
     "enabled": true,
@@ -7882,12 +7882,12 @@
   {
     "enabled": true,
     "word": "英知",
-    "reading": "えい,ち"
+    "reading": "え#い,ち"
   },
   {
     "enabled": true,
     "word": "理念",
-    "reading": "り,ねん"
+    "reading": "り,ね#ん"
   },
   {
     "enabled": true,
@@ -7897,7 +7897,7 @@
   {
     "enabled": true,
     "word": "無償",
-    "reading": "む,しょう"
+    "reading": "む,しょ#う"
   },
   {
     "enabled": true,
@@ -7912,37 +7912,37 @@
   {
     "enabled": true,
     "word": "期限",
-    "reading": "き,げん"
+    "reading": "き,げ#ん"
   },
   {
     "enabled": true,
     "word": "無期限",
-    "reading": "む,き,げん"
+    "reading": "む,き,げ#ん"
   },
   {
     "enabled": true,
     "word": "天秤",
-    "reading": "てん,びん"
+    "reading": "て#ん,び#ん"
   },
   {
     "enabled": true,
     "word": "潮風",
-    "reading": "しお,かぜ"
+    "reading": "し#お,か#ぜ"
   },
   {
     "enabled": true,
     "word": "道端",
-    "reading": "みち,ばた"
+    "reading": "み#ち,ば#た"
   },
   {
     "enabled": true,
     "word": "一髪",
-    "reading": "いっ,ぱつ"
+    "reading": "いっ,ぱ#つ"
   },
   {
     "enabled": true,
     "word": "日付",
-    "reading": "ひ,づけ"
+    "reading": "ひ,づ#け"
   },
   {
     "enabled": true,
@@ -7957,82 +7957,82 @@
   {
     "enabled": true,
     "word": "知力",
-    "reading": "ち,りょく"
+    "reading": "ち,りょ#く"
   },
   {
     "enabled": true,
     "word": "無駄口",
-    "reading": "む,だ,ぐち"
+    "reading": "む,だ,ぐ#ち"
   },
   {
     "enabled": true,
     "word": "非道",
-    "reading": "ひ,どう"
+    "reading": "ひ,ど#う"
   },
   {
     "enabled": true,
     "word": "全人類",
-    "reading": "ぜん,じん,るい"
+    "reading": "ぜ#ん,じ#ん,る#い"
   },
   {
     "enabled": true,
     "word": "獣道",
-    "reading": "けもの,みち"
+    "reading": "け#も#の,み#ち"
   },
   {
     "enabled": true,
     "word": "奉仕",
-    "reading": "ほう,し"
+    "reading": "ほ#う,し"
   },
   {
     "enabled": true,
     "word": "御奉仕",
-    "reading": "ご,ほう,し"
+    "reading": "ご,ほ#う,し"
   },
   {
     "enabled": true,
     "word": "変更",
-    "reading": "へん,こう"
+    "reading": "へ#ん,こ#う"
   },
   {
     "enabled": true,
     "word": "規格",
-    "reading": "き,かく"
+    "reading": "き,か#く"
   },
   {
     "enabled": true,
     "word": "規格外",
-    "reading": "き,かく,がい"
+    "reading": "き,か#く,が#い"
   },
   {
     "enabled": true,
     "word": "存在感",
-    "reading": "そん,ざい,かん"
+    "reading": "そ#ん,ざ#い,か#ん"
   },
   {
     "enabled": true,
     "word": "悶絶",
-    "reading": "もん,ぜつ"
+    "reading": "も#ん,ぜ#つ"
   },
   {
     "enabled": true,
     "word": "七転八倒",
-    "reading": "しち,てん,ばっ,とう"
+    "reading": "し#ち,て#ん,ばっ,と#う"
   },
   {
     "enabled": true,
     "word": "安心",
-    "reading": "あん,しん"
+    "reading": "あ#ん,し#ん"
   },
   {
     "enabled": true,
     "word": "貴様",
-    "reading": "き,さま"
+    "reading": "き,さ#ま"
   },
   {
     "enabled": true,
     "word": "手土産",
-    "reading": "て,みやげ"
+    "reading": "て,み#や#げ"
   },
   {
     "enabled": true,
@@ -8052,7 +8052,7 @@
   {
     "enabled": true,
     "word": "時折",
-    "reading": "とき,おり"
+    "reading": "と#き,お#り"
   },
   {
     "enabled": true,
@@ -8062,7 +8062,7 @@
   {
     "enabled": true,
     "word": "道順",
-    "reading": "みち,じゅん"
+    "reading": "み#ち,じゅ#ん"
   },
   {
     "enabled": true,
@@ -8072,72 +8072,72 @@
   {
     "enabled": true,
     "word": "推定",
-    "reading": "すい,てい"
+    "reading": "す#い,て#い"
   },
   {
     "enabled": true,
     "word": "未満",
-    "reading": "み,まん"
+    "reading": "み,ま#ん"
   },
   {
     "enabled": true,
     "word": "sacred",
-    "reading": "セイクリッド"
+    "reading": "セ,イ,ク,リ,ッ,ド"
   },
   {
     "enabled": true,
     "word": "聖夜",
-    "reading": "せい,や"
+    "reading": "せ#い,や"
   },
   {
     "enabled": true,
     "word": "悠遠",
-    "reading": "ゆう,えん"
+    "reading": "ゆ#う,え#ん"
   },
   {
     "enabled": true,
     "word": "夢追人",
-    "reading": "ゆめ,おい,びと"
+    "reading": "ゆ#め,お#い,び#と"
   },
   {
     "enabled": true,
     "word": "無想",
-    "reading": "む,そう"
+    "reading": "む,そ#う"
   },
   {
     "enabled": true,
     "word": "神楽",
-    "reading": "かぐ,ら"
+    "reading": "か#ぐ,ら"
   },
   {
     "enabled": true,
     "word": "散華",
-    "reading": "さん,げ"
+    "reading": "さ#ん,げ"
   },
   {
     "enabled": true,
     "word": "酔狂",
-    "reading": "すい,きょう"
+    "reading": "す#い,きょ#う"
   },
   {
     "enabled": true,
     "word": "鬼火",
-    "reading": "おに,び"
+    "reading": "お#に,び"
   },
   {
     "enabled": true,
     "word": "藻屑",
-    "reading": "も,くず"
+    "reading": "も,く#ず"
   },
   {
     "enabled": true,
     "word": "光源",
-    "reading": "こう,げん"
+    "reading": "こ#う,げ#ん"
   },
   {
     "enabled": true,
     "word": "精度",
-    "reading": "せい,ど"
+    "reading": "せ#い,ど"
   },
   {
     "enabled": true,
@@ -8157,7 +8157,7 @@
   {
     "enabled": true,
     "word": "敏腕",
-    "reading": "びん,わん"
+    "reading": "び#ん,わ#ん"
   },
   {
     "enabled": true,
@@ -8172,72 +8172,72 @@
   {
     "enabled": true,
     "word": "難波",
-    "reading": "なん,ば"
+    "reading": "な#ん,ば"
   },
   {
     "enabled": true,
     "word": "難波船",
-    "reading": "なん,ば,せん"
+    "reading": "な#ん,ば,せ#ん"
   },
   {
     "enabled": true,
     "word": "補充",
-    "reading": "ほ,じゅう"
+    "reading": "ほ,じゅ#う"
   },
   {
     "enabled": true,
     "word": "急接近",
-    "reading": "きゅう,せっ,きん"
+    "reading": "きゅ#う,せっ,き#ん"
   },
   {
     "enabled": true,
     "word": "実物大",
-    "reading": "じつ,ぶつ,だい"
+    "reading": "じ#つ,ぶ#つ,だ#い"
   },
   {
     "enabled": true,
     "word": "素体",
-    "reading": "そ,たい"
+    "reading": "そ,た#い"
   },
   {
     "enabled": true,
     "word": "原型",
-    "reading": "げん,けい"
+    "reading": "げ#ん,け#い"
   },
   {
     "enabled": true,
     "word": "爆走",
-    "reading": "ばく,そう"
+    "reading": "ば#く,そ#う"
   },
   {
     "enabled": true,
     "word": "造形",
-    "reading": "ぞう,けい"
+    "reading": "ぞ#う,け#い"
   },
   {
     "enabled": true,
     "word": "造形美",
-    "reading": "ぞう,けい,び"
+    "reading": "ぞ#う,け#い,び"
   },
   {
     "enabled": true,
     "word": "原型師",
-    "reading": "げん,けい,し"
+    "reading": "げ#ん,け#い,し"
   },
   {
     "enabled": true,
     "word": "成立",
-    "reading": "せい,りつ"
+    "reading": "せ#い,り#つ"
   },
   {
     "enabled": true,
     "word": "交渉",
-    "reading": "こう,しょう"
+    "reading": "こ#う,しょ#う"
   },
   {
     "enabled": true,
     "word": "芳醇",
-    "reading": "ほう,じゅん"
+    "reading": "ほ#う,じゅ#ん"
   },
   {
     "enabled": true,
@@ -8247,97 +8247,97 @@
   {
     "enabled": true,
     "word": "個体",
-    "reading": "こ,たい"
+    "reading": "こ,た#い"
   },
   {
     "enabled": true,
     "word": "蒟蒻",
-    "reading": "こん,にゃく"
+    "reading": "こ#ん,にゃ#く"
   },
   {
     "enabled": true,
     "word": "神出鬼没",
-    "reading": "しん,しゅつ,き,ぼつ"
+    "reading": "し#ん,しゅ#つ,き,ぼ#つ"
   },
   {
     "enabled": true,
     "word": "一日千秋",
-    "reading": "いち,じつ,せん,しゅう"
+    "reading": "い#ち,じ#つ,せ#ん,しゅ#う"
   },
   {
     "enabled": true,
     "word": "千変万化",
-    "reading": "せん,べん,ばん,か"
+    "reading": "せ#ん,べ#ん,ば#ん,か"
   },
   {
     "enabled": true,
     "word": "満身創痍",
-    "reading": "まん,しん,そう,い"
+    "reading": "ま#ん,し#ん,そ#う,い"
   },
   {
     "enabled": true,
     "word": "雪月花",
-    "reading": "せつ,げつ,か"
+    "reading": "せ#つ,げ#つ,か"
   },
   {
     "enabled": true,
     "word": "丁丁発止",
-    "reading": "ちょう,ちょう,はっ,し"
+    "reading": "ちょ#う,ちょ#う,はっ,し"
   },
   {
     "enabled": true,
     "word": "群雄割拠",
-    "reading": "ぐん,ゆう,かっ,きょ"
+    "reading": "ぐ#ん,ゆ#う,かっ,きょ"
   },
   {
     "enabled": true,
     "word": "一攫千金",
-    "reading": "いっ,かく,せん,きん"
+    "reading": "いっ,か#く,せ#ん,き#ん"
   },
   {
     "enabled": true,
     "word": "平安",
-    "reading": "へい,あん"
+    "reading": "へ#い,あ#ん"
   },
   {
     "enabled": true,
     "word": "千客万来",
-    "reading": "せん,きゃく,ばん,らい"
+    "reading": "せ#ん,きゃ#く,ば#ん,ら#い"
   },
   {
     "enabled": true,
     "word": "奇想天外",
-    "reading": "き,そう,てん,がい"
+    "reading": "き,そ#う,て#ん,が#い"
   },
   {
     "enabled": true,
     "word": "激安",
-    "reading": "げき,やす"
+    "reading": "げ#き,や#す"
   },
   {
     "enabled": true,
     "word": "真鍮",
-    "reading": "しん,ちゅう"
+    "reading": "し#ん,ちゅ#う"
   },
   {
     "enabled": true,
     "word": "構成",
-    "reading": "こう,せい"
+    "reading": "こ#う,せ#い"
   },
   {
     "enabled": true,
     "word": "赤子",
-    "reading": "あか,ご"
+    "reading": "あ#か,ご"
   },
   {
     "enabled": true,
     "word": "万古",
-    "reading": "ばん,こ"
+    "reading": "ば#ん,こ"
   },
   {
     "enabled": true,
     "word": "鼻血",
-    "reading": "はな,ぢ"
+    "reading": "は#な,ぢ"
   },
   {
     "enabled": true,
@@ -8347,82 +8347,82 @@
   {
     "enabled": true,
     "word": "騎馬戦",
-    "reading": "き,ば,せん"
+    "reading": "き,ば,せ#ん"
   },
   {
     "enabled": true,
     "word": "水中",
-    "reading": "すい,ちゅう"
+    "reading": "す#い,ちゅ#う"
   },
   {
     "enabled": true,
     "word": "保健",
-    "reading": "ほ,けん"
+    "reading": "ほ,け#ん"
   },
   {
     "enabled": true,
     "word": "保健室",
-    "reading": "ほ,けん,しつ"
+    "reading": "ほ,け#ん,し#つ"
   },
   {
     "enabled": true,
     "word": "A組",
-    "reading": "エー,ぐみ"
+    "reading": "エー,ぐ#み"
   },
   {
     "enabled": true,
     "word": "2年",
-    "reading": "に,ねん"
+    "reading": "に,ね#ん"
   },
   {
     "enabled": true,
     "word": "宮前",
-    "reading": "みや,まえ"
+    "reading": "み#や,ま#え"
   },
   {
     "enabled": true,
     "word": "女学院",
-    "reading": "じょ,がく,いん"
+    "reading": "じょ,が#く,い#ん"
   },
   {
     "enabled": true,
     "word": "蕁麻疹",
-    "reading": "じん,ま,しん"
+    "reading": "じ#ん,ま,し#ん"
   },
   {
     "enabled": true,
     "word": "補給",
-    "reading": "ほ,きゅう"
+    "reading": "ほ,きゅ#う"
   },
   {
     "enabled": true,
     "word": "鉄分",
-    "reading": "てつ,ぶん"
+    "reading": "て#つ,ぶ#ん"
   },
   {
     "enabled": true,
     "word": "変態",
-    "reading": "へん,たい"
+    "reading": "へ#ん,た#い"
   },
   {
     "enabled": true,
     "word": "好物",
-    "reading": "こう,ぶつ"
+    "reading": "こ#う,ぶ#つ"
   },
   {
     "enabled": true,
     "word": "女子寮",
-    "reading": "じょ,し,りょう"
+    "reading": "じょ,し,りょ#う"
   },
   {
     "enabled": true,
     "word": "鼻歌",
-    "reading": "はな,うた"
+    "reading": "は#な,う#た"
   },
   {
     "enabled": true,
     "word": "美少女",
-    "reading": "び,しょう,じょ"
+    "reading": "び,しょ#う,じょ"
   },
   {
     "enabled": true,
@@ -8432,32 +8432,32 @@
   {
     "enabled": true,
     "word": "腹黒",
-    "reading": "はら,ぐろ"
+    "reading": "は#ら,ぐ#ろ"
   },
   {
     "enabled": true,
     "word": "編入",
-    "reading": "へん,にゅう"
+    "reading": "へ#ん,にゅ#う"
   },
   {
     "enabled": true,
     "word": "流線型",
-    "reading": "りゅう,せん,けい"
+    "reading": "りゅ#う,せ#ん,け#い"
   },
   {
     "enabled": true,
     "word": "何億光年",
-    "reading": "なん,おく,こう,ねん"
+    "reading": "な#ん,お#く,こ#う,ね#ん"
   },
   {
     "enabled": true,
     "word": "大気",
-    "reading": "たい,き"
+    "reading": "た#い,き"
   },
   {
     "enabled": true,
     "word": "凄絶",
-    "reading": "せい,ぜつ"
+    "reading": "せ#い,ぜ#つ"
   },
   {
     "enabled": true,
@@ -8467,92 +8467,92 @@
   {
     "enabled": true,
     "word": "不正",
-    "reading": "ふ,せい"
+    "reading": "ふ,せ#い"
   },
   {
     "enabled": true,
     "word": "特命",
-    "reading": "とく,めい"
+    "reading": "と#く,め#い"
   },
   {
     "enabled": true,
     "word": "激突",
-    "reading": "げき,とつ"
+    "reading": "げ#き,と#つ"
   },
   {
     "enabled": true,
     "word": "告知",
-    "reading": "こく,ち"
+    "reading": "こ#く,ち"
   },
   {
     "enabled": true,
     "word": "月極",
-    "reading": "つき,ぎめ"
+    "reading": "つ#き,ぎ#め"
   },
   {
     "enabled": true,
     "word": "会社",
-    "reading": "かい,しゃ"
+    "reading": "か#い,しゃ"
   },
   {
     "enabled": true,
     "word": "男伊達",
-    "reading": "おとこ,だ,て"
+    "reading": "お#と#こ,だ,て"
   },
   {
     "enabled": true,
     "word": "下剋上",
-    "reading": "げ,こく,じょう"
+    "reading": "げ,こ#く,じょ#う"
   },
   {
     "enabled": true,
     "word": "焼肉",
-    "reading": "やき,にく"
+    "reading": "や#き,に#く"
   },
   {
     "enabled": true,
     "word": "定食",
-    "reading": "てい,しょく"
+    "reading": "て#い,しょ#く"
   },
   {
     "enabled": true,
     "word": "御飯",
-    "reading": "ご,はん"
+    "reading": "ご,は#ん"
   },
   {
     "enabled": true,
     "word": "定礎",
-    "reading": "てい,そ"
+    "reading": "て#い,そ"
   },
   {
     "enabled": true,
     "word": "華吹雪",
-    "reading": "はな,ふぶき"
+    "reading": "は#な,ふ#ぶ#き"
   },
   {
     "enabled": true,
     "word": "非日常",
-    "reading": "ひ,にち,じょう"
+    "reading": "ひ,に#ち,じょ#う"
   },
   {
     "enabled": true,
     "word": "学歴",
-    "reading": "がく,れき"
+    "reading": "が#く,れ#き"
   },
   {
     "enabled": true,
     "word": "七転",
-    "reading": "しち,てん"
+    "reading": "し#ち,て#ん"
   },
   {
     "enabled": true,
     "word": "老若男女",
-    "reading": "ろう,にゃく,なん,にょ"
+    "reading": "ろ#う,にゃ#く,な#ん,にょ"
   },
   {
     "enabled": true,
     "word": "vs",
-    "reading": "バーサス"
+    "reading": "バ,ー#サ#ス"
   },
   {
     "enabled": true,
@@ -8562,17 +8562,17 @@
   {
     "enabled": true,
     "word": "乳酸菌",
-    "reading": "にゅう,さん,きん"
+    "reading": "にゅ#う,さ#ん,き#ん"
   },
   {
     "enabled": true,
     "word": "腸内",
-    "reading": "ちょう,ない"
+    "reading": "ちょ#う,な#い"
   },
   {
     "enabled": true,
     "word": "具合",
-    "reading": "ぐ,あい"
+    "reading": "ぐ,あ#い"
   },
   {
     "enabled": true,
@@ -8602,7 +8602,7 @@
   {
     "enabled": true,
     "word": "情報化",
-    "reading": "じょう,ほう,か"
+    "reading": "じょ#う,ほ#う,か"
   },
   {
     "enabled": true,
@@ -8622,7 +8622,7 @@
   {
     "enabled": true,
     "word": "男気",
-    "reading": "おとこ,ぎ"
+    "reading": "お#と#こ,ぎ"
   },
   {
     "enabled": true,
@@ -8632,32 +8632,32 @@
   {
     "enabled": true,
     "word": "ST☆RISH",
-    "reading": "スターリッシュ/"
+    "reading": "ス,タ,ー,リ,ッ,シ,ュ#/"
   },
   {
     "enabled": true,
     "word": "何曜日",
-    "reading": "なん,よう,び"
+    "reading": "な#ん,よ#う,び"
   },
   {
     "enabled": true,
     "word": "栄枯盛衰",
-    "reading": "えい,こ,せい,すい"
+    "reading": "え#い,こ,せ#い,す#い"
   },
   {
     "enabled": true,
     "word": "日進月歩",
-    "reading": "にっ,しん,げっ,ぽ"
+    "reading": "にっ,し#ん,げっ,ぽ"
   },
   {
     "enabled": true,
     "word": "一見",
-    "reading": "いっ,けん"
+    "reading": "いっ,け#ん"
   },
   {
     "enabled": true,
     "word": "一刀両断",
-    "reading": "いっ,とう,りょう,だん"
+    "reading": "いっ,と#う,りょ#う,だ#ん"
   },
   {
     "enabled": true,
@@ -8682,7 +8682,7 @@
   {
     "enabled": true,
     "word": "砂時計",
-    "reading": "すな,ど,けい"
+    "reading": "す#な,ど,け#い"
   },
   {
     "enabled": true,
@@ -8692,12 +8692,12 @@
   {
     "enabled": true,
     "word": "見え方",
-    "reading": "み,え,かた"
+    "reading": "み,え,か#た"
   },
   {
     "enabled": true,
     "word": "道の上",
-    "reading": "みち,の,うえ"
+    "reading": "み#ち,の,う#え"
   },
   {
     "enabled": true,
@@ -8707,32 +8707,32 @@
   {
     "enabled": true,
     "word": "空虚",
-    "reading": "くう,きょ"
+    "reading": "く#う,きょ"
   },
   {
     "enabled": true,
     "word": "空振",
-    "reading": "から,ぶ"
+    "reading": "か#ら,ぶ"
   },
   {
     "enabled": true,
     "word": "眩し",
-    "reading": "まぶ,し"
+    "reading": "ま#ぶ,し"
   },
   {
     "enabled": true,
     "word": "凝れた",
-    "reading": "こご,れ,た"
+    "reading": "こ#ご,れ,た"
   },
   {
     "enabled": true,
     "word": "語り続",
-    "reading": "かた,り,つづ"
+    "reading": "か#た,り,つ#づ"
   },
   {
     "enabled": true,
     "word": "時を止",
-    "reading": "とき,を,と"
+    "reading": "と#き,を,と"
   },
   {
     "enabled": true,
@@ -8742,7 +8742,7 @@
   {
     "enabled": true,
     "word": "月日",
-    "reading": "つき,ひ"
+    "reading": "つ#き,ひ"
   },
   {
     "enabled": true,
@@ -8757,7 +8757,7 @@
   {
     "enabled": true,
     "word": "0時",
-    "reading": "れい,じ"
+    "reading": "れ#い,じ"
   },
   {
     "enabled": true,
@@ -8767,47 +8767,47 @@
   {
     "enabled": true,
     "word": "四季彩",
-    "reading": "し,き,さい"
+    "reading": "し,き,さ#い"
   },
   {
     "enabled": true,
     "word": "宣戰布告",
-    "reading": "せん,せん,ふ,こく"
+    "reading": "せ#ん,せ#ん,ふ,こ#く"
   },
   {
     "enabled": true,
     "word": "2人",
-    "reading": "ふた,り"
+    "reading": "ふ#た,り"
   },
   {
     "enabled": true,
     "word": "公開処刑",
-    "reading": "こう,かい,しょ,けい"
+    "reading": "こ#う,か#い,しょ,け#い"
   },
   {
     "enabled": true,
     "word": "四面楚歌",
-    "reading": "し,めん,そ,か"
+    "reading": "し,め#ん,そ,か"
   },
   {
     "enabled": true,
     "word": "森羅万象",
-    "reading": "しん,ら,ばん,しょう"
+    "reading": "し#ん,ら,ば#ん,しょ#う"
   },
   {
     "enabled": true,
     "word": "鼓動",
-    "reading": "こ,どう"
+    "reading": "こ,ど#う"
   },
   {
     "enabled": true,
     "word": "色即是空",
-    "reading": "しき,そく,ぜ,くう"
+    "reading": "し#き,そ#く,ぜ,く#う"
   },
   {
     "enabled": true,
     "word": "助言",
-    "reading": "じょ,げん"
+    "reading": "じょ,げ#ん"
   },
   {
     "enabled": true,
@@ -8817,87 +8817,87 @@
   {
     "enabled": true,
     "word": "五分",
-    "reading": "ご,ふん"
+    "reading": "ご,ふ#ん"
   },
   {
     "enabled": true,
     "word": "既視感",
-    "reading": "き,し,かん"
+    "reading": "き,し,か#ん"
   },
   {
     "enabled": true,
     "word": "唯唯諾諾",
-    "reading": "い,い,だく,だく"
+    "reading": "い,い,だ#く,だ#く"
   },
   {
     "enabled": true,
     "word": "危機感",
-    "reading": "き,き,かん"
+    "reading": "き,き,か#ん"
   },
   {
     "enabled": true,
     "word": "全国各地",
-    "reading": "ぜん,こく,かく,ち"
+    "reading": "ぜ#ん,こ#く,か#く,ち"
   },
   {
     "enabled": true,
     "word": "離れ離れ",
-    "reading": "はな,れ,ばな,れ"
+    "reading": "は#な,れ,ば#な,れ"
   },
   {
     "enabled": true,
     "word": "離れ離",
-    "reading": "はな,れ,ばな"
+    "reading": "は#な,れ,ば#な"
   },
   {
     "enabled": true,
     "word": "未成年者",
-    "reading": "み,せい,ねん,しゃ"
+    "reading": "み,せ#い,ね#ん,しゃ"
   },
   {
     "enabled": true,
     "word": "彼奴",
-    "reading": "あい,つ"
+    "reading": "あ#い,つ"
   },
   {
     "enabled": true,
     "word": "欠片",
-    "reading": "かけら"
+    "reading": "か,け#ら"
   },
   {
     "enabled": true,
     "word": "二回目",
-    "reading": "に,かい,め"
+    "reading": "に,か#い,め"
   },
   {
     "enabled": true,
     "word": "三回目",
-    "reading": "さん,かい,め"
+    "reading": "さ#ん,か#い,め"
   },
   {
     "enabled": true,
     "word": "今年",
-    "reading": "ことし"
+    "reading": "こ,と#し"
   },
   {
     "enabled": true,
     "word": "火星",
-    "reading": "か,せい"
+    "reading": "か,せ#い"
   },
   {
     "enabled": true,
     "word": "何千回",
-    "reading": "なん,ぜん,かい"
+    "reading": "な#ん,ぜ#ん,か#い"
   },
   {
     "enabled": true,
     "word": "何百回",
-    "reading": "なん,びゃっ,かい"
+    "reading": "な#ん,びゃっ,か#い"
   },
   {
     "enabled": true,
     "word": "小鳥",
-    "reading": "こ,とり"
+    "reading": "こ,と#り"
   },
   {
     "enabled": true,
@@ -8907,72 +8907,72 @@
   {
     "enabled": true,
     "word": "都会",
-    "reading": "と,かい"
+    "reading": "と,か#い"
   },
   {
     "enabled": true,
     "word": "果実",
-    "reading": "か,じつ"
+    "reading": "か,じ#つ"
   },
   {
     "enabled": true,
     "word": "規範",
-    "reading": "き,はん"
+    "reading": "き,は#ん"
   },
   {
     "enabled": true,
     "word": "有象無象",
-    "reading": "う,ぞう,む,ぞう"
+    "reading": "う,ぞ#う,む,ぞ#う"
   },
   {
     "enabled": true,
     "word": "弥生",
-    "reading": "やよい"
+    "reading": "や,よ#い"
   },
   {
     "enabled": true,
     "word": "想像力",
-    "reading": "そう,ぞう,りょく"
+    "reading": "そ#う,ぞ#う,りょ#く"
   },
   {
     "enabled": true,
     "word": "処分",
-    "reading": "しょ,ぶん"
+    "reading": "しょ,ぶ#ん"
   },
   {
     "enabled": true,
     "word": "一発二発",
-    "reading": "いっ,ぱつ,に,はつ"
+    "reading": "いっ,ぱ#つ,に,は#つ"
   },
   {
     "enabled": true,
     "word": "闇夜",
-    "reading": "やみ,よ"
+    "reading": "や#み,よ"
   },
   {
     "enabled": true,
     "word": "満天",
-    "reading": "まん,てん"
+    "reading": "ま#ん,て#ん"
   },
   {
     "enabled": true,
     "word": "亀裂",
-    "reading": "き,れつ"
+    "reading": "き,れ#つ"
   },
   {
     "enabled": true,
     "word": "不正解",
-    "reading": "ふ,せい,かい"
+    "reading": "ふ,せ#い,か#い"
   },
   {
     "enabled": true,
     "word": "呪縛",
-    "reading": "じゅ,ばく"
+    "reading": "じゅ,ば#く"
   },
   {
     "enabled": true,
     "word": "砂丘",
-    "reading": "さ,きゅう"
+    "reading": "さ,きゅ#う"
   },
   {
     "enabled": true,
@@ -8982,57 +8982,57 @@
   {
     "enabled": true,
     "word": "恐る恐る",
-    "reading": "おそ,る,おそ,る"
+    "reading": "お#そ,る,お#そ,る"
   },
   {
     "enabled": true,
     "word": "表裏",
-    "reading": "ひょう,り"
+    "reading": "ひょ#う,り"
   },
   {
     "enabled": true,
     "word": "時限",
-    "reading": "じ,げん"
+    "reading": "じ,げ#ん"
   },
   {
     "enabled": true,
     "word": "由来",
-    "reading": "ゆ,らい"
+    "reading": "ゆ,ら#い"
   },
   {
     "enabled": true,
     "word": "毎日",
-    "reading": "まい,にち"
+    "reading": "ま#い,に#ち"
   },
   {
     "enabled": true,
     "word": "三ツ星",
-    "reading": "み,つ,ぼし"
+    "reading": "み,つ,ぼ#し"
   },
   {
     "enabled": true,
     "word": "作法",
-    "reading": "さ,ほう"
+    "reading": "さ,ほ#う"
   },
   {
     "enabled": true,
     "word": "咀嚼",
-    "reading": "そ,しゃく"
+    "reading": "そ,しゃ#く"
   },
   {
     "enabled": true,
     "word": "兎角",
-    "reading": "と,かく"
+    "reading": "と,か#く"
   },
   {
     "enabled": true,
     "word": "奴隷",
-    "reading": "ど,れい"
+    "reading": "ど,れ#い"
   },
   {
     "enabled": true,
     "word": "一方通行",
-    "reading": "いっ,ぽう,つう,こう"
+    "reading": "いっ,ぽ#う,つ#う,こ#う"
   },
   {
     "enabled": true,
@@ -9042,17 +9042,17 @@
   {
     "enabled": true,
     "word": "四六時中",
-    "reading": "し,ろく,じ,ちゅう"
+    "reading": "し,ろ#く,じ,ちゅ#う"
   },
   {
     "enabled": true,
     "word": "小町",
-    "reading": "こ,まち"
+    "reading": "こ,ま#ち"
   },
   {
     "enabled": true,
     "word": "一等星",
-    "reading": "いっ,とう,せい"
+    "reading": "いっ,と#う,せ#い"
   },
   {
     "enabled": true,
@@ -9062,112 +9062,112 @@
   {
     "enabled": true,
     "word": "偽善",
-    "reading": "ぎ,ぜん"
+    "reading": "ぎ,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "喜怒哀楽",
-    "reading": "き,ど,あい,らく"
+    "reading": "き,ど,あ#い,ら#く"
   },
   {
     "enabled": true,
     "word": "矛盾",
-    "reading": "む,じゅん"
+    "reading": "む,じゅ#ん"
   },
   {
     "enabled": true,
     "word": "地団駄",
-    "reading": "じ,たん,だ"
+    "reading": "じ,た#ん,だ"
   },
   {
     "enabled": true,
     "word": "頭上",
-    "reading": "ず,じょう"
+    "reading": "ず,じょ#う"
   },
   {
     "enabled": true,
     "word": "処刑",
-    "reading": "しょ,けい"
+    "reading": "しょ,け#い"
   },
   {
     "enabled": true,
     "word": "禁止事項",
-    "reading": "きん,し,じ,こう"
+    "reading": "き#ん,し,じ,こ#う"
   },
   {
     "enabled": true,
     "word": "慇懃尾籠",
-    "reading": "いん,ぎん,び,ろう"
+    "reading": "い#ん,ぎ#ん,び,ろ#う"
   },
   {
     "enabled": true,
     "word": "無礼行為",
-    "reading": "ぶ,れい,こう,い"
+    "reading": "ぶ,れ#い,こ#う,い"
   },
   {
     "enabled": true,
     "word": "土台",
-    "reading": "ど,だい"
+    "reading": "ど,だ#い"
   },
   {
     "enabled": true,
     "word": "五体",
-    "reading": "ご,たい"
+    "reading": "ご,た#い"
   },
   {
     "enabled": true,
     "word": "伽藍",
-    "reading": "が,らん"
+    "reading": "が,ら#ん"
   },
   {
     "enabled": true,
     "word": "名詮自性",
-    "reading": "みょう,せん,じ,しょう"
+    "reading": "みょ#う,せ#ん,じ,しょ#う"
   },
   {
     "enabled": true,
     "word": "創造的",
-    "reading": "そう,ぞう,てき"
+    "reading": "そ#う,ぞ#う,て#き"
   },
   {
     "enabled": true,
     "word": "地獄",
-    "reading": "じ,ごく"
+    "reading": "じ,ご#く"
   },
   {
     "enabled": true,
     "word": "大変身",
-    "reading": "だい,へん,しん"
+    "reading": "だ#い,へ#ん,し#ん"
   },
   {
     "enabled": true,
     "word": "花壇",
-    "reading": "か,だん"
+    "reading": "か,だ#ん"
   },
   {
     "enabled": true,
     "word": "机上",
-    "reading": "き,じょう"
+    "reading": "き,じょ#う"
   },
   {
     "enabled": true,
     "word": "一点",
-    "reading": "いっ,てん"
+    "reading": "いっ,て#ん"
   },
   {
     "enabled": true,
     "word": "話題",
-    "reading": "わ,だい"
+    "reading": "わ,だ#い"
   },
   {
     "enabled": true,
     "word": "紅蓮",
-    "reading": "ぐ,れん"
+    "reading": "ぐ,れ#ん"
   },
   {
     "enabled": true,
     "word": "都合",
-    "reading": "つ,ごう"
+    "reading": "つ,ご#う"
   },
   {
     "enabled": true,
@@ -9182,47 +9182,47 @@
   {
     "enabled": true,
     "word": "間違",
-    "reading": "ま,ちが"
+    "reading": "ま,ち#が"
   },
   {
     "enabled": true,
     "word": "野菜",
-    "reading": "や,さい"
+    "reading": "や,さ#い"
   },
   {
     "enabled": true,
     "word": "次第",
-    "reading": "し,だい"
+    "reading": "し,だ#い"
   },
   {
     "enabled": true,
     "word": "一回",
-    "reading": "いっ,かい"
+    "reading": "いっ,か#い"
   },
   {
     "enabled": true,
     "word": "絶対",
-    "reading": "ぜっ,たい"
+    "reading": "ぜっ,た#い"
   },
   {
     "enabled": true,
     "word": "自然",
-    "reading": "し,ぜん"
+    "reading": "し,ぜ#ん"
   },
   {
     "enabled": true,
     "word": "眩暈",
-    "reading": "め,まい"
+    "reading": "め,ま#い"
   },
   {
     "enabled": true,
     "word": "模様",
-    "reading": "も,よう"
+    "reading": "も,よ#う"
   },
   {
     "enabled": true,
     "word": "俯瞰",
-    "reading": "ふ,かん"
+    "reading": "ふ,か#ん"
   },
   {
     "enabled": true,
@@ -9232,57 +9232,57 @@
   {
     "enabled": true,
     "word": "地道",
-    "reading": "じ,みち"
+    "reading": "じ,み#ち"
   },
   {
     "enabled": true,
     "word": "仏様",
-    "reading": "ほとけ,さま"
+    "reading": "ほ#と#け,さ#ま"
   },
   {
     "enabled": true,
     "word": "沈丁花",
-    "reading": "じん,ちょう,げ"
+    "reading": "じ#ん,ちょ#う,げ"
   },
   {
     "enabled": true,
     "word": "他愛の",
-    "reading": "た,あい,の"
+    "reading": "た,あ#い,の"
   },
   {
     "enabled": true,
     "word": "不安定",
-    "reading": "ふ,あん,てい"
+    "reading": "ふ,あ#ん,て#い"
   },
   {
     "enabled": true,
     "word": "紅一点",
-    "reading": "こう,いっ,てん"
+    "reading": "こ#う,いっ,て#ん"
   },
   {
     "enabled": true,
     "word": "花瓶",
-    "reading": "か,びん"
+    "reading": "か,び#ん"
   },
   {
     "enabled": true,
     "word": "麻酔",
-    "reading": "ま,すい"
+    "reading": "ま,す#い"
   },
   {
     "enabled": true,
     "word": "馳走",
-    "reading": "ち,そう"
+    "reading": "ち,そ#う"
   },
   {
     "enabled": true,
     "word": "日",
-    "reading": "いち,にち"
+    "reading": "い#ち#,#に#ち"
   },
   {
     "enabled": true,
     "word": "箒星",
-    "reading": "ほうき,ぼし"
+    "reading": "ほ#う#き,ぼ#し"
   },
   {
     "enabled": true,
@@ -9297,57 +9297,57 @@
   {
     "enabled": true,
     "word": "正義",
-    "reading": "せい,ぎ"
+    "reading": "せ#い,ぎ"
   },
   {
     "enabled": true,
     "word": "否定",
-    "reading": "ひ,てい"
+    "reading": "ひ,て#い"
   },
   {
     "enabled": true,
     "word": "世代",
-    "reading": "せ,だい"
+    "reading": "せ,だ#い"
   },
   {
     "enabled": true,
     "word": "皮肉",
-    "reading": "ひ,にく"
+    "reading": "ひ,に#く"
   },
   {
     "enabled": true,
     "word": "極彩",
-    "reading": "ごく,さい"
+    "reading": "ご#く,さ#い"
   },
   {
     "enabled": true,
     "word": "雲散霧消",
-    "reading": "うん,さん,む,しょう"
+    "reading": "う#ん,さ#ん,む,しょ#う"
   },
   {
     "enabled": true,
     "word": "偽装",
-    "reading": "ぎ,そう"
+    "reading": "ぎ,そ#う"
   },
   {
     "enabled": true,
     "word": "味方",
-    "reading": "み,かた"
+    "reading": "み,か#た"
   },
   {
     "enabled": true,
     "word": "他人",
-    "reading": "た,にん"
+    "reading": "た,に#ん"
   },
   {
     "enabled": true,
     "word": "最低限",
-    "reading": "さい,てい,げん"
+    "reading": "さ#い,て#い,げ#ん"
   },
   {
     "enabled": true,
     "word": "鬼哭に",
-    "reading": "き,こく,に"
+    "reading": "き,こ#く,に"
   },
   {
     "enabled": true,
@@ -9357,27 +9357,27 @@
   {
     "enabled": true,
     "word": "戦姫",
-    "reading": "せん,き"
+    "reading": "せ#ん,き"
   },
   {
     "enabled": true,
     "word": "義体",
-    "reading": "ぎ,たい"
+    "reading": "ぎ,た#い"
   },
   {
     "enabled": true,
     "word": "栄光",
-    "reading": "えい,こう"
+    "reading": "え#い,こ#う"
   },
   {
     "enabled": true,
     "word": "満タン",
-    "reading": "まん,た,ん"
+    "reading": "ま#ん,た,ん"
   },
   {
     "enabled": true,
     "word": "破天荒",
-    "reading": "は,てん,こう"
+    "reading": "は,て#ん,こ#う"
   },
   {
     "enabled": true,
@@ -9392,27 +9392,27 @@
   {
     "enabled": true,
     "word": "技術",
-    "reading": "ぎ,じゅつ"
+    "reading": "ぎ,じゅ#つ"
   },
   {
     "enabled": true,
     "word": "天国",
-    "reading": "てん,ごく"
+    "reading": "て#ん,ご#く"
   },
   {
     "enabled": true,
     "word": "度",
-    "reading": "たび"
+    "reading": "た#び"
   },
   {
     "enabled": true,
     "word": "夏暁",
-    "reading": "なつ,あけ"
+    "reading": "な#つ,あ#け"
   },
   {
     "enabled": true,
     "word": "お供",
-    "reading": "お,とも"
+    "reading": "お,と#も"
   },
   {
     "enabled": true,
@@ -9422,22 +9422,22 @@
   {
     "enabled": true,
     "word": "空",
-    "reading": "そら"
+    "reading": "そ#ら"
   },
   {
     "enabled": true,
     "word": "月灯り",
-    "reading": "つき,あか,り"
+    "reading": "つ#き,あ#か,り"
   },
   {
     "enabled": true,
     "word": "爪弾",
-    "reading": "つま,び"
+    "reading": "つ#ま,び"
   },
   {
     "enabled": true,
     "word": "紅茶",
-    "reading": "こう,ちゃ"
+    "reading": "こ#う,ちゃ"
   },
   {
     "enabled": true,
@@ -9447,11 +9447,11 @@
   {
     "enabled": true,
     "word": "大冒険",
-    "reading": "だい,ぼう,けん"
+    "reading": "だ#い,ぼ#う,け#ん"
   },
   {
     "enabled": true,
     "word": "私",
-    "reading": "わたし"
+    "reading": "わ#た#し"
   }
 ]

@@ -1030,3 +1030,116 @@ after seek 1500ms → 1708ms（继续推进正常）
 补丁（第十三批）处理。
 
 ---
+
+## 第十三批修复 (2026-04-22) - Ruby `#` 语义收敛 + cp 主导对齐 + 字典英文保留
+
+**背景**：第十一批引入的"方案 B"把 Ruby 分组标记 `#` 直接塞进了
+`Ruby.text`，但渲染/导出/字典/UI 对话框并未全链路适配，导致：
+(a) 卡拉 OK 预览与 TXT 导出里 `#` 直接漏出；(b) 三个编辑对话框没有
+`#` 说明也不处理 cp 与分组数失配；(c) 迁移脚本对 "ruby 含英文字母"
+的条目一律尝试切分，产生 349 条假阳性 manual_review；(d) #9 选中
+字符后出现异常大空行的渲染 bug。
+
+### 1. 新增 `Ruby.display_text()` + `align_ruby_to_checkpoints()`
+
+- `backend/domain/models.py` `Ruby.display_text()`：返回
+  `self.text.replace("#", "")`，供渲染/导出使用。`text` 保留
+  `#` 用于内部分组持久化，`display_text()` 用于所有用户可见路径。
+- `backend/infrastructure/parsers/inline_format.py`
+  `align_ruby_to_checkpoints(ruby_text, check_count, is_sentence_end)`：
+  - `cp < 2` 或 `is_sentence_end=True` → 剥 `#`（单 cp 不分组）
+  - `cp >= 2` → 按 `#` 分组后：
+    - 组数 == cp：空组补空格（避免 ValidationError）
+    - 组数 > cp：多余组合并到末组
+    - 组数 < cp：末尾补空格占位
+  - 规则严格按用户要求："以 checkpoint 为准，多余合一、缺失补空格，
+    句尾 cp 不算"
+
+### 2. 三个编辑对话框：`#` 提示 + cp 主导对齐
+
+- **`editor_interface.py`** `ModifyCharacterDialog`（L1184-1280）：
+  - 显示初值 `c.ruby.display_text()`（不再漏 `#`）
+  - placeholder 加 `#` 分组说明
+  - 保存时走 `align_ruby_to_checkpoints(raw, cc, is_se)`
+- **`editor/bulk_change_dialog.py`**（L25-230）：
+  - placeholder 加 `#` 说明
+  - 两处 `Ruby(text=...)` 构造走 `align_ruby_to_checkpoints`
+- **`editor/edit_interface.py`** `LineDetailDialog`（L28-478）：
+  - Hint 文案补 `#` 说明
+  - 三处 `Ruby(text=...)` 构造走 `align_ruby_to_checkpoints`
+
+结论：单 cp 或句尾 cp 自动剥 `#`；多 cp 失配自动归并/补齐，
+**永不抛 ValidationError**。
+
+### 3. 全文本编辑界面（`ruby_editor.py`）以 `#` 数反推 cp
+
+用户规则："全文本编辑界面下必须以 `#` 分组为准更新 checkpoint，
+因为这里会自动生成节奏点。"
+
+- `settings/ruby_editor.py` `_rebuild_characters`（L76-111）：
+  解析 `{字|ruby}` 时 `check_count = ruby.count("#") + 1`，
+  没有 `#` 则 cp=1；覆盖旧的"cp 固定为 1"逻辑。
+
+### 4. 渲染 / 导出路径统一走 `display_text()`
+
+- `editor_interface.py` L924、L984、L989、L1001、L1021：
+  所有预览渲染 `r.text` → `r.display_text()`（新增局部变量
+  `_ruby_disp` 避免重复调用）
+- `startup_interface.py` L384：字符列表显示改用 `display_text()`
+- `txt_exporter.py` L109：TXT 导出用 `display_text()`
+- **无需改**：`nicokara_exporter.py` 走 `ruby_parts`（已经经过
+  `c.ruby.groups()`，天然 #-free）；`inline_exporter.py` 保留 `#`
+  是 inline 格式规范要求。
+
+### 5. 修复 #9：选中字符后出现异常大空行
+
+**根因**：`editor_interface.paintEvent` 对选中字符的补色高亮
+使用了 `max(line_box_top, font_ascent_top)` 的混用逻辑，而
+非选中字符用的是 `y_center - rect_height / 2`。当 line_height
+与 font metrics 不一致（字体 fallback、ruby 导致行高变化）时，
+选中态的矩形顶端会跳到行盒子上沿，视觉上像多出一条空行。
+
+**修复**：L870-876 统一锚点为
+`_rect_top = int(round(y_center_f - _rect_height / 2))`，
+选中/非选中一致，差异只在背景色 alpha。
+
+### 6. 字典迁移：跳过 "ruby 含英文字母" 的条目
+
+用户规则："字典里 ruby 含有英文的场景不要处理，用 `,` 分组足够了；
+如果原文是英文而 ruby 是假名，还是要处理。"
+
+- `scripts/migrate_dict_to_ruby_groups.py`：
+  - 新增 `_has_ascii_letter(s)`
+  - `_migrate_reading` 开头检测 **reading**（非 lemma）含 ASCII
+    字母时直接返回 `unchanged`
+- **Dry-run 统计（1891 条）**：
+  ```
+  unchanged      121 → 132 (+11, 纯英文 reading)
+  manual_review  411 → 349 (-62)
+  comma_cp_split 1304
+  mora_split     13
+  char_split     26
+  char_split_flat 78
+  ```
+- **已 `--apply` 写入**：
+  - `src/strange_uta_game/config/dictionary.json`（168208→170396 bytes）
+  - `dictionary.json`（程序目录覆盖）
+  - 两份 `.bak.20260422_00xxxx` 备份已保留
+
+### 7. 测试 & LSP
+
+- `domain/` + `inline_format` 单元测试：96/96 通过
+- `align_ruby_to_checkpoints` 行为手工验证：cp<2 剥 #、cp>=2
+  归并/补齐均符合预期
+- LSP 诊断：所修文件无新增错误（`edit_interface.py` 剩余错误为
+  PyQt5/PyQt6 stub 冲突的 pre-existing 问题）
+
+### 遗留（独立批次处理）
+
+- `tests/unit/infrastructure/test_inline_format.py` 中
+  `test_ruby_single_char` / `test_ruby_group` / `test_multi_char_ruby` /
+  `test_mixed_line` / `test_ruby_roundtrip` 5 个失败，属第十一批
+  引入的 `to_inline_text` / `from_inline_text` 方案 B 对齐逻辑，
+  与本批"UI/渲染/字典适配"正交，留作第十四批。
+
+---

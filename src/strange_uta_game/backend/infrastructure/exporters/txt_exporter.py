@@ -106,7 +106,7 @@ class TXTExporter(BaseExporter):
 
         # 注音（可选）
         if self.include_rubies and sentence.rubies:
-            ruby_texts = [r.text for r in sentence.rubies[:3]]
+            ruby_texts = [r.display_text() for r in sentence.rubies[:3]]
             if ruby_texts:
                 parts.append(f"  (注音: {', '.join(ruby_texts)}...)")
 

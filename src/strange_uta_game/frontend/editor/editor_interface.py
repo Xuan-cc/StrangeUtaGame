@@ -867,13 +867,13 @@ class KaraokePreview(QWidget):
             for char_pos, ch in enumerate(line.chars):
                 char_w = char_widths[char_pos]
 
-                # 统一高亮/hitbox 矩形：clamp 到 line_height 内，避免因当前行
-                # 字体变大（22pt vs 18pt）在行间产生半像素空隙或撑开行距
+                # 统一高亮/hitbox 矩形：以行逻辑中心 y_center_f 为唯一锚点、
+                # 高度 clamp 到 int(line_height)。此前 _rect_top 在「行框顶」
+                # 与「字体 ascent 顶」之间取 max()，在当前行字体放大（22pt）
+                # 相邻行字体缩小（18pt）时两套锚点不一致，会让选中行下方出现
+                # 大块空白（issue #9）。现统一以行中心垂直居中矩形，消除跳变。
                 _rect_height = min(main_fm.height() + 4, int(line_height))
-                _rect_top = max(
-                    int(y_center_f - line_height / 2),
-                    int(y_center - main_fm.ascent()) - 2,
-                )
+                _rect_top = int(round(y_center_f - _rect_height / 2))
 
                 # 当前打轴位置高亮背景
                 if is_current and char_pos == self._current_char_idx:
@@ -921,7 +921,7 @@ class KaraokePreview(QWidget):
                         if _r:
                             _grp_rubies.append(_r)
                     if _grp_rubies:
-                        _merged = "".join(r.text for r in _grp_rubies)
+                        _merged = "".join(r.display_text() for r in _grp_rubies)
                         _grp_w = sum(char_widths[g] for g in _grp)
                         ruby_text_w = fm_ruby.horizontalAdvance(_merged)
                         ruby_x = curr_x + (_grp_w - ruby_text_w) // 2
@@ -980,13 +980,14 @@ class KaraokePreview(QWidget):
                 else:
                     ruby = line.characters[char_pos].ruby
                     if ruby:
-                        # 单字符 ruby（per-char 模型）
-                        ruby_text_w = fm_ruby.horizontalAdvance(ruby.text)
+                        # 单字符 ruby（per-char 模型）- 渲染剥离 '#' 分组标记
+                        _ruby_disp = ruby.display_text()
+                        ruby_text_w = fm_ruby.horizontalAdvance(_ruby_disp)
                         ruby_x = curr_x + (char_w - ruby_text_w) // 2
                         ruby_y = int(y_center - main_fm.ascent() - 4)
                         painter.setFont(font_ruby)
                         painter.setPen(base_color)
-                        painter.drawText(int(ruby_x), ruby_y, ruby.text)
+                        painter.drawText(int(ruby_x), ruby_y, _ruby_disp)
                         # Wipe
                         ruby_wipe_st = char_wipe_times.get(char_pos)
                         ruby_st = ruby_wipe_st[0] if ruby_wipe_st else None
@@ -998,7 +999,7 @@ class KaraokePreview(QWidget):
                             ruby_et = ruby_wipe_et[1] if ruby_wipe_et else ruby_st + 300
                             if current_time >= ruby_et:
                                 painter.setPen(ruby_highlight)
-                                painter.drawText(int(ruby_x), ruby_y, ruby.text)
+                                painter.drawText(int(ruby_x), ruby_y, _ruby_disp)
                             elif current_time >= ruby_st:
                                 r_dur = ruby_et - ruby_st
                                 r_ratio = (
@@ -1018,7 +1019,7 @@ class KaraokePreview(QWidget):
                                         )
                                     )
                                     painter.setPen(ruby_highlight)
-                                    painter.drawText(int(ruby_x), ruby_y, ruby.text)
+                                    painter.drawText(int(ruby_x), ruby_y, _ruby_disp)
                                     painter.restore()
 
                 # 主文字 — 基于 checkpoint 的逐字 wipe
@@ -1180,13 +1181,16 @@ class ModifyCharacterDialog(QDialog):
         self.edit_new_chars.setPlaceholderText("输入新字符")
         form.addRow("新字符:", self.edit_new_chars)
 
-        # Field 3: New ruby (comma-separated for multi-char)
+        # Field 3: New ruby (comma-separated for multi-char; '#' 用于组内 cp 分组)
         rubies = []
         for c in chars:
-            rubies.append(c.ruby.text if c.ruby else "")
+            # 对话框显示剥离 '#'，用户可重新用 '#' 标注分组
+            rubies.append(c.ruby.display_text() if c.ruby else "")
         initial_ruby = ",".join(rubies) if any(rubies) else ""
         self.edit_new_ruby = QLineEdit(initial_ruby)
-        self.edit_new_ruby.setPlaceholderText("注音（多字符用逗号分隔）")
+        self.edit_new_ruby.setPlaceholderText(
+            "注音（多字符用逗号分隔；同字符内多节奏点可用 # 分组，如 わ#た#し）"
+        )
         form.addRow("新注音:", self.edit_new_ruby)
 
         # Field 4: New check counts (comma-separated for multi-char)
@@ -1216,6 +1220,9 @@ class ModifyCharacterDialog(QDialog):
 
     def _on_execute(self):
         from strange_uta_game.backend.domain.models import Character, Ruby
+        from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+            align_ruby_to_checkpoints,
+        )
 
         new_text = self.edit_new_chars.text().strip()
         if not new_text:
@@ -1256,11 +1263,19 @@ class ModifyCharacterDialog(QDialog):
         # Build new Character objects
         new_chars = []
         for i, ch_str in enumerate(new_text):
-            ruby_obj = Ruby(text=ruby_parts[i]) if ruby_parts[i] else None
+            cc = max(0, check_parts[i])
+            raw_ruby = ruby_parts[i]
+            # is_sentence_end 仅作用于最后一个新字符（若旧末字为句尾）
+            is_se = (i == len(new_text) - 1) and old_last_is_sentence_end
+            if raw_ruby:
+                aligned = align_ruby_to_checkpoints(raw_ruby, cc, is_se)
+                ruby_obj = Ruby(text=aligned) if aligned else None
+            else:
+                ruby_obj = None
             new_ch = Character(
                 char=ch_str,
                 ruby=ruby_obj,
-                check_count=max(0, check_parts[i]),
+                check_count=cc,
                 singer_id=singer_id,
                 linked_to_next=False,
                 is_line_end=False,
