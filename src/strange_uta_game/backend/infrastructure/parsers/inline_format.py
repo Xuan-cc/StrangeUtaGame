@@ -222,7 +222,11 @@ def to_inline_text(sentence: Sentence) -> str:
 
             for c in chars[group_start:group_end]:
                 assert c.ruby is not None  # 由上方 while 条件保证
-                ruby_segments = c.ruby.groups()
+                # 优先按 '#' 分组；无 '#' 时按 mora/字符均分到 check_count，
+                # 兼容旧数据（无 '#' 的多 cp ruby）
+                ruby_segments = split_ruby_for_checkpoints(
+                    c.ruby.text, c.check_count
+                )
 
                 portion_parts: List[str] = []
                 for cp_idx in range(c.total_timing_points):

@@ -1143,3 +1143,49 @@ after seek 1500ms → 1708ms（继续推进正常）
   与本批"UI/渲染/字典适配"正交，留作第十四批。
 
 ---
+
+## 第十四批修复 (2026-04-22) - inline_format 方案 B 回归测试收尾
+
+**背景**：第十一批引入方案 B 后，`tests/unit/infrastructure/test_inline_format.py`
+有 5 个测试失败。失败分两类：(a) `to_inline_text` 对"无 `#` 的
+legacy 多 cp ruby"没有 mora 级切分，导致所有假名挤在首个 cp 时间戳
+前；(b) 测试仍按旧模型断言 `ruby.text == "やわ"`，未适配方案 B 的
+`ruby.text == "や#わ"` 内部分组存储。
+
+### 1. `to_inline_text` 适配 legacy 无 `#` 多 cp ruby
+
+- **问题**：`Ruby(text="やわ")` + `check_count=2` 调用
+  `c.ruby.groups()` 返回 `["やわ"]`（1 组），序列化时只有 cp_idx=0
+  附上 `"やわ"`，cp_idx=1 的时间戳后没有 ruby 片段 → 输出
+  `[2|ts1]やわ[ts2]` 而非期望的 `[2|ts1]や[ts2]わ`。
+- **修复**：`inline_format.py` L223-229 改用
+  `split_ruby_for_checkpoints(c.ruby.text, c.check_count)`，
+  该函数优先按 `#` 切分，否则按 mora / 字符均分。这样 legacy 数据
+  （无 `#` 多 cp）也能正确序列化。
+
+### 2. 测试按方案 B 更新断言：用 `display_text()` / `groups()`
+
+- 方案 B 后，`from_inline_text` 解析多 cp ruby 时会产生
+  `Ruby(text="や#わ")`（存储含 `#` 内部分组标记）。旧测试仍断言
+  `ruby.text == "やわ"`，失败。
+- **修复**：`tests/unit/infrastructure/test_inline_format.py`
+  - `test_ruby_group`: `ruby.text == "やわ"` →
+    `ruby.display_text() == "やわ"` + `ruby.groups() == ["や","わ"]`
+  - `test_multi_char_ruby`: cc=1 (`"しゃ"`) 保持 text 断言，
+    cc=2 (`"てい"`) 改用 `display_text()` + `groups()`
+  - `test_mixed_line`: 三处 ruby 断言全改 `display_text()`
+  - `test_ruby_roundtrip`: roundtrip 后改断言 `display_text()` +
+    `groups()`，显式注释"ruby.text 从 `やわ` 变为 `や#わ`，
+    但 display_text() 保持不变"
+
+### 3. 测试 & 验证
+
+- `tests/unit/infrastructure/test_inline_format.py`：**45/45 通过**
+- `tests/unit/`（全量）：209 通过；2 pre-existing 失败与本批无关：
+  - `test_batch_export` — `batch_export` 功能已于 commit 0217443 移除
+  - `test_export_ruby_relative_timestamps` — nicokara_exporter
+    中 legacy `#` 遗留，非本批引入
+- 验证方式：`git stash` + run tests + `git stash pop`，确认两失败
+  在 HEAD=c901138 未改动状态下同样失败
+
+---
