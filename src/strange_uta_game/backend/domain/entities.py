@@ -176,6 +176,100 @@ class Sentence:
             idx = end_idx
         return char_idx, char_idx + 1
 
+    def insert_character(self, idx: int, ch: Character) -> None:
+        """在指定位置前插入字符。"""
+        if idx < 0 or idx > len(self.characters):
+            raise ValidationError(
+                f"字符索引 {idx} 超出范围 [0, {len(self.characters)}]"
+            )
+
+        if not self.characters:
+            ch.is_line_end = True
+
+        self.characters.insert(idx, ch)
+
+    def delete_character(self, idx: int) -> bool:
+        """删除指定字符，返回删除后该行是否为空。"""
+        if idx < 0 or idx >= len(self.characters):
+            raise ValidationError(
+                f"字符索引 {idx} 超出范围 [0, {len(self.characters)})"
+            )
+
+        removed = self.characters.pop(idx)
+
+        if not self.characters:
+            return True
+
+        if removed.is_line_end:
+            promote_idx = idx - 1 if idx > 0 else len(self.characters) - 1
+            self.characters[promote_idx].is_line_end = True
+
+        if idx > 0 and idx - 1 < len(self.characters):
+            prev = self.characters[idx - 1]
+            if prev.linked_to_next and idx - 1 >= len(self.characters) - 1:
+                prev.linked_to_next = False
+
+        return False
+
+    def toggle_sentence_end(self, idx: int) -> None:
+        """切换指定字符的句尾标记。"""
+        char = self.get_character(idx)
+        if not char:
+            raise ValidationError(
+                f"字符索引 {idx} 超出范围 [0, {len(self.characters)})"
+            )
+
+        if char.is_sentence_end:
+            char.clear_sentence_end_ts()
+        char.is_sentence_end = not char.is_sentence_end
+
+    def add_checkpoint(self, idx: int) -> None:
+        """增加指定字符的普通节奏点。"""
+        char = self.get_character(idx)
+        if not char:
+            raise ValidationError(
+                f"字符索引 {idx} 超出范围 [0, {len(self.characters)})"
+            )
+        char.check_count += 1
+
+    def remove_checkpoint(self, idx: int) -> None:
+        """减少指定字符的普通节奏点。"""
+        char = self.get_character(idx)
+        if not char:
+            raise ValidationError(
+                f"字符索引 {idx} 超出范围 [0, {len(self.characters)})"
+            )
+
+        char.check_count = max(0, char.check_count - 1)
+        if len(char.timestamps) > char.check_count:
+            char.timestamps = char.timestamps[: char.check_count]
+            char._update_offset_timestamps()
+            char.push_to_ruby()
+
+    def split_at(self, idx: int) -> "Sentence":
+        """在指定字符后断行，返回后半句。"""
+        if idx < 0 or idx >= len(self.characters):
+            raise ValidationError(
+                f"字符索引 {idx} 超出范围 [0, {len(self.characters)})"
+            )
+
+        current_chars = self.characters[: idx + 1]
+        moved_chars = self.characters[idx + 1 :]
+        self.characters = current_chars
+
+        split_char = self.characters[idx]
+        split_char.is_line_end = True
+        split_char.linked_to_next = False
+
+        if moved_chars:
+            moved_singer_id = moved_chars[0].singer_id or split_char.singer_id or self.singer_id
+            if not any(ch.is_line_end for ch in moved_chars):
+                moved_chars[-1].is_line_end = True
+            return Sentence(singer_id=moved_singer_id, characters=moved_chars)
+
+        moved_singer_id = split_char.singer_id or self.singer_id
+        return Sentence(singer_id=moved_singer_id, characters=[])
+
     # ── 时间戳管理 ──
 
     def push_all_timestamps(self) -> None:

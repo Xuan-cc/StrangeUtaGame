@@ -36,7 +36,8 @@ from strange_uta_game.backend.infrastructure.parsers.e2k_engine import (
 )
 
 
-# 允许自动注音的字符类型白名单（#11）：英文字符、汉字、平假名、片假名
+# 允许自动注音的字符类型白名单（第十批 #5）：
+# 英文字符/英文词语、汉字/日汉字、平假名、片假名、阿拉伯数字
 _RUBY_ALLOWED_TYPES = {
     CharType.ALPHABET,
     CharType.KANJI,
@@ -44,7 +45,13 @@ _RUBY_ALLOWED_TYPES = {
     CharType.KATAKANA,
     CharType.SOKUON,
     CharType.LONG_VOWEL,
+    CharType.NUMBER,
 }
+
+
+def _has_latin(s: str) -> bool:
+    """是否含有 ASCII 英文字母（用于词边界判定）。"""
+    return any(c.isascii() and c.isalpha() for c in s)
 
 
 @dataclass
@@ -96,6 +103,11 @@ class AutoCheckService:
             key=lambda x: len(x[0]),
             reverse=True,
         )
+        # 第十批 #5：建立英文整词 O(1) 查询表，作为 e2k 失败时的用户词典全词回退。
+        # key 为小写词条，仅收录含 ASCII 英文字母的条目。
+        self._dict_map: Dict[str, str] = {
+            w.lower(): r for (w, r) in self._dict if _has_latin(w)
+        }
         # pykakasi 用于无约束分区的参考读音
         self._pykakasi_conv = None
         try:
@@ -122,9 +134,22 @@ class AutoCheckService:
 
         for word, reading in self._dict:
             wlen = len(word)
+            # 第十批 #5：含英文字母的词条须走整词边界匹配，否则 "we" 会命中 "answer" 中部。
+            is_latin = _has_latin(word)
             pos = 0
             while pos <= len(text) - wlen:
                 if text[pos : pos + wlen] == word:
+                    # 英文词条的词边界检查：前后字符都不能是英文字母。
+                    if is_latin:
+                        left_ok = pos == 0 or not (
+                            text[pos - 1].isascii() and text[pos - 1].isalpha()
+                        )
+                        right_ok = pos + wlen == len(text) or not (
+                            text[pos + wlen].isascii() and text[pos + wlen].isalpha()
+                        )
+                        if not (left_ok and right_ok):
+                            pos += 1
+                            continue
                     span = set(range(pos, pos + wlen))
                     if not span & covered:
                         overrides.append(
@@ -155,13 +180,16 @@ class AutoCheckService:
     def _apply_english_dictionary(
         self, text: str, ruby_results: List[RubyResult], dict_covered: set
     ) -> Tuple[List[RubyResult], set]:
-        """对英文单词应用自动注音（#12 / 第八批 #9）。
+        """对英文单词应用自动注音（第十批 #5）。
 
-        优先级（针对英文单词）：
+        用户要求的优先级：
           1. e2k 规则引擎（基于 CMU Pronouncing Dictionary 的音素规则转换）
-          2. e2k.txt 词表（作为引擎失败时的 fallback）
+          2. 用户词典整词回退（仅含字母的条目，通过 self._dict_map 做小写全词查询）
+          3. e2k.txt 词表（EnglishRubyLookup 静态词表）
 
-        只覆盖未被用户词典占用的英文单词。
+        只覆盖未被用户词典（非英文部分）占用的英文整词范围。
+        本函数对命中的英文词以整词为粒度替换 ruby_results，使下游序列化产生
+        形如 "{hello|ヘロー}" 的整词 ruby，而不是被 Sudachi 逐字符拆散。
 
         Returns:
             (合并后的 ruby_results, 被英文注音覆盖的字符索引集合)
@@ -170,18 +198,20 @@ class AutoCheckService:
         lookup = EnglishRubyLookup.instance()
         has_engine = engine.has()
         has_lookup = lookup.has()
-        if not has_engine and not has_lookup:
+        has_user_dict = bool(self._dict_map)
+        if not has_engine and not has_lookup and not has_user_dict:
             return ruby_results, set()
         e2k_covered: set[int] = set()
         overrides: List[RubyResult] = []
         for start, end, word in find_english_words(text):
             span = set(range(start, end))
-            # 跳过被用户词典覆盖的范围
+            # 跳过已被用户词典（多字符跨英/非英复合词）占用的范围
             if span & dict_covered:
                 continue
-            # 优先使用规则引擎
+            # 第十批 #5 优先级：e2k → user dict 全词 → 静态 lookup
             reading = engine.convert(word) if has_engine else None
-            # 引擎未命中则回退到静态词表
+            if not reading and has_user_dict:
+                reading = self._dict_map.get(word.lower())
             if not reading and has_lookup:
                 reading = lookup.lookup(word)
             if not reading:
@@ -194,7 +224,7 @@ class AutoCheckService:
             e2k_covered |= span
         if not overrides:
             return ruby_results, e2k_covered
-        # 移除被英文注音覆盖位置上来自库函数的结果
+        # 移除被英文注音覆盖位置上来自 Sudachi 的逐字符结果（防止 hello 被拆成 h/e/l/l/o）
         filtered = [
             r
             for r in ruby_results

@@ -647,3 +647,173 @@ after seek 1500ms → 1708ms（继续推进正常）
   极端素材（大量打击乐瞬态），可尝试 `audiotsm.phasevocoder` 对比。
 
 ---
+
+## 第十批改动（2026-04-21）
+
+本批改动覆盖 11 项用户反馈（#1~#11），主要修复快捷键/注音/右键菜单/字典/
+结构化编辑等交互问题，并引入 Domain 层结构化编辑 API，保持分层架构零
+跨层污染。
+
+### 功能改动
+
+#### #1 Checkpoint 循环键与高亮补色
+- `cycle_checkpoint` 默认键由 `Tab` 改为 `ALT+RIGHT`（对 Tab 焦点切换更友好）
+- 当前 checkpoint marker 使用**演唱者颜色的 HSV 补色**高亮，保持
+  marker 形状/大小/描边不变，仅换色，便于识别当前选中节奏点
+- `KaraokePreview` 新增 `_current_checkpoint_idx` 跟踪字内选中 cp
+- 预览底部快捷键提示追加 "Alt+→ 切换字内节奏点"
+
+#### #2 Alt+→ 提示
+- 同 #1，编辑器底部提示栏已加入按键说明
+- 设置界面同步更新 `cycle_checkpoint` 描述文本
+
+#### #3 主题说明合并
+- 删除独立 `theme_hint` QLabel
+- 把 "暂仅支持浅色主题，自定义配色将在后续版本更新" 拼接到
+  `card_theme` 的 content 参数末尾，保持单一 card 展示
+
+#### #4 快捷键冲突明确提示
+- `_resolve_shortcut_conflicts()` 返回 `list[str]` 冲突描述
+- `_do_auto_save` 调用后用 `InfoBar.warning` 逐条弹出冲突项
+  （包含具体冲突的两个动作名称）
+
+#### #5 英文注音管线重写
+- `auto_check_service.py` 注音优先级严格为：
+  1. 英文 e2k（`_has_latin`）
+  2. 用户字典（`_dict_map` 按词条长度倒序匹配）
+  3. 库函数（SudachiPy）
+- 参与过 e2k 或用户字典的字符标记后**不再进入下一轮**
+- 注音对象白名单：英文字符、英文词语、汉字、日汉字、平假名、片假名、
+  阿拉伯数字（`CharType.NUMBER`）
+- 英文单引号（`who's`、`what's`、`don't`）由现有正则
+  `[A-Za-z]+(?:['.][A-Za-z]+)*` 覆盖，作为英文单词内部字符；
+  非英文上下文的单引号不受影响
+
+#### #6 RL 字典逆序覆盖
+- `AppSettings.register_dictionary_word(word, reading)` 新增：
+  去重 + 插入到最高优先级
+- `AppSettings.import_rl_dictionary(text)` 新增：逆序遍历导入内容，
+  相同 word 覆盖旧条目并移到最高优先级，返回 `(added, updated)`
+- `DictionaryEditDialog._on_import_rl` 按新逻辑在表格内逆序覆盖
+- `ModifyCharacterDialog._register_to_dictionary` 改用
+  `register_dictionary_word`
+
+#### #7 编辑模式键位（音乐暂停时）
+- `Space` → 当前字符加 checkpoint
+- `Backspace` → 当前字符减 checkpoint（无 checkpoint 则 no-op）
+- `.` / `。` → 切换 sentence_end
+- `Enter/Return` → 在此处断行（当前字成为新的行尾，后续字移到新行）
+- `Delete` → 删除当前字符，含 is_line_end 提升 / 空行清理规则
+- 编辑模式下原 `Space/Z/X` 打轴/跳转行为变为 no-op
+
+#### #8 打轴模式键位（音乐播放时）
+- `Space` → tag_now（保持）
+- `Z` / `X` → seek ±5s（保持）
+- `F4` → 切换 sentence_end
+- `F5` → 加 checkpoint
+- `F6` → 减 checkpoint
+- `Enter/Return` → 断行（同 #7）
+- `Delete` → 删除选择或当前字符
+
+#### #9 右键菜单重设计
+`KaraokePreview._show_context_menu` 改用 `RoundMenu + Action`：
+
+1. 删除字符 → `delete_chars_requested(line_idx, start, end)`
+2. 在此插入空格 → `insert_space_after_requested(line_idx, char_idx)`
+   [分割线]
+3. 合并上一行 → `merge_line_up_requested(line_idx)`（行 0 禁用）
+4. 删除本行 → `delete_line_requested(line_idx)`
+5. 在此插入空行 → `insert_blank_line_requested(line_idx)`
+   [分割线]
+6. 增加节奏点 → `add_checkpoint_requested(line_idx, char_idx)`
+7. 减少节奏点 → `remove_checkpoint_requested(line_idx, char_idx)`
+8. 设置/取消句尾 → `toggle_sentence_end_requested(line_idx, char_idx)`
+   [分割线]
+9. 设置演唱者 ▶（子菜单，复用 `singer_selected` 信号）
+
+选区命中时 "删除字符" 使用选区范围，未命中时按 `[char_idx, char_idx+1)`。
+
+#### #10 快捷键 UI 合并（按 scope 语义）
+`_SHORTCUT_ACTIONS` 改为 7 元组：
+`(action_key, icon, title, content, default_timing, default_edit, scope)`
+- `scope="both"` → 单卡片，两模式共享
+- `scope="timing_only"` / `"edit_only"` → 单模式出现
+- `scope="split"` → 标题追加【打轴模式】/【编辑模式】两卡片
+
+**后台仍保留 `_key_map_timing` / `_key_map_edit` 双模式 dict，config 结构
+`shortcuts.{mode}.{action}` 不变**（用户要求：不改 config）。
+冲突检测用 `id(card)` 去重，避免 both 卡片自冲突。
+
+#### #11 设置切页即保存
+- `hideEvent` 检测 `_auto_save_timer.isActive()`，active 时立即 stop +
+  `_do_auto_save()` flush，与其他设置保持一致
+
+### Domain 层新 API（保持零框架导入）
+
+#### `backend/domain/entities.py::Sentence`（+94 LOC）
+- `insert_character(idx, ch)`
+- `delete_character(idx) -> bool`（返回 True 若该行变空；内部处理
+  is_line_end 提升、链尾修正）
+- `toggle_sentence_end(idx)`
+- `add_checkpoint(idx)` / `remove_checkpoint(idx)`（min 0）
+- `split_at(idx) -> Sentence`（返回 idx+1 起的新 Sentence；
+  当前 Sentence 保留 [0..idx] 并把 idx 设为 line_end）
+
+#### `backend/domain/project.py::Project`（+68 LOC）
+- `merge_line_into_previous(line_idx) -> bool`
+- `delete_line(line_idx)`
+- `insert_blank_line(after_line_idx) -> int`（零字符空 Sentence）
+- `insert_line_break(line_idx, char_idx)`
+
+#### `backend/application/timing_service.py`（+4 LOC）
+- 公开封装 `rebuild_global_checkpoints()` 调用已有
+  `_rebuild_global_checkpoints()`，让 presentation 层无需访问私有成员
+
+### 架构合规性
+- Domain 层零 PyQt 导入（仅 `dataclasses` / `typing` / 相对 domain 导入）
+- Presentation 层通过 `TimingService.rebuild_global_checkpoints()` 访问
+  引擎，不直接访问 engines 子模块
+- 所有结构化编辑走 `CommandManager` + `ProjectSnapshotCommand`
+  （deepcopy sentences），保留撤销/重做链
+- 结构变更统一链：mutate → `rebuild_global_checkpoints()` →
+  `_refresh_preview()` → `preview.update()`
+
+### 验证
+- `lsp_diagnostics(severity="error")` 对 4 个修改文件：无新增错误
+  （预存在 PyQt5/PyQt6 stub 不匹配噪音保持，不属于本批改动）
+- 运行时冒烟测试：
+  ```
+  from strange_uta_game.frontend.editor.editor_interface import EditorInterface, KaraokePreview
+  from strange_uta_game.backend.domain.entities import Sentence
+  from strange_uta_game.backend.domain.project import Project
+  from strange_uta_game.backend.application.timing_service import TimingService
+  # 所有 import 成功，新 API 全部存在
+  hasattr(TimingService, 'rebuild_global_checkpoints') == True
+  hasattr(Sentence, 'split_at') == True
+  hasattr(Project, 'insert_line_break') == True
+  ```
+- `AppSettings` 字典 API：`register_dictionary_word` /
+  `import_rl_dictionary` 皆 callable
+- `_SHORTCUT_ACTIONS` 加载 21 项，包含新增 `break_line_here` /
+  `delete_char` 两个 action
+
+### 改动文件一览
+
+| 文件 | 负责范围 | 说明 |
+|---|---|---|
+| `backend/domain/entities.py` | #7 #8 #9 | Sentence 结构化 API |
+| `backend/domain/project.py` | #7 #8 #9 | Project 行级结构化 API |
+| `backend/application/timing_service.py` | #1 #7 #8 #9 | 公开 rebuild 包装 |
+| `backend/application/auto_check_service.py` | #5 | 注音管线重写 |
+| `frontend/editor/editor_interface.py` | #1 #2 #6 #7 #8 #9 | 键位 / 右键菜单 / 预览补色 |
+| `frontend/settings/settings_interface.py` | #2 #3 #4 #6 #10 #11 | 快捷键合并 / 切页即保存 / 字典 API |
+
+### 遗留 / 未来优化
+- "插入空格" 当前插入半角空格 `" "`；如需与日文排版一致可改为全角
+  空格 `"　"`（用户可选）
+- 空行在引擎渲染时以零字符 Sentence 存在，若后续发现引擎对空 Sentence
+  的边缘 case 处理不一致，可改为插入单个全角空格占位
+- `_SHORTCUT_ACTIONS` 的 scope 字段未来如果要支持更细粒度的 "某键仅某
+  模式禁用"，可扩展为枚举
+
+---

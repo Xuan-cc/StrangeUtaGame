@@ -248,6 +248,74 @@ class Project:
         self.sentences.insert(new_position, sentence)
         self._update_timestamp()
 
+    def merge_line_into_previous(self, line_idx: int) -> bool:
+        """将指定行合并到上一行。"""
+        if line_idx <= 0 or line_idx >= len(self.sentences):
+            return False
+
+        prev_sentence = self.sentences[line_idx - 1]
+        current_sentence = self.sentences[line_idx]
+
+        if not current_sentence.characters:
+            self.sentences.pop(line_idx)
+            self._update_timestamp()
+            return True
+
+        if prev_sentence.characters:
+            prev_sentence.characters[-1].is_line_end = False
+
+        prev_sentence.characters.extend(current_sentence.characters)
+        prev_sentence.singer_id = prev_sentence.characters[0].singer_id or prev_sentence.singer_id
+        self.sentences.pop(line_idx)
+        self._update_timestamp()
+        return True
+
+    def delete_line(self, line_idx: int) -> None:
+        """按索引删除整行。"""
+        if line_idx < 0 or line_idx >= len(self.sentences):
+            raise ValidationError(f"行索引 {line_idx} 超出范围")
+
+        self.sentences.pop(line_idx)
+        self._update_timestamp()
+
+    def insert_blank_line(self, after_line_idx: int) -> int:
+        """在指定行后插入空行，返回新行索引。"""
+        if after_line_idx < -1 or after_line_idx >= len(self.sentences):
+            raise ValidationError(f"行索引 {after_line_idx} 超出范围")
+
+        if 0 <= after_line_idx < len(self.sentences):
+            singer_id = self.sentences[after_line_idx].singer_id
+        else:
+            singer_id = self.get_default_singer().id
+
+        sentence = Sentence(singer_id=singer_id, characters=[])
+        new_idx = after_line_idx + 1
+        self.sentences.insert(new_idx, sentence)
+        self._update_timestamp()
+        return new_idx
+
+    def insert_line_break(self, line_idx: int, char_idx: int) -> None:
+        """在指定字符后插入换行。"""
+        if line_idx < 0 or line_idx >= len(self.sentences):
+            raise ValidationError(f"行索引 {line_idx} 超出范围")
+
+        sentence = self.sentences[line_idx]
+        if char_idx < 0 or char_idx >= len(sentence.characters):
+            raise ValidationError(f"字符索引 {char_idx} 超出范围")
+
+        new_sentence = sentence.split_at(char_idx)
+        if new_sentence.characters:
+            inherit_singer_id = sentence.characters[char_idx].singer_id or sentence.singer_id
+            new_sentence.singer_id = inherit_singer_id
+            for moved_char in new_sentence.characters:
+                if not moved_char.singer_id:
+                    moved_char.singer_id = inherit_singer_id
+        else:
+            new_sentence.singer_id = sentence.characters[char_idx].singer_id or sentence.singer_id
+
+        self.sentences.insert(line_idx + 1, new_sentence)
+        self._update_timestamp()
+
     # ==================== 全局查询 ====================
 
     def get_all_timestamps(self) -> List[tuple[str, int, int, int, int]]:

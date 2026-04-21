@@ -243,6 +243,10 @@ class TimingService:
             key=lambda p: (p.line_idx, p.char_idx, p.checkpoint_idx)
         )
 
+    def rebuild_global_checkpoints(self) -> None:
+        """公开封装：重建全局 Checkpoint 序列。"""
+        self._rebuild_global_checkpoints()
+
     def _get_current_checkpoint_info(self) -> tuple:
         """获取当前 checkpoint 的详细信息
 

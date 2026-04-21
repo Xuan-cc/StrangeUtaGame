@@ -45,10 +45,13 @@ from qfluentwidgets import (
     SimpleCardWidget,
     ToolButton,
     PrimaryToolButton,
+    RoundMenu,
+    Action,
 )
 
-from typing import Optional, List
+from typing import Optional, List, Callable
 from pathlib import Path
+from copy import deepcopy
 import time
 
 from strange_uta_game.backend.domain import (
@@ -61,7 +64,36 @@ from strange_uta_game.backend.application import (
     CheckpointPosition,
     TimingService,
 )
+from strange_uta_game.backend.application.commands.base import Command
 from strange_uta_game.backend.infrastructure.audio import AudioLoadError
+
+
+class _SentenceSnapshotCommand(Command):
+    """基于句子列表快照的结构编辑撤销命令。"""
+
+    def __init__(
+        self,
+        project: Project,
+        before_sentences: List[Sentence],
+        after_sentences: List[Sentence],
+        description: str,
+    ):
+        self._project = project
+        self._before_sentences = before_sentences
+        self._after_sentences = after_sentences
+        self._description = description
+
+    def execute(self) -> None:
+        self._project.sentences = deepcopy(self._after_sentences)
+        self._project._update_timestamp()
+
+    def undo(self) -> None:
+        self._project.sentences = deepcopy(self._before_sentences)
+        self._project._update_timestamp()
+
+    @property
+    def description(self) -> str:
+        return self._description
 
 
 # ──────────────────────────────────────────────
@@ -93,14 +125,12 @@ class TransportBar(QFrame):
         # 停止
         self.btn_stop = ToolButton(FIF.CANCEL, self)
         self.btn_stop.setFixedSize(40, 40)
-        self.btn_stop.setIconSize(QSize(18, 18))
         self.btn_stop.clicked.connect(self.stop_clicked.emit)
         layout.addWidget(self.btn_stop)
 
         # 播放/暂停
         self.btn_play = PrimaryToolButton(FIF.PLAY, self)
         self.btn_play.setFixedSize(40, 40)
-        self.btn_play.setIconSize(QSize(18, 18))
         self.btn_play.clicked.connect(self._on_play_clicked)
         layout.addWidget(self.btn_play)
 
@@ -318,12 +348,21 @@ class KaraokePreview(QWidget):
     singer_change_requested = pyqtSignal(
         int, int, int, str
     )  # line_idx, start_char, end_char, singer_id
+    delete_chars_requested = pyqtSignal(int, int, int)
+    insert_space_after_requested = pyqtSignal(int, int)
+    merge_line_up_requested = pyqtSignal(int)
+    delete_line_requested = pyqtSignal(int)
+    insert_blank_line_requested = pyqtSignal(int)
+    add_checkpoint_requested = pyqtSignal(int, int)
+    remove_checkpoint_requested = pyqtSignal(int, int)
+    toggle_sentence_end_requested = pyqtSignal(int, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._project: Optional[Project] = None
         self._current_line_idx = 0
         self._current_char_idx = 0
+        self._current_checkpoint_idx: Optional[int] = None
         self._current_time_ms = 0
         self._render_offset_ms = 0
         self._visible_lines = 7  # 视口内可见行数（决定行高）
@@ -409,10 +448,9 @@ class KaraokePreview(QWidget):
         click_x = int(a0.position().x())
         click_y = int(a0.position().y())
 
-        # 右键点击 → 打开演唱者选择菜单（如果有选中范围）
+        # 右键点击 → 打开上下文菜单
         if a0.button() == Qt.MouseButton.RightButton:
-            if self._sel_line_idx >= 0 and self._sel_start_char >= 0:
-                self._show_singer_context_menu(a0.globalPosition().toPoint())
+            self._show_context_menu(a0.globalPosition().toPoint(), click_x, click_y)
             return
 
         # 优先检查 checkpoint 标记的点击
@@ -468,31 +506,133 @@ class KaraokePreview(QWidget):
         if a0 and a0.button() == Qt.MouseButton.LeftButton:
             self._sel_dragging = False
 
-    def _show_singer_context_menu(self, global_pos):
-        """显示演唱者选择右键菜单"""
-        if not self._project or not self._project.singers:
+    def _show_context_menu(self, global_pos, click_x: int, click_y: int):
+        """显示字符上下文菜单。"""
+        if not self._project or not self._project.sentences:
             return
 
-        from qfluentwidgets import RoundMenu, Action
+        target_line_idx = self._current_line_idx
+        target_char_idx = self._current_char_idx
+        for char_rect, line_idx, char_idx in self._char_hitboxes:
+            if char_rect.contains(click_x, click_y):
+                target_line_idx = line_idx
+                target_char_idx = char_idx
+                self._current_line_idx = line_idx
+                self._current_char_idx = char_idx
+                break
+
+        if target_line_idx < 0 or target_line_idx >= len(self._project.sentences):
+            return
+
+        sentence = self._project.sentences[target_line_idx]
+        if target_char_idx < 0:
+            target_char_idx = 0
+        if sentence.characters and target_char_idx >= len(sentence.characters):
+            target_char_idx = len(sentence.characters) - 1
+
+        in_selection = False
+        if (
+            self._sel_line_idx == target_line_idx
+            and self._sel_start_char >= 0
+            and self._sel_end_char >= 0
+        ):
+            sel_start = min(self._sel_start_char, self._sel_end_char)
+            sel_end = max(self._sel_start_char, self._sel_end_char)
+            in_selection = sel_start <= target_char_idx <= sel_end
+        else:
+            sel_start = target_char_idx
+            sel_end = target_char_idx
+
+        delete_start = sel_start if in_selection else target_char_idx
+        delete_end = sel_end + 1 if in_selection else target_char_idx + 1
 
         menu = RoundMenu(parent=self)
-        menu.addAction(Action("设置选中字符的演唱者：", menu))
+
+        delete_action = Action("删除字符", menu)
+        delete_action.triggered.connect(
+            lambda checked=False: self.delete_chars_requested.emit(
+                target_line_idx, delete_start, delete_end
+            )
+        )
+        menu.addAction(delete_action)
+
+        insert_space_action = Action("在此插入空格", menu)
+        insert_space_action.triggered.connect(
+            lambda checked=False: self.insert_space_after_requested.emit(
+                target_line_idx, target_char_idx
+            )
+        )
+        menu.addAction(insert_space_action)
         menu.addSeparator()
 
-        start = min(self._sel_start_char, self._sel_end_char)
-        end = max(self._sel_start_char, self._sel_end_char)
-        line_idx = self._sel_line_idx
+        merge_up_action = Action("合并上一行", menu)
+        merge_up_action.setEnabled(target_line_idx > 0)
+        merge_up_action.triggered.connect(
+            lambda checked=False: self.merge_line_up_requested.emit(target_line_idx)
+        )
+        menu.addAction(merge_up_action)
+
+        delete_line_action = Action("删除本行", menu)
+        delete_line_action.triggered.connect(
+            lambda checked=False: self.delete_line_requested.emit(target_line_idx)
+        )
+        menu.addAction(delete_line_action)
+
+        insert_blank_line_action = Action("在此插入空行", menu)
+        insert_blank_line_action.triggered.connect(
+            lambda checked=False: self.insert_blank_line_requested.emit(target_line_idx)
+        )
+        menu.addAction(insert_blank_line_action)
+        menu.addSeparator()
+
+        add_checkpoint_action = Action("增加节奏点", menu)
+        add_checkpoint_action.triggered.connect(
+            lambda checked=False: self.add_checkpoint_requested.emit(
+                target_line_idx, target_char_idx
+            )
+        )
+        menu.addAction(add_checkpoint_action)
+
+        remove_checkpoint_action = Action("减少节奏点", menu)
+        remove_checkpoint_action.triggered.connect(
+            lambda checked=False: self.remove_checkpoint_requested.emit(
+                target_line_idx, target_char_idx
+            )
+        )
+        menu.addAction(remove_checkpoint_action)
+
+        toggle_sentence_end_action = Action("设置/取消句尾", menu)
+        toggle_sentence_end_action.triggered.connect(
+            lambda checked=False: self.toggle_sentence_end_requested.emit(
+                target_line_idx, target_char_idx
+            )
+        )
+        menu.addAction(toggle_sentence_end_action)
+        menu.addSeparator()
+
+        singer_start = delete_start if in_selection else target_char_idx
+        singer_end = delete_end - 1 if in_selection else target_char_idx
+        singer_menu = RoundMenu("设置演唱者", self)
+        default_singer = self._project.get_default_singer()
+        default_action = Action("默认演唱者", singer_menu)
+        default_action.triggered.connect(
+            lambda checked=False: self.singer_change_requested.emit(
+                target_line_idx, singer_start, singer_end, default_singer.id
+            )
+        )
+        singer_menu.addAction(default_action)
+        singer_menu.addSeparator()
 
         for singer in self._project.singers:
-            action = Action(f"{singer.name}", menu)
-            action.setData(singer.id)
+            action = Action(singer.name, singer_menu)
             action.triggered.connect(
-                lambda checked, sid=singer.id: self.singer_change_requested.emit(
-                    line_idx, start, end, sid
+                lambda checked=False, sid=singer.id: self.singer_change_requested.emit(
+                    target_line_idx, singer_start, singer_end, sid
                 )
             )
-            menu.addAction(action)
+            singer_menu.addAction(action)
 
+        menu.addMenu(singer_menu)
         menu.exec(global_pos)
 
     def _get_sentence_render_data(
@@ -684,11 +824,11 @@ class KaraokePreview(QWidget):
 
             # 预计算每个字符的 per-char singer 颜色（从 Character.singer_id 读取）
             _char_singer_colors: dict = {}  # char_idx -> QColor
-            for ci, ch in enumerate(line.characters):
-                if ch.singer_id and ch.singer_id != (line.singer_id or ""):
-                    ch_singer = self._project.get_singer(ch.singer_id)
-                    if ch_singer and ch_singer.color:
-                        _char_singer_colors[ci] = QColor(ch_singer.color)
+            default_singer = self._project.get_default_singer()
+            for ci, char in enumerate(line.characters):
+                singer_obj = self._project.get_singer(char.singer_id)
+                singer_color = singer_obj.color if singer_obj and singer_obj.color else default_singer.color
+                _char_singer_colors[ci] = QColor(singer_color)
 
             if is_current:
                 main_font = font_current
@@ -958,6 +1098,14 @@ class KaraokePreview(QWidget):
                     for cp_idx, (marker_char, has_timed) in enumerate(markers):
                         char_color = _char_singer_colors.get(char_pos, highlight_color)
                         color = char_color if has_timed else QColor("#ccc")
+                        if (
+                            is_current
+                            and char_pos == self._current_char_idx
+                            and cp_idx == self._current_checkpoint_idx
+                        ):
+                            h, s, v, a = char_color.getHsv()
+                            if h >= 0:
+                                color = QColor.fromHsv((h + 180) % 360, s, v, a)
                         painter.setPen(color)
 
                         mw = fm_checkpoint.horizontalAdvance(marker_char)
@@ -1121,28 +1269,14 @@ class ModifyCharacterDialog(QDialog):
         self.accept()
 
     def _register_to_dictionary(self, word: str, ruby_parts: list):
-        """Register word to user dictionary."""
+        """Register word to user dictionary (dedup + top-insert)."""
         try:
             from strange_uta_game.frontend.settings.settings_interface import (
                 AppSettings,
             )
 
-            settings = AppSettings()
-            config_dir = settings.get_config_dir()
-            dict_path = config_dir / "dictionary.json"
-            import json
-
-            if dict_path.exists():
-                data = json.loads(dict_path.read_text(encoding="utf-8"))
-            else:
-                data = []
             reading = ",".join(r for r in ruby_parts if r)
-            # Add to top of dictionary (highest priority)
-            entry = {"word": word, "reading": reading}
-            data.insert(0, entry)
-            dict_path.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            AppSettings().register_dictionary_word(word, reading)
         except Exception:
             pass
 
@@ -1546,6 +1680,24 @@ class EditorInterface(QWidget):
         self.preview.char_edit_requested.connect(self._on_char_edit_requested)
         self.preview.seek_to_char_requested.connect(self._on_seek_to_char)
         self.preview.singer_change_requested.connect(self._on_singer_change_selection)
+        self.preview.delete_chars_requested.connect(self._on_delete_chars_requested)
+        self.preview.insert_space_after_requested.connect(
+            self._on_insert_space_after_requested
+        )
+        self.preview.merge_line_up_requested.connect(self._on_merge_line_up_requested)
+        self.preview.delete_line_requested.connect(self._on_delete_line_requested)
+        self.preview.insert_blank_line_requested.connect(
+            self._on_insert_blank_line_requested
+        )
+        self.preview.add_checkpoint_requested.connect(
+            self._on_add_checkpoint_requested
+        )
+        self.preview.remove_checkpoint_requested.connect(
+            self._on_remove_checkpoint_requested
+        )
+        self.preview.toggle_sentence_end_requested.connect(
+            self._on_toggle_sentence_end_requested
+        )
         layout.addWidget(self.preview, stretch=1)
 
         # 5) 底部打轴操作栏
@@ -1681,7 +1833,7 @@ class EditorInterface(QWidget):
             "nav_next_line": "RIGHT",
             "timestamp_up": "ALT+UP",
             "timestamp_down": "ALT+DOWN",
-            "cycle_checkpoint": "Tab",
+            "cycle_checkpoint": "ALT+RIGHT",
         }
 
         def _collect_map(mode_key: str) -> tuple[dict, dict]:
@@ -1703,6 +1855,8 @@ class EditorInterface(QWidget):
 
         self._key_map_timing, timing_actions = _collect_map("timing_mode")
         self._key_map_edit, edit_actions = _collect_map("edit_mode")
+        for key_name in ("SPACE", "Z", "X"):
+            self._key_map_edit.pop(key_name, None)
         # 兼容旧字段名：当前活动 map（按播放状态切换；初始为编辑模式）
         self._key_map = self._key_map_edit
         # 应用默认速度
@@ -1760,6 +1914,7 @@ class EditorInterface(QWidget):
             if key:
                 first_key = key.split(",")[0].strip()
                 parts.append(f"{first_key}{label}")
+        parts.append("Alt+→ 切换字内节奏点")
         if hasattr(self, "lbl_shortcut_hint"):
             self.lbl_shortcut_hint.setText(" ".join(parts))
         # 缓存以便模式切换时再次调用（无需重读设置）
@@ -2509,6 +2664,185 @@ class EditorInterface(QWidget):
         self._update_line_info()
         self.refresh_lyric_display()
 
+    def _rebuild_checkpoints(self):
+        if self._timing_service:
+            if hasattr(self._timing_service, "rebuild_global_checkpoints"):
+                self._timing_service.rebuild_global_checkpoints()
+            else:
+                self._timing_service._rebuild_global_checkpoints()
+
+    def _sync_after_structure_change(
+        self,
+        change_type: str = "lyrics",
+        focus_line_idx: Optional[int] = None,
+        focus_char_idx: Optional[int] = None,
+        checkpoint_idx: Optional[int] = None,
+    ):
+        if not self._project:
+            return
+
+        self._rebuild_checkpoints()
+
+        total_lines = len(self._project.sentences)
+        if total_lines == 0:
+            self._current_line_idx = 0
+            self.preview._current_line_idx = 0
+            self.preview._current_char_idx = 0
+            self.preview._current_checkpoint_idx = None
+            self.refresh_lyric_display()
+            self._update_time_tags_display()
+            self._update_status()
+            return
+
+        line_idx = focus_line_idx if focus_line_idx is not None else self._current_line_idx
+        line_idx = max(0, min(line_idx, total_lines - 1))
+        sentence = self._project.sentences[line_idx]
+
+        if sentence.characters:
+            char_idx = focus_char_idx if focus_char_idx is not None else self.preview._current_char_idx
+            char_idx = max(0, min(char_idx, len(sentence.characters) - 1))
+        else:
+            char_idx = 0
+
+        self.preview._current_checkpoint_idx = checkpoint_idx
+        self.preview.set_current_position(line_idx, char_idx)
+        self._current_line_idx = line_idx
+
+        if self._timing_service and sentence.characters:
+            target_cp = checkpoint_idx if checkpoint_idx is not None else 0
+            self._timing_service.move_to_checkpoint(line_idx, char_idx, target_cp)
+
+        self.refresh_lyric_display()
+        self._update_time_tags_display()
+        self._update_status()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify(change_type)
+
+    def _execute_structural_edit(
+        self,
+        description: str,
+        mutator: Callable[[], Optional[tuple[int, int, Optional[int], str]]],
+    ) -> bool:
+        if not self._project:
+            return False
+
+        before_sentences = deepcopy(self._project.sentences)
+        result = mutator()
+        if result is None:
+            return False
+
+        after_sentences = deepcopy(self._project.sentences)
+        command_manager = None
+        if self._timing_service:
+            command_manager = getattr(self._timing_service, "_command_manager", None)
+        if command_manager is not None:
+            command = _SentenceSnapshotCommand(
+                self._project,
+                before_sentences,
+                after_sentences,
+                description,
+            )
+            command_manager.execute(command)
+
+        focus_line_idx, focus_char_idx, checkpoint_idx, change_type = result
+        self._sync_after_structure_change(
+            change_type=change_type,
+            focus_line_idx=focus_line_idx,
+            focus_char_idx=focus_char_idx,
+            checkpoint_idx=checkpoint_idx,
+        )
+        return True
+
+    def _delete_char_range(
+        self, line_idx: int, start_idx: int, end_idx: int
+    ) -> Optional[tuple[int, int, Optional[int], str]]:
+        if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
+            return None
+
+        sentence = self._project.sentences[line_idx]
+        if not sentence.characters:
+            return None
+
+        start = max(0, min(start_idx, len(sentence.characters) - 1))
+        end = max(start + 1, min(end_idx, len(sentence.characters)))
+        delete_count = end - start
+        for _ in range(delete_count):
+            became_empty = sentence.delete_character(start)
+            if became_empty:
+                break
+
+        if not sentence.characters:
+            self._project.delete_line(line_idx)
+            if not self._project.sentences:
+                return 0, 0, None, "lyrics"
+            new_line_idx = max(0, min(line_idx, len(self._project.sentences) - 1))
+            new_sentence = self._project.sentences[new_line_idx]
+            new_char_idx = 0 if not new_sentence.characters else min(start, len(new_sentence.characters) - 1)
+            return new_line_idx, new_char_idx, 0, "lyrics"
+
+        new_char_idx = min(start, len(sentence.characters) - 1)
+        return line_idx, new_char_idx, 0, "lyrics"
+
+    def _insert_line_break_at_current(self):
+        if not self._project:
+            return
+        line_idx = self._current_line_idx
+        if line_idx < 0 or line_idx >= len(self._project.sentences):
+            return
+        sentence = self._project.sentences[line_idx]
+        char_idx = self.preview._current_char_idx
+        if char_idx < 0 or char_idx >= len(sentence.characters):
+            return
+
+        project = self._project
+
+        self._execute_structural_edit(
+            "插入换行",
+            lambda: (
+                project.insert_line_break(line_idx, char_idx)
+                or (line_idx + 1, 0, 0, "lyrics")
+            ),
+        )
+
+    def _delete_current_selection_or_char(self):
+        if not self._project:
+            return
+
+        line_idx = self._current_line_idx
+        start = self.preview._current_char_idx
+        end = start + 1
+        if (
+            self.preview._sel_line_idx == line_idx
+            and self.preview._sel_start_char >= 0
+            and self.preview._sel_end_char >= 0
+        ):
+            start = min(self.preview._sel_start_char, self.preview._sel_end_char)
+            end = max(self.preview._sel_start_char, self.preview._sel_end_char) + 1
+
+        self._execute_structural_edit(
+            "删除字符",
+            lambda: self._delete_char_range(line_idx, start, end),
+        )
+
+    def _toggle_sentence_end_at_current(self):
+        if not self._project:
+            return
+        line_idx = self._current_line_idx
+        if line_idx < 0 or line_idx >= len(self._project.sentences):
+            return
+        sentence = self._project.sentences[line_idx]
+        char_idx = self.preview._current_char_idx
+        if char_idx < 0 or char_idx >= len(sentence.characters):
+            return
+
+        self._execute_structural_edit(
+            "切换句尾",
+            lambda: (
+                sentence.toggle_sentence_end(char_idx)
+                or (line_idx, char_idx, 0, "checkpoints")
+            ),
+        )
+
     def _change_checkpoint(self, delta: int):
         """增加或减少当前字符的节奏点数量。"""
         if not self._project:
@@ -2521,18 +2855,17 @@ class EditorInterface(QWidget):
         if char_idx >= len(sentence.characters):
             return
 
-        ch = sentence.characters[char_idx]
-        ch.check_count = max(0, ch.check_count + delta)
-        if len(ch.timestamps) > ch.check_count:
-            ch.timestamps = ch.timestamps[: ch.check_count]
-            ch.push_to_ruby()
-        # 重建 timing_service 的全局 checkpoint 列表
-        if self._timing_service:
-            self._timing_service._rebuild_global_checkpoints()
-        self.refresh_lyric_display()
-        self._update_status()
-        if hasattr(self, "_store") and self._store:
-            self._store.notify("checkpoints")
+        def _mutate():
+            if delta > 0:
+                sentence.add_checkpoint(char_idx)
+            else:
+                sentence.remove_checkpoint(char_idx)
+            cp_idx = self.preview._current_checkpoint_idx
+            if cp_idx is not None and delta < 0:
+                cp_idx = min(cp_idx, sentence.characters[char_idx].check_count)
+            return line_idx, char_idx, cp_idx if cp_idx is not None else 0, "checkpoints"
+
+        self._execute_structural_edit("调整节奏点", _mutate)
 
     def _toggle_line_end(self):
         """F6 切换当前字符的句尾标记 (is_line_end)。
@@ -2549,19 +2882,13 @@ class EditorInterface(QWidget):
         if char_idx >= len(sentence.characters):
             return
 
-        ch = sentence.characters[char_idx]
-        new_is_sentence_end = not ch.is_sentence_end
-
-        if not new_is_sentence_end:
-            ch.clear_sentence_end_ts()
-
-        ch.is_sentence_end = new_is_sentence_end
-        if self._timing_service:
-            self._timing_service._rebuild_global_checkpoints()
-        self.refresh_lyric_display()
-        self._update_status()
-        if hasattr(self, "_store") and self._store:
-            self._store.notify("checkpoints")
+        self._execute_structural_edit(
+            "切换句尾",
+            lambda: (
+                sentence.toggle_sentence_end(char_idx)
+                or (line_idx, char_idx, 0, "checkpoints")
+            ),
+        )
 
     def _toggle_word_join(self):
         """F3 连词/取消连词 — toggle 当前字符的 linked_to_next 标记"""
@@ -2642,6 +2969,113 @@ class EditorInterface(QWidget):
             self._update_time_tags_display()
             self._update_status()
 
+    def _on_delete_chars_requested(self, line_idx: int, start: int, end: int):
+        self._execute_structural_edit(
+            "删除字符",
+            lambda: self._delete_char_range(line_idx, start, end),
+        )
+
+    def _on_insert_space_after_requested(self, line_idx: int, char_idx: int):
+        if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
+            return
+        project = self._project
+
+        def _mutate():
+            sentence = project.sentences[line_idx]
+            if char_idx < 0 or char_idx >= len(sentence.characters):
+                return None
+            ref_char = sentence.characters[char_idx]
+            new_char = Character(
+                char=" ",
+                check_count=1,
+                singer_id=ref_char.singer_id or sentence.singer_id,
+            )
+            sentence.insert_character(char_idx + 1, new_char)
+            return line_idx, char_idx + 1, 0, "lyrics"
+
+        self._execute_structural_edit("插入空格", _mutate)
+
+    def _on_merge_line_up_requested(self, line_idx: int):
+        if not self._project:
+            return
+        project = self._project
+        self._execute_structural_edit(
+            "合并上一行",
+            lambda: (
+                (
+                    line_idx - 1,
+                    max(0, len(project.sentences[line_idx - 1].characters) - 1),
+                    0,
+                    "lyrics",
+                )
+                if project.merge_line_into_previous(line_idx)
+                else None
+            ),
+        )
+
+    def _on_delete_line_requested(self, line_idx: int):
+        if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
+            return
+        project = self._project
+
+        def _mutate():
+            project.delete_line(line_idx)
+            if not project.sentences:
+                return 0, 0, None, "lyrics"
+            new_line_idx = max(0, min(line_idx, len(project.sentences) - 1))
+            return new_line_idx, 0, 0, "lyrics"
+
+        self._execute_structural_edit("删除本行", _mutate)
+
+    def _on_insert_blank_line_requested(self, line_idx: int):
+        if not self._project:
+            return
+        project = self._project
+
+        self._execute_structural_edit(
+            "插入空行",
+            lambda: ((project.insert_blank_line(line_idx), 0, None, "lyrics")),
+        )
+
+    def _on_add_checkpoint_requested(self, line_idx: int, char_idx: int):
+        if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
+            return
+        project = self._project
+
+        self._execute_structural_edit(
+            "增加节奏点",
+            lambda: (
+                project.sentences[line_idx].add_checkpoint(char_idx)
+                or (line_idx, char_idx, 0, "checkpoints")
+            ),
+        )
+
+    def _on_remove_checkpoint_requested(self, line_idx: int, char_idx: int):
+        if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
+            return
+        project = self._project
+
+        self._execute_structural_edit(
+            "减少节奏点",
+            lambda: (
+                project.sentences[line_idx].remove_checkpoint(char_idx)
+                or (line_idx, char_idx, 0, "checkpoints")
+            ),
+        )
+
+    def _on_toggle_sentence_end_requested(self, line_idx: int, char_idx: int):
+        if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
+            return
+        project = self._project
+
+        self._execute_structural_edit(
+            "切换句尾",
+            lambda: (
+                project.sentences[line_idx].toggle_sentence_end(char_idx)
+                or (line_idx, char_idx, 0, "checkpoints")
+            ),
+        )
+
     # ==================== 键盘 ====================
 
     def keyPressEvent(self, a0: Optional[QKeyEvent]):
@@ -2649,6 +3083,20 @@ class EditorInterface(QWidget):
             return
         key = a0.key()
         modifiers = a0.modifiers()
+        playing = bool(self._timing_service and self._timing_service.is_playing())
+
+        if playing and key == Qt.Key.Key_F4:
+            self._toggle_sentence_end_at_current()
+            a0.accept()
+            return
+        if playing and key == Qt.Key.Key_F5:
+            self._add_checkpoint()
+            a0.accept()
+            return
+        if playing and key == Qt.Key.Key_F6:
+            self._remove_checkpoint()
+            a0.accept()
+            return
 
         # Ctrl 快捷键（系统级，优先处理）
         if modifiers & Qt.KeyboardModifier.ControlModifier:
@@ -2682,6 +3130,10 @@ class EditorInterface(QWidget):
             action = self._default_key_action(key, modifiers)
 
         if action == "tag_now":
+            if not playing:
+                self._add_checkpoint()
+                a0.accept()
+                return
             if a0.isAutoRepeat():
                 a0.ignore()
                 return
@@ -2702,10 +3154,16 @@ class EditorInterface(QWidget):
         elif action == "stop":
             self._on_stop()
         elif action == "seek_back":
+            if not playing:
+                a0.accept()
+                return
             if self._timing_service:
                 cur = self._timing_service.get_position_ms()
                 self._on_seek(max(0, cur - self._rewind_ms))
         elif action == "seek_forward":
+            if not playing:
+                a0.accept()
+                return
             if self._timing_service:
                 cur = self._timing_service.get_position_ms()
                 dur = self._timing_service.get_duration_ms()
@@ -2761,6 +3219,22 @@ class EditorInterface(QWidget):
         elif action == "toggle_line_end":
             if self._project:
                 self._toggle_line_end()
+        elif key == Qt.Key.Key_Backspace and not playing:
+            self._remove_checkpoint()
+            a0.accept()
+            return
+        elif a0.text() in (".", "。"):
+            self._toggle_sentence_end_at_current()
+            a0.accept()
+            return
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._insert_line_break_at_current()
+            a0.accept()
+            return
+        elif key == Qt.Key.Key_Delete:
+            self._delete_current_selection_or_char()
+            a0.accept()
+            return
         else:
             super().keyPressEvent(a0)
 
@@ -2774,6 +3248,9 @@ class EditorInterface(QWidget):
         if action is None:
             action = self._default_key_action(key, modifiers)
         if action == "tag_now":
+            if not (self._timing_service and self._timing_service.is_playing()):
+                a0.accept()
+                return
             if a0.isAutoRepeat():
                 a0.ignore()
                 return
@@ -2964,11 +3441,13 @@ class EditorInterface(QWidget):
     def _apply_checkpoint_position(self, position: CheckpointPosition):
         if not self._project or not self._project.sentences:
             self._current_line_idx = 0
+            self.preview._current_checkpoint_idx = None
             self._update_line_info()
             return
 
         line_idx = max(0, min(position.line_idx, len(self._project.sentences) - 1))
         self._current_line_idx = line_idx
+        self.preview._current_checkpoint_idx = position.checkpoint_idx
         self.preview.set_current_position(line_idx, position.char_idx)
         self._update_line_info()
 

@@ -375,6 +375,52 @@ class AppSettings:
         """保存用户词典条目到 dictionary.json。"""
         self._save_json(self._dict_path, entries)
 
+    def register_dictionary_word(self, word: str, reading: str) -> None:
+        """新增或更新单个词条：如已存在则删除旧条目，将新条目置顶（最高优先级）。"""
+        word = (word or "").strip()
+        reading = (reading or "").strip()
+        if not word:
+            return
+        entries = self.load_dictionary()
+        entries = [e for e in entries if (e.get("word") or "").strip() != word]
+        entries.insert(0, {"enabled": True, "word": word, "reading": reading})
+        self.save_dictionary(entries)
+
+    def import_rl_dictionary(self, text: str) -> tuple:
+        """导入 RL 字典文本：逆序遍历，重复条目以新导入覆盖并置顶。
+
+        Returns:
+            (added, updated): 新增数量与覆盖数量。
+        """
+        new_entries = _parse_rl_dictionary(text)
+        if not new_entries:
+            return (0, 0)
+        entries = self.load_dictionary()
+        index = {(e.get("word") or "").strip(): i for i, e in enumerate(entries)}
+        added = 0
+        updated = 0
+        # 逆序遍历：使原文件顺序靠前的词条最终置顶
+        for entry in reversed(new_entries):
+            word = (entry.get("word") or "").strip()
+            if not word:
+                continue
+            if word in index:
+                # 覆盖旧条目：删除后插入顶部
+                old_idx = index[word]
+                entries.pop(old_idx)
+                updated += 1
+            else:
+                added += 1
+            entries.insert(0, {
+                "enabled": True,
+                "word": word,
+                "reading": entry.get("reading", ""),
+            })
+            # 重建索引（位置已变）
+            index = {(e.get("word") or "").strip(): i for i, e in enumerate(entries)}
+        self.save_dictionary(entries)
+        return (added, updated)
+
     def load_singer_presets(self) -> list:
         """从 singers.json 加载演唱者预设。"""
         return self._load_json(self._singers_path, [])
@@ -922,25 +968,35 @@ class DictionaryEditDialog(QDialog):
             )
             return
 
-        # 获取现有词汇集合，避免重复
-        existing_words = set()
-        for row in range(self._table.rowCount()):
-            item = self._table.item(row, 1)
-            if item:
-                existing_words.add(item.text().strip())
+        # 逆序导入：重复条目以新导入覆盖并置顶（最高优先级）
+        # word -> row 索引，随插入/删除动态重建
+        def _rebuild_index() -> dict:
+            idx = {}
+            for r in range(self._table.rowCount()):
+                item = self._table.item(r, 1)
+                if item:
+                    idx[item.text().strip()] = r
+            return idx
 
+        index = _rebuild_index()
         added = 0
-        for entry in new_entries:
+        updated = 0
+        for entry in reversed(new_entries):
             word = entry["word"]
-            if word not in existing_words:
-                # 新条目插入到顶部
-                self._insert_row_at(0, True, word, entry["reading"])
-                existing_words.add(word)
+            reading = entry["reading"]
+            if word in index:
+                # 覆盖旧条目：删除后插入顶部
+                self._table.removeRow(index[word])
+                updated += 1
+            else:
                 added += 1
+            self._insert_row_at(0, True, word, reading)
+            index = _rebuild_index()
 
+        self._table.scrollToTop()
         InfoBar.success(
             title="导入完成",
-            content=f"已导入 {added} 个新词条（共 {len(new_entries)} 个，跳过 {len(new_entries) - added} 个重复）",
+            content=f"新增 {added} 条，覆盖 {updated} 条（共 {len(new_entries)} 条，已全部置顶）",
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -1570,9 +1626,23 @@ class SettingsInterface(ScrollArea):
         self._auto_save_timer.start()
 
     def _do_auto_save(self):
-        """执行自动保存：收集设置 → 保存到磁盘 → 通知变更。"""
-        # 先检测快捷键冲突并自动解决
-        self._resolve_shortcut_conflicts()
+        """执行自动保存：收集设置 → 保存到磁盘 → 通知变更。
+
+        #4：若快捷键冲突自动解除，逐条以 InfoBar 提示占用方功能名。
+        #11：切换页面时 flush 未完成的 debounce，确保设置立即固化。
+        """
+        # 先检测快捷键冲突并自动解决（UI 状态已同步变更）
+        conflicts = self._resolve_shortcut_conflicts()
+        for msg in conflicts:
+            InfoBar.warning(
+                title="快捷键冲突",
+                content=msg,
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
         self._collect_settings()
         self._settings.save()
         self.settings_changed.emit()
@@ -1788,9 +1858,19 @@ class SettingsInterface(ScrollArea):
         super().keyPressEvent(a0)
 
     def hideEvent(self, a0):
-        """设置界面隐藏时关闭校准弹窗并释放资源。"""
+        """设置界面隐藏时关闭校准弹窗并释放资源。
+
+        #11：切换页面即保存——若 500ms debounce 还未到期，立即 flush。
+        """
         if self._calibration_dialog is not None:
             self._calibration_dialog.close()
+        # flush 未完成的自动保存
+        try:
+            if self._auto_save_timer.isActive():
+                self._auto_save_timer.stop()
+                self._do_auto_save()
+        except Exception:
+            pass
         super().hideEvent(a0)
 
     # ── Auto Check ──
@@ -1979,16 +2059,14 @@ class SettingsInterface(ScrollArea):
     def _init_ui_group(self):
         self.ui_group = SettingCardGroup("界面设定", self.scrollWidget)
 
+        # #3：主题提示拼接到主题说明文案末尾，不再占用独立一行
         self.card_theme = ComboSettingCard(
             FIF.BRUSH,
             "主题",
-            "切换应用主题颜色方案",
+            "切换应用主题颜色方案（暂仅支持浅色主题，自定义配色将在后续版本更新）",
             items=["浅色"],
             parent=self.ui_group,
         )
-        self.theme_hint = QLabel("暂仅支持浅色主题，自定义配色将在后续版本更新", self.ui_group)
-        self.theme_hint.setWordWrap(True)
-        self.theme_hint.setStyleSheet("color: rgba(0, 0, 0, 0.6);")
         self.card_font_size = SpinSettingCard(
             FIF.FONT_SIZE,
             "歌词字体大小",
@@ -2001,7 +2079,6 @@ class SettingsInterface(ScrollArea):
         )
 
         self.ui_group.addSettingCard(self.card_theme)
-        self.ui_group.layout().addWidget(self.theme_hint)
         self.ui_group.addSettingCard(self.card_font_size)
         self.expandLayout.addWidget(self.ui_group)
 
@@ -2040,27 +2117,38 @@ class SettingsInterface(ScrollArea):
     # ── 快捷键 ──
 
     # 统一维护两种模式下的动作元数据，避免 UI/加载/保存三处重复写死。
-    # 结构: (action_key, 图标, 标题, 描述, 默认按键)
-    _SHORTCUT_ACTIONS: list[tuple[str, object, str, str, str]] = [
-        ("tag_now", FIF.PLAY, "打轴键", "打轴操作的按键", "Space"),
-        ("play_pause", FIF.PLAY, "播放/暂停", "切换播放和暂停", "A"),
-        ("stop", FIF.PAUSE, "停止", "停止播放", "S"),
-        ("seek_back", FIF.LEFT_ARROW, "后退", "后退跳转", "Z"),
-        ("seek_forward", FIF.CHEVRON_RIGHT, "前进", "前进跳转", "X"),
-        ("speed_down", FIF.SPEED_OFF, "减速", "降低播放速度", "Q"),
-        ("speed_up", FIF.SPEED_HIGH, "加速", "提高播放速度", "W"),
-        ("edit_ruby", FIF.EDIT, "注音编辑", "编辑当前字符注音", "F2"),
-        ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量", "F4"),
-        ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量（最小为0）", "F5"),
-        ("volume_up", FIF.VOLUME, "音量增大", "增大播放音量", "UP"),
-        ("volume_down", FIF.MUTE, "音量减小", "减小播放音量", "DOWN"),
-        ("nav_prev_line", FIF.LEFT_ARROW, "上一行", "移动到上一歌词行", "LEFT"),
-        ("nav_next_line", FIF.RIGHT_ARROW, "下一行", "移动到下一歌词行", "RIGHT"),
-        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记", "F6"),
-        ("toggle_word_join", FIF.LINK, "连词", "连词/取消连词", "F3"),
-        ("timestamp_up", FIF.UP, "时间戳+步长", "增加选中节奏点时间戳", "ALT+UP"),
-        ("timestamp_down", FIF.DOWN, "时间戳-步长", "减少选中节奏点时间戳", "ALT+DOWN"),
-        ("cycle_checkpoint", FIF.SYNC, "切换节奏点", "在当前字符的节奏点之间循环切换", "Tab"),
+    # 结构: (action_key, 图标, 标题, 描述, 默认按键(打轴模式), 默认按键(编辑模式), 作用域)
+    # 作用域 scope:
+    #   "both"         两模式下按键相同，UI 只渲染一次
+    #   "timing_only"  仅打轴模式可用，UI 渲染一次并标注【仅打轴】
+    #   "edit_only"    仅编辑模式可用，UI 渲染一次并标注【仅编辑】
+    #   "split"        两模式下按键不同，UI 渲染两张卡片
+    _SHORTCUT_ACTIONS: list[tuple[str, object, str, str, str, str, str]] = [
+        # (key, icon, title, content, default_timing, default_edit, scope)
+        # — 两模式通用 —
+        ("play_pause", FIF.PLAY, "播放/暂停", "切换播放和暂停", "A", "A", "both"),
+        ("stop", FIF.PAUSE, "停止", "停止播放", "S", "S", "both"),
+        ("speed_down", FIF.SPEED_OFF, "减速", "降低播放速度", "Q", "Q", "both"),
+        ("speed_up", FIF.SPEED_HIGH, "加速", "提高播放速度", "W", "W", "both"),
+        ("volume_up", FIF.VOLUME, "音量增大", "增大播放音量", "UP", "UP", "both"),
+        ("volume_down", FIF.MUTE, "音量减小", "减小播放音量", "DOWN", "DOWN", "both"),
+        ("nav_prev_line", FIF.LEFT_ARROW, "上一行", "移动到上一歌词行", "LEFT", "LEFT", "both"),
+        ("nav_next_line", FIF.RIGHT_ARROW, "下一行", "移动到下一歌词行", "RIGHT", "RIGHT", "both"),
+        ("timestamp_up", FIF.UP, "时间戳+步长", "增加选中节奏点时间戳", "ALT+UP", "ALT+UP", "both"),
+        ("timestamp_down", FIF.DOWN, "时间戳-步长", "减少选中节奏点时间戳", "ALT+DOWN", "ALT+DOWN", "both"),
+        ("cycle_checkpoint", FIF.SYNC, "切换字内节奏点", "在当前字符的多个节奏点之间循环切换（Alt+→）", "ALT+RIGHT", "ALT+RIGHT", "both"),
+        ("edit_ruby", FIF.EDIT, "注音编辑", "编辑当前字符注音", "F2", "F2", "both"),
+        ("toggle_word_join", FIF.LINK, "连词", "连词/取消连词", "F3", "F3", "both"),
+        # — 仅打轴模式 —
+        ("tag_now", FIF.PLAY, "打轴键", "打轴操作的按键【仅打轴模式】", "Space", "", "timing_only"),
+        ("seek_back", FIF.LEFT_ARROW, "后退", "后退跳转【仅打轴模式】", "Z", "", "timing_only"),
+        ("seek_forward", FIF.CHEVRON_RIGHT, "前进", "前进跳转【仅打轴模式】", "X", "", "timing_only"),
+        # — 两模式下按键不同 —
+        ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量（打轴 F5 / 编辑 Space）", "F5", "Space", "split"),
+        ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量（打轴 F6 / 编辑 Backspace）", "F6", "Backspace", "split"),
+        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记（打轴 F4 / 编辑 句号）", "F4", ".", "split"),
+        ("break_line_here", FIF.RETURN, "在此处换行", "在当前字符后插入换行", "Return", "Return", "both"),
+        ("delete_char", FIF.DELETE, "删除字符", "删除选中字符或当前字符（删行尾时行合并）", "Delete", "Delete", "both"),
     ]
 
     # 两种模式的中文标签，供 UI 标题与冲突提示使用
@@ -2070,27 +2158,73 @@ class SettingsInterface(ScrollArea):
     ]
 
     def _init_shortcut_group(self):
-        # 为两种模式分别创建独立的 SettingCardGroup，避免视觉混淆
-        # self._shortcut_cards[mode_key][action_key] -> ShortcutSettingCard
-        self._shortcut_cards: dict[str, dict[str, ShortcutSettingCard]] = {}
-        self._shortcut_groups: dict[str, SettingCardGroup] = {}
+        """渲染快捷键设置（按作用域合并呈现）。
 
-        for mode_key, mode_label in self._SHORTCUT_MODES:
-            group = SettingCardGroup(f"快捷键 · {mode_label}", self.scrollWidget)
-            self._shortcut_groups[mode_key] = group
-            self._shortcut_cards[mode_key] = {}
-            for action_key, icon, title, content, default_key in self._SHORTCUT_ACTIONS:
+        #10：两模式下表现一致的快捷键合并为一张卡片（描述中标注作用域）；
+        仅单一模式可用的动作标注【仅打轴】/【仅编辑】；
+        两模式按键不同的动作（scope=split）保留两张卡片、标注模式。
+        后台数据结构仍按 mode_key 区分，保证 config 与引擎侧键位映射不变。
+        """
+        # self._shortcut_cards[mode_key][action_key] -> ShortcutSettingCard
+        self._shortcut_cards: dict[str, dict[str, ShortcutSettingCard]] = {
+            mode_key: {} for mode_key, _ in self._SHORTCUT_MODES
+        }
+
+        group = SettingCardGroup("快捷键", self.scrollWidget)
+        self._shortcut_groups: dict[str, SettingCardGroup] = {}  # 兼容旧引用
+        self._shortcut_groups["_merged"] = group
+
+        for (
+            action_key,
+            icon,
+            title,
+            content,
+            default_timing,
+            default_edit,
+            scope,
+        ) in self._SHORTCUT_ACTIONS:
+            if scope == "both":
+                # 单张卡片控制两模式（同键）
                 card = ShortcutSettingCard(
-                    icon, title, content, default_key, parent=group
+                    icon, title, content, default_timing, parent=group
                 )
-                self._shortcut_cards[mode_key][action_key] = card
+                self._shortcut_cards["timing_mode"][action_key] = card
+                self._shortcut_cards["edit_mode"][action_key] = card
                 group.addSettingCard(card)
-            self.expandLayout.addWidget(group)
+            elif scope == "timing_only":
+                card = ShortcutSettingCard(
+                    icon, f"{title}【仅打轴模式】", content, default_timing, parent=group
+                )
+                self._shortcut_cards["timing_mode"][action_key] = card
+                group.addSettingCard(card)
+            elif scope == "edit_only":
+                card = ShortcutSettingCard(
+                    icon, f"{title}【仅编辑模式】", content, default_edit, parent=group
+                )
+                self._shortcut_cards["edit_mode"][action_key] = card
+                group.addSettingCard(card)
+            elif scope == "split":
+                # 两张卡片，分别标注模式
+                card_t = ShortcutSettingCard(
+                    icon, f"{title}【打轴模式】", content, default_timing, parent=group
+                )
+                self._shortcut_cards["timing_mode"][action_key] = card_t
+                group.addSettingCard(card_t)
+                card_e = ShortcutSettingCard(
+                    icon, f"{title}【编辑模式】", content, default_edit, parent=group
+                )
+                self._shortcut_cards["edit_mode"][action_key] = card_e
+                group.addSettingCard(card_e)
+        self.expandLayout.addWidget(group)
 
     def _get_all_shortcut_cards(
         self,
     ) -> list[tuple[str, str, str, "ShortcutSettingCard"]]:
-        """返回 (模式键, 模式标签, 功能名称, 卡片) 列表。"""
+        """返回 (模式键, 模式标签, 功能名称, 卡片) 列表。
+
+        注意：scope=both 的卡片在 timing/edit 两个模式下引用同一对象。
+        冲突检测仍按模式分桶，使用身份去重避免同一卡片被列两次。
+        """
         action_titles = {a[0]: a[2] for a in self._SHORTCUT_ACTIONS}
         result: list[tuple[str, str, str, ShortcutSettingCard]] = []
         for mode_key, mode_label in self._SHORTCUT_MODES:
@@ -2105,14 +2239,21 @@ class SettingsInterface(ScrollArea):
 
         - 冲突检测 **仅在同一模式内** 进行（#13：打轴/编辑两套独立）。
         - 冲突提示需包含另一个占用该按键的功能名称（#12）。
+        - scope=both 的卡片在两个模式下是同一对象，用 id() 去重避免自冲突。
         """
         conflicts: list[str] = []
         cards = self._get_all_shortcut_cards()
         # 以模式为粒度独立检测冲突
         for mode_key, mode_label in self._SHORTCUT_MODES:
-            mode_cards = [
-                (name, card) for m, _, name, card in cards if m == mode_key
-            ]
+            seen_ids: set[int] = set()
+            mode_cards: list[tuple[str, ShortcutSettingCard]] = []
+            for m, _, name, card in cards:
+                if m != mode_key:
+                    continue
+                if id(card) in seen_ids:
+                    continue
+                seen_ids.add(id(card))
+                mode_cards.append((name, card))
             # key → (功能名, 卡片)；按卡片顺序后者覆盖前者
             key_owners: dict[str, tuple[str, ShortcutSettingCard]] = {}
             for name, card in mode_cards:
@@ -2408,8 +2549,15 @@ class SettingsInterface(ScrollArea):
 
         # 快捷键（双模式）
         for mode_key, _ in self._SHORTCUT_MODES:
-            for action_key, _icon, _title, _content, default_key in self._SHORTCUT_ACTIONS:
-                card = self._shortcut_cards[mode_key][action_key]
+            for row in self._SHORTCUT_ACTIONS:
+                action_key = row[0]
+                default_timing = row[4]
+                default_edit = row[5]
+                default_key = default_timing if mode_key == "timing_mode" else default_edit
+                card = self._shortcut_cards[mode_key].get(action_key)
+                if card is None:
+                    # scope 限制此动作不在该模式下出现（如 timing_only/edit_only）
+                    continue
                 value = self._settings.get(
                     f"shortcuts.{mode_key}.{action_key}", default_key
                 )
@@ -2516,8 +2664,11 @@ class SettingsInterface(ScrollArea):
 
         # 快捷键（双模式）
         for mode_key, _ in self._SHORTCUT_MODES:
-            for action_key, *_ in self._SHORTCUT_ACTIONS:
-                card = self._shortcut_cards[mode_key][action_key]
+            for row in self._SHORTCUT_ACTIONS:
+                action_key = row[0]
+                card = self._shortcut_cards[mode_key].get(action_key)
+                if card is None:
+                    continue
                 self._settings.set(
                     f"shortcuts.{mode_key}.{action_key}", card.value()
                 )
