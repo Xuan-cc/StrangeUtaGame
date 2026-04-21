@@ -1189,3 +1189,90 @@ legacy 多 cp ruby"没有 mora 级切分，导致所有假名挤在首个 cp 时
   在 HEAD=c901138 未改动状态下同样失败
 
 ---
+
+## 第十五批修复：#9 选中 checkpoint 产生"大白框"根治（2026-04-22）
+
+### 0. 症状与用户诊断
+
+用户报告（原话）："有一个修了好几批次的问题，就是那个选中后大空行问题。
+经我观测，其实不是大空行而是大白框。应该就是选中后高亮引起的问题……
+只要是在这个checkpoint渲染的情况下，该checkpoint下方所有的内容都会变白。
+并且这个白框会以着这个补色后的checkpoint的底部为分界逐渐往上。所谓加一
+个空行就恢复，其实本质上是因为加一次空行会重新渲染一次，但是不渲染高亮。
+所以我建议你仔细检查以下checkpoint高亮的绘图逻辑，他是不是越界了，他应
+该绘图框限定在字符和▮▶。这三个符号内吧。"
+
+### 1. 前几批的误诊
+
+- 第十批"已修复 #9"按 race condition + 垂直锚点两处调整 → 用户实测未修
+- 第十三批 `_rect_top = y_center - _rect_height/2` 统一垂直锚点 → 方向
+  对但未根治；症状仍在
+- 根因不在 line-height 数学，而在 **Windows 平台 QPainter.drawText**
+  渲染 `▶/▮/▷/▯/。` 等符号 glyph 时的 text-run 背景清除行为。
+
+### 2. 根因
+
+Oracle 诊断结论（session `ses_24f0281e8ffeApj5W442HXNxg7`）：
+
+1. `editor_interface.py` paintEvent 起始 L762 有唯一一次
+   `painter.fillRect(self.rect(), QColor("#FFFFFF"))` → 整个可见区域白
+2. checkpoint 标记块 L1083-1142 仅用 `drawText` 绘制，**表面上不可能产
+   生大矩形**
+3. 但 Windows 下 Qt 对 `▶/▮` 等特殊 Unicode 符号 glyph 会走 fallback
+   symbol-font 渲染路径；该路径的 text-run 有时会清除一个远大于 glyph
+   ink 的 background 矩形，**露出 L762 填的纯白背景**
+4. 另外该路径对 **前序未清理的 setClipRect 状态** 更敏感——若 ruby/
+   主文字 wipe clip 因任何原因泄漏到 checkpoint 绘制，后续 draw 会被
+   意外裁剪，视觉表现同样是"大白框"
+5. 选中（补色）分支仅是 **触发这条路径更频繁的条件**（每帧必走），
+   所以用户观察到"只要 checkpoint 渲染就白"
+
+### 3. 修复方案
+
+对每个 checkpoint marker 的 `drawText` 做防御性隔离
+（`editor_interface.py` L1115-1154）：
+
+```python
+draw_rect = QRect(
+    int(mx) - 1,
+    marker_y - fm_checkpoint.ascent() - 1,
+    int(mw) + 2,
+    fm_checkpoint.height() + 2,
+)
+painter.save()
+painter.setClipping(False)                             # 清除任何残留 clip
+painter.setBackgroundMode(Qt.BGMode.TransparentMode)   # 强制透明 text run
+painter.setClipRect(draw_rect)                         # 本地严格 clip 到 glyph 框
+painter.setPen(color)
+painter.drawText(int(mx), marker_y, marker_char)
+painter.restore()
+```
+
+三条防线同时生效：
+
+- **`setClipping(False)`**：清除任何从前序 ruby/主文字 wipe 泄漏的 clip
+  状态，排除假设 H2
+- **`setBackgroundMode(TransparentMode)`**：强制 drawText 不做 background
+  fill，直接排除 H1 的 over-clear 机制
+- **`setClipRect(draw_rect)`**：即使前两条都失效，本地 clip 也保证
+  drawText 不能影响 glyph 框 `[mx-1, marker_y-ascent-1, mw+2, height+2]`
+  之外的任何像素——**严格满足用户"绘图框限定在字符和▮▶三个符号内"
+  的不变量**
+
+### 4. 验证
+
+- `lsp_diagnostics`：无错误
+- `tests/unit/` 全量：209 passed；2 pre-existing 失败（`test_batch_export`、
+  `test_export_ruby_relative_timestamps`）与本批无关，前批已记录
+- 手工复现指引：选中任意带 checkpoint 的字符，移动
+  `_current_checkpoint_idx`；在修复前当前 checkpoint 补色渲染时该字符
+  下方区域应出现向上延展的白框；修复后白框消失
+
+### 5. 影响面
+
+- 单一修改点：`editor_interface.py` checkpoint marker 绘制块
+- 不改动任何 domain/application/infrastructure 层
+- 不引入新依赖、不改 Qt 配置、不改字体声明
+- AGENTS.md 约束全部保持（Qt 字体 YaHei、PyQt6、中文文案、PYTHONIOENCODING）
+
+---

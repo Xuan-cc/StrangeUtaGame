@@ -1123,10 +1123,33 @@ class KaraokePreview(QWidget):
                             h, s, v, a = char_color.getHsv()
                             if h >= 0:
                                 color = QColor.fromHsv((h + 180) % 360, s, v, a)
-                        painter.setPen(color)
 
                         mw = fm_checkpoint.horizontalAdvance(marker_char)
+
+                        # Issue #9 第十五批：彻底隔离 checkpoint 标记的绘制区域。
+                        # 此前"选中后产生大白框、以 checkpoint 底部为分界向上扩散"
+                        # 的现象，根因是 Windows 下 drawText 对 ▶/▮/▷/▯/。 等符号
+                        # 走 fallback 字体路径时，text-run 的 background 会清到一个
+                        # 比 glyph ink 更大的区域，露出 paintEvent 起始处 fillRect
+                        # 填的纯白背景；同时该路径对前序 setClipRect 的状态残留也
+                        # 更敏感。这里用 save/restore 包裹、显式禁用 clipping 再
+                        # 设一个严格贴合 marker 几何的本地 clip、并强制透明 BGMode，
+                        # 保证每个 checkpoint 的 drawText 永远不能影响自身 glyph 框
+                        # 之外的任何像素——满足用户"绘图框限定在字符和▮▶三个符号
+                        # 内"的不变量。
+                        draw_rect = QRect(
+                            int(mx) - 1,
+                            marker_y - fm_checkpoint.ascent() - 1,
+                            int(mw) + 2,
+                            fm_checkpoint.height() + 2,
+                        )
+                        painter.save()
+                        painter.setClipping(False)
+                        painter.setBackgroundMode(Qt.BGMode.TransparentMode)
+                        painter.setClipRect(draw_rect)
+                        painter.setPen(color)
                         painter.drawText(int(mx), marker_y, marker_char)
+                        painter.restore()
 
                         # 存储 hitbox 用于点击检测
                         marker_rect = QRect(
