@@ -201,8 +201,34 @@ class MainWindow(MSFluentWindow):
         ):
             line_idx = self.editorInterface._current_line_idx
             self.editViewInterface.scroll_to_line(line_idx)
+        # #1：从打轴界面切换到全文本编辑界面时，将输入光标跳转到对应字符
+        if (
+            hasattr(self, "editorInterface")
+            and hasattr(self, "rubyInterface")
+            and self._current_interface is self.editorInterface
+            and interface is self.rubyInterface
+        ):
+            line_idx = self.editorInterface._current_line_idx
+            char_idx = 0
+            preview = getattr(self.editorInterface, "preview", None)
+            if preview is not None:
+                char_idx = max(0, int(getattr(preview, "_current_char_idx", 0) or 0))
+            # 注意：rubyInterface 在切换"进入"时会调用 _refresh_display 重置文本，
+            # 因此需要在 super().switchTo 之后再定位光标。
+            self._pending_ruby_jump = (line_idx, char_idx)
+        else:
+            self._pending_ruby_jump = None
         self._current_interface = interface
         super().switchTo(interface)
+        # #1：切到 rubyInterface 之后再定位光标（保证 QPlainTextEdit 已显示）
+        pending = getattr(self, "_pending_ruby_jump", None)
+        if pending is not None and interface is getattr(self, "rubyInterface", None):
+            line_idx, char_idx = pending
+            try:
+                self.rubyInterface.scroll_to_line(line_idx, char_idx)
+            except Exception:
+                pass
+            self._pending_ruby_jump = None
 
     # ==================== 项目操作 ====================
 

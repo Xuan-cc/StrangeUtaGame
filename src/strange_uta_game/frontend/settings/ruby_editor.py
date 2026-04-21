@@ -382,6 +382,66 @@ class RubyInterface(QWidget):
             return False
         return self.text_edit.toPlainText() != self._lines_to_text()
 
+    def scroll_to_line(self, line_idx: int, char_idx: int = 0):
+        """#1：从打轴界面切换至全文本编辑时，将 QPlainTextEdit 输入光标
+        跳转到 (line_idx, char_idx) 对应位置。
+
+        文本由 _lines_to_text() 生成：每条 Sentence 占一行，连词组渲染为
+        `{原文|读音,...}`。本方法用同样的遍历逻辑把"字符索引"映射到
+        行内的列号（列号计入花括号/竖线/逗号等语法字符的长度），尽量把
+        光标停在 char_idx 字符的起始位置。
+        """
+        if not self._project or not self._project.sentences:
+            return
+        if not (0 <= line_idx < len(self._project.sentences)):
+            return
+        sentence = self._project.sentences[line_idx]
+        chars = sentence.characters
+        if char_idx < 0:
+            char_idx = 0
+        if char_idx > len(chars):
+            char_idx = len(chars)
+
+        # 复刻 _lines_to_text 对单行的生成，同时累计到目标 char_idx 为止的列数
+        column = 0
+        i = 0
+        while i < len(chars) and i < char_idx:
+            if chars[i].ruby:
+                group_start = i
+                while i < len(chars) - 1 and chars[i].linked_to_next:
+                    i += 1
+                i += 1
+                # 整组包含目标字符：跳到组的起始 `{` 之后的原文部分
+                if group_start <= char_idx < i:
+                    # 起始 `{`
+                    column += 1
+                    # 目标字符在原文段中的偏移（按字符计）
+                    column += char_idx - group_start
+                    char_idx = -1  # 提前结束
+                    break
+                # 整组在目标之前：累加整组生成文本长度
+                text_part = "".join(ch.char for ch in chars[group_start:i])
+                readings = ",".join(
+                    ch.ruby.text if ch.ruby else "" for ch in chars[group_start:i]
+                )
+                column += len(f"{{{text_part}|{readings}}}")
+            else:
+                column += len(chars[i].char)
+                i += 1
+
+        # 定位 QTextCursor
+        doc = self.text_edit.document()
+        if doc is None:
+            return
+        block = doc.findBlockByNumber(line_idx)
+        if not block.isValid():
+            return
+        cursor = self.text_edit.textCursor()
+        cursor.setPosition(block.position() + min(column, block.length() - 1))
+        self.text_edit.setTextCursor(cursor)
+        self.text_edit.ensureCursorVisible()
+        self.text_edit.setFocus()
+
     # ==================== 内部方法 ====================
 
     def _refresh_display(self):

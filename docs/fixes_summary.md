@@ -496,3 +496,75 @@
 | 资源 | src/strange_uta_game/config/e2k.txt, e2k_readme.txt |
 
 ---
+
+## 第八批修复与功能增强（2026-04-21）
+
+本批针对打轴界面交互、英文注音质量、快捷键双模式、跨界面光标同步共 13 项改进（音频流式渲染 #14 延后单独一轮）。
+
+### 英文注音规则引擎（#9）
+
+**问题**：英文注音仅依赖用户词典 `e2k.txt`（共 ~1400 条），且因 `english_ruby.py` 与 `e2k_engine.py` 的 `parent.parent.parent` 路径计算错误（实际需 4 层 parent 到达 `src/strange_uta_game/`），导致 `e2k.txt` 从未被成功加载，英文词基本无注音输出。
+
+**修复**：
+- 新增 `backend/infrastructure/parsers/e2k_engine.py`：基于 Morikatron 规则引擎（内置基础形态还原 baseform）+ CMU 发音词典 `cmudict-0.7b`（125,696 词条），将英文 → 音素 → 片假名。
+- 新增 `config/cmudict-0.7b`（3.87MB，latin-1 编码，`;;;` 注释、`WORD  P1 P2` 两空格分隔）并在 `build.py` 中随包发布。
+- 修复路径：所有 `parent.parent.parent / "config"` → `parent.parent.parent.parent / "config"`。
+- `auto_check_service._apply_english_dictionary` 优先级调整为：**e2k 引擎 → 用户词典 → 库函数回退**。
+
+**效果**：`english` → `イングリッシュ`，`beautiful` → `ビューティファル`，质量显著优于旧 e2k.txt 查表。
+
+### 快捷键双模式（#8 补充、#11、#12、#13）
+
+**问题**：旧 schema `shortcuts.<action>` 扁平结构不支持"音乐播放中" vs "音乐暂停中"的不同按键映射；冲突检测仅提示"与其他项冲突"，未告知对方是谁。
+
+**破坏性升级**（用户分发仅两人，放弃迁移）：
+
+- `DEFAULT_SETTINGS.shortcuts` 改为 `{"timing_mode": {...}, "edit_mode": {...}}` 双层 schema。
+- 两模式各自含 18 个动作 + 新增 `cycle_checkpoint`（默认 `Tab`）共 19 项。
+- `settings_interface.py` 新增 `_SHORTCUT_ACTIONS` / `_SHORTCUT_MODES` 元数据，UI 构造 / 读取 / 保存 / 冲突检测全部由元数据驱动，消除了原先针对每个动作重复的 SettingCard 代码。
+- `_resolve_shortcut_conflicts` 按模式独立分桶（#13），**只在同一模式内检查冲突**；冲突提示改为 `"Space (与 打轴 (打轴中) 冲突)"` 格式，明确指出另一方（#12）。
+
+### 时间戳微调步长（#4）
+
+- 新增 `timing.timing_adjust_step_ms` 设置项，默认 `10`（毫秒），放置于 **打轴设定** 分组。
+- `editor_interface._adjust_current_timestamp` 的步长从硬编码 `±1` 改为 `±self._timing_adjust_step_ms`。
+
+### 打轴界面交互改进（#2、#3、#5、#6、#7、#8）
+
+| 编号 | 变更 |
+|------|------|
+| #2 | `Tab` 键循环切换当前字符的 checkpoint（新增 `_cycle_current_checkpoint` 方法；以 `TimingService.get_current_position()` 为起点推进 `checkpoint_idx`，到尾回绕；句尾 checkpoint 也在序列内）。 |
+| #3 | `Alt+↑/↓` 微调对象从"当前选中字符的首个 checkpoint"改为**当前选中 checkpoint**（直接读 `pos.checkpoint_idx`，原逻辑已正确；补充 docstring 明确约定）。 |
+| #5 | 行号/字符/时间戳信息标签 `lbl_line_info` 从底部打轴栏移到最底部状态栏中段，与"播放状态""总体进度"同行显示。 |
+| #6 | 底部快捷键提示缩减为 9 项核心：播放、停止、前进、后退、加速、减速、加节奏点、减节奏点、句尾。 |
+| #7 | `btn_tag` 按钮文字从硬编码 `打轴 (Space)` 改为动态读取 `shortcuts.timing_mode.tag_now` 设置项的首个键位。 |
+| #8 | 左下角新增 `lbl_mode` 模式指示器：播放中 "模式：打轴"（黄底高亮），非播放 "模式：编辑"（灰底）；`_on_play/_on_pause/_on_stop` 回调同步刷新。 |
+
+运行时 `keyPressEvent` 根据 `TimingService.is_playing()` 在 `_key_map_timing` 与 `_key_map_edit` 间切换活动映射；`_update_mode_indicator` 同时更新 `_key_map` 引用与底部提示文本。
+
+### 跨界面字符同步（#1）
+
+- `MainWindow.switchTo`：从打轴界面 → 全文本编辑界面（`rubyInterface`）时，读取 `editorInterface.preview._current_char_idx` 保存为 `_pending_ruby_jump`，在 `super().switchTo()` 之后调用 `rubyInterface.scroll_to_line(line_idx, char_idx)`。
+- `RubyInterface.scroll_to_line`：复用 `_lines_to_text` 的连词/注音渲染逻辑，将字符索引精确映射到 QPlainTextEdit 的列号（正确跨过 `{`、`|`、`,` 等语法字符），然后通过 `QTextCursor` 定位并 `ensureCursorVisible + setFocus`。
+
+### 设置界面（#10）
+
+- 经核实当前布局已为 "主题下拉 → 说明文字 → 字体大小"，"暂仅支持浅色主题…" 说明已位于主题项后面，符合要求。
+
+### 涉及文件
+
+| 类别 | 文件 |
+|------|------|
+| 前端（打轴） | `frontend/editor/editor_interface.py` |
+| 前端（全文本编辑） | `frontend/settings/ruby_editor.py` |
+| 前端（主窗口） | `frontend/main_window.py` |
+| 前端（设置） | `frontend/settings/settings_interface.py` |
+| 后端（注音） | `backend/infrastructure/parsers/e2k_engine.py`（新增），`english_ruby.py`，`application/auto_check_service.py` |
+| 资源 | `config/cmudict-0.7b`（新增） |
+| 打包 | `build.py` |
+
+### 遗留
+
+- **#14 音频流式渲染**：引入 `audiotsm` 重写播放循环的任务，计划下一轮单独实施，本轮未动。
+
+---

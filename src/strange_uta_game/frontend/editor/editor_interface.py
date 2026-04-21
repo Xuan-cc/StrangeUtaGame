@@ -1549,12 +1549,17 @@ class EditorInterface(QWidget):
         layout.addWidget(self.preview, stretch=1)
 
         # 5) 底部打轴操作栏
+        # 布局：[模式指示器] [打轴按钮] [清除按钮] <stretch> [快捷键提示]
         bottom = QHBoxLayout()
         bottom.setSpacing(10)
 
-        self.lbl_line_info = QLabel("当前行: -")
-        self.lbl_line_info.setStyleSheet("font-size: 12px;")
-        bottom.addWidget(self.lbl_line_info)
+        # 左下角模式指示器（#8：区分音乐播放/暂停模式）
+        self.lbl_mode = QLabel("模式：编辑")
+        self.lbl_mode.setStyleSheet(
+            "font-size: 12px; padding: 2px 8px; border-radius: 4px;"
+            "background-color: #e0e0e0; color: #444;"
+        )
+        bottom.addWidget(self.lbl_mode)
 
         self.btn_tag = PrimaryPushButton("打轴 (Space)", self)
         self.btn_tag.setIcon(FIF.PIN)
@@ -1578,11 +1583,17 @@ class EditorInterface(QWidget):
         layout.addLayout(bottom)
 
         # 6) 状态栏
+        # 布局：[播放状态] <stretch> [当前行/字符/时间戳] <stretch> [总体进度]
         status = QHBoxLayout()
         status.setContentsMargins(5, 2, 5, 2)
         self.lbl_status = QLabel("就绪")
         self.lbl_status.setStyleSheet("font-size: 11px; color: gray;")
         status.addWidget(self.lbl_status)
+        status.addStretch()
+        # 行号/字符/时间戳信息（#5：从打轴栏移到此处，与播放状态一同显示）
+        self.lbl_line_info = QLabel("当前行: -")
+        self.lbl_line_info.setStyleSheet("font-size: 11px; color: gray;")
+        status.addWidget(self.lbl_line_info)
         status.addStretch()
         self.lbl_progress = QLabel("行: 0/0 | 进度: 0%")
         self.lbl_progress.setStyleSheet("font-size: 11px; color: gray;")
@@ -1623,33 +1634,77 @@ class EditorInterface(QWidget):
         self._fast_forward_ms = settings.get("timing.fast_forward_ms", 5000)
         self._rewind_ms = settings.get("timing.rewind_ms", 5000)
         self._jump_before_ms = settings.get("timing.jump_before_ms", 3000)
-        # 读取快捷键映射
-        self._key_map = {}
-        shortcut_actions = {
-            "tag_now": settings.get("shortcuts.tag_now", "Space"),
-            "play_pause": settings.get("shortcuts.play_pause", "A"),
-            "stop": settings.get("shortcuts.stop", "S"),
-            "seek_back": settings.get("shortcuts.seek_back", "Z"),
-            "seek_forward": settings.get("shortcuts.seek_forward", "X"),
-            "speed_down": settings.get("shortcuts.speed_down", "Q"),
-            "speed_up": settings.get("shortcuts.speed_up", "W"),
-            "edit_ruby": settings.get("shortcuts.edit_ruby", "F2"),
-            "add_checkpoint": settings.get("shortcuts.add_checkpoint", "F4"),
-            "remove_checkpoint": settings.get("shortcuts.remove_checkpoint", "F5"),
-            "toggle_line_end": settings.get("shortcuts.toggle_line_end", "F6"),
-            "toggle_word_join": settings.get("shortcuts.toggle_word_join", "F3"),
-            "volume_up": settings.get("shortcuts.volume_up", "UP"),
-            "volume_down": settings.get("shortcuts.volume_down", "DOWN"),
-            "nav_prev_line": settings.get("shortcuts.nav_prev_line", "LEFT"),
-            "nav_next_line": settings.get("shortcuts.nav_next_line", "RIGHT"),
-            "timestamp_up": settings.get("shortcuts.timestamp_up", "ALT+UP"),
-            "timestamp_down": settings.get("shortcuts.timestamp_down", "ALT+DOWN"),
+        # #4：读取时间戳微调步长（默认 10ms）
+        self._timing_adjust_step_ms = int(
+            settings.get("timing.timing_adjust_step_ms", 10)
+        )
+        # #8/#11/#13：读取双模式快捷键映射（打轴模式=播放中、编辑模式=未播放）
+        # 动作集合（所有动作在两种模式下都存在，读设置时各自取值，互不干扰）
+        action_names = [
+            "tag_now",
+            "play_pause",
+            "stop",
+            "seek_back",
+            "seek_forward",
+            "speed_down",
+            "speed_up",
+            "edit_ruby",
+            "add_checkpoint",
+            "remove_checkpoint",
+            "toggle_line_end",
+            "toggle_word_join",
+            "volume_up",
+            "volume_down",
+            "nav_prev_line",
+            "nav_next_line",
+            "timestamp_up",
+            "timestamp_down",
+            "cycle_checkpoint",
+        ]
+        # 默认值兜底（当设置未写入新 schema 时使用）
+        defaults = {
+            "tag_now": "Space",
+            "play_pause": "A",
+            "stop": "S",
+            "seek_back": "Z",
+            "seek_forward": "X",
+            "speed_down": "Q",
+            "speed_up": "W",
+            "edit_ruby": "F2",
+            "add_checkpoint": "F4",
+            "remove_checkpoint": "F5",
+            "toggle_line_end": "F6",
+            "toggle_word_join": "F3",
+            "volume_up": "UP",
+            "volume_down": "DOWN",
+            "nav_prev_line": "LEFT",
+            "nav_next_line": "RIGHT",
+            "timestamp_up": "ALT+UP",
+            "timestamp_down": "ALT+DOWN",
+            "cycle_checkpoint": "Tab",
         }
-        for action, key_str in shortcut_actions.items():
-            # 支持双键位：值可能是 "Space,A" 格式
-            keys = [k.strip() for k in key_str.split(",") if k.strip()]
-            for k in keys:
-                self._key_map[k.upper()] = action
+
+        def _collect_map(mode_key: str) -> tuple[dict, dict]:
+            """返回 (key_map, action->key_str) 两套数据，后者用于提示显示。"""
+            key_map: dict[str, str] = {}
+            action_to_keys: dict[str, str] = {}
+            for action in action_names:
+                raw = settings.get(
+                    f"shortcuts.{mode_key}.{action}",
+                    # 兼容旧 schema（无 mode_key 的扁平 shortcuts.xxx）
+                    settings.get(f"shortcuts.{action}", defaults[action]),
+                )
+                action_to_keys[action] = raw
+                for k in (raw or "").split(","):
+                    k = k.strip()
+                    if k:
+                        key_map[k.upper()] = action
+            return key_map, action_to_keys
+
+        self._key_map_timing, timing_actions = _collect_map("timing_mode")
+        self._key_map_edit, edit_actions = _collect_map("edit_mode")
+        # 兼容旧字段名：当前活动 map（按播放状态切换；初始为编辑模式）
+        self._key_map = self._key_map_edit
         # 应用默认速度
         default_speed = settings.get("audio.default_speed", 1.0)
         speed_pct = int(default_speed * 100)
@@ -1668,11 +1723,24 @@ class EditorInterface(QWidget):
             for sentence in self._project.sentences:
                 for ch in sentence.characters:
                     ch.set_offsets(render_offset, render_offset)
-        # 更新快捷键提示
-        self._update_shortcut_hint(shortcut_actions)
+        # 更新快捷键提示（#6：只保留 9 项核心）
+        self._update_shortcut_hint(timing_actions, edit_actions)
+        # #7：打轴按钮文字联动 shortcuts.timing_mode.tag_now
+        tag_key_raw = timing_actions.get("tag_now", "Space")
+        tag_first = tag_key_raw.split(",")[0].strip() if tag_key_raw else "Space"
+        if hasattr(self, "btn_tag"):
+            self.btn_tag.setText(f"打轴 ({tag_first})")
+        # #8：同步模式指示器（首次应用设置时刷新）
+        self._update_mode_indicator()
 
-    def _update_shortcut_hint(self, shortcut_actions: dict):
-        """根据当前设置的快捷键映射，动态更新底部提示。"""
+    def _update_shortcut_hint(
+        self, timing_actions: dict, edit_actions: Optional[dict] = None
+    ):
+        """根据当前设置的快捷键映射，动态更新底部提示。
+
+        #6：只显示 9 项核心动作（播放/停止/前进/后退/加速/减速/加节奏点/减节奏点/句尾），
+        按当前模式（播放中=打轴模式，否则=编辑模式）取快捷键文本。
+        """
         action_labels = [
             ("play_pause", "播放"),
             ("stop", "停止"),
@@ -1680,24 +1748,23 @@ class EditorInterface(QWidget):
             ("seek_forward", "前进"),
             ("speed_down", "减速"),
             ("speed_up", "加速"),
-            ("edit_ruby", "注音"),
-            ("toggle_word_join", "连词"),
             ("add_checkpoint", "加节奏点"),
             ("remove_checkpoint", "减节奏点"),
             ("toggle_line_end", "句尾"),
-            ("timestamp_up", "时间+1ms"),
-            ("timestamp_down", "时间-1ms"),
         ]
+        playing = bool(self._timing_service and self._timing_service.is_playing())
+        active = timing_actions if playing else (edit_actions or timing_actions)
         parts = []
         for action, label in action_labels:
-            key = shortcut_actions.get(action, "")
+            key = active.get(action, "")
             if key:
-                # 仅取第一个键位显示
                 first_key = key.split(",")[0].strip()
                 parts.append(f"{first_key}{label}")
-        parts.append("Ctrl+H批量")
         if hasattr(self, "lbl_shortcut_hint"):
             self.lbl_shortcut_hint.setText(" ".join(parts))
+        # 缓存以便模式切换时再次调用（无需重读设置）
+        self._shortcut_actions_timing = timing_actions
+        self._shortcut_actions_edit = edit_actions or timing_actions
 
     # ==================== 项目 ====================
 
@@ -2220,6 +2287,39 @@ class EditorInterface(QWidget):
             )
             return False
 
+    def _update_mode_indicator(self):
+        """#8：根据播放状态更新左下角模式指示器与激活的 key_map。
+
+        - 播放中 → "模式：打轴"，使用 _key_map_timing
+        - 未播放 → "模式：编辑"，使用 _key_map_edit
+        同步刷新底部快捷键提示（因为两模式文本可能不同）。
+        """
+        if not hasattr(self, "lbl_mode"):
+            return
+        playing = bool(self._timing_service and self._timing_service.is_playing())
+        if playing:
+            self.lbl_mode.setText("模式：打轴")
+            self.lbl_mode.setStyleSheet(
+                "font-size: 12px; padding: 2px 8px; border-radius: 4px;"
+                "background-color: #ffd54f; color: #333; font-weight: bold;"
+            )
+            if hasattr(self, "_key_map_timing"):
+                self._key_map = self._key_map_timing
+        else:
+            self.lbl_mode.setText("模式：编辑")
+            self.lbl_mode.setStyleSheet(
+                "font-size: 12px; padding: 2px 8px; border-radius: 4px;"
+                "background-color: #e0e0e0; color: #444;"
+            )
+            if hasattr(self, "_key_map_edit"):
+                self._key_map = self._key_map_edit
+        # 刷新快捷键提示（按新模式取文本）
+        if hasattr(self, "_shortcut_actions_timing"):
+            self._update_shortcut_hint(
+                self._shortcut_actions_timing,
+                getattr(self, "_shortcut_actions_edit", None),
+            )
+
     # ==================== 播放控制 ====================
 
     def _on_play(self):
@@ -2228,6 +2328,7 @@ class EditorInterface(QWidget):
                 self._timing_service.play()
                 self.transport.set_playing(self._timing_service.is_playing())
                 self.lbl_status.setText("播放中")
+                self._update_mode_indicator()
             except Exception as e:
                 self._show_runtime_error(str(e))
 
@@ -2236,6 +2337,7 @@ class EditorInterface(QWidget):
             self._timing_service.pause()
             self.transport.set_playing(False)
             self.lbl_status.setText("已暂停")
+            self._update_mode_indicator()
 
     def _on_stop(self):
         if self._timing_service:
@@ -2244,6 +2346,7 @@ class EditorInterface(QWidget):
             self.transport.set_position(0)
             self.timeline.set_position(0)
             self.lbl_status.setText("已停止")
+            self._update_mode_indicator()
 
     def _on_seek(self, ms: int):
         if self._timing_service:
@@ -2345,7 +2448,12 @@ class EditorInterface(QWidget):
         self._change_checkpoint(delta=-1)
 
     def _adjust_current_timestamp(self, delta_ms: int):
-        """Alt+↑/↓ 微调当前打轴位置对应 checkpoint 的时间戳 (±1ms)。"""
+        """Alt+↑/↓ 微调当前选中 checkpoint 的时间戳。
+
+        #3：调整对象从"当前字符"改为"当前选中的 checkpoint"（以
+        TimingService.get_current_position().checkpoint_idx 为准）。
+        #4：步长由 timing.timing_adjust_step_ms 设置项决定（调用方传入）。
+        """
         if not self._project or not self._timing_service:
             return
         pos = self._timing_service.get_current_position()
@@ -2374,6 +2482,32 @@ class EditorInterface(QWidget):
         self._update_line_info()
         if hasattr(self, "_store") and self._store:
             self._store.notify("timetags")
+
+    def _cycle_current_checkpoint(self):
+        """#2：Tab 键循环切换当前字符的 checkpoint 索引。
+
+        以 TimingService.get_current_position() 为起点，将 checkpoint_idx
+        推进到下一个（到尾后回到 0）。句尾字符若带 is_sentence_end，则
+        句尾 checkpoint 也在循环序列内（位置为 check_count）。
+        """
+        if not self._project or not self._timing_service:
+            return
+        pos = self._timing_service.get_current_position()
+        line_idx = pos.line_idx
+        char_idx = pos.char_idx
+        if line_idx >= len(self._project.sentences):
+            return
+        sentence = self._project.sentences[line_idx]
+        if char_idx >= len(sentence.characters):
+            return
+        ch = sentence.characters[char_idx]
+        total = ch.check_count + (1 if ch.is_sentence_end else 0)
+        if total <= 0:
+            return
+        next_idx = (pos.checkpoint_idx + 1) % total
+        self._timing_service.move_to_checkpoint(line_idx, char_idx, next_idx)
+        self._update_line_info()
+        self.refresh_lyric_display()
 
     def _change_checkpoint(self, delta: int):
         """增加或减少当前字符的节奏点数量。"""
@@ -2597,11 +2731,17 @@ class EditorInterface(QWidget):
             a0.accept()
             return
         elif action == "timestamp_up":
-            self._adjust_current_timestamp(1)
+            # #3/#4：以 checkpoint 为单位 + 步长可配置
+            self._adjust_current_timestamp(self._timing_adjust_step_ms)
             a0.accept()
             return
         elif action == "timestamp_down":
-            self._adjust_current_timestamp(-1)
+            self._adjust_current_timestamp(-self._timing_adjust_step_ms)
+            a0.accept()
+            return
+        elif action == "cycle_checkpoint":
+            # #2：Tab 循环切换当前字符的 checkpoint
+            self._cycle_current_checkpoint()
             a0.accept()
             return
         elif action == "edit_ruby":
