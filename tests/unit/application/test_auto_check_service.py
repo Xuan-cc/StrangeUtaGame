@@ -160,3 +160,44 @@ class TestA3RootCauseEmptyRubyGroup:
                 assert c.ruby.parts, f"parts 为空: {c.char}"
                 for p in c.ruby.parts:
                     assert p.text, f"part.text 为空: char={c.char!r}"
+
+
+class TestPunctuationCheckpointFlag:
+    """#5：标点参与节奏点开关。
+
+    默认关闭：()【】[]{}「」!?、， 等标点 check_count=0；
+    开关启用：标点 check_count >= 1。
+    """
+
+    def test_punctuation_default_off(self):
+        """默认关闭：标点 check_count=0"""
+        service = AutoCheckService(DummyAnalyzer())
+        sentence = Sentence.from_text("ねえ、君", "s2")
+        service.apply_to_sentence(sentence)
+        for c in sentence.characters:
+            if c.char == "、":
+                assert c.check_count == 0, "默认情况下标点 check_count 必须为 0"
+
+    def test_punctuation_enabled(self):
+        """开关开启：标点 check_count >= 1"""
+        service = AutoCheckService(
+            DummyAnalyzer(),
+            auto_check_flags={"checkpoint_on_punctuation": True},
+        )
+        sentence = Sentence.from_text("ねえ、君", "s1")
+        service.apply_to_sentence(sentence)
+        for c in sentence.characters:
+            if c.char == "、":
+                assert c.check_count >= 1, "开关启用时标点 check_count 必须 >= 1"
+
+    def test_punctuation_full_set_default_off(self):
+        """覆盖完整 PUNCTUATION_SET：默认全部为 0"""
+        from strange_uta_game.backend.domain import PUNCTUATION_SET
+
+        text = "あ" + "".join(PUNCTUATION_SET) + "い"
+        service = AutoCheckService(DummyAnalyzer())
+        sentence = Sentence.from_text(text, "s1")
+        service.apply_to_sentence(sentence)
+        for c in sentence.characters:
+            if c.char in PUNCTUATION_SET:
+                assert c.check_count == 0, f"标点 {c.char!r} 默认 check_count 必须为 0"

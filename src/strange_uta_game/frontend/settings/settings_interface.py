@@ -86,6 +86,7 @@ class AppSettings:
             "space_after_symbol": True,
             "small_kana": False,
             "check_space_as_line_end": True,
+            "checkpoint_on_punctuation": False,
         },
         "ui": {
             "theme": "light",
@@ -2078,6 +2079,12 @@ class SettingsInterface(ScrollArea):
             "字符后跟空格时视为句尾，额外增加一个节奏点",
             parent=self.auto_check_group,
         )
+        self.card_checkpoint_on_punctuation = SwitchSettingCard(
+            FIF.ACCEPT,
+            "标点参与节奏点",
+            "为 ()【】[]{}「」!?、， 等标点符号自动添加节奏点（不参与注音）",
+            parent=self.auto_check_group,
+        )
 
         self.auto_check_group.addSettingCard(self.card_auto_on_load)
         self.auto_check_group.addSettingCard(self.card_check_n)
@@ -2092,6 +2099,7 @@ class SettingsInterface(ScrollArea):
         self.auto_check_group.addSettingCard(self.card_space_after_alpha)
         self.auto_check_group.addSettingCard(self.card_space_after_symbol)
         self.auto_check_group.addSettingCard(self.card_space_as_line_end)
+        self.auto_check_group.addSettingCard(self.card_checkpoint_on_punctuation)
 
     # ── 读音词典 ──
 
@@ -2609,6 +2617,9 @@ class SettingsInterface(ScrollArea):
         self.card_space_as_line_end.setChecked(
             self._settings.get("auto_check.check_space_as_line_end", True)
         )
+        self.card_checkpoint_on_punctuation.setChecked(
+            self._settings.get("auto_check.checkpoint_on_punctuation", False)
+        )
 
         # 界面设定
         theme = self._settings.get("ui.theme", "light")
@@ -2727,6 +2738,10 @@ class SettingsInterface(ScrollArea):
         self._settings.set(
             "auto_check.check_space_as_line_end",
             self.card_space_as_line_end.isChecked(),
+        )
+        self._settings.set(
+            "auto_check.checkpoint_on_punctuation",
+            self.card_checkpoint_on_punctuation.isChecked(),
         )
 
         # 界面设定

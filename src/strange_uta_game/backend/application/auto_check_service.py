@@ -12,6 +12,7 @@ from strange_uta_game.backend.domain import (
     Character,
     Ruby,
     RubyPart,
+    PUNCTUATION_SET,
 )
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
     split_text,
@@ -673,6 +674,14 @@ class AutoCheckService:
             if self._flags.get("check_line_start", False) and check_counts:
                 check_counts[0] = max(check_counts[0], 1)
 
+        # 标点符号：默认不参与节奏点；开关启用时强制 1
+        _enable_punct_cp = (
+            self._flags.get("checkpoint_on_punctuation", False) if self._flags else False
+        )
+        for i, ch in enumerate(chars):
+            if i < len(check_counts) and ch in PUNCTUATION_SET:
+                check_counts[i] = max(check_counts[i], 1) if _enable_punct_cp else 0
+
         # 构建结果
         results = []
         for i, (char, count) in enumerate(zip(chars, check_counts)):
@@ -1021,6 +1030,14 @@ class AutoCheckService:
 
             if self._flags.get("check_line_start", False) and check_counts:
                 check_counts[0] = max(check_counts[0], 1)
+
+        # 标点符号：默认不参与节奏点；开关启用时强制 1
+        _enable_punct_cp2 = (
+            self._flags.get("checkpoint_on_punctuation", False) if self._flags else False
+        )
+        for i, ch in enumerate(chars):
+            if i < len(check_counts) and ch in PUNCTUATION_SET:
+                check_counts[i] = max(check_counts[i], 1) if _enable_punct_cp2 else 0
 
         # 更新字符属性
         add_line_end = self._flags.get("check_line_end", True)
