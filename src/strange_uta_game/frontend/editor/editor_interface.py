@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QLineEdit,
     QScrollArea,
+    QMessageBox,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QRect
 from PyQt6.QtGui import (
@@ -1162,15 +1163,17 @@ class KaraokePreview(QWidget):
 
 
 class ModifyCharacterDialog(QDialog):
-    """修改所选字符对话框 — 替换选中区间的文本、注音、节奏点。
+    """修改所选字符对话框 — 替换选中区间的文本、注音、节奏点、连词。
 
     字符级独立输入框方案（批 18 #1/#2/#3）：
       - 顶部"新字符"文本框决定字符序列
-      - 下方按新文本长度动态生成每字符一行：[字符] [注音] [节奏点]
+      - 下方按新文本长度动态生成每字符一行：[字符] [注音] [节奏点] [是否连词]
       - 注音框内用半角逗号分隔 RubyPart（如 わ,た,し → 3 个 RubyPart）
       - 文本修改时自动重建字符行，并按位置尽量保留已输入值
-      - 单字符修改时直接原地 set_ruby/check_count/push_to_ruby，保留 timestamps
+      - 单字符修改时直接原地 set_ruby/check_count/linked_to_next/push_to_ruby，保留 timestamps
       - 字符数变化时才走替换 slice 流程（必然丢旧 timestamps）
+      - 连词校验：末字/句尾/行尾字符禁止 linked_to_next=True，
+        提交时若有违规项则跳过该项的 linked_to_next 并在 failures 列表返回。
     """
 
     def __init__(self, sentence, start_idx, end_idx, parent=None):
@@ -1179,7 +1182,9 @@ class ModifyCharacterDialog(QDialog):
         self._start_idx = start_idx
         self._end_idx = end_idx
         self._modified = False
-        self._char_rows: list[tuple[QLabel, QLineEdit, QLineEdit]] = []
+        self._linked_failures: list[tuple[int, str, str]] = []
+        # (pos, char, reason) 列表，执行后由调用方读取弹窗汇总
+        self._char_rows: list[tuple[QLabel, QLineEdit, QLineEdit, QCheckBox]] = []
 
         self.setWindowTitle("修改所选字符")
         self.resize(520, 440)
@@ -1220,7 +1225,7 @@ class ModifyCharacterDialog(QDialog):
             ruby_str = (
                 ",".join(p.text for p in c.ruby.parts) if c.ruby and c.ruby.parts else ""
             )
-            self._append_char_row(c.char, ruby_str, str(c.check_count))
+            self._append_char_row(c.char, ruby_str, str(c.check_count), c.linked_to_next)
 
         # 文本变更 → 重建行，保留已输入值
         self.edit_new_chars.textChanged.connect(self._rebuild_rows_on_text_change)
@@ -1240,7 +1245,9 @@ class ModifyCharacterDialog(QDialog):
         btn_layout.addWidget(btn_close)
         layout.addLayout(btn_layout)
 
-    def _append_char_row(self, char_str: str, ruby_str: str, check_str: str):
+    def _append_char_row(
+        self, char_str: str, ruby_str: str, check_str: str, linked: bool = False
+    ):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
@@ -1253,15 +1260,24 @@ class ModifyCharacterDialog(QDialog):
         edit_check = QLineEdit(check_str)
         edit_check.setPlaceholderText("节奏点")
         edit_check.setFixedWidth(64)
+        chk_linked = QCheckBox("是否连词")
+        chk_linked.setChecked(bool(linked))
+        chk_linked.setToolTip(
+            "连接到下一字符（末字/句尾/行尾不可连词，提交时将跳过并提示）"
+        )
         row_layout.addWidget(lbl)
         row_layout.addWidget(edit_ruby, stretch=1)
         row_layout.addWidget(edit_check)
+        row_layout.addWidget(chk_linked)
         self._rows_layout.addWidget(row_widget)
-        self._char_rows.append((lbl, edit_ruby, edit_check))
+        self._char_rows.append((lbl, edit_ruby, edit_check, chk_linked))
 
     def _rebuild_rows_on_text_change(self, new_text: str):
         # 保留旧输入值按索引对齐
-        old_vals = [(e_r.text(), e_c.text()) for _, e_r, e_c in self._char_rows]
+        old_vals = [
+            (e_r.text(), e_c.text(), chk.isChecked())
+            for _, e_r, e_c, chk in self._char_rows
+        ]
         # 清空现有行
         while self._rows_layout.count():
             item = self._rows_layout.takeAt(0)
@@ -1271,10 +1287,10 @@ class ModifyCharacterDialog(QDialog):
         self._char_rows.clear()
         for i, ch in enumerate(new_text):
             if i < len(old_vals):
-                r_val, c_val = old_vals[i]
+                r_val, c_val, l_val = old_vals[i]
             else:
-                r_val, c_val = "", "1"
-            self._append_char_row(ch, r_val, c_val)
+                r_val, c_val, l_val = "", "1", False
+            self._append_char_row(ch, r_val, c_val, l_val)
 
     def _parse_ruby(self, raw: str):
         from strange_uta_game.backend.domain.models import Ruby, RubyPart
@@ -1294,25 +1310,30 @@ class ModifyCharacterDialog(QDialog):
         if not new_text:
             return
 
-        # 收集每行值
+        # 收集每行值：ruby / check_count / linked_to_next
         per_char_ruby = []
         per_char_check = []
+        per_char_linked_req = []  # 用户请求的 linked_to_next
         for i in range(len(new_text)):
             if i >= len(self._char_rows):
                 per_char_ruby.append(None)
                 per_char_check.append(1)
+                per_char_linked_req.append(False)
                 continue
-            _, edit_ruby, edit_check = self._char_rows[i]
+            _, edit_ruby, edit_check, chk_linked = self._char_rows[i]
             per_char_ruby.append(self._parse_ruby(edit_ruby.text()))
             try:
                 per_char_check.append(max(0, int(edit_check.text().strip())))
             except ValueError:
                 per_char_check.append(1)
+            per_char_linked_req.append(bool(chk_linked.isChecked()))
 
         old_chars = self._sentence.characters[self._start_idx : self._end_idx + 1]
         old_last_is_sentence_end = old_chars[-1].is_sentence_end if old_chars else False
         old_last_is_line_end = old_chars[-1].is_line_end if old_chars else False
         singer_id = old_chars[0].singer_id if old_chars else ""
+
+        self._linked_failures = []
 
         if len(new_text) == len(old_chars):
             # 字符数不变 → 原地修改，保留 timestamps 和 offset
@@ -1322,8 +1343,26 @@ class ModifyCharacterDialog(QDialog):
                 tgt.check_count = per_char_check[i]
                 tgt.set_ruby(per_char_ruby[i])
                 tgt.push_to_ruby()
-            # 句尾 / 行末仍由旧末字转移到新末字（同位置即原字符）
-            # 不动 is_sentence_end / is_line_end
+                # linked_to_next 校验：末字/句尾/行尾字符禁止连词
+                req_linked = per_char_linked_req[i]
+                abs_idx = self._start_idx + i
+                sentence_len = len(self._sentence.characters)
+                is_last_in_sentence = abs_idx >= sentence_len - 1
+                if req_linked and (
+                    is_last_in_sentence
+                    or tgt.is_sentence_end
+                    or tgt.is_line_end
+                ):
+                    reason = (
+                        "最后一个字符"
+                        if is_last_in_sentence
+                        else ("句尾" if tgt.is_sentence_end else "行尾")
+                    )
+                    self._linked_failures.append((abs_idx, ch_str, reason))
+                    tgt.linked_to_next = False
+                else:
+                    tgt.linked_to_next = req_linked
+            # 句尾 / 行末由原字符保留，不动 is_sentence_end / is_line_end
         else:
             # 字符数变化 → 替换 slice（无法保留 timestamps）
             new_chars = []
@@ -1342,6 +1381,28 @@ class ModifyCharacterDialog(QDialog):
                 new_chars[-1].is_sentence_end = True
             if old_last_is_line_end:
                 new_chars[-1].is_line_end = True
+            # 应用 linked_to_next（需与新的句尾/行尾/末字状态校验）
+            total_after = (
+                len(self._sentence.characters) - len(old_chars) + len(new_chars)
+            )
+            for i, new_ch in enumerate(new_chars):
+                req_linked = per_char_linked_req[i]
+                abs_idx = self._start_idx + i
+                is_last_in_sentence = abs_idx >= total_after - 1
+                if req_linked and (
+                    is_last_in_sentence
+                    or new_ch.is_sentence_end
+                    or new_ch.is_line_end
+                ):
+                    reason = (
+                        "最后一个字符"
+                        if is_last_in_sentence
+                        else ("句尾" if new_ch.is_sentence_end else "行尾")
+                    )
+                    self._linked_failures.append((abs_idx, new_ch.char, reason))
+                    new_ch.linked_to_next = False
+                else:
+                    new_ch.linked_to_next = req_linked
             self._sentence.characters[self._start_idx : self._end_idx + 1] = new_chars
 
         # 词典注册：用户输入的第一段 ruby 拼接
@@ -1356,6 +1417,10 @@ class ModifyCharacterDialog(QDialog):
 
         self._modified = True
         self.accept()
+
+    def get_linked_failures(self) -> list[tuple[int, str, str]]:
+        """返回应用连词时因末字/句尾/行尾被跳过的项列表（abs_idx, char, reason）。"""
+        return list(self._linked_failures)
 
     def _register_to_dictionary(self, word: str, ruby_parts: list):
         """Register word to user dictionary (dedup + top-insert)."""
@@ -2399,10 +2464,31 @@ class EditorInterface(QWidget):
         if start_idx < 0 or end_idx >= len(sentence.characters):
             return
 
+        # 快照 before：ModifyCharacterDialog 会原地修改 project.sentences
+        before_sentences = deepcopy(self._project.sentences)
+
         dialog = ModifyCharacterDialog(sentence, start_idx, end_idx, self)
         dialog.exec()
 
         if dialog.was_modified():
+            # 将本次修改登记为一次 _SentenceSnapshotCommand（支持撤销/重做）
+            command_manager = None
+            if self._timing_service:
+                command_manager = getattr(
+                    self._timing_service, "_command_manager", None
+                )
+            if command_manager is not None:
+                after_sentences = deepcopy(self._project.sentences)
+                cmd = _SentenceSnapshotCommand(
+                    self._project,
+                    before_sentences,
+                    after_sentences,
+                    f"修改字符（第 {use_line + 1} 句 第 {start_idx + 1}-{end_idx + 1} 字）",
+                )
+                # 我们已经原地修改完成，不希望 execute() 再跑一次：
+                # 用直接入栈方式——调用 execute 会重置为 after_sentences（幂等，安全）
+                command_manager.execute(cmd)
+
             # Rebuild global checkpoints
             if self._timing_service:
                 self._timing_service._rebuild_global_checkpoints()
@@ -2413,6 +2499,25 @@ class EditorInterface(QWidget):
                 self._store.notify("rubies")
                 self._store.notify("checkpoints")
                 self._store.notify("lyrics")
+
+            # 弹窗汇总连词失败项
+            failures = dialog.get_linked_failures()
+            if failures:
+                lines = []
+                for abs_idx, ch, reason in failures[:20]:
+                    lines.append(
+                        f"  第 {use_line + 1} 句 第 {abs_idx + 1} 字「{ch}」：{reason}"
+                    )
+                more = ""
+                if len(failures) > 20:
+                    more = f"\n...（还有 {len(failures) - 20} 项未显示）"
+                QMessageBox.information(
+                    self,
+                    "部分连词设置未应用",
+                    "以下位置为末字/句尾/行尾，不能设置连词，已自动跳过：\n\n"
+                    + "\n".join(lines)
+                    + more,
+                )
 
     def _on_insert_guide(self):
         """打开插入导唱符对话框"""

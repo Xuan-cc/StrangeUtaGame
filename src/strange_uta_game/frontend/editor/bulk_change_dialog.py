@@ -28,6 +28,7 @@ from qfluentwidgets import (
     PrimaryPushButton,
 )
 from typing import Optional, List, Tuple
+from copy import deepcopy
 
 from strange_uta_game.backend.domain import Project
 from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
@@ -52,13 +53,15 @@ class BulkChangeDialog(QDialog):
     ):
         super().__init__(parent)
         self._project = project
-        self._char_rows: List[Tuple[QLabel, QLineEdit, QLineEdit]] = []
+        self._char_rows: List[Tuple[QLabel, QLineEdit, QLineEdit, QCheckBox]] = []
         # 用户是否已手动编辑过 rows / 新字符框；一旦手动编辑，搜索词变化不再覆盖
         self._rows_user_edited = False
         self._new_chars_user_edited = False
         # 抑制程序性 textChanged 触发的标志
         self._suppress_row_signals = False
         self._suppress_new_chars_signal = False
+        # 执行后的失败项汇总：(sentence_index, abs_char_idx, char, reason)
+        self._linked_failures: List[Tuple[int, int, str, str]] = []
 
         self.setWindowTitle("批量变更 (Ctrl+H)")
         self.resize(520, 480)
@@ -127,8 +130,10 @@ class BulkChangeDialog(QDialog):
 
     # ---------- 行管理 ----------
 
-    def _append_char_row(self, char_str: str, ruby_str: str, check_str: str):
-        """追加一行：[字符] [注音] [节奏点]。"""
+    def _append_char_row(
+        self, char_str: str, ruby_str: str, check_str: str, linked: bool = False
+    ):
+        """追加一行：[字符] [注音] [节奏点] [是否连词]。"""
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
@@ -141,14 +146,21 @@ class BulkChangeDialog(QDialog):
         edit_check = QLineEdit(check_str)
         edit_check.setPlaceholderText("节奏点")
         edit_check.setFixedWidth(64)
+        chk_linked = QCheckBox("是否连词")
+        chk_linked.setChecked(bool(linked))
+        chk_linked.setToolTip(
+            "连接到下一字符（末字/句尾/行尾不可连词，提交时将跳过并提示）"
+        )
         # 监控用户手动编辑
         edit_ruby.textEdited.connect(self._on_row_user_edited)
         edit_check.textEdited.connect(self._on_row_user_edited)
+        chk_linked.stateChanged.connect(self._on_row_checkbox_edited)
         row_layout.addWidget(lbl)
         row_layout.addWidget(edit_ruby, stretch=1)
         row_layout.addWidget(edit_check)
+        row_layout.addWidget(chk_linked)
         self._rows_layout.addWidget(row_widget)
-        self._char_rows.append((lbl, edit_ruby, edit_check))
+        self._char_rows.append((lbl, edit_ruby, edit_check, chk_linked))
 
     def _clear_rows(self):
         while self._rows_layout.count():
@@ -163,28 +175,38 @@ class BulkChangeDialog(QDialog):
         new_text: str,
         ruby_list: Optional[List[str]] = None,
         check_list: Optional[List[str]] = None,
+        linked_list: Optional[List[bool]] = None,
     ):
-        """按 new_text 重建行；ruby_list/check_list 为初始值（按索引对齐，不足补空/1）。"""
+        """按 new_text 重建行；ruby_list/check_list/linked_list 为初始值（按索引对齐）。"""
         # 若未传初始值，尝试保留现有 rows 的输入值
         if ruby_list is None or check_list is None:
-            old_vals = [(e_r.text(), e_c.text()) for _, e_r, e_c in self._char_rows]
+            old_vals = [
+                (e_r.text(), e_c.text(), chk.isChecked())
+                for _, e_r, e_c, chk in self._char_rows
+            ]
         else:
-            old_vals = list(zip(ruby_list, check_list))
+            linked_list = linked_list or [False] * len(ruby_list)
+            old_vals = list(zip(ruby_list, check_list, linked_list))
         self._suppress_row_signals = True
         try:
             self._clear_rows()
             for i, ch in enumerate(new_text):
                 if i < len(old_vals):
-                    r_val, c_val = old_vals[i]
+                    r_val, c_val, l_val = old_vals[i]
                 else:
-                    r_val, c_val = "", "1"
-                self._append_char_row(ch, r_val, c_val)
+                    r_val, c_val, l_val = "", "1", False
+                self._append_char_row(ch, r_val, c_val, l_val)
         finally:
             self._suppress_row_signals = False
 
     # ---------- 信号处理 ----------
 
     def _on_row_user_edited(self, _text: str):
+        if self._suppress_row_signals:
+            return
+        self._rows_user_edited = True
+
+    def _on_row_checkbox_edited(self, _state: int):
         if self._suppress_row_signals:
             return
         self._rows_user_edited = True
@@ -254,6 +276,7 @@ class BulkChangeDialog(QDialog):
                 for c in chars
             ]
             check_list = [str(c.check_count) for c in chars]
+            linked_list = [bool(c.linked_to_next) for c in chars]
         else:
             # 无匹配：用搜索词 + fallback reading
             new_text = word
@@ -263,13 +286,14 @@ class BulkChangeDialog(QDialog):
             else:
                 ruby_list = ["" for _ in range(w_len)]
             check_list = ["1" for _ in range(w_len)]
+            linked_list = [False for _ in range(w_len)]
 
         self._suppress_new_chars_signal = True
         try:
             self.edit_new_chars.setText(new_text)
         finally:
             self._suppress_new_chars_signal = False
-        self._rebuild_rows_for_text(new_text, ruby_list, check_list)
+        self._rebuild_rows_for_text(new_text, ruby_list, check_list, linked_list)
 
     # ---------- 解析 ----------
 
@@ -282,21 +306,26 @@ class BulkChangeDialog(QDialog):
             return None
         return Ruby(parts=[RubyPart(text=p) for p in parts])
 
-    def _collect_per_char(self, new_text: str) -> Tuple[List[Optional[Ruby]], List[int]]:
+    def _collect_per_char(
+        self, new_text: str
+    ) -> Tuple[List[Optional[Ruby]], List[int], List[bool]]:
         per_char_ruby: List[Optional[Ruby]] = []
         per_char_check: List[int] = []
+        per_char_linked: List[bool] = []
         for i in range(len(new_text)):
             if i >= len(self._char_rows):
                 per_char_ruby.append(None)
                 per_char_check.append(1)
+                per_char_linked.append(False)
                 continue
-            _, edit_ruby, edit_check = self._char_rows[i]
+            _, edit_ruby, edit_check, chk_linked = self._char_rows[i]
             per_char_ruby.append(self._parse_ruby(edit_ruby.text()))
             try:
                 per_char_check.append(max(0, int(edit_check.text().strip())))
             except ValueError:
                 per_char_check.append(1)
-        return per_char_ruby, per_char_check
+            per_char_linked.append(bool(chk_linked.isChecked()))
+        return per_char_ruby, per_char_check, per_char_linked
 
     # ---------- 执行 ----------
 
@@ -310,7 +339,9 @@ class BulkChangeDialog(QDialog):
         if not new_text:
             return
 
-        per_char_ruby, per_char_check = self._collect_per_char(new_text)
+        per_char_ruby, per_char_check, per_char_linked_req = self._collect_per_char(
+            new_text
+        )
 
         # 收集所有匹配（按 sentence 分组，位置升序）
         matches_by_sentence: dict = {}
@@ -335,9 +366,18 @@ class BulkChangeDialog(QDialog):
             if reply != QMessageBox.StandardButton.Yes:
                 return
 
+        # 执行前快照（用于 CommandManager 的 undo/redo）
+        before_sentences = deepcopy(self._project.sentences)
+
+        self._linked_failures = []
         changed = 0
         word_len = len(word)
+
+        # 以 project.sentences 的索引记录失败位置，便于 UI 定位
+        sentence_idx_map = {id(s): i for i, s in enumerate(self._project.sentences)}
+
         for sentence, positions in matches_by_sentence.values():
+            s_idx = sentence_idx_map.get(id(sentence), -1)
             if same_len:
                 # 原地修改，正向遍历即可（长度不变，索引稳定）
                 for pos in positions:
@@ -350,6 +390,28 @@ class BulkChangeDialog(QDialog):
                         tgt.check_count = per_char_check[i]
                         tgt.set_ruby(per_char_ruby[i])
                         tgt.push_to_ruby()
+                        # linked_to_next 校验：末字/句尾/行尾禁止连词
+                        req_linked = per_char_linked_req[i]
+                        sentence_len = len(sentence.characters)
+                        is_last_in_sentence = ci >= sentence_len - 1
+                        if req_linked and (
+                            is_last_in_sentence
+                            or tgt.is_sentence_end
+                            or tgt.is_line_end
+                        ):
+                            reason = (
+                                "最后一个字符"
+                                if is_last_in_sentence
+                                else (
+                                    "句尾" if tgt.is_sentence_end else "行尾"
+                                )
+                            )
+                            self._linked_failures.append(
+                                (s_idx, ci, ch_str, reason)
+                            )
+                            tgt.linked_to_next = False
+                        else:
+                            tgt.linked_to_next = req_linked
                     changed += 1
             else:
                 # 替换 slice，必须倒序以保持前序位置稳定
@@ -383,12 +445,41 @@ class BulkChangeDialog(QDialog):
                         new_chars[-1].is_sentence_end = True
                     if old_last_is_line_end:
                         new_chars[-1].is_line_end = True
+                    # 应用 linked_to_next（需考虑该匹配点处的新末字状态）
+                    new_total_len = (
+                        len(sentence.characters) - len(old_chars) + len(new_chars)
+                    )
+                    for i, new_ch in enumerate(new_chars):
+                        req_linked = per_char_linked_req[i]
+                        abs_idx = pos + i
+                        is_last_in_sentence = abs_idx >= new_total_len - 1
+                        if req_linked and (
+                            is_last_in_sentence
+                            or new_ch.is_sentence_end
+                            or new_ch.is_line_end
+                        ):
+                            reason = (
+                                "最后一个字符"
+                                if is_last_in_sentence
+                                else (
+                                    "句尾" if new_ch.is_sentence_end else "行尾"
+                                )
+                            )
+                            self._linked_failures.append(
+                                (s_idx, abs_idx, new_ch.char, reason)
+                            )
+                            new_ch.linked_to_next = False
+                        else:
+                            new_ch.linked_to_next = req_linked
                     sentence.characters[pos : pos + word_len] = new_chars
                     changed += 1
 
         # 注册到词典
         if self.chk_register.isChecked():
             self._register_to_dictionary(new_text, per_char_ruby)
+
+        # 将本次批量变更登记为一次 CommandManager 快照命令（支持撤销/重做）
+        self._register_snapshot_command(before_sentences, changed)
 
         # 通知父窗口刷新
         parent = self.parent()
@@ -414,9 +505,57 @@ class BulkChangeDialog(QDialog):
             store.notify("lyrics")
             store.notify("timetags")
 
+        # 弹窗汇总连词失败项
+        if self._linked_failures:
+            self._show_linked_failures_popup()
+
         self.lbl_match.setText(f"已修改 {changed} 处")
         # 一次执行后，后续搜索词变化不应再覆盖 rows（用户已 commit 过）
         self._rows_user_edited = True
+
+    def _register_snapshot_command(self, before_sentences, changed: int) -> None:
+        """将批量变更包成 _SentenceSnapshotCommand 放进 CommandManager。"""
+        if not self._project or changed == 0:
+            return
+        parent = self.parent()
+        timing_service = getattr(parent, "_timing_service", None)
+        if timing_service is None:
+            return
+        command_manager = getattr(timing_service, "_command_manager", None)
+        if command_manager is None:
+            return
+        try:
+            # 延迟导入避免循环依赖
+            from strange_uta_game.frontend.editor.editor_interface import (
+                _SentenceSnapshotCommand,
+            )
+        except Exception:
+            return
+        after_sentences = deepcopy(self._project.sentences)
+        word = self.edit_word.text().strip()
+        description = f"批量变更「{word}」（{changed} 处）"
+        command = _SentenceSnapshotCommand(
+            self._project, before_sentences, after_sentences, description
+        )
+        command_manager.execute(command)
+
+    def _show_linked_failures_popup(self) -> None:
+        """弹窗列出连词失败项。"""
+        if not self._linked_failures:
+            return
+        lines = []
+        for s_idx, c_idx, ch, reason in self._linked_failures[:20]:
+            lines.append(f"  第 {s_idx + 1} 句 第 {c_idx + 1} 字「{ch}」：{reason}")
+        more = ""
+        if len(self._linked_failures) > 20:
+            more = f"\n...（还有 {len(self._linked_failures) - 20} 项未显示）"
+        QMessageBox.information(
+            self,
+            "部分连词设置未应用",
+            "以下位置为末字/句尾/行尾，不能设置连词，已自动跳过：\n\n"
+            + "\n".join(lines)
+            + more,
+        )
 
     def _register_to_dictionary(
         self, word: str, per_char_ruby: List[Optional[Ruby]]
