@@ -128,9 +128,11 @@ class TestDictOkuriganaPeel:
         assert _serialize(sent.characters) == "{食べ物||た,,も|の}"
 
     def test_dict_leading_kana_peeled(self):
-        """`お花見 → お,はな,み`：首字 お 是假名 + part==char → 剥离出 block。
+        """`お花見 → お,はな,み`：干净拆分（3段非空==3字）→ 每字独立。
 
-        期望：`お{花見||は|な,み}`
+        期望：`お{花||はな}{見||み}`（花/見 各自独立，不连词）
+        规则：reading 逗号分段干净（段数==字符数且每段非空）→ 不连词，
+        允许单字独立使用。
         """
         service = AutoCheckService(
             ruby_analyzer=_get_sudachi(),
@@ -141,13 +143,19 @@ class TestDictOkuriganaPeel:
         sent = _make_sentence("お花見")
         service.apply_to_sentence(sent)
 
-        assert _serialize(sent.characters) == "お{花見||は|な,み}"
-        # お 被剥离为独立自注音（ruby=None 因 len==1 且 ==self）
+        assert _serialize(sent.characters) == "お{花||は|な}{見||み}"
+        # お 独立自注音
         assert sent.characters[0].ruby is None
         assert sent.characters[0].linked_to_next is False
+        # 花 也独立不连词到 見
+        assert sent.characters[1].linked_to_next is False
 
     def test_normal_dict_unaffected(self):
-        """正常字典 `大冒険 → だい,ぼう,けん` 不应受新逻辑影响。"""
+        """干净拆分 `大冒険 → だい,ぼう,けん`（3段非空==3字）→ 每字独立。
+
+        规则：reading 逗号分段干净 → 不连词，允许单字独立使用。
+        期望：`{大||だ|い}{冒||ぼ|う}{険||け|ん}`
+        """
         service = AutoCheckService(
             ruby_analyzer=_get_sudachi(),
             user_dictionary=[
@@ -157,7 +165,10 @@ class TestDictOkuriganaPeel:
         sent = _make_sentence("大冒険")
         service.apply_to_sentence(sent)
 
-        assert _serialize(sent.characters) == "{大冒険||だ|い,ぼ|う,け|ん}"
+        assert _serialize(sent.characters) == "{大||だ|い}{冒||ぼ|う}{険||け|ん}"
+        # 三字都独立不连词
+        assert sent.characters[0].linked_to_next is False
+        assert sent.characters[1].linked_to_next is False
 
     def test_two_char_dict_tail_empty_fallback(self):
         """2 字刷质：`可愛 → かわ,` 尾空对汉字 → fallback。"""
@@ -171,6 +182,61 @@ class TestDictOkuriganaPeel:
         service.apply_to_sentence(sent)
 
         assert _serialize(sent.characters) == "{可愛||か,わ}"
+        assert sent.characters[0].linked_to_next is True
+
+    def test_clean_split_two_char_independent(self):
+        """干净拆分 2 字 `大空 → おお,そら` → 每字独立可单独使用。
+
+        规则：2 段非空 == 2 字 → 不连词。
+        期望：`{大||お|お}{空||そ|ら}`
+        """
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "大空", "reading": "おお,そら"}
+            ],
+        )
+        sent = _make_sentence("大空")
+        service.apply_to_sentence(sent)
+
+        assert _serialize(sent.characters) == "{大||お|お}{空||そ|ら}"
+        assert sent.characters[0].linked_to_next is False
+
+    def test_clean_split_jiyuu_independent(self):
+        """干净拆分 `自由 → じ,ゆう` → 每字独立。
+
+        期望：`{自||じ}{由||ゆ|う}`，自.cp=1、由.cp=2
+        """
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "自由", "reading": "じ,ゆう"}
+            ],
+        )
+        sent = _make_sentence("自由")
+        service.apply_to_sentence(sent)
+
+        assert _serialize(sent.characters) == "{自||じ}{由||ゆ|う}"
+        assert sent.characters[0].linked_to_next is False
+        assert sent.characters[0].check_count == 1
+        assert sent.characters[1].check_count == 2
+
+    def test_empty_middle_segment_still_links(self):
+        """非干净拆分 `可愛い → かわい,,い`（中间空段）→ 保留连词。
+
+        规则：有空段 → 不是干净拆分 → 连词语义尊重原字典。
+        期望：`{可愛||か|わ|い,}い` 形式（可 linked → 愛）
+        """
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "可愛い", "reading": "かわい,,い"}
+            ],
+        )
+        sent = _make_sentence("可愛い")
+        service.apply_to_sentence(sent)
+
+        # 可 必须 linked 到 愛（中间空段语义：前字承载全部 mora）
         assert sent.characters[0].linked_to_next is True
 
     def test_adjective_okurigana_no_dict(self):

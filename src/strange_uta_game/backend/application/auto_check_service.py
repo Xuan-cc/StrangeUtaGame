@@ -649,6 +649,11 @@ class AutoCheckService:
         char_to_block: Dict[int, int] = {}
         for block_id, result in enumerate(ruby_results):
             block_len = result.end_idx - result.start_idx
+            # "干净拆分"标记：用户词典 reading 用逗号干净拆成每字独立读音时
+            # （每段非空 + 段数 == 字符数），不应强制连词，让每字能被独立使用。
+            # 例：`大空 → おお,そら` → 大[おお] 空[そら] 各自独立。
+            # 反例：`可愛い → かわい,,い`（中间空段）仍需连词承载 mora。
+            is_clean_per_char_split = False
             # 词典条目可能用逗号分隔各字符的读音（如 "だい,ぼう,けん"）
             if "," in (result.reading or "") and block_len > 1:
                 parts = [p.strip() for p in result.reading.split(",")]
@@ -681,6 +686,14 @@ class AutoCheckService:
                     )
                     # 升级来源让 apply_to_sentence 允许连续汉字间连词
                     block_source[block_id] = "fallback"
+                else:
+                    # 干净拆分判定：所有 part 非空 + 原始段数 == block_len
+                    # （补齐逻辑产生的尾部空段算不干净）
+                    if (
+                        len(parts) >= block_len
+                        and all(p for p in split_parts)
+                    ):
+                        is_clean_per_char_split = True
             else:
                 if block_len > 1:
                     # library 来源：跳过 _try_split_to_chars，直接走 fallback
@@ -713,7 +726,13 @@ class AutoCheckService:
                     pos = idx - result.start_idx
                     if pos < len(split_parts) and split_parts[pos]:
                         char_to_ruby_raw[idx] = split_parts[pos]
-                    char_to_block[idx] = block_id
+                    # 干净拆分（每段非空 + 段数==字符数）→ 每字独立，
+                    # 不写 char_to_block，使 origin_block_id 保持 -1，
+                    # 从而跳过 L1094-1100 的连词判定，允许单字独立使用。
+                    # 例：大空=おお,そら → 大[おお]+空[そら] 独立；
+                    # 大冒険=だい,ぼう,けん → 大/冒/険 各自独立。
+                    if not is_clean_per_char_split:
+                        char_to_block[idx] = block_id
 
         # 首尾假名剥离：若连词块的首/尾字符是假名（送り仮名/接头假名模式），
         # 将它们从 char_to_block 中移除，使其成为独立自注音字符，
