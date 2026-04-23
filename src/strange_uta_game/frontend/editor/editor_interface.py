@@ -2496,6 +2496,10 @@ class EditorInterface(QWidget):
             self._audio_file_path = file_path
             self.toolbar.lbl_audio.setText(Path(file_path).name)
 
+            # 与 Home 页加载音频的动作对称：广播 audio 变更，使导出页等订阅者同步
+            if hasattr(self, "_store") and self._store:
+                self._store.set_audio_path(file_path)
+
             InfoBar.success(
                 title="音频已加载",
                 content=Path(file_path).name,
