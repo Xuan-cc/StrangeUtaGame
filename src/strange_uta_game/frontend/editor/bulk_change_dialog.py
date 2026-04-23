@@ -20,11 +20,24 @@ from qfluentwidgets import (
     InfoBarPosition,
 )
 from typing import Optional
-from strange_uta_game.backend.domain import Project, Ruby
+from strange_uta_game.backend.domain import Project, Ruby, RubyPart
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     split_ruby_for_checkpoints,
-    align_ruby_to_checkpoints,
+    align_ruby_parts_to_checkpoints,
 )
+
+
+def _build_ruby_from_text(raw: str, check_count: int, is_sentence_end: bool):
+    """UI 整串 ruby 字符串 → Ruby 对象；空串返回 None。"""
+    text = raw.strip()
+    if not text:
+        return None
+    initial = split_ruby_for_checkpoints(text, max(check_count, 1))
+    aligned = align_ruby_parts_to_checkpoints(initial, check_count, is_sentence_end)
+    parts = [RubyPart(text=p) for p in aligned if p]
+    if not parts:
+        return None
+    return Ruby(parts=parts)
 
 
 class BulkChangeDialog(QDialog):
@@ -83,7 +96,7 @@ class BulkChangeDialog(QDialog):
         lbl2.setFixedWidth(100)
         self.edit_reading = LineEdit()
         self.edit_reading.setPlaceholderText(
-            "留空将删除注音（假名，逗号分隔多段；同字符内多节奏点可用 # 分组，如 わ#た#し）"
+            "留空将删除注音（假名，逗号分隔多段）"
         )
         self.edit_reading.setFont(QFont("Microsoft YaHei", 10))
         if initial_reading:
@@ -202,13 +215,13 @@ class BulkChangeDialog(QDialog):
                                         )
                                         if part:
                                             tgt = sentence.characters[ci]
-                                            aligned = align_ruby_to_checkpoints(
+                                            ruby_obj = _build_ruby_from_text(
                                                 part,
                                                 tgt.check_count,
                                                 tgt.is_sentence_end,
                                             )
-                                            if aligned:
-                                                tgt.set_ruby(Ruby(text=aligned))
+                                            if ruby_obj is not None:
+                                                tgt.set_ruby(ruby_obj)
                                             else:
                                                 tgt.set_ruby(None)
                                         else:
@@ -223,13 +236,13 @@ class BulkChangeDialog(QDialog):
                                     if ci < len(sentence.characters):
                                         if k < len(split_parts) and split_parts[k]:
                                             tgt = sentence.characters[ci]
-                                            aligned = align_ruby_to_checkpoints(
+                                            ruby_obj = _build_ruby_from_text(
                                                 split_parts[k],
                                                 tgt.check_count,
                                                 tgt.is_sentence_end,
                                             )
-                                            if aligned:
-                                                tgt.set_ruby(Ruby(text=aligned))
+                                            if ruby_obj is not None:
+                                                tgt.set_ruby(ruby_obj)
                                             else:
                                                 tgt.set_ruby(None)
                                         else:

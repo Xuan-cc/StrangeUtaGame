@@ -2,6 +2,7 @@ import pytest
 from strange_uta_game.backend.domain import (
     Character,
     Ruby,
+    RubyPart,
     ValidationError,
     TimeTagType,
 )
@@ -20,7 +21,7 @@ class TestCharacter:
         assert ch.singer_id == ""
 
     def test_full_creation(self):
-        ruby = Ruby(text="あか")
+        ruby = Ruby(parts=[RubyPart(text="あか")])
         ch = Character(
             char="赤",
             ruby=ruby,
@@ -57,7 +58,7 @@ class TestCharacter:
         assert ch.check_count == 0
 
     def test_push_to_ruby(self):
-        ruby = Ruby(text="あか")
+        ruby = Ruby(parts=[RubyPart(text="あか")])
         ch = Character(
             char="赤",
             ruby=ruby,
@@ -92,7 +93,7 @@ class TestCharacter:
         assert ch.remove_timestamp_at(10) is None
 
     def test_clear_timestamps(self):
-        ruby = Ruby(text="a")
+        ruby = Ruby(parts=[RubyPart(text="a")])
         ch = Character(
             char="a",
             ruby=ruby,
@@ -113,7 +114,7 @@ class TestCharacter:
             is_sentence_end=True,
             singer_id="s1",
         )
-        ruby = Ruby(text="あか")
+        ruby = Ruby(parts=[RubyPart(text="あか")])
         ch.set_ruby(ruby)
         assert ch.ruby == ruby
         assert ruby.timestamps == [1000, 1500]

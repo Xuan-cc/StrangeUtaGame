@@ -78,11 +78,21 @@ class EnglishRubyLookup:
 
         #11：先规范化弯引号/全角撇号为 ASCII，避免 `what\u2019s` 之类的输入
         找不到 `what's` 条目。
+
+        批 17：正则会把末尾的 `.` 剪掉（`a.m.` → `a.m`），但词典 key 以
+        原始形式 `a.m.` 存储。miss 时自动补尾点重试，命中 `a.m./p.m./b.c./
+        a.d./c.o.d.` 等约定俗成含尾点的缩略词条。
         """
         if not word:
             return None
         key = normalize_apostrophes(word).lower()
-        return self._dict.get(key)
+        hit = self._dict.get(key)
+        if hit is not None:
+            return hit
+        # 尾点重试：仅当 key 含内部点（形如 a.m、b.c、c.o.d）时才尝试
+        if "." in key:
+            return self._dict.get(key + ".")
+        return None
 
     def has(self) -> bool:
         """词典是否加载成功且非空。"""

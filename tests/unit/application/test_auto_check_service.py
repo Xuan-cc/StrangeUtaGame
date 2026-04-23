@@ -6,6 +6,18 @@ from strange_uta_game.backend.domain import Sentence
 from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import DummyAnalyzer
 
 
+def _get_sudachi_analyzer():
+    """尝试获取真实 SudachiAnalyzer；不可用则返回 None（测试 skip）。"""
+    try:
+        from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
+            SudachiAnalyzer,
+        )
+
+        return SudachiAnalyzer()
+    except Exception:
+        return None
+
+
 class TestAutoCheckService:
     """测试自动检查服务"""
 
@@ -101,3 +113,50 @@ class TestAutoCheckService:
         service.apply_to_sentence(sentence)
 
         assert not sentence.characters[-1].is_line_end
+
+
+class TestA3RootCauseEmptyRubyGroup:
+    """批 17 A.3 根因锁定（集成层红测）。
+
+    用户原报错 verbatim：'Ruby 分组存在空组:'お#お#''
+    触发：自动分析"大空" 或 "{大|おお}{空|そら}" 均抛异常。
+    新 API 下 # 不再作为分组标记，断言改为验证 parts 结构合法。
+    """
+
+    def test_ookusora_raw_no_empty_group_exception(self):
+        """A.3 端到端：自动分析"大空" 不应抛异常，且每个 part.text 非空"""
+        analyzer = _get_sudachi_analyzer()
+        if analyzer is None:
+            pytest.skip("SudachiAnalyzer 不可用，跳过集成测试")
+
+        service = AutoCheckService(analyzer)
+        sentence = Sentence.from_text("大空", "s1")
+
+        service.apply_to_sentence(sentence)
+
+        for c in sentence.characters:
+            if c.ruby:
+                assert c.ruby.parts, f"parts 为空: {c.char}"
+                for p in c.ruby.parts:
+                    assert p.text, f"part.text 为空: char={c.char!r}"
+
+    def test_ookusora_linked_no_empty_group_exception(self):
+        """A.3 端到端：自动分析"{大|おお}{空|そら}" 不应抛异常"""
+        analyzer = _get_sudachi_analyzer()
+        if analyzer is None:
+            pytest.skip("SudachiAnalyzer 不可用，跳过集成测试")
+
+        from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+            from_inline_text,
+        )
+
+        sentence = from_inline_text("{大|おお}{空|そら}", "s1")
+        service = AutoCheckService(analyzer)
+
+        service.apply_to_sentence(sentence)
+
+        for c in sentence.characters:
+            if c.ruby:
+                assert c.ruby.parts, f"parts 为空: {c.char}"
+                for p in c.ruby.parts:
+                    assert p.text, f"part.text 为空: char={c.char!r}"

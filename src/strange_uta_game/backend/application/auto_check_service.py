@@ -11,6 +11,7 @@ from strange_uta_game.backend.domain import (
     Sentence,
     Character,
     Ruby,
+    RubyPart,
 )
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
     split_text,
@@ -63,7 +64,7 @@ class AutoCheckResult:
     char_idx: int
     char: str
     check_count: int
-    ruby: Optional[str]
+    ruby: Optional[List[str]]  # Stage 0: _group_reading_for_character 返回 List[str]
     origin_block_id: int = -1
     # 注音来源："dict"=用户词典, "e2k"=英语词典, "library"=库函数, "self"=原字符, "none"=无注音
     origin_source: str = "none"
@@ -240,6 +241,60 @@ class AutoCheckService:
         merged = filtered + overrides
         merged.sort(key=lambda r: r.start_idx)
         return merged, e2k_covered
+
+    def _apply_english_fallback(
+        self,
+        text: str,
+        ruby_results: List[RubyResult],
+        dict_covered: set,
+        e2k_covered: set,
+    ) -> Tuple[List[RubyResult], set]:
+        """批 17 #1：未命中任何词典的英文连续段作为整词 ruby。
+
+        对 find_english_words 定位到、且未被 user_dict / e2k 覆盖的英文词，
+        生成 RubyResult(text=word, reading=word)，整块挂 ruby，
+        配合下游 check_counts 覆写（首字=1、其他=0）实现「英文词组首字母
+        一个 cp、其他字母无 cp」的需求。
+
+        单字母英文词（end-start <= 1）不视为"词组"，跳过以保留默认逐字 cp。
+
+        Args:
+            text: 原句子文本
+            ruby_results: 当前已处理的 ruby 结果
+            dict_covered: 用户词典已覆盖位置
+            e2k_covered: e2k 英语词典已覆盖位置
+
+        Returns:
+            (合并后的 ruby_results, 本 fallback 覆盖的字符索引集合)
+        """
+        covered: set[int] = set()
+        overrides: List[RubyResult] = []
+        for start, end, word in find_english_words(text):
+            if end - start <= 1:
+                continue  # 单字母词：无词组概念，保留默认
+            span = set(range(start, end))
+            if span & dict_covered:
+                continue
+            if span & e2k_covered:
+                continue
+            # 整词 fallback：text == reading，下游 check_counts 覆写完成 cp 分配
+            overrides.append(
+                RubyResult(
+                    text=word, reading=word, start_idx=start, end_idx=end
+                )
+            )
+            covered |= span
+        if not overrides:
+            return ruby_results, covered
+        # 移除 Sudachi 在这些位置的逐字符结果，防止残留
+        filtered = [
+            r
+            for r in ruby_results
+            if not (set(range(r.start_idx, r.end_idx)) & covered)
+        ]
+        merged = filtered + overrides
+        merged.sort(key=lambda r: r.start_idx)
+        return merged, covered
 
     def _try_split_to_chars(self, word: str, reading: str) -> Optional[List[str]]:
         """尝试将多字词的读音拆分到各字符（三遍策略）。
@@ -443,6 +498,12 @@ class AutoCheckService:
             text, ruby_results, dict_covered
         )
 
+        # 批 17 #1: 英文词组 fallback — 未命中任何词典的英文词整块挂 ruby
+        # 配合下游 check_counts 覆写实现「首字=1 cp、其他字母=0 cp」
+        ruby_results, english_fallback_covered = self._apply_english_fallback(
+            text, ruby_results, dict_covered, e2k_covered
+        )
+
         # 记录每个块的来源（用于 #10 连词判定）
         block_source: Dict[int, str] = {}
         for block_id, result in enumerate(ruby_results):
@@ -451,6 +512,8 @@ class AutoCheckService:
                 block_source[block_id] = "dict"
             elif span & e2k_covered:
                 block_source[block_id] = "e2k"
+            elif span & english_fallback_covered:
+                block_source[block_id] = "english_fallback"
             else:
                 block_source[block_id] = "library"
 
@@ -497,7 +560,15 @@ class AutoCheckService:
             char_to_ruby_raw[idx] = char
 
         # 根据注音更新 check_count（汉字按 mora 数分配节奏点）
-        for result in ruby_results:
+        for block_id, result in enumerate(ruby_results):
+            # 批 17 #1: 英文词组 fallback 块——首字母=1 cp、其他字母=0 cp
+            # 必须在 `result.text == result.reading` 短路之前处理
+            # （fallback 的 text 与 reading 完全相同，否则会被跳过保留默认每字母=1）
+            if block_source.get(block_id) == "english_fallback":
+                for idx in range(result.start_idx, result.end_idx):
+                    if idx < len(check_counts):
+                        check_counts[idx] = 1 if idx == result.start_idx else 0
+                continue
             if result.text == result.reading:
                 continue  # 假名/符号/空格等读音与原文相同，不更新
 
@@ -631,11 +702,39 @@ class AutoCheckService:
 
         return results
 
+    def _is_char_already_rubied(
+        self, sentence: Sentence, idx: int
+    ) -> bool:
+        """判断指定位置的字符是否已被注音。
+
+        规则：
+        - char.ruby 非 None 视为已注音。
+        - 若前一个字符 linked_to_next=True 且前一个字符已注音，则视为已注音（连词传递）。
+
+        Args:
+            sentence: 句子
+            idx: 字符索引
+
+        Returns:
+            是否已注音
+        """
+        if idx < 0 or idx >= len(sentence.characters):
+            return False
+        char = sentence.characters[idx]
+        if char.ruby is not None:
+            return True
+        if idx > 0:
+            prev = sentence.characters[idx - 1]
+            if prev.linked_to_next and self._is_char_already_rubied(sentence, idx - 1):
+                return True
+        return False
+
     def apply_to_sentence(
         self,
         sentence: Sentence,
         split_config: Optional[SplitConfig] = None,
         keep_existing_timetags: bool = True,
+        only_noruby: bool = False,
     ) -> None:
         """分析并应用自动检查结果到句子
 
@@ -646,7 +745,19 @@ class AutoCheckService:
             sentence: 句子
             split_config: 拆分配置
             keep_existing_timetags: 是否保留现有时间标签
+            only_noruby: 仅对未注音字符应用（已注音字符的 Ruby/check_count/linked_to_next 保留）
         """
+        # only_noruby 模式：预先快照已注音字符的状态
+        preserved: Dict[int, Tuple[Optional[Ruby], int, bool]] = {}
+        if only_noruby:
+            for i in range(len(sentence.characters)):
+                if self._is_char_already_rubied(sentence, i):
+                    c = sentence.characters[i]
+                    preserved[i] = (c.ruby, c.check_count, c.linked_to_next)
+            # 全部已注音 → 无事可做
+            if len(preserved) == len(sentence.characters) and sentence.characters:
+                return
+
         results = self.analyze_sentence(sentence, split_config)
 
         if not results:
@@ -688,9 +799,15 @@ class AutoCheckService:
             # 每个字符直接携带自己的 Ruby（无需跨字符合并）
             # #11：ruby 为空、或与字符本身相同时不生成 Ruby 对象，
             # 避免 Ruby.__post_init__ 触发空文本异常，并避免导出残留 {a|a}。
-            ruby_text = result.ruby
-            if ruby_text and ruby_text != result.char:
-                ruby_obj = Ruby(text=ruby_text)
+            # Stage 0: result.ruby 为 List[str]（来自 _group_reading_for_character），
+            # 映射为 Ruby(parts=[RubyPart(text=s), ...])。
+            ruby_groups = result.ruby  # List[str] | None
+            if ruby_groups and not (
+                len(ruby_groups) == 1 and ruby_groups[0] == result.char
+            ):
+                ruby_obj = Ruby(parts=[RubyPart(text=g) for g in ruby_groups if g])
+                if not ruby_obj.parts:
+                    ruby_obj = None
             else:
                 ruby_obj = None
 
@@ -706,9 +823,9 @@ class AutoCheckService:
 
         # 设置 linked_to_next: 当下一个字符 check_count==0 时，当前字符连词到下一个
         # 空格字符不应触发连词（空格 check_count==0 是过滤规则的结果，不代表连读）
-        # #10: 仅当注音来源是「用户词典」或「e2k 英语词典」时才允许连词；
-        #      库函数（Sudachi/pykakasi）和自注音的结果一律不连词。
-        _LINKABLE_SOURCES = {"dict", "e2k"}
+        # #10: 仅当注音来源是「用户词典」或「e2k 英语词典」或「英文词组 fallback」
+        #      时才允许连词；库函数（Sudachi/pykakasi）和自注音的结果一律不连词。
+        _LINKABLE_SOURCES = {"dict", "e2k", "english_fallback"}
         for i in range(len(new_characters) - 1):
             next_ch = new_characters[i + 1]
             if next_ch.char and next_ch.char.isspace():
@@ -738,6 +855,15 @@ class AutoCheckService:
 
         sentence.characters = new_characters
 
+        # only_noruby 模式：对已注音字符恢复原 Ruby/check_count/linked_to_next。
+        # 注意：analyze 过程可能改变字符数量时（当前流程下不会），此覆盖按原位置对齐。
+        if only_noruby and preserved:
+            for i, (old_ruby, old_cc, old_link) in preserved.items():
+                if i < len(sentence.characters):
+                    sentence.characters[i].ruby = old_ruby
+                    sentence.characters[i].check_count = old_cc
+                    sentence.characters[i].linked_to_next = old_link
+
     def analyze_project(
         self, project: Project, split_config: Optional[SplitConfig] = None
     ) -> List[Tuple[int, List[AutoCheckResult]]]:
@@ -766,6 +892,7 @@ class AutoCheckService:
         project: Project,
         split_config: Optional[SplitConfig] = None,
         keep_existing_timetags: bool = True,
+        only_noruby: bool = False,
     ) -> None:
         """分析并应用到整个项目
 
@@ -773,9 +900,12 @@ class AutoCheckService:
             project: 项目
             split_config: 拆分配置
             keep_existing_timetags: 是否保留现有时间标签
+            only_noruby: 仅对未注音字符应用
         """
         for sentence in project.sentences:
-            self.apply_to_sentence(sentence, split_config, keep_existing_timetags)
+            self.apply_to_sentence(
+                sentence, split_config, keep_existing_timetags, only_noruby
+            )
 
     def update_checkpoints_from_rubies(
         self,
@@ -808,7 +938,8 @@ class AutoCheckService:
         for i, char in enumerate(sentence.characters):
             if not char.ruby:
                 continue
-            ruby_groups = char.ruby.groups()
+            # Stage 0: Ruby 已迁移为 parts 模型，ruby.parts: List[RubyPart]
+            ruby_groups = [p.text for p in char.ruby.parts]
             if len(ruby_groups) == 1 and char.char == ruby_groups[0]:
                 continue  # 自注音（假名等），保留默认 check_count
             # 汉字等：按 Ruby 分组数量/组内 mora 数分配节奏点

@@ -32,6 +32,7 @@ from strange_uta_game.backend.domain import (
     Sentence,
     Character,
     Ruby,
+    RubyPart,
 )
 from strange_uta_game.backend.application import AutoCheckService
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
@@ -61,7 +62,7 @@ def _rebuild_characters(
         if ruby_map:
             for i, ch in enumerate(old_sentence.characters):
                 if i in ruby_map:
-                    ch.set_ruby(Ruby(text=ruby_map[i]))
+                    ch.set_ruby(Ruby(parts=[RubyPart(text=ruby_map[i])]))
         # ruby_map 为空时保留现有 ruby 不变
         return old_sentence.characters
 
@@ -78,20 +79,11 @@ def _rebuild_characters(
         is_last = j == len(new_chars) - 1
         old_idx = new_to_old.get(j)
 
-        # 全文本编辑界面：以 ruby_map 中 '#' 数反推 check_count（用户规则）
-        # - 若该位置有 ruby 且含 '#': cc = groups 数（句尾不额外 +1，句尾 cp 不在 ruby 层体现）
-        # - 否则沿用旧值（old 存在时）或默认 1
-        derived_cc: Optional[int] = None
-        raw_ruby_for_j = ruby_map.get(j)
-        if raw_ruby_for_j and "#" in raw_ruby_for_j:
-            derived_cc = raw_ruby_for_j.count("#") + 1
-
         if old_idx is not None:
             old_ch = old_sentence.characters[old_idx]
-            cc = derived_cc if derived_cc is not None else old_ch.check_count
             ch = Character(
                 char=new_chars[j],
-                check_count=cc,
+                check_count=old_ch.check_count,
                 timestamps=list(old_ch.timestamps),
                 sentence_end_ts=old_ch.sentence_end_ts,
                 linked_to_next=old_ch.linked_to_next if not is_last else False,
@@ -102,13 +94,12 @@ def _rebuild_characters(
             )
             # 保留原字符的注音（后续 ruby_map 覆盖优先）
             if old_ch.ruby:
-                ch.set_ruby(Ruby(text=old_ch.ruby.text))
+                ch.set_ruby(Ruby(parts=[RubyPart(text=p.text) for p in old_ch.ruby.parts]))
         else:
-            # 新字符：默认 check_count=1；若 ruby_map 给出 '#' 分组则以分组数反推
-            cc = derived_cc if derived_cc is not None else 1
+            # 新字符：默认 check_count=1
             ch = Character(
                 char=new_chars[j],
-                check_count=cc,
+                check_count=1,
                 is_line_end=is_last,
                 is_sentence_end=is_last,
                 singer_id=old_sentence.singer_id,
@@ -116,7 +107,7 @@ def _rebuild_characters(
 
         # 应用 ruby
         if j in ruby_map:
-            ch.set_ruby(Ruby(text=ruby_map[j]))
+            ch.set_ruby(Ruby(parts=[RubyPart(text=ruby_map[j])]))
 
         characters.append(ch)
 
@@ -127,7 +118,7 @@ def _apply_ruby_map(sentence: Sentence, ruby_map: Dict[int, str]) -> None:
     """将 ruby_map 应用到句子的字符上。"""
     for ci, ruby_text in ruby_map.items():
         if 0 <= ci < len(sentence.characters):
-            sentence.characters[ci].set_ruby(Ruby(text=ruby_text))
+            sentence.characters[ci].set_ruby(Ruby(parts=[RubyPart(text=ruby_text)]))
 
 
 def _is_kanji_char(char: str) -> bool:
@@ -307,7 +298,7 @@ class RubyInterface(QWidget):
         # 说明
         desc = QLabel(
             "全文本编辑：新格式 {原文|读音1,读音2,...} 逗号分隔每字读音，\n"
-            "例：{大冒険|だい,ぼう,けん}；多 checkpoint 的单字读音用 # 分组，如 {私|わ#た#し}\n"
+            "例：{大冒険|だい,ぼう,けん}\n"
             "仍兼容旧格式 赤{あか}い花{はな}。切换标签页时自动保存修改"
         )
         desc.setStyleSheet("color: gray;")
@@ -533,17 +524,35 @@ class RubyInterface(QWidget):
     # ==================== 批量操作 ====================
 
     def _on_auto_analyze_all(self):
-        """自动分析全部注音（同时更新节奏点）"""
+        """自动分析全部注音：拆成注音与节奏点两步；节奏点失败不影响注音更新。"""
         if not self._project:
             return
 
+        auto_check = self._create_auto_check_service()
+
+        # 第一步：应用注音
         try:
-            auto_check = self._create_auto_check_service()
             auto_check.apply_to_project(self._project)
             self._refresh_display()
             if hasattr(self, "_store"):
                 self._store.notify("rubies")
+        except Exception as e:
+            InfoBar.warning(
+                title="注音分析失败",
+                content=str(e),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
 
+        # 第二步：更新节奏点（失败时保留已更新的注音）
+        try:
+            auto_check.update_checkpoints_for_project(self._project)
+            if hasattr(self, "_store"):
+                self._store.notify("checkpoints")
             InfoBar.success(
                 title="分析完成",
                 content=f"已为 {len(self._project.sentences)} 行自动分析注音并更新节奏点",
@@ -555,12 +564,12 @@ class RubyInterface(QWidget):
             )
         except Exception as e:
             InfoBar.warning(
-                title="分析失败",
-                content=str(e),
+                title="节奏点更新失败",
+                content=f"注音已更新，但节奏点更新失败: {e}",
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
-                duration=3000,
+                duration=4000,
                 parent=self,
             )
 

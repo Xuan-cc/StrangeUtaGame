@@ -26,10 +26,31 @@ from strange_uta_game.backend.domain import (
     Character,
     Ruby,
 )
+from strange_uta_game.backend.domain.models import RubyPart
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-    align_ruby_to_checkpoints,
+    align_ruby_parts_to_checkpoints,
+    split_ruby_for_checkpoints,
 )
 import re
+
+
+def _build_ruby_from_text(
+    raw: str, check_count: int, is_sentence_end: bool
+) -> Optional[Ruby]:
+    """将用户输入整串 ruby 文本构造为 Ruby 对象。
+
+    入参: raw 用户输入字符串; check_count 目标分段数; is_sentence_end 是否句尾。
+    出参: 构造好的 Ruby，若 raw 为空或 align 后全空返回 None。
+    """
+    text = raw.strip()
+    if not text:
+        return None
+    initial = split_ruby_for_checkpoints(text, max(check_count, 1))
+    aligned = align_ruby_parts_to_checkpoints(initial, check_count, is_sentence_end)
+    parts = [RubyPart(text=p) for p in aligned if p]
+    if not parts:
+        return None
+    return Ruby(parts=parts)
 
 
 def _fmt_time(ms: int) -> str:
@@ -58,7 +79,9 @@ def _clone_ruby(ruby: Optional[Ruby]) -> Optional[Ruby]:
     if ruby is None:
         return None
     return Ruby(
-        text=ruby.text, timestamps=list(ruby.timestamps), singer_id=ruby.singer_id
+        parts=[RubyPart(text=p.text, offset_ms=p.offset_ms) for p in ruby.parts],
+        timestamps=list(ruby.timestamps),
+        singer_id=ruby.singer_id,
     )
 
 
@@ -136,8 +159,8 @@ class LineDetailDialog(QDialog):
             "连词合并为一行，注音/Checkpoint/演唱者用逗号分隔对应各字符\n"
             "双击可编辑「字符」「注音」「Checkpoint数」「句尾」「时间标签」「演唱者」列\n"
             "句尾列填写「是」标记为句尾（独立记录释放时间），留空取消\n"
-            "注音列：同字符内多节奏点可用 # 分组（如 わ#た#し，对应 Checkpoint 数=3）；"
-            "分组数不匹配 Checkpoint 时会自动合并/补空格，不会报错"
+            "注音列：单字符注音整串填写；自动按 mora / 字符拆分到 Checkpoint，"
+            "分段数不匹配时会自动合并/补空格，不会报错"
         )
         hint.setStyleSheet("color: gray; font-size: 11px;")
         self.vbox.addWidget(hint)
@@ -437,15 +460,12 @@ class LineDetailDialog(QDialog):
                         if new_r_text:
                             try:
                                 tgt = characters[ci]
-                                aligned = align_ruby_to_checkpoints(
+                                ruby_obj = _build_ruby_from_text(
                                     new_r_text,
                                     tgt.check_count,
                                     tgt.is_sentence_end,
                                 )
-                                if aligned:
-                                    tgt.set_ruby(Ruby(text=aligned))
-                                else:
-                                    tgt.set_ruby(None)
+                                tgt.set_ruby(ruby_obj)
                             except Exception as e:
                                 errors.append(f"字符 {ci + 1}: 注音错误 {e}")
                         else:
@@ -456,26 +476,20 @@ class LineDetailDialog(QDialog):
                         if g_len == 1:
                             try:
                                 tgt = characters[group[0]]
-                                aligned = align_ruby_to_checkpoints(
+                                ruby_obj = _build_ruby_from_text(
                                     raw, tgt.check_count, tgt.is_sentence_end
                                 )
-                                if aligned:
-                                    tgt.set_ruby(Ruby(text=aligned))
-                                else:
-                                    tgt.set_ruby(None)
+                                tgt.set_ruby(ruby_obj)
                             except Exception as e:
                                 errors.append(f"字符 {group[0] + 1}: 注音错误 {e}")
                         else:
                             # 多字符无逗号：整体 ruby 分配到第一个字符
                             try:
                                 tgt = characters[group[0]]
-                                aligned = align_ruby_to_checkpoints(
+                                ruby_obj = _build_ruby_from_text(
                                     raw, tgt.check_count, tgt.is_sentence_end
                                 )
-                                if aligned:
-                                    tgt.set_ruby(Ruby(text=aligned))
-                                else:
-                                    tgt.set_ruby(None)
+                                tgt.set_ruby(ruby_obj)
                             except Exception as e:
                                 errors.append(f"字符 {group[0] + 1}: 注音错误 {e}")
                             for ci in group[1:]:

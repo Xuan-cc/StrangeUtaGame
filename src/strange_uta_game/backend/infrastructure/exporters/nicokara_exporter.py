@@ -519,7 +519,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 break
             ch = sentence.characters[char_idx]
             ruby = ch.ruby
-            groups = ruby.groups() if ruby else []
+            groups = [p.text for p in ruby.parts] if ruby else []
 
             for cp_idx, group_text in enumerate(groups):
                 mapping.append((group_text, char_idx, cp_idx))

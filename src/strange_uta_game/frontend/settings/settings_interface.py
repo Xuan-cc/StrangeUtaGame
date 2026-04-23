@@ -661,6 +661,7 @@ class _KeyCaptureButton(PushButton):
 
     def set_key(self, key_name: str):
         self._captured_key = key_name
+        self._original_key = key_name
         self._update_display()
 
     def get_key(self) -> str:
@@ -2775,20 +2776,6 @@ class SettingsInterface(ScrollArea):
     # ==================== 操作 ====================
 
     def _on_save(self):
-        # 先检测快捷键冲突并自动解决
-        conflicts = self._resolve_shortcut_conflicts()
-        if conflicts:
-            for msg in conflicts:
-                InfoBar.warning(
-                    title="快捷键冲突",
-                    content=msg,
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=5000,
-                    parent=self,
-                )
-
         self._collect_settings()
         self._settings.save()
         self.settings_changed.emit()

@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 from strange_uta_game.backend.domain.models import (
     Character,
     Ruby,
+    RubyPart,
     TimeTagType,
 )
 from strange_uta_game.backend.domain.entities import Sentence
@@ -109,34 +110,24 @@ def split_into_moras(text: str) -> List[str]:
 
 
 def split_ruby_for_checkpoints(ruby_text: str, total_cps: int) -> List[str]:
-    """将 ruby 文本按 checkpoint 数量拆分。
+    """将 ruby 纯读音文本按 checkpoint 数量拆分。
 
-    优先按显式 `#` 分组；若 `#` 组数与 cp 数不匹配，回退到 mora 对齐，
-    再回退到均匀分字符。回退路径会先去掉 `#` 避免把分组标记当作字符。
+    入参: ruby_text 纯读音串（不再支持 `#` 分组标记）; total_cps 节奏点数量。
+    出参: 长度为 total_cps 的读音分段列表；优先按 mora 对齐，否则按字符均分。
     """
-    if "#" in ruby_text:
-        groups = ruby_text.split("#")
-        if len(groups) == total_cps:
-            return groups
-
-    # 回退路径：`#` 仅是分组标记，此处按字符/mora 均分时应忽略它
-    plain = ruby_text.replace("#", "")
-
     if total_cps <= 0:
-        return [plain] if plain else []
+        return [ruby_text] if ruby_text else []
     if total_cps == 1:
-        return [plain]
+        return [ruby_text]
 
-    moras = split_into_moras(plain)
+    moras = split_into_moras(ruby_text)
     if len(moras) == total_cps:
         return moras
 
-    # 均匀分字符
-    chars = list(plain)
+    chars = list(ruby_text)
     if len(chars) <= total_cps:
         # 字符数 ≤ cp 数: 每个 cp 分一个字符，多余 cp 分空串
-        result = chars + [""] * (total_cps - len(chars))
-        return result
+        return chars + [""] * (total_cps - len(chars))
 
     # 字符数 > cp 数: 尽量均匀
     result = []
@@ -150,46 +141,34 @@ def split_ruby_for_checkpoints(ruby_text: str, total_cps: int) -> List[str]:
     return result
 
 
-def align_ruby_to_checkpoints(
-    ruby_text: str, check_count: int, is_sentence_end: bool = False
-) -> str:
-    """将 ruby 文本按 check_count 对齐生成合法的 Ruby.text（cp 主导策略）。
+def align_ruby_parts_to_checkpoints(
+    parts: List[str], check_count: int, is_sentence_end: bool = False
+) -> List[str]:
+    """将 Ruby 分段列表对齐到 check_count。
 
-    用户规则（重要）：
-      - check_count < 2: 不分组，返回剥离 '#' 的整串（cp=1 也不分组）
-      - is_sentence_end 为 True: 句尾 cp 不计入分组，按不分组返回
-      - check_count >= 2: 按 '#' 切分后，
-          * 多余组合并到最后一组
-          * 缺失组以空格 ' ' 填充（避免 Ruby 空组报错）
-          * 永不抛异常
-
-    返回值是**可直接传给 `Ruby(text=...)`** 的字符串（不含空组 / 满足校验）。
+    入参: parts 原始分段列表; check_count 目标分段数; is_sentence_end 是否为句尾。
+    出参: 对齐后的分段列表；cp<2 或句尾合并为单段，多余合并到末段，缺失用空格填充。
     """
-    if not ruby_text:
-        return ruby_text
+    joined = "".join(parts)
+    if not joined:
+        return []
 
     # cp<2 或句尾 → 不分组
     if check_count < 2 or is_sentence_end:
-        return ruby_text.replace("#", "")
+        return [joined]
 
-    # cp>=2 → 按 # 切分，严格对齐到 check_count
-    groups = ruby_text.split("#") if "#" in ruby_text else [ruby_text]
-    n = len(groups)
+    n = len(parts)
     if n == check_count:
-        # 已对齐，但仍需处理空组（全空 → 直接返回空串前的 '#'.join 会失败）
-        groups = [g if g else " " for g in groups]
-    elif n > check_count:
+        return [p if p else " " for p in parts]
+    if n > check_count:
         # 多余组合并到末组
-        head = groups[: check_count - 1]
-        tail = "".join(groups[check_count - 1 :])
-        groups = head + [tail if tail else " "]
-        groups = [g if g else " " for g in groups]
-    else:
-        # 缺失组以空格填充
-        groups = [g if g else " " for g in groups]
-        groups = groups + [" "] * (check_count - n)
-
-    return "#".join(groups)
+        head = list(parts[: check_count - 1])
+        tail = "".join(parts[check_count - 1 :])
+        merged = head + [tail if tail else " "]
+        return [p if p else " " for p in merged]
+    # 缺失组以空格填充
+    padded = [p if p else " " for p in parts]
+    return padded + [" "] * (check_count - n)
 
 
 # ──────────────────────────────────────────────
@@ -222,11 +201,8 @@ def to_inline_text(sentence: Sentence) -> str:
 
             for c in chars[group_start:group_end]:
                 assert c.ruby is not None  # 由上方 while 条件保证
-                # 优先按 '#' 分组；无 '#' 时按 mora/字符均分到 check_count，
-                # 兼容旧数据（无 '#' 的多 cp ruby）
-                ruby_segments = split_ruby_for_checkpoints(
-                    c.ruby.text, c.check_count
-                )
+                # 直接读 parts 结构化分段，无需再按 '#' 或 mora 拆分
+                ruby_segments = [p.text for p in c.ruby.parts]
 
                 portion_parts: List[str] = []
                 for cp_idx in range(c.total_timing_points):
@@ -415,7 +391,7 @@ def _parse_ruby_group(
         if not tokens:
             # 无 checkpoint 信息
             ruby_text = portion.strip()
-            ruby_obj = Ruby(text=ruby_text) if ruby_text else None
+            ruby_obj = Ruby(parts=[RubyPart(text=ruby_text)]) if ruby_text else None
             character = Character(
                 char=char_text,
                 ruby=ruby_obj,
@@ -447,9 +423,9 @@ def _parse_ruby_group(
         if is_sentence_end and len(all_timestamps) > check_count:
             sentence_end_ts = all_timestamps[check_count]
 
-        # per-char ruby 文本（保留 # 分组）
-        per_char_ruby = "#".join(ruby_text_parts)
-        ruby_obj = Ruby(text=per_char_ruby) if per_char_ruby else None
+        # per-char ruby 分段（结构化）
+        ruby_parts = [RubyPart(text=p) for p in ruby_text_parts if p]
+        ruby_obj = Ruby(parts=ruby_parts) if ruby_parts else None
 
         character = Character(
             char=char_text,

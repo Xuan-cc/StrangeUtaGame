@@ -59,6 +59,7 @@ from strange_uta_game.backend.domain import (
     Sentence,
     Character,
     Ruby,
+    RubyPart,
 )
 from strange_uta_game.backend.application import (
     CheckpointPosition,
@@ -928,7 +929,7 @@ class KaraokePreview(QWidget):
                         if _r:
                             _grp_rubies.append(_r)
                     if _grp_rubies:
-                        _merged = "".join(r.display_text() for r in _grp_rubies)
+                        _merged = "".join(r.text for r in _grp_rubies)
                         _grp_w = sum(char_widths[g] for g in _grp)
                         ruby_text_w = fm_ruby.horizontalAdvance(_merged)
                         ruby_x = curr_x + (_grp_w - ruby_text_w) // 2
@@ -988,7 +989,7 @@ class KaraokePreview(QWidget):
                     ruby = line.characters[char_pos].ruby
                     if ruby:
                         # 单字符 ruby（per-char 模型）- 渲染剥离 '#' 分组标记
-                        _ruby_disp = ruby.display_text()
+                        _ruby_disp = ruby.text
                         ruby_text_w = fm_ruby.horizontalAdvance(_ruby_disp)
                         ruby_x = curr_x + (char_w - ruby_text_w) // 2
                         ruby_y = int(y_center - main_fm.ascent() - 4)
@@ -1200,7 +1201,7 @@ class ModifyCharacterDialog(QDialog):
         rubies = []
         for c in chars:
             # 对话框显示剥离 '#'，用户可重新用 '#' 标注分组
-            rubies.append(c.ruby.display_text() if c.ruby else "")
+            rubies.append(c.ruby.text if c.ruby else "")
         initial_ruby = ",".join(rubies) if any(rubies) else ""
         self.edit_new_ruby = QLineEdit(initial_ruby)
         self.edit_new_ruby.setPlaceholderText(
@@ -1234,9 +1235,10 @@ class ModifyCharacterDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _on_execute(self):
-        from strange_uta_game.backend.domain.models import Character, Ruby
+        from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
         from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-            align_ruby_to_checkpoints,
+            align_ruby_parts_to_checkpoints,
+            split_ruby_for_checkpoints,
         )
 
         new_text = self.edit_new_chars.text().strip()
@@ -1283,8 +1285,10 @@ class ModifyCharacterDialog(QDialog):
             # is_sentence_end 仅作用于最后一个新字符（若旧末字为句尾）
             is_se = (i == len(new_text) - 1) and old_last_is_sentence_end
             if raw_ruby:
-                aligned = align_ruby_to_checkpoints(raw_ruby, cc, is_se)
-                ruby_obj = Ruby(text=aligned) if aligned else None
+                initial = split_ruby_for_checkpoints(raw_ruby, max(cc, 1))
+                aligned = align_ruby_parts_to_checkpoints(initial, cc, is_se)
+                parts = [RubyPart(text=p) for p in aligned if p]
+                ruby_obj = Ruby(parts=parts) if parts else None
             else:
                 ruby_obj = None
             new_ch = Character(
@@ -1548,7 +1552,7 @@ class CharEditDialog(QDialog):
             for i, part in enumerate(parts[:word_len]):
                 ci = self._word_start + i
                 if part:
-                    self._sentence.characters[ci].set_ruby(Ruby(text=part))
+                    self._sentence.characters[ci].set_ruby(Ruby(parts=[RubyPart(text=part)]))
                 else:
                     self._sentence.characters[ci].set_ruby(None)
                 self._modified = True
@@ -1562,13 +1566,13 @@ class CharEditDialog(QDialog):
             for i, part in enumerate(split_parts):
                 ci = self._word_start + i
                 if part:
-                    self._sentence.characters[ci].set_ruby(Ruby(text=part))
+                    self._sentence.characters[ci].set_ruby(Ruby(parts=[RubyPart(text=part)]))
                 else:
                     self._sentence.characters[ci].set_ruby(None)
                 self._modified = True
         else:
             # 单字符
-            self._sentence.characters[self._char_idx].set_ruby(Ruby(text=new_ruby_text))
+            self._sentence.characters[self._char_idx].set_ruby(Ruby(parts=[RubyPart(text=new_ruby_text)]))
             self._modified = True
 
         self.accept()
@@ -3092,9 +3096,15 @@ class EditorInterface(QWidget):
             return
         project = self._project
 
+        singer_id = ""
+        if 0 <= line_idx < len(project.sentences):
+            sentence = project.sentences[line_idx]
+            if sentence.characters:
+                singer_id = sentence.characters[-1].singer_id
+
         self._execute_structural_edit(
             "插入空行",
-            lambda: ((project.insert_blank_line(line_idx), 0, None, "lyrics")),
+            lambda: ((project.insert_blank_line(line_idx, singer_id=singer_id), 0, None, "lyrics")),
         )
 
     def _on_add_checkpoint_requested(self, line_idx: int, char_idx: int):

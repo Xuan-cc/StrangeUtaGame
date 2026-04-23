@@ -1,4 +1,4 @@
-from strange_uta_game.backend.domain import Word, Character, Ruby
+from strange_uta_game.backend.domain import Word, Character, Ruby, RubyPart
 
 
 class TestWord:
@@ -10,7 +10,7 @@ class TestWord:
         assert word.char_count == 2
 
     def test_word_ruby_properties(self):
-        ch1 = Character(char="赤", ruby=Ruby(text="あか"))
+        ch1 = Character(char="赤", ruby=Ruby(parts=[RubyPart(text="あか")]))
         ch2 = Character(char="い")
         word = Word(characters=[ch1, ch2])
 
@@ -20,8 +20,8 @@ class TestWord:
         assert word.has_ruby is True
 
     def test_word_multi_ruby(self):
-        ch1 = Character(char="昨", ruby=Ruby(text="きの"))
-        ch2 = Character(char="日", ruby=Ruby(text="う"))
+        ch1 = Character(char="昨", ruby=Ruby(parts=[RubyPart(text="きの")]))
+        ch2 = Character(char="日", ruby=Ruby(parts=[RubyPart(text="う")]))
         word = Word(characters=[ch1, ch2])
 
         assert word.ruby_parts == ["きの", "う"]

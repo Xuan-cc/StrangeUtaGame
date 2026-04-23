@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from strange_uta_game.backend.domain import Ruby, Sentence
+from strange_uta_game.backend.domain import Ruby, RubyPart, Sentence
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     split_ruby_for_checkpoints,
 )
@@ -507,14 +507,22 @@ def create_analyzer(use_pykakasi: bool = True) -> RubyAnalyzer:
     return DummyAnalyzer()
 
 
-def _group_reading_for_character(reading: str, checkpoint_count: int) -> str:
-    """按字符 checkpoint 数量生成带 # 的 Ruby 文本。"""
+def _group_reading_for_character(reading: str, checkpoint_count: int) -> List[str]:
+    """按字符 checkpoint 数量拆分读音为分段列表。
+
+    入参: reading 读音串; checkpoint_count 节奏点数量。
+    出参: 长度为 checkpoint_count 的分段列表（或单段列表）。
+
+    #1: 纯 ASCII 英文 reading 不参与 mora 切分，整体作为一个 part。
+    """
     if not reading:
-        return ""
+        return []
+    # 英文 reading：整体一个 part，不按 mora 切
+    if all(c.isascii() and c.isalpha() for c in reading):
+        return [reading]
     if checkpoint_count <= 1:
-        return reading
-    groups = split_ruby_for_checkpoints(reading, checkpoint_count)
-    return "#".join(groups) if len(groups) > 1 else groups[0]
+        return [reading]
+    return split_ruby_for_checkpoints(reading, checkpoint_count)
 
 
 def analyze_sentence_ruby(
@@ -548,6 +556,6 @@ def analyze_sentence_ruby(
                 continue
 
             character = sentence.characters[char_idx]
-            grouped_text = _group_reading_for_character(part, character.check_count)
-            if grouped_text and grouped_text != character.char:
-                character.set_ruby(Ruby(text=grouped_text))
+            grouped_parts = _group_reading_for_character(part, character.check_count)
+            if grouped_parts and "".join(grouped_parts) != character.char:
+                character.set_ruby(Ruby(parts=[RubyPart(text=p) for p in grouped_parts if p]))

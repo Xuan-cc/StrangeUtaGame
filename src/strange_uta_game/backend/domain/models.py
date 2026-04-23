@@ -35,6 +35,10 @@ class ValidationError(DomainError):
 # ──────────────────────────────────────────────
 
 
+# 标点符号集合（不参与注音但可加节奏点）
+PUNCTUATION_SET = frozenset("()【】[]{}「」!?、，")
+
+
 class TimeTagType(Enum):
     """时间标签类型（用于导出兼容）
 
@@ -59,50 +63,53 @@ class TimeTagType(Enum):
 
 
 @dataclass
-class Ruby:
-    """注音/振り仮名 — 最小数据结构单元
-
-    存储 Ruby 的假名文本。除假名文本以外的所有属性均由母对象
-    (Character) 推送更新，用于 Ruby 绘制和 Ruby 输出。
+class RubyPart:
+    """Ruby 的一个分段，对应父 Character 的一个 checkpoint。
 
     Attributes:
-        text: 注音文本（如 "あか"、"きのう"）
-        timestamps: checkpoint 时间戳列表（从 Character 推送，毫秒）
-        singer_id: 演唱者 ID（从 Character 推送）
-
-    Example:
-        >>> ruby = Ruby(text="あか")
-        >>> ruby.text
-        'あか'
+        text: 分段文本（如单个 mora "か"；英文 reading 整段 "Ro"）
+        offset_ms: 相对父 Character 起始时间戳的偏移（毫秒）。
+                   由 Character.push_to_ruby 推送时计算写入，Nicokara 内嵌时间戳导出使用。
     """
 
     text: str
+    offset_ms: int = 0
+
+
+@dataclass
+class Ruby:
+    """注音/振り仮名 — 最小数据结构单元
+
+    由 List[RubyPart] 组成；每个 part 对应父 Character 的一个 checkpoint。
+    时间戳 (timestamps) 和演唱者 (singer_id) 由父对象 (Character) 推送更新。
+
+    Attributes:
+        parts: Ruby 分段列表；不变量：len(parts) == character.check_count
+        timestamps: checkpoint 绝对时间戳列表（毫秒，Character 推送，渲染使用）
+        singer_id: 演唱者 ID（Character 推送）
+
+    Example:
+        >>> ruby = Ruby(parts=[RubyPart("あ"), RubyPart("か")])
+        >>> ruby.text
+        'あか'
+        >>> [p.text for p in ruby.parts]
+        ['あ', 'か']
+    """
+
+    parts: List[RubyPart] = field(default_factory=list)
     timestamps: List[int] = field(default_factory=list)
     singer_id: str = ""
 
     def __post_init__(self) -> None:
-        if not self.text:
-            raise ValidationError("注音文本不能为空")
-        if "#" in self.text and any(not group for group in self.text.split("#")):
-            raise ValidationError(f"Ruby 分组存在空组: {self.text!r}")
+        if not self.parts:
+            raise ValidationError("Ruby 分段不能为空")
+        if any(not isinstance(p, RubyPart) for p in self.parts):
+            raise ValidationError("Ruby.parts 元素必须是 RubyPart")
 
-    def groups(self) -> List[str]:
-        """按 '#' 分组返回；无 '#' 时返回单组。"""
-        return self.text.split("#") if "#" in self.text else [self.text]
-
-    def group_count(self) -> int:
-        """返回 Ruby 分组数量。"""
-        return len(self.groups()) if self.text else 0
-
-    def display_text(self) -> str:
-        """渲染/导出层使用的用户可见文本（剥离内部 '#' 分组标记）。
-
-        '#' 仅是内部存储用于标记 checkpoint 切分的分组分隔符，
-        任何面向用户的场景（karaoke 预览、playback 高亮、tooltip、
-        导入预览表格、Nicokara/txt 导出等）都应使用本方法而非直接读 text。
-        仅 inline_format 导出与编辑对话框原样保留 '#'。
-        """
-        return self.text.replace("#", "")
+    @property
+    def text(self) -> str:
+        """用户可见的拼接文本（所有 part 按序拼接）。"""
+        return "".join(p.text for p in self.parts)
 
 
 # ──────────────────────────────────────────────
@@ -130,7 +137,7 @@ class Character:
 
     Example:
         >>> ch = Character(char="赤", check_count=2, singer_id="singer_1")
-        >>> ch.set_ruby(Ruby(text="あか"))
+        >>> ch.set_ruby(Ruby(parts=[RubyPart(text="あか")]))
         >>> ch.add_timestamp(1000)
         >>> ch.ruby.timestamps
         [1000]
@@ -172,10 +179,20 @@ class Character:
     # ── 时间戳管理 ──
 
     def push_to_ruby(self) -> None:
-        """将自己的时间戳和演唱者推送给 Ruby 对象"""
+        """将自己的时间戳、演唱者推送给 Ruby；同时计算每个 RubyPart 的 offset_ms。
+
+        offset_ms 相对父 Character 的第一个时间戳（timestamps[0]）。
+        仅当父字符的 timestamps 长度 >= 1 且 RubyPart 索引 i 在 timestamps 范围内时写入；
+        否则 offset_ms 保持 0（未打轴状态）。
+        """
         if self.ruby:
             self.ruby.timestamps = self.all_timestamps
             self.ruby.singer_id = self.singer_id
+            if self.timestamps:
+                base_ts = self.timestamps[0]
+                for i, part in enumerate(self.ruby.parts):
+                    if i < len(self.timestamps):
+                        part.offset_ms = self.timestamps[i] - base_ts
 
     def add_timestamp(self, timestamp_ms: int, checkpoint_idx: int = -1) -> None:
         """添加时间戳
@@ -285,6 +302,11 @@ class Character:
         """是否有注音"""
         return self.ruby is not None
 
+    @property
+    def is_punctuation(self) -> bool:
+        """是否是标点符号（不参与注音但可加节奏点）"""
+        return self.char in PUNCTUATION_SET
+
     def get_tag_type(self, checkpoint_idx: int) -> TimeTagType:
         """根据上下文推导时间标签类型
 
@@ -386,8 +408,8 @@ class Word:
 
     @property
     def ruby_parts(self) -> List[str]:
-        """各字符 Ruby 的分组文本列表（按 checkpoint 顺序展开）。"""
-        return [group for c in self.characters if c.ruby for group in c.ruby.groups()]
+        """各字符 Ruby 的分段文本列表（按 checkpoint 顺序展开）。"""
+        return [p.text for c in self.characters if c.ruby for p in c.ruby.parts]
 
     @property
     def ruby_text(self) -> str:

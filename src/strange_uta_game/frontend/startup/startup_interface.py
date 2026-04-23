@@ -381,7 +381,7 @@ class ImportPreview(QGroupBox):
 
             # 注音预览（前3个有注音的字符）
             ruby_preview = ""
-            ruby_texts = [c.ruby.display_text() for c in line.characters if c.ruby]
+            ruby_texts = [c.ruby.text for c in line.characters if c.ruby]
             if ruby_texts:
                 preview = ruby_texts[:3]
                 ruby_preview = ", ".join(preview)

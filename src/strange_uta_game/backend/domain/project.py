@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from uuid import uuid4
 from datetime import datetime
 
-from .models import DomainError, ValidationError
+from .models import Character, DomainError, ValidationError
 from .entities import Singer, Sentence
 
 
@@ -262,7 +262,20 @@ class Project:
             return True
 
         if prev_sentence.characters:
-            prev_sentence.characters[-1].is_line_end = False
+            prev_tail = prev_sentence.characters[-1]
+            tail_singer = prev_tail.singer_id
+            prev_tail.is_line_end = False
+            prev_sentence.characters.append(
+                Character(
+                    char=" ",
+                    singer_id=tail_singer,
+                    ruby=None,
+                    check_count=0,
+                    is_line_end=False,
+                    is_sentence_end=False,
+                    timestamps=[],
+                )
+            )
 
         prev_sentence.characters.extend(current_sentence.characters)
         prev_sentence.singer_id = prev_sentence.characters[0].singer_id or prev_sentence.singer_id
@@ -278,17 +291,32 @@ class Project:
         self.sentences.pop(line_idx)
         self._update_timestamp()
 
-    def insert_blank_line(self, after_line_idx: int) -> int:
+    def insert_blank_line(self, after_line_idx: int, singer_id: str = "") -> int:
         """在指定行后插入空行，返回新行索引。"""
         if after_line_idx < -1 or after_line_idx >= len(self.sentences):
             raise ValidationError(f"行索引 {after_line_idx} 超出范围")
 
-        if 0 <= after_line_idx < len(self.sentences):
-            singer_id = self.sentences[after_line_idx].singer_id
+        if singer_id:
+            resolved_singer_id = singer_id
+        elif 0 <= after_line_idx < len(self.sentences):
+            resolved_singer_id = self.sentences[after_line_idx].singer_id
         else:
-            singer_id = self.get_default_singer().id
+            resolved_singer_id = self.get_default_singer().id
 
-        sentence = Sentence(singer_id=singer_id, characters=[])
+        sentence = Sentence(
+            singer_id=resolved_singer_id,
+            characters=[
+                Character(
+                    char=" ",
+                    singer_id=resolved_singer_id,
+                    ruby=None,
+                    check_count=0,
+                    is_line_end=True,
+                    is_sentence_end=False,
+                    timestamps=[],
+                )
+            ],
+        )
         new_idx = after_line_idx + 1
         self.sentences.insert(new_idx, sentence)
         self._update_timestamp()

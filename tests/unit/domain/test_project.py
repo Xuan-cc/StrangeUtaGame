@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime
 from strange_uta_game.backend.domain import (
+    Character,
     Project,
     ProjectMetadata,
     Singer,
@@ -127,3 +128,59 @@ class TestProject:
 
         project.remove_line(s.id)
         assert len(project.lines) == 0
+
+    def test_insert_blank_line_creates_space_char(self):
+        project = Project()
+        singer = project.get_default_singer()
+        project.add_sentence(Sentence.from_text("测试", singer.id))
+
+        new_idx = project.insert_blank_line(0, singer_id="singer_1")
+
+        assert new_idx == 1
+        new_sentence = project.sentences[1]
+        assert new_sentence.singer_id == "singer_1"
+        assert len(new_sentence.characters) == 1
+
+        char = new_sentence.characters[0]
+        assert char.char == " "
+        assert char.singer_id == "singer_1"
+        assert char.ruby is None
+        assert char.check_count == 0
+        assert char.is_line_end is True
+        assert char.is_sentence_end is False
+        assert char.timestamps == []
+
+    def test_merge_line_inserts_space(self):
+        project = Project()
+        project.add_singer(Singer(id="s1", name="Singer 1"))
+        project.add_singer(Singer(id="s2", name="Singer 2"))
+        prev_sentence = Sentence(
+            singer_id="s1",
+            characters=[
+                Character(
+                    char="a",
+                    singer_id="s1",
+                    is_line_end=True,
+                )
+            ],
+        )
+        current_sentence = Sentence(
+            singer_id="s2",
+            characters=[Character(char="b", singer_id="s2", is_line_end=True)],
+        )
+        project.add_sentence(prev_sentence)
+        project.add_sentence(current_sentence)
+
+        result = project.merge_line_into_previous(1)
+
+        assert result is True
+        assert len(project.sentences) == 1
+        chars = project.sentences[0].characters
+        assert [char.char for char in chars] == ["a", " ", "b"]
+        assert chars[0].is_line_end is False
+        assert chars[1].singer_id == "s1"
+        assert chars[1].check_count == 0
+        assert chars[1].ruby is None
+        assert chars[1].timestamps == []
+        assert chars[1].is_line_end is False
+        assert chars[1].is_sentence_end is False

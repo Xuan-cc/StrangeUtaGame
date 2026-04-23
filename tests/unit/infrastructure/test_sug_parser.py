@@ -14,6 +14,7 @@ from strange_uta_game.backend.domain import (
     Sentence,
     Character,
     Ruby,
+    RubyPart,
 )
 
 
@@ -173,8 +174,8 @@ class TestSugProjectParser:
         singer = project.get_default_singer()
 
         sentence = Sentence.from_text("赤い花", singer.id)
-        sentence.characters[0].set_ruby(Ruby(text="あか"))
-        sentence.characters[2].set_ruby(Ruby(text="はな"))
+        sentence.characters[0].set_ruby(Ruby(parts=[RubyPart(text="あか")]))
+        sentence.characters[2].set_ruby(Ruby(parts=[RubyPart(text="はな")]))
 
         project.add_sentence(sentence)
 

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
 from pathlib import Path
 
-from strange_uta_game.backend.domain import Sentence, Character, Ruby
+from strange_uta_game.backend.domain import Sentence, Character, Ruby, RubyPart
 
 
 class ParseError(Exception):
@@ -786,7 +786,7 @@ def _apply_ruby_entries(sentence: Sentence, ruby_entries: List[NicokaraRubyEntry
                         ruby_segments = split_ruby_for_checkpoints(
                             split_parts[part_idx], target_char.check_count
                         )
-                        target_char.set_ruby(Ruby(text="#".join(ruby_segments)))
+                        target_char.set_ruby(Ruby(parts=[RubyPart(text=s) for s in ruby_segments if s]))
                 break  # 每个 entry 只匹配第一个未标注的出现
             start = end_pos
 

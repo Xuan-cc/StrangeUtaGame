@@ -4,6 +4,7 @@ import pytest
 from strange_uta_game.backend.domain.models import (
     Character,
     Ruby,
+    RubyPart,
     TimeTagType,
 )
 from strange_uta_game.backend.domain.entities import Sentence
@@ -229,7 +230,7 @@ class TestToInlineText:
                     char="柔",
                     check_count=2,
                     timestamps=[14640, 15610],
-                    ruby=Ruby(text="やわ"),
+                    ruby=Ruby(parts=[RubyPart(text="や"), RubyPart(text="わ")]),
                     singer_id="s1",
                 )
             ],
@@ -296,10 +297,10 @@ class TestFromInlineText:
         assert sentence.chars == ["柔"]
         assert sentence.text == "柔"
         assert len(sentence.rubies) == 1
-        # 方案 B：内部以 '#' 分组存储，display_text() 提供用户可见文本
-        assert sentence.rubies[0].display_text() == "やわ"
-        assert sentence.rubies[0].groups() == ["や", "わ"]
-        assert sentence.characters[0].ruby.display_text() == "やわ"
+        # 新 API：parts 结构化存储
+        assert sentence.rubies[0].text == "やわ"
+        assert [p.text for p in sentence.rubies[0].parts] == ["や", "わ"]
+        assert sentence.characters[0].ruby.text == "やわ"
         assert sentence.characters[0].check_count == 2
         assert len(sentence.characters[0].timestamps) == 2
         assert sentence.characters[0].timestamps[0] == 14640
@@ -312,10 +313,10 @@ class TestFromInlineText:
         assert sentence.text == "射程"
         # 逐字模型中，"{射程|...}" 组会被拆分为逐字的 Ruby
         assert len(sentence.rubies) == 2
-        # 射: cc=1 → ruby="しゃ"；程: cc=2 → ruby="て#い"（方案 B）
-        assert sentence.rubies[0].display_text() == "しゃ"
-        assert sentence.rubies[1].display_text() == "てい"
-        assert sentence.rubies[1].groups() == ["て", "い"]
+        # 射: cc=1 → ruby="しゃ"；程: cc=2 → parts=["て","い"]
+        assert sentence.rubies[0].text == "しゃ"
+        assert sentence.rubies[1].text == "てい"
+        assert [p.text for p in sentence.rubies[1].parts] == ["て", "い"]
         # 射: 1 cp, 程: 2 cps
         assert sentence.characters[0].check_count == 1
         assert sentence.characters[1].check_count == 2
@@ -334,10 +335,10 @@ class TestFromInlineText:
         assert sentence.chars == ["柔", "な", "▨", "射", "程"]
         # 柔(1), 射(1), 程(1) -> 3 rubies total
         assert len(sentence.rubies) == 3
-        # 方案 B：多 cp ruby 内部以 '#' 分组，display_text() 剥离分组标记
-        assert sentence.rubies[0].display_text() == "やわ"
-        assert sentence.rubies[1].display_text() == "しゃ"
-        assert sentence.rubies[2].display_text() == "てい"
+        # 新 API：parts 结构化存储，text 属性拼接
+        assert sentence.rubies[0].text == "やわ"
+        assert sentence.rubies[1].text == "しゃ"
+        assert sentence.rubies[2].text == "てい"
         # check_counts: 柔(2), な(1), ▨(1,le), 射(1), 程(2)
         assert [c.check_count for c in sentence.characters] == [2, 1, 1, 1, 2]
         assert sentence.characters[2].is_line_end is True
@@ -412,7 +413,7 @@ class TestRoundtrip:
                     char="柔",
                     check_count=2,
                     timestamps=[14640, 15610],
-                    ruby=Ruby(text="やわ"),
+                    ruby=Ruby(parts=[RubyPart(text="や"), RubyPart(text="わ")]),
                     singer_id="s1",
                 ),
                 Character(
@@ -428,10 +429,9 @@ class TestRoundtrip:
         restored = from_inline_text(text, singer_id="s1")
         assert restored.chars == original.chars
         assert len(restored.rubies) == 1
-        # 方案 B：roundtrip 后 ruby.text 从 "やわ" 变为 "や#わ"（内部分组标记），
-        # 但 display_text() 保持用户可见不变
-        assert restored.rubies[0].display_text() == "やわ"
-        assert restored.rubies[0].groups() == ["や", "わ"]
+        # 新 API：roundtrip 保留 parts 结构
+        assert restored.rubies[0].text == "やわ"
+        assert [p.text for p in restored.rubies[0].parts] == ["や", "わ"]
         assert sum(len(c.all_timestamps) for c in restored.characters) == 3
 
     def test_multiline_roundtrip(self):

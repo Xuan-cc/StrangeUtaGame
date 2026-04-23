@@ -358,7 +358,7 @@ class TestNicokaraWithRubyExporter:
 
     def test_export_with_ruby(self):
         """测试 @Ruby 注音标签生成"""
-        from strange_uta_game.backend.domain import Ruby
+        from strange_uta_game.backend.domain import Ruby, RubyPart
         from strange_uta_game.backend.infrastructure.exporters import (
             NicokaraWithRubyExporter,
         )
@@ -367,7 +367,7 @@ class TestNicokaraWithRubyExporter:
         singer = project.singers[0]
 
         sentence = Sentence.from_text("赤い", singer.id)
-        sentence.characters[0].set_ruby(Ruby(text="あか"))
+        sentence.characters[0].set_ruby(Ruby(parts=[RubyPart(text="あか")]))
         sentence.characters[0].add_timestamp(5000)
         sentence.characters[1].add_timestamp(6000)
         project.add_sentence(sentence)
@@ -396,7 +396,7 @@ class TestNicokaraWithRubyExporter:
 
     def test_export_ruby_relative_timestamps(self):
         """测试 @Ruby 读音中的相对时间戳"""
-        from strange_uta_game.backend.domain import Ruby
+        from strange_uta_game.backend.domain import Ruby, RubyPart
         from strange_uta_game.backend.infrastructure.exporters import (
             NicokaraWithRubyExporter,
         )
@@ -407,7 +407,7 @@ class TestNicokaraWithRubyExporter:
         sentence = Sentence.from_text("赤い", singer.id)
         # 设置「赤」的 check_count 为 2（对应读音 あか）
         sentence.characters[0].check_count = 2
-        sentence.characters[0].set_ruby(Ruby(text="あか"))
+        sentence.characters[0].set_ruby(Ruby(parts=[RubyPart(text="あ"), RubyPart(text="か")]))
 
         # checkpoint_idx=0 → あ, checkpoint_idx=1 → か
         sentence.characters[0].add_timestamp(5000, checkpoint_idx=0)

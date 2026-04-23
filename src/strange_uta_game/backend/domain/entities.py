@@ -232,14 +232,24 @@ class Sentence:
                 f"字符索引 {idx} 超出范围 [0, {len(self.characters)})"
             )
 
-        removed = self.characters.pop(idx)
+        char = self.characters[idx]
+        was_line_end = char.is_line_end
+        was_sentence_end = char.is_sentence_end
+        self.characters.pop(idx)
 
         if not self.characters:
             return True
 
-        if removed.is_line_end:
+        if was_line_end:
             promote_idx = idx - 1 if idx > 0 else len(self.characters) - 1
             self.characters[promote_idx].is_line_end = True
+
+        if was_sentence_end:
+            prev_idx = idx - 1
+            if 0 <= prev_idx < len(self.characters):
+                prev = self.characters[prev_idx]
+                if not prev.is_sentence_end:
+                    prev.is_sentence_end = True
 
         if idx > 0 and idx - 1 < len(self.characters):
             prev = self.characters[idx - 1]

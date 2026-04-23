@@ -22,6 +22,7 @@ from strange_uta_game.backend.domain import (
     Sentence,
     Character,
     Ruby,
+    RubyPart,
     DomainError,
 )
 
@@ -367,7 +368,12 @@ class SugProjectParser:
                 "singer_id": char.singer_id,
             }
             if char.ruby:
-                char_dict["ruby"] = {"text": char.ruby.text}
+                char_dict["ruby"] = {
+                    "parts": [
+                        {"text": p.text, "offset_ms": p.offset_ms}
+                        for p in char.ruby.parts
+                    ],
+                }
             characters.append(char_dict)
 
         return {
@@ -443,8 +449,19 @@ class SugProjectParser:
             # 解析 Ruby
             ruby = None
             ruby_data = char_data.get("ruby")
-            if ruby_data and ruby_data.get("text"):
-                ruby = Ruby(text=ruby_data["text"])
+            if ruby_data:
+                parts_data = ruby_data.get("parts")
+                if parts_data:
+                    parts = [
+                        RubyPart(
+                            text=str(p.get("text", "")),
+                            offset_ms=int(p.get("offset_ms", 0)),
+                        )
+                        for p in parts_data
+                        if p.get("text")
+                    ]
+                    if parts:
+                        ruby = Ruby(parts=parts)
 
             raw_check_count = int(char_data.get("check_count", 1))
             timestamps = [int(ts) for ts in char_data.get("timestamps", [])]

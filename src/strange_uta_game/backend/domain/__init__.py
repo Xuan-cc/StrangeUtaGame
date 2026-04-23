@@ -11,6 +11,8 @@ from .models import (
     DomainError,
     ValidationError,
     TimeTagType,
+    PUNCTUATION_SET,
+    RubyPart,
     Ruby,
     Character,
     Word,
@@ -32,7 +34,9 @@ __all__ = [
     "ValidationError",
     # 枚举
     "TimeTagType",
+    "PUNCTUATION_SET",
     # 数据结构（自底向上）
+    "RubyPart",
     "Ruby",
     "Character",
     "Word",

@@ -1,5 +1,5 @@
 import pytest
-from strange_uta_game.backend.domain import Sentence, Character, Ruby, ValidationError
+from strange_uta_game.backend.domain import Sentence, Character, Ruby, RubyPart, ValidationError
 
 
 class TestSentence:
@@ -45,7 +45,7 @@ class TestSentence:
 
     def test_get_ruby_for_char(self):
         s = Sentence.from_text("abc", "s1")
-        ruby = Ruby(text="test")
+        ruby = Ruby(parts=[RubyPart(text="test")])
         s.add_ruby_to_char(1, ruby)
 
         assert s.get_ruby_for_char(1) == ruby
@@ -94,7 +94,7 @@ class TestSentence:
 
     def test_ruby_management(self):
         s = Sentence.from_text("abc", "s1")
-        ruby = Ruby(text="test")
+        ruby = Ruby(parts=[RubyPart(text="test")])
         s.add_ruby_to_char(0, ruby)
         assert len(s.rubies) == 1
 
@@ -108,9 +108,53 @@ class TestSentence:
 
     def test_add_ruby_validation(self):
         s = Sentence.from_text("a", "s1")
-        s.add_ruby_to_char(0, Ruby(text="test"))
+        s.add_ruby_to_char(0, Ruby(parts=[RubyPart(text="test")]))
         with pytest.raises(ValidationError, match="已有注音"):
-            s.add_ruby_to_char(0, Ruby(text="fail"))
+            s.add_ruby_to_char(0, Ruby(parts=[RubyPart(text="fail")]))
 
         with pytest.raises(ValidationError, match="超出范围"):
-            s.add_ruby_to_char(10, Ruby(text="fail"))
+            s.add_ruby_to_char(10, Ruby(parts=[RubyPart(text="fail")]))
+
+    def test_delete_sentence_end_promotes_prev(self):
+        sentence = Sentence(
+            singer_id="s1",
+            characters=[
+                Character(char="a", singer_id="s1"),
+                Character(char="b", singer_id="s1", is_sentence_end=True),
+                Character(char="c", singer_id="s1", is_line_end=True),
+            ],
+        )
+
+        result = sentence.delete_character(1)
+
+        assert result is False
+        assert [char.char for char in sentence.characters] == ["a", "c"]
+        assert sentence.characters[0].is_sentence_end is True
+        assert sentence.characters[1].is_sentence_end is False
+
+    def test_delete_line_end_promotes_last(self):
+        sentence = Sentence(
+            singer_id="s1",
+            characters=[
+                Character(char="a", singer_id="s1"),
+                Character(char="b", singer_id="s1", is_line_end=True),
+            ],
+        )
+
+        result = sentence.delete_character(1)
+
+        assert result is False
+        assert len(sentence.characters) == 1
+        assert sentence.characters[0].char == "a"
+        assert sentence.characters[0].is_line_end is True
+
+    def test_delete_only_char_returns_empty(self):
+        sentence = Sentence(
+            singer_id="s1",
+            characters=[Character(char="a", singer_id="s1", is_line_end=True)],
+        )
+
+        result = sentence.delete_character(0)
+
+        assert result is True
+        assert sentence.characters == []
