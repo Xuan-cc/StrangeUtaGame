@@ -120,6 +120,9 @@ class BulkChangeDialog(QDialog):
         self.edit_delta.setPlaceholderText("整数或逗号分隔，如 -1、0、1,2,1")
         self.edit_delta.setFont(QFont("Microsoft YaHei", 10))
         self.edit_delta.setFixedWidth(160)
+        # 用户手动编辑过后不再自动覆盖
+        self._delta_user_edited = False
+        self.edit_delta.textEdited.connect(self._on_delta_user_edited)
         hint = QLabel("（-1=不修改，0=设为0，逗号分隔对应各字符）")
         hint.setFont(QFont("Microsoft YaHei", 9))
         row3.addWidget(lbl3)
@@ -154,12 +157,39 @@ class BulkChangeDialog(QDialog):
         btn_row.addWidget(btn_cancel)
         layout.addLayout(btn_row)
 
+    def _on_delta_user_edited(self, _text: str):
+        self._delta_user_edited = True
+
     def _update_preview(self, word: str):
         if not self._project or not word.strip():
             self.lbl_preview.setText("")
             return
-        count = self._count_matches(word.strip())
+        w = word.strip()
+        count = self._count_matches(w)
         self.lbl_preview.setText(f"找到 {count} 处匹配")
+        # 预填首个匹配的现有节奏点，方便用户修改
+        if count > 0 and not self._delta_user_edited:
+            cps = self._first_match_checkpoints(w)
+            if cps:
+                self.edit_delta.setText(",".join(str(c) for c in cps))
+
+    def _first_match_checkpoints(self, word: str) -> list[int]:
+        """返回第一个匹配词各字符的 check_count 列表。"""
+        if not self._project:
+            return []
+        word_len = len(word)
+        for sentence in self._project.sentences:
+            text = sentence.text
+            pos = 0
+            while pos <= len(text) - word_len:
+                if text[pos : pos + word_len] == word:
+                    return [
+                        sentence.characters[pos + k].check_count
+                        for k in range(word_len)
+                        if pos + k < len(sentence.characters)
+                    ]
+                pos += 1
+        return []
 
     def _count_matches(self, word: str) -> int:
         if not self._project:
