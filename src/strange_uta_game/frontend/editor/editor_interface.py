@@ -3025,12 +3025,31 @@ class EditorInterface(QWidget):
         )
 
     def _on_nav_line(self, delta: int):
-        """方向键导航：上一行 (delta=-1) 或下一行 (delta=+1)"""
+        """方向键导航：上一行 (delta=-1) 或下一行 (delta=+1)。
+
+        空行无 checkpoint，TimingService.move_to_checkpoint 向下搜索时天然跳过；
+        但向上时不会跨空行。此处对 delta=-1 补上跳空行逻辑，首行处停止。
+        """
         if not self._project:
             return
-        new_idx = self._current_line_idx + delta
-        if new_idx < 0 or new_idx >= len(self._project.sentences):
-            return
+        sentences = self._project.sentences
+        if delta < 0:
+            # 向上寻找最近的有 checkpoint 的行（有 check_count>0 或 is_sentence_end 的字符）
+            cand = self._current_line_idx + delta
+            while cand >= 0:
+                s = sentences[cand]
+                if any(
+                    ch.check_count > 0 or ch.is_sentence_end for ch in s.characters
+                ):
+                    break
+                cand -= 1
+            if cand < 0:
+                return
+            new_idx = cand
+        else:
+            new_idx = self._current_line_idx + delta
+            if new_idx < 0 or new_idx >= len(sentences):
+                return
         if self._timing_service:
             self._timing_service.move_to_checkpoint(new_idx, 0, 0)
             self._update_time_tags_display()
