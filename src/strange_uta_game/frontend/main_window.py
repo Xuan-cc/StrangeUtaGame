@@ -111,7 +111,7 @@ class MainWindow(MSFluentWindow):
         from .home.home_interface import HomeInterface
         from .editor.timing_interface import EditorInterface
         from .export.export_interface import ExportInterface
-        from .settings.singer_interface import SingerManagerInterface
+        from .singer.singer_interface import SingerManagerInterface
         from .editor.fulltext_interface import RubyInterface
         from .settings.settings_interface import SettingsInterface
         from .editor.line_interface import EditInterface
