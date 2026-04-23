@@ -215,18 +215,24 @@ class ExportInterface(QWidget):
         """响应 ProjectStore 的数据变更。"""
         if change_type == "project":
             self._project = self._store.project
-            # 用音频文件名（无扩展名）作为默认导出文件名
-            audio_path = getattr(self._store, "audio_path", None)
-            if audio_path:
-                default_name = Path(audio_path).stem
-            elif self._project and self._project.metadata.title:
-                default_name = self._project.metadata.title
-            else:
-                default_name = ""
-            self.line_filename.setText(default_name)
+            self._sync_default_filename()
             self._refresh_singer_checkboxes()
+        elif change_type == "audio":
+            # 音频变更即刻反映到默认文件名（无需等待"创建项目"）
+            self._sync_default_filename()
         elif change_type == "singers":
             self._refresh_singer_checkboxes()
+
+    def _sync_default_filename(self):
+        """根据当前 store 的音频 / 项目元数据刷新默认导出文件名。"""
+        audio_path = getattr(self._store, "audio_path", None) if self._store else None
+        if audio_path:
+            default_name = Path(audio_path).stem
+        elif self._project and self._project.metadata.title:
+            default_name = self._project.metadata.title
+        else:
+            default_name = ""
+        self.line_filename.setText(default_name)
 
     def _refresh_singer_checkboxes(self):
         """刷新演唱者 checkbox 列表"""
