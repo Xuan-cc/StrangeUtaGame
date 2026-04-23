@@ -86,8 +86,10 @@ class NicokaraExporter(BaseExporter):
         default_singer_id = self._get_default_singer_id(project)
 
         for i, sentence in enumerate(project.sentences):
+            # 空行（用户排版意图）无条件保留
+            is_blank_line = not sentence.text.strip() and not sentence.characters
             # 演唱者过滤：检查行内是否有选中的演唱者字符
-            if singer_ids is not None:
+            if singer_ids is not None and not is_blank_line:
                 if not self._sentence_has_singer(
                     sentence, singer_ids, default_singer_id
                 ):
@@ -104,10 +106,14 @@ class NicokaraExporter(BaseExporter):
                 prev_singer_id,
                 default_singer_id,
             )
-            # 演唱者过滤后可能产生无实际字符的空行，跳过
+            # 过滤后无字符的行需要区分：原本就是空行（保留）vs 被过滤掉内容的行（跳过）
             stripped = line_text.strip()
             content_only = _NICOKARA_TS_RE.sub('', stripped)
-            if singer_ids is not None and not content_only.strip():
+            if (
+                singer_ids is not None
+                and not content_only.strip()
+                and sentence.text.strip()
+            ):
                 continue
             output_lines.append(line_text)
 
@@ -283,8 +289,10 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         default_singer_id = self._get_default_singer_id(project)
 
         for i, sentence in enumerate(project.sentences):
+            # 空行（用户排版意图）无条件保留
+            is_blank_line = not sentence.text.strip() and not sentence.characters
             # 演唱者过滤
-            if singer_ids is not None:
+            if singer_ids is not None and not is_blank_line:
                 if not self._sentence_has_singer(
                     sentence, singer_ids, default_singer_id
                 ):
@@ -300,10 +308,14 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 prev_singer_id,
                 default_singer_id,
             )
-            # 演唱者过滤后可能产生无实际字符的空行，跳过
+            # 过滤后无字符的行需要区分：原本就是空行（保留）vs 被过滤掉内容的行（跳过）
             stripped = line_text.strip()
             content_only = _NICOKARA_TS_RE.sub('', stripped)
-            if singer_ids is not None and not content_only.strip():
+            if (
+                singer_ids is not None
+                and not content_only.strip()
+                and sentence.text.strip()
+            ):
                 continue
             output_lines.append(line_text)
 
