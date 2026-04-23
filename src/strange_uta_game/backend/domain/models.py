@@ -307,6 +307,22 @@ class Character:
         """是否是标点符号（不参与注音但可加节奏点）"""
         return self.char in PUNCTUATION_SET
 
+    def is_sentence_end_tail_cp(self, cp_idx: int) -> bool:
+        """判定 cp_idx 是否为本字符的"句尾末尾 cp"。
+
+        语义：句尾字符在 check_count 个普通 cp 之后追加 1 个虚拟 cp（索引 = check_count），
+        该虚拟 cp 仅响应打轴键的 released 事件；普通 cp 仅响应 pressed 事件。
+
+        Args:
+            cp_idx: 待判定的 cp 索引（all_timestamps 域）
+
+        Returns:
+            True 表示该 cp 是句尾末尾 cp（仅 released 写入）；False 表示普通 cp（仅 pressed 写入）。
+        """
+        if not self.is_sentence_end:
+            return False
+        return cp_idx == self.check_count
+
     def get_tag_type(self, checkpoint_idx: int) -> TimeTagType:
         """根据上下文推导时间标签类型
 

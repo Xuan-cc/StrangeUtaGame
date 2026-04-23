@@ -4,14 +4,14 @@
 
 核心功能：
 1. 全局 Checkpoint 管理 - 维护跨所有演唱者的打轴位置
-2. 打轴按键处理 - Space/F1-F9 的时间标签记录
-3. 句尾长按打轴 - 按下=开始时间，抬起=结束时间
+2. 打轴按键处理 - Space/F1-F9 通过统一入口 on_key_changed 路由
+3. 角色化 cp 过滤 - 普通 cp 仅响应 pressed；句尾末尾 cp 仅响应 released
 4. 多演唱者自动切换 - 后台管理，用户无感知
 5. 音频协调 - 播放控制、变速、位置同步
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Callable, Protocol
+from typing import Optional, Dict, List, Callable, Protocol, Literal
 from enum import Enum, auto
 import time
 
@@ -37,7 +37,7 @@ class RecordingState(Enum):
 
     STOPPED = auto()
     PLAYING = auto()
-    RECORDING = auto()  # 正在录制（句尾长按中）
+    RECORDING = auto()  # 保留枚举以维持向后兼容（不再实际使用）
 
 
 @dataclass
@@ -83,18 +83,6 @@ class TimingCallbacks(Protocol):
         """Checkpoint 位置移动时回调"""
         ...
 
-    def on_line_end_recording_started(
-        self, line_idx: int, char_idx: int, start_time_ms: int
-    ) -> None:
-        """句尾长按录制开始时回调"""
-        ...
-
-    def on_line_end_recording_finished(
-        self, line_idx: int, char_idx: int, start_time_ms: int, end_time_ms: int
-    ) -> None:
-        """句尾长按录制结束时回调"""
-        ...
-
     def on_timing_error(self, error_type: str, message: str) -> None:
         """打轴错误回调（如时间倒退警告）"""
         ...
@@ -108,8 +96,6 @@ class TimingService:
     """
 
     # 常量
-    LINE_END_RECORDING_TIMEOUT_MS = 5000  # 句尾长按超时（5秒）
-    SHORT_PRESS_THRESHOLD_MS = 100  # 短按阈值（100ms）
     DEFAULT_TIMING_OFFSET_MS = 0  # 默认打轴偏移量
 
     def __init__(
@@ -131,8 +117,6 @@ class TimingService:
 
         # 录制状态
         self._recording_state = RecordingState.STOPPED
-        self._line_end_recording = False
-        self._line_end_start_time_ms: Optional[int] = None
 
         # 打轴偏移（补偿反应延迟）
         self._timing_offset_ms = self.DEFAULT_TIMING_OFFSET_MS
@@ -398,8 +382,49 @@ class TimingService:
 
     # ==================== 打轴功能 ====================
 
+    def on_key_changed(
+        self, timestamp_ms: int, key_type: Literal["pressed", "released"]
+    ) -> None:
+        """打轴按键状态变更统一入口（按下/抬起均触发）。
+
+        路由规则（角色化过滤）：
+          - 普通 cp：仅响应 'pressed'，写入时间戳并推进；忽略 'released'
+          - 句尾末尾 cp（is_sentence_end 且 cp_idx == check_count）：
+            仅响应 'released'，写入 sentence_end_ts 并推进；忽略 'pressed'
+        写入后单次推进到下一个 cp。
+
+        Args:
+            timestamp_ms: 时间戳（毫秒，已含 timing_offset 补偿）
+            key_type: 'pressed' 或 'released'
+        """
+        if not self._project:
+            return
+
+        sentence, char = self._get_current_checkpoint_info()
+        if not sentence or not char:
+            # 当前位置无效（如 check_count=0 中段）→ 尝试跳到下一个有效 checkpoint
+            if self.move_to_next_checkpoint():
+                sentence, char = self._get_current_checkpoint_info()
+            if not sentence or not char:
+                return
+
+        cp_idx = self._current_position.checkpoint_idx
+        is_tail = char.is_sentence_end_tail_cp(cp_idx)
+
+        # 角色化过滤
+        if is_tail and key_type != "released":
+            return
+        if not is_tail and key_type != "pressed":
+            return
+
+        # 写入 + 单次推进
+        self._add_timetag_at_current_checkpoint(timestamp_ms)
+        self.move_to_next_checkpoint()
+
     def on_timing_key_pressed(self, key: str) -> None:
         """打轴按键按下处理（Space 或 F1-F9）
+
+        薄 shim：自动启播 + 计算时间戳 + 转发 on_key_changed('pressed')
 
         Args:
             key: 按键名称（"SPACE", "F1", "F2", ...）
@@ -409,44 +434,15 @@ class TimingService:
             return
 
         if not self._audio_engine.is_playing():
-            # 未播放，先开始播放
             self._audio_engine.play()
 
-        # 获取当前 checkpoint
-        sentence, char = self._get_current_checkpoint_info()
-        if not sentence or not char:
-            # 当前位置无效（如 check_count=0）→ 尝试跳到下一个有效 checkpoint
-            if self.move_to_next_checkpoint():
-                sentence, char = self._get_current_checkpoint_info()
-            if not sentence or not char:
-                self._notify_error("NO_CHECKPOINT", "无效的 checkpoint 位置")
-                return
-
-        # 检查是否为句尾字符的最后一个普通节奏点（开始长按录制）
-        if char.is_sentence_end and (
-            self._current_position.checkpoint_idx == char.check_count - 1
-            or (
-                char.check_count == 0
-                and self._current_position.checkpoint_idx == char.check_count
-            )
-        ):
-            # 句尾长按处理 - 记录开始时间
-            # 当 check_count=0 时，使用前一个字符的最后时间戳作为按下时间
-            if char.check_count == 0:
-                self._start_line_end_recording_from_prev(char)
-            else:
-                self._start_line_end_recording()
-        else:
-            # 普通字符 / 句尾字符的注音节奏点 - 按下即记录时间戳
-            current_time_ms = self._audio_engine.get_position_ms()
-            timestamp_ms = max(0, current_time_ms + self._timing_offset_ms)
-            self._add_timetag_at_current_checkpoint(timestamp_ms)
-            self.move_to_next_checkpoint()
+        timestamp_ms = max(0, self._audio_engine.get_position_ms() + self._timing_offset_ms)
+        self.on_key_changed(timestamp_ms, "pressed")
 
     def on_timing_key_released(self, key: str) -> None:
         """打轴按键抬起处理
 
-        只处理句尾长按的结束。普通 checkpoint 已在按下时完成记录。
+        薄 shim：计算时间戳 + 转发 on_key_changed('released')
 
         Args:
             key: 按键名称（"SPACE", "F1", "F2", ...）
@@ -454,121 +450,8 @@ class TimingService:
         if not self._project:
             return
 
-        if self._line_end_recording:
-            # 句尾长按结束 - 记录抬起时间
-            current_time_ms = self._audio_engine.get_position_ms()
-            timestamp_ms = max(0, current_time_ms + self._timing_offset_ms)
-            self._finish_line_end_recording(timestamp_ms)
-            self.move_to_next_checkpoint()
-        # else: 普通 checkpoint 已在 on_timing_key_pressed 中处理，无需操作
-
-    def _start_line_end_recording(self) -> None:
-        """开始句尾长按录制"""
-        self._line_end_recording = True
-        self._line_end_start_time_ms = self._audio_engine.get_position_ms()
-
-        if self._callbacks:
-            self._callbacks.on_line_end_recording_started(
-                self._current_position.line_idx,
-                self._current_position.char_idx,
-                self._line_end_start_time_ms,
-            )
-
-    def _start_line_end_recording_from_prev(self, char: Character) -> None:
-        """当句尾字符 check_count=0 时，使用前一个字符的最后时间戳作为按下时间。
-
-        句尾字符没有普通节奏点，说明和前面字符形成连读词组，
-        以前面字符的最后一个 checkpoint 时间戳作为句尾按下-抬起的开始。
-        """
-        self._line_end_recording = True
-
-        # 查找前一个字符的最后时间戳
-        prev_ts = None
-        line_idx = self._current_position.line_idx
-        char_idx = self._current_position.char_idx
-        if self._project and line_idx < len(self._project.sentences):
-            sentence = self._project.sentences[line_idx]
-            for ci in range(char_idx - 1, -1, -1):
-                prev_ch = sentence.characters[ci]
-                if prev_ch.timestamps:
-                    prev_ts = prev_ch.timestamps[-1]
-                    break
-
-        if prev_ts is not None:
-            self._line_end_start_time_ms = prev_ts
-        else:
-            # 无前一字符时间戳，回退到当前音频时间
-            self._line_end_start_time_ms = self._audio_engine.get_position_ms()
-
-        if self._callbacks:
-            self._callbacks.on_line_end_recording_started(
-                line_idx,
-                char_idx,
-                self._line_end_start_time_ms,
-            )
-
-    def _finish_line_end_recording(self, end_time_ms: int) -> None:
-        """完成句尾长按录制
-
-        句尾字符的最后一个普通节奏点和句尾释放点用于长按录制：
-        - 当前 checkpoint_idx (= check_count-1): 按下时间（start_time_ms）
-        - 下一个 checkpoint_idx (= check_count): 抬起时间（end_time_ms）
-        短按时两者均填 start_time_ms。
-
-        当 check_count=0 时（句尾无普通节奏点，与前字符连读），
-        只有句尾释放点（checkpoint_idx=0 = check_count），
-        直接记录 end_time_ms 作为句尾时间戳。
-
-        调用后 _current_position 停在句尾释放点，
-        外层 on_timing_key_released 的 move_to_next_checkpoint() 会
-        将位置推进到下一行首字符。
-
-        Args:
-            end_time_ms: 结束时间（毫秒）
-        """
-        if self._line_end_start_time_ms is None:
-            return
-
-        start_time_ms = self._line_end_start_time_ms
-
-        # 检查是否超时
-        if end_time_ms - start_time_ms > self.LINE_END_RECORDING_TIMEOUT_MS:
-            end_time_ms = start_time_ms + self.LINE_END_RECORDING_TIMEOUT_MS
-
-        sentence, char = self._get_current_checkpoint_info()
-        if not sentence or not char:
-            self._line_end_recording = False
-            self._line_end_start_time_ms = None
-            return
-
-        char_idx = self._current_position.char_idx
-
-        if char.check_count == 0:
-            # check_count=0: 只有句尾释放点，直接记录 end_time_ms
-            self._add_timetag_at_current_checkpoint(end_time_ms)
-        elif end_time_ms - start_time_ms < self.SHORT_PRESS_THRESHOLD_MS:
-            # 短按 - 两个 checkpoint 都记录 start_time
-            self._add_timetag_at_current_checkpoint(start_time_ms)
-            self.move_to_next_checkpoint()
-            self._add_timetag_at_current_checkpoint(start_time_ms)
-        else:
-            # 长按 - checkpoint_idx=0 记录按下时间，idx=1 记录抬起时间
-            self._add_timetag_at_current_checkpoint(start_time_ms)
-            self.move_to_next_checkpoint()
-            self._add_timetag_at_current_checkpoint(end_time_ms)
-
-        # 通知回调
-        if self._callbacks:
-            self._callbacks.on_line_end_recording_finished(
-                self._current_position.line_idx,
-                char_idx,
-                start_time_ms,
-                end_time_ms,
-            )
-
-        # 重置状态
-        self._line_end_recording = False
-        self._line_end_start_time_ms = None
+        timestamp_ms = max(0, self._audio_engine.get_position_ms() + self._timing_offset_ms)
+        self.on_key_changed(timestamp_ms, "released")
 
     def _add_timetag_at_current_checkpoint(self, timestamp_ms: int) -> None:
         """在当前 checkpoint 添加时间标签
@@ -629,10 +512,6 @@ class TimingService:
         """停止播放"""
         self._audio_engine.stop()
         self._recording_state = RecordingState.STOPPED
-        # 重置句尾录制状态
-        if self._line_end_recording:
-            self._line_end_recording = False
-            self._line_end_start_time_ms = None
 
     def seek(self, position_ms: int) -> None:
         """跳转到指定位置"""

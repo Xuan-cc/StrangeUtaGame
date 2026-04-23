@@ -1664,8 +1664,6 @@ class EditorInterface(QWidget):
     _checkpoint_moved_signal = pyqtSignal(object)
     _timetag_added_signal = pyqtSignal()
     _timing_error_signal = pyqtSignal(str, str)
-    _line_end_started_signal = pyqtSignal(int, int, int)
-    _line_end_finished_signal = pyqtSignal(int, int, int, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1688,8 +1686,6 @@ class EditorInterface(QWidget):
         self._checkpoint_moved_signal.connect(self._handle_checkpoint_moved)
         self._timetag_added_signal.connect(self._handle_timetag_added)
         self._timing_error_signal.connect(self._handle_timing_error)
-        self._line_end_started_signal.connect(self._handle_line_end_recording_started)
-        self._line_end_finished_signal.connect(self._handle_line_end_recording_finished)
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -3454,18 +3450,6 @@ class EditorInterface(QWidget):
     def on_checkpoint_moved(self, position: CheckpointPosition) -> None:
         self._checkpoint_moved_signal.emit(position)
 
-    def on_line_end_recording_started(
-        self, line_idx: int, char_idx: int, start_time_ms: int
-    ) -> None:
-        self._line_end_started_signal.emit(line_idx, char_idx, start_time_ms)
-
-    def on_line_end_recording_finished(
-        self, line_idx: int, char_idx: int, start_time_ms: int, end_time_ms: int
-    ) -> None:
-        self._line_end_finished_signal.emit(
-            line_idx, char_idx, start_time_ms, end_time_ms
-        )
-
     def on_timing_error(self, error_type: str, message: str) -> None:
         self._timing_error_signal.emit(error_type, message)
 
@@ -3505,18 +3489,6 @@ class EditorInterface(QWidget):
             duration=3000,
             parent=self,
         )
-
-    def _handle_line_end_recording_started(
-        self, line_idx: int, char_idx: int, start_time_ms: int
-    ):
-        _ = line_idx, char_idx, start_time_ms
-        self.lbl_status.setText("句尾长按录制中")
-
-    def _handle_line_end_recording_finished(
-        self, line_idx: int, char_idx: int, start_time_ms: int, end_time_ms: int
-    ):
-        _ = line_idx, char_idx, start_time_ms, end_time_ms
-        self.lbl_status.setText("句尾长按录制完成")
 
     # ==================== 辅助 ====================
 
