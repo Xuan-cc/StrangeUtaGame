@@ -301,9 +301,11 @@ class AutoCheckService:
     def _try_split_to_chars(self, word: str, reading: str) -> Optional[List[str]]:
         """尝试将多字词的读音拆分到各字符（三遍策略）。
 
-        Pass 1: 约束回溯 — 用户字典 + 库分析器 + pykakasi 候选读音
+        Pass 1: 约束回溯 — 库分析器 + pykakasi 候选读音
         Pass 2: pykakasi 参考分区 — 使用 _partition_reading 三级匹配
         Pass 3: 无约束分区 — 空参考，尝试所有可能拆分
+
+        注意：不查用户字典（用户字典由上游独立路径处理）。
 
         Args:
             word: 多字词
@@ -327,18 +329,12 @@ class AutoCheckService:
 
         for ch in word:
             options: List[str] = []
-            # 1. 用户字典单字条目
-            for dict_word, dict_reading in self._dict:
-                if dict_word == ch and dict_reading:
-                    clean = dict_reading.replace(",", "")
-                    if clean and clean not in options:
-                        options.append(clean)
-            # 2. 库分析器
+            # 1. 库分析器
             results = self._analyzer.analyze(ch)
             for r in results:
                 if r.reading and r.reading != ch and r.reading not in options:
                     options.append(r.reading)
-            # 3. pykakasi 参考读音（加入候选 + 保存为 ref）
+            # 2. pykakasi 参考读音（加入候选 + 保存为 ref）
             pyk_ref = ""
             if self._pykakasi_conv is not None:
                 try:
@@ -383,18 +379,13 @@ class AutoCheckService:
         return result
 
     def _get_single_char_candidates(self, ch: str) -> List[str]:
-        """收集单个字符的候选读音（用户字典 + 库分析器 + pykakasi）。
+        """收集单个字符的候选读音（仅库：库分析器 + pykakasi）。
 
         用于连词回退时的「头尾假名剥离」策略。
+        注意：不查用户字典、不查 e2k，用户字典/e2k 由上游独立路径处理。
         """
         options: List[str] = []
-        # 1. 用户字典单字条目
-        for dict_word, dict_reading in self._dict:
-            if dict_word == ch and dict_reading:
-                clean = dict_reading.replace(",", "")
-                if clean and clean not in options:
-                    options.append(clean)
-        # 2. 库分析器
+        # 1. 库分析器
         try:
             results = self._analyzer.analyze(ch)
             for r in results:
@@ -402,7 +393,7 @@ class AutoCheckService:
                     options.append(r.reading)
         except Exception:
             pass
-        # 3. pykakasi 参考读音
+        # 2. pykakasi 参考读音
         if self._pykakasi_conv is not None:
             try:
                 converted = self._pykakasi_conv.do(ch)
@@ -667,18 +658,29 @@ class AutoCheckService:
                 split_parts = parts[:block_len]
             else:
                 if block_len > 1:
-                    # 尝试按单字读音拆分，不可拆分则走「头尾假名剥离」回退
-                    char_split = self._try_split_to_chars(result.text, result.reading)
-                    if char_split is not None:
-                        split_parts = char_split
-                    else:
-                        # 连词回退：剥离头尾非汉字的自注音，保留假名 ruby，
-                        # 中间连续汉字由 apply_to_sentence 基于 check_count==0 自动连词
+                    # library 来源：跳过 _try_split_to_chars，直接走 fallback
+                    # （_try_split_to_chars 成功率高但粒度粗到单字，会阻止同块连词；
+                    # 走 fallback 让头尾假名剥离 + 中间汉字连词生效）
+                    if block_source.get(block_id) == "library":
                         split_parts = self._fallback_split_peel_kana(
                             result.text, result.reading
                         )
-                        # 升级来源为 "fallback"，让 apply_to_sentence 允许连续汉字间连词
+                        # 升级来源让 apply_to_sentence 允许连续汉字间连词
                         block_source[block_id] = "fallback"
+                    else:
+                        # 非 library（dict/e2k/english_fallback 残留）：尝试按单字读音拆分，
+                        # 不可拆分则走「头尾假名剥离」回退
+                        char_split = self._try_split_to_chars(result.text, result.reading)
+                        if char_split is not None:
+                            split_parts = char_split
+                        else:
+                            # 连词回退：剥离头尾非汉字的自注音，保留假名 ruby，
+                            # 中间连续汉字由 apply_to_sentence 基于 check_count==0 自动连词
+                            split_parts = self._fallback_split_peel_kana(
+                                result.text, result.reading
+                            )
+                            # 升级来源为 "fallback"，让 apply_to_sentence 允许连续汉字间连词
+                            block_source[block_id] = "fallback"
                 else:
                     split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
@@ -722,14 +724,21 @@ class AutoCheckService:
                 split_parts = parts[:block_len]
             else:
                 if block_len > 1:
-                    char_split = self._try_split_to_chars(result.text, result.reading)
-                    if char_split is not None:
-                        split_parts = char_split
-                    else:
-                        # 与 analyze_sentence 一致的连词回退
+                    # 与 analyze_sentence 一致：library/fallback 来源走头尾假名剥离；
+                    # 其他来源先尝试单字拆分再回退
+                    src = block_source.get(block_id, "library")
+                    if src in ("library", "fallback"):
                         split_parts = self._fallback_split_peel_kana(
                             result.text, result.reading
                         )
+                    else:
+                        char_split = self._try_split_to_chars(result.text, result.reading)
+                        if char_split is not None:
+                            split_parts = char_split
+                        else:
+                            split_parts = self._fallback_split_peel_kana(
+                                result.text, result.reading
+                            )
                 else:
                     split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
