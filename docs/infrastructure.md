@@ -24,13 +24,10 @@
 提供高精度的日语分词与注音分析实现。
 
 - **职责**：
-    - **SudachiPy Mode C 上下文感知分析器**：利用 SudachiPy 进行长单位（Mode C）分词，能够准确识别复合词。
-    - **假名锚点分配算法**：基于分词结果，将假名智能分配至对应的汉字。`_try_distribute_kanji_block` 采用两步分发策略（优先匹配 pykakasi 参考，失败则回退至无约束分发）。`_partition_with_refs` 使用三级匹配逻辑（精确匹配→前缀匹配→无约束回退）。
-    - **片假名→平假名转换修复**：所有注音分析（Sudachi/Pykakasi）均会将片假名转换为平假名作为注音（包括小写片假名如 ェ），确保注音显示的一致性。
-    - **pykakasi 单字参考分配**：在无法通过上下文确定读音时，使用 pykakasi 作为单字读音参考。
-    - **PykakasiAnalyzer 作为回退**：若系统未安装 SudachiPy 相关依赖，自动降级至 PykakasiAnalyzer。
-    - **create_analyzer() 优先级**：SudachiPy → pykakasi → DummyAnalyzer。
-    - **默认词典数据 (data/default_dictionary)**：内嵌 1757 条 RL 字典原始文本，用于在用户缺失 `dictionary.json` 时自动初始化词典数据。
+    - **SudachiPy Mode C 上下文感知**：长单位分词识别复合词；假名锚点分配采用两步策略（优先匹配 pykakasi 参考，失败则无约束分发）。
+    - **假名统一**：所有注音输出均转为平假名（含小写片假名如 ェ）。
+    - **回退链**：`create_analyzer()` 优先级 SudachiPy → pykakasi → DummyAnalyzer。
+    - **内置词典**：缺失 `dictionary.json` 时自动从内嵌的 1757 条 RL 词典初始化。
 
 ### lyric_parser (歌词解析器)
 支持多种原始歌词格式的导入。
@@ -56,29 +53,13 @@
     - **TXT Exporter**：纯文本打轴数据。使用 `ch.export_timestamps`。
     - **txt2ass Exporter**：兼容特定 ASS 生成工具的中间格式。使用 `ch.export_timestamps`。
     - **ASS Exporter**：直接生成包含 Ruby 支持和样式信息的 ASS 字幕。
-        - **Nicokara Exporter**：生成符合ニコカラメーカー规范的歌词文件。使用 `ch.export_timestamps`。支持单行内非行尾句尾的释放时间戳导出（句尾字符后插入额外时间戳）。
-            - **@Ruby 条目生成规则（タイムタグ規格ルビ拡張規格）**：
-                - 格式：`@RubyN=亲文字,注音,适用开始时间,适用结束时间`，N 从 1 连续编号。
-                - 注音可包含内嵌相对时间戳（如 `つ[00:00:20]ば[00:00:60]さ`），由 `_build_reading_with_timestamps` 构建。
-                - 同一 (亲文字, 读音) 组所有出现的 reading_with_ts 完全相同时 → 单条全局条目，不附加时间范围。
-                - 同一 (亲文字, 读音) 组出现的 reading_with_ts 有差异时 → 合并连续相同读音为子组，每个子组生成一条带时间范围的条目（首子组省略开始时间，末子组省略结束时间）。
-                - 所有条目最终按首字符时间戳全局排序，跨汉字组交错排列（非按汉字分组输出）。
-                - 半角逗号为分隔符；注音含逗号时用 `&#44;` 转义。
-        - **演唱者过滤与标签 (Nicokara)**：
-            - 无效演唱者归一化：未指定演唱者、未知（"?"、"未知"）或空值的句子在导出过滤时均被视为项目的默认演唱者。
-            - 过滤逻辑使用有效演唱者（优先 per-char singer_id，其次 sentence.singer_id）。
-            - 导出界面演唱者列表包含所有在 Sentence 级别或 Character 级别出现的演唱者。
-            - 演唱者切换标签（【演唱者名】）实现跨行连续性：仅在演唱者实际发生变化（对比 `prev_singer_id`）时插入标签。默认演唱者也会在首次出现时插入标签。
+        - **Nicokara Exporter**：符合ニコカラメーカー规范。使用 `ch.export_timestamps`，支持句尾释放时间戳（非行尾句尾字符后插入额外时间戳）。
+            - **@Ruby 拡張規格**：格式 `@RubyN=亲,注音,开始时间,结束时间`，N 从 1 连续编号。注音含内嵌时间戳（`つ[00:00:20]ば[00:00:60]さ`）。同 (亲, 读音) 组 reading_with_ts 全相同 → 单条全局；有差异 → 按子组输出带时间范围（首省略开始、末省略结束）。所有条目按首字符时间戳全局排序，跨字交错。分隔符半角逗号；含逗号用 `&#44;` 转义。
+            - **演唱者标签**：无效演唱者（空/"?"/"未知"）归一化为默认演唱者；标签 `【名】` 跨行连续，仅在演唱者实际变化（对比 `prev_singer_id`）时插入；默认演唱者首次出现也插入。
 
 ### AudioEngine (音频引擎)
 提供跨平台音频播放与实时处理。
 
 - **职责**：
-    - **Phase Vocoder 变速不变调**：采用 Phase-Locked Phase Vocoder 算法实现高质量变速播放，并保持立体声相位一致性。
-        - **立体声保持**：以第 0 通道作为参考相位，其它通道通过 Phase-Locked 机制保持与参考通道的相位差，从而保留声场定位效果。
-        - **原理**：STFT → 相位累积 (Phase Accumulation) → ISTFT 重叠相加 (Overlap-add)。FFT size: 2048, hop: 512。
-        - **分段优先处理**：变速时采用两阶段后台处理策略：Phase 1 优先处理当前播放位置到末尾的片段，以尽快切换到变速不变调模式（大幅缩短回退期）；Phase 2 再处理完整文件以支持任意位置拖动。已播放部分使用快速重采样填充，仅作索引对齐用途。
-        - **模式切换淡入**：从线性插值回退模式切换到 Phase Vocoder 模式时，施加 32ms 线性淡入以消除拼接噪声，保证音频连续性。
-        - **实现细节**：纯 numpy 实现，无外部 C 库依赖。原始数据保留在 `_original_data` 中，使用 `_stretched_speed`、`_stretch_version` 和 `_switch_fade_samples` 管理处理状态与切换平滑。位置追踪始终基于原始音频时间。
-    - **低延迟播放**：使用 sounddevice (PortAudio) 提供低延迟音频输出。
-    - **格式支持**：通过 soundfile 支持多种音频格式解码。
+    - **WSOLA 流式变速不变调**：基于 audiotsm 的 WSOLA 算法按需生成变速音频，立体声相位一致，支持实时速度切换（50%-200%）。位置追踪始终基于原始音频时间。
+    - **低延迟播放**：sounddevice (PortAudio) 输出，soundfile 解码多格式。
