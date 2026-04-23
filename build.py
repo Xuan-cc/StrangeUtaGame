@@ -76,15 +76,9 @@ args = [
     # 标准库可能被跳过的模块
     "--hidden-import=encodings.idna",
     "--hidden-import=pkg_resources",
-    # 排除不必要的模块（减小体积）
-    "--exclude-module=matplotlib",
-    "--exclude-module=scipy",
-    "--exclude-module=pandas",
-    "--exclude-module=tkinter",
-    "--exclude-module=unittest",
-    "--exclude-module=pdb",
-    "--exclude-module=pydoc",
-    "--exclude-module=test",
+    # 注：不使用 --exclude-module 手动裁剪，让 PyInstaller 自行决定，
+    # 避免遗漏运行时通过 importlib / 反射间接加载的模块。
+    # 项目使用 PyQt6 + PyQt6-Fluent-Widgets，环境内不应再有 PyQt5。
     # ── 收集所有二进制文件和数据 ──
     "--collect-all=sounddevice",
     "--collect-all=soundfile",

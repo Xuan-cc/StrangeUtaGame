@@ -2,7 +2,7 @@
 
 # 核心依赖
 PyQt6>=6.6.0
-PyQt-Fluent-Widgets>=1.5.0
+PyQt6-Fluent-Widgets>=1.5.0
 sounddevice>=0.4.6
 soundfile>=0.12.1
 audiotsm>=0.1.2
