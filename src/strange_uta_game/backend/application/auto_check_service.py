@@ -983,24 +983,30 @@ class AutoCheckService:
         #      时才允许连词；库函数（Sudachi/pykakasi）和自注音的结果一律不连词。
         # 补丁：library 来源走了「头尾假名剥离」回退（block_source="fallback"）时
         #      也允许连词（此时连续汉字间必须连词以保证 ruby 正确显示）。
+        # 连词规则：同一 origin_block_id 内相邻字符自动 linked_to_next，
+        # 不再要求 next.check_count == 0。后字继续展示自己的 ruby。
+        # 空格字符不参与连词。
         _LINKABLE_SOURCES = {"dict", "e2k", "english_fallback", "fallback"}
         for i in range(len(new_characters) - 1):
             next_ch = new_characters[i + 1]
             if next_ch.char and next_ch.char.isspace():
                 continue
-            if next_ch.check_count == 0:
-                cur_src = results[i].origin_source if i < len(results) else "self"
-                next_src = (
-                    results[i + 1].origin_source if i + 1 < len(results) else "self"
-                )
-                # 仅可连词来源且属于同一个注音块时，才建立连词关系
-                if (
-                    cur_src in _LINKABLE_SOURCES
-                    and next_src in _LINKABLE_SOURCES
-                    and results[i].origin_block_id
-                    == results[i + 1].origin_block_id
-                ):
-                    new_characters[i].linked_to_next = True
+            cur_ch = new_characters[i]
+            if cur_ch.char and cur_ch.char.isspace():
+                continue
+            cur_src = results[i].origin_source if i < len(results) else "self"
+            next_src = (
+                results[i + 1].origin_source if i + 1 < len(results) else "self"
+            )
+            # 仅可连词来源且属于同一个注音块时，才建立连词关系
+            if (
+                cur_src in _LINKABLE_SOURCES
+                and next_src in _LINKABLE_SOURCES
+                and results[i].origin_block_id >= 0
+                and results[i].origin_block_id
+                == results[i + 1].origin_block_id
+            ):
+                new_characters[i].linked_to_next = True
 
         # 恢复时间标签
         if keep_existing_timetags:
