@@ -1,7 +1,10 @@
 """全文本编辑界面。
 
 全文本视图编辑歌词注音（ルビ），支持批量操作。
-格式: {大冒険|だい,ぼう,けん} — 花括号内为原文|逗号分隔注音。
+格式: {大冒険||だ|い,ぼ|う,け|ん} — `||` 分开汉字块与 ruby；
+`,` 分开不同字的读音；`|` 分开同一字的多个 RubyPart（mora）。
+示例 {大冒険||だ|い,ぼ|う,け|ん} = 大(だ・い) 冒(ぼ・う) 険(け・ん)。
+注意：切换动作不触发自动注音 / 自动节奏点，只做字符 diff 增删。
 """
 
 from PyQt6.QtWidgets import (
@@ -39,31 +42,42 @@ from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
     CharType,
     get_char_type,
 )
-from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-    split_ruby_for_checkpoints,
-)
 
 
 def _rebuild_characters(
     old_sentence: Sentence,
     new_chars: List[str],
-    ruby_map: Dict[int, str],
+    ruby_map: Dict[int, List[str]],
 ) -> List[Character]:
     """文本变更后重建 Character 列表，保留匹配字符的时间戳和配置。
 
     使用 SequenceMatcher 计算旧字符到新字符的映射，
     匹配到的旧字符保留 timestamps/check_count/linked_to_next/singer_id，
     新插入的字符使用默认设置。最后一个字符标记为句尾。
+
+    ruby_map[j] 为 RubyPart.text 列表（来自新格式解析，可能为多段 mora）。
+    - 匹配到的旧字符：优先保留 old_ch.ruby（含多段 RubyPart 切分），
+      仅当用户在文本框里**显式改动**了该字符的 ruby 文本（ruby_map[j]
+      拼接后与 old_ch.ruby.text 不同）时，才用 ruby_map[j] 覆盖。
+    - 新插入字符：仅当 ruby_map[j] 明确给出时应用，否则保持空 ruby
+      （切换动作不自动注音，需用户主动触发）。
     """
     old_chars_str = [c.char for c in old_sentence.characters]
 
     if old_chars_str == new_chars:
-        # 文本未变，仅更新 ruby
-        if ruby_map:
-            for i, ch in enumerate(old_sentence.characters):
-                if i in ruby_map:
-                    ch.set_ruby(Ruby(parts=[RubyPart(text=ruby_map[i])]))
-        # ruby_map 为空时保留现有 ruby 不变
+        # 文本未变，仅在用户显式改动 ruby 时更新
+        for i, ch in enumerate(old_sentence.characters):
+            if i not in ruby_map:
+                continue
+            new_parts = ruby_map[i]
+            new_text = "".join(new_parts)
+            old_text = ch.ruby.text if ch.ruby else ""
+            if new_text == old_text:
+                # ruby 文本一致，保留 old_ch.ruby 的完整 RubyPart 切分
+                continue
+            # 用户改了注音：用新 parts 覆盖，check_count 同步为 parts 长度
+            ch.check_count = len(new_parts)
+            ch.set_ruby(Ruby(parts=[RubyPart(text=t) for t in new_parts]))
         return old_sentence.characters
 
     # 构建 old_idx → new_idx 映射
@@ -92,11 +106,21 @@ def _rebuild_characters(
                 is_rest=old_ch.is_rest,
                 singer_id=old_ch.singer_id,
             )
-            # 保留原字符的注音（后续 ruby_map 覆盖优先）
+            # 默认保留原字符的完整 ruby（含多段 RubyPart）
             if old_ch.ruby:
-                ch.set_ruby(Ruby(parts=[RubyPart(text=p.text) for p in old_ch.ruby.parts]))
+                ch.set_ruby(
+                    Ruby(parts=[RubyPart(text=p.text) for p in old_ch.ruby.parts])
+                )
+            # 仅当用户显式改动 ruby 文本时才覆盖
+            if j in ruby_map:
+                new_parts = ruby_map[j]
+                new_text = "".join(new_parts)
+                old_text = old_ch.ruby.text if old_ch.ruby else ""
+                if new_text != old_text:
+                    ch.check_count = len(new_parts)
+                    ch.set_ruby(Ruby(parts=[RubyPart(text=t) for t in new_parts]))
         else:
-            # 新字符：默认 check_count=1
+            # 新插入字符：默认 check_count=1，空 ruby
             ch = Character(
                 char=new_chars[j],
                 check_count=1,
@@ -104,25 +128,33 @@ def _rebuild_characters(
                 is_sentence_end=is_last,
                 singer_id=old_sentence.singer_id,
             )
-
-        # 应用 ruby
-        if j in ruby_map:
-            ch.set_ruby(Ruby(parts=[RubyPart(text=ruby_map[j])]))
+            # 仅当用户在文本框里显式给新字符加了 ruby 才应用
+            if j in ruby_map:
+                new_parts = ruby_map[j]
+                ch.check_count = len(new_parts)
+                ch.set_ruby(Ruby(parts=[RubyPart(text=t) for t in new_parts]))
 
         characters.append(ch)
 
     return characters
 
 
-def _apply_ruby_map(sentence: Sentence, ruby_map: Dict[int, str]) -> None:
-    """将 ruby_map 应用到句子的字符上。"""
-    for ci, ruby_text in ruby_map.items():
-        if 0 <= ci < len(sentence.characters):
-            sentence.characters[ci].set_ruby(Ruby(parts=[RubyPart(text=ruby_text)]))
+def _apply_ruby_map(sentence: Sentence, ruby_map: Dict[int, List[str]]) -> None:
+    """将 ruby_map 应用到句子的字符上（用于新插入行）。
+
+    仅当 ruby_map[ci] 明确给出时才应用（新行默认保持空 ruby，
+    不触发自动注音）。check_count 同步为 parts 长度。
+    """
+    for ci, parts in ruby_map.items():
+        if 0 <= ci < len(sentence.characters) and parts:
+            sentence.characters[ci].check_count = len(parts)
+            sentence.characters[ci].set_ruby(
+                Ruby(parts=[RubyPart(text=t) for t in parts])
+            )
 
 
 def _is_kanji_char(char: str) -> bool:
-    """判断是否为汉字"""
+    """判断是否为汉字（公用辅助）。"""
     if len(char) != 1:
         return False
     code = ord(char)
@@ -135,17 +167,26 @@ def _is_kanji_char(char: str) -> bool:
 
 def _parse_annotated_line(
     line_text: str,
-) -> Tuple[str, List[str], Dict[int, str]]:
-    """解析带注音标注的文本行。
+) -> Tuple[str, List[str], Dict[int, List[str]]]:
+    """解析带注音标注的文本行（新格式）。
 
-    新格式: {大冒険|だい,ぼう,けん} — 花括号内：原文|逗号分隔各字符注音。
-    兼容旧格式: 漢字{かんじ} — 花括号标注前面连续汉字块的读音。
+    新格式: ``{大冒険||だ|い,ぼ|う,け|ん}``
+      - ``||`` 分开汉字块与 ruby 部分
+      - ``,`` 分开不同字的 ruby
+      - ``|`` 分开同一字的多个 RubyPart（mora）
+
+    示例：
+      - ``{大冒険||だ|い,ぼ|う,け|ん}`` → 大(だ・い) 冒(ぼ・う) 険(け・ん)
+      - ``{漢|か|ん|じ}`` → 漢(か・ん・じ)（单字多段 mora）
+      - ``{赤|あか}`` → 赤(あか)（单字单段，向后兼容）
+
+    不再支持旧的 ``漢字{かんじ}`` 后置格式。
 
     Returns:
-        (原文, 字符列表, ruby_map: char_idx → ruby_text)
+        (原文, 字符列表, ruby_map: char_idx → List[RubyPart.text])
     """
     raw_chars: List[str] = []
-    ruby_map: Dict[int, str] = {}
+    ruby_map: Dict[int, List[str]] = {}
     i = 0
     n = len(line_text)
 
@@ -160,52 +201,38 @@ def _parse_annotated_line(
 
             content = line_text[i + 1 : close]
 
-            if "|" in content:
-                # 新格式: {text|r1,r2,...}
-                text_part, readings_part = content.split("|", 1)
-                readings = readings_part.split(",")
+            if "||" in content:
+                # 新主格式：text||mora|mora,mora|mora
+                text_part, readings_part = content.split("||", 1)
+                per_char_readings = readings_part.split(",")
+                start_idx = len(raw_chars)
+                for ch in text_part:
+                    raw_chars.append(ch)
+
+                for j, reading_group in enumerate(per_char_readings):
+                    # reading_group 内部用 "|" 分 mora；空串代表无 ruby
+                    parts = [p for p in reading_group.split("|") if p != ""]
+                    if parts and (start_idx + j) < len(raw_chars):
+                        ruby_map[start_idx + j] = parts
+            elif "|" in content:
+                # 兼容简短格式：{text|mora|mora|mora}（单字多段 mora）
+                # 或 {text|reading}（单字单段）
+                text_part, _, readings_part = content.partition("|")
+                parts = [p for p in readings_part.split("|") if p != ""]
 
                 start_idx = len(raw_chars)
                 for ch in text_part:
                     raw_chars.append(ch)
 
-                for j, reading in enumerate(readings):
-                    reading = reading.strip()
-                    if reading and (start_idx + j) < len(raw_chars):
-                        ruby_map[start_idx + j] = reading
+                if len(text_part) == 1 and parts:
+                    ruby_map[start_idx] = parts
+                elif len(text_part) > 1 and parts:
+                    # 歧义：多字只给一个 reading，兜底当作首字全吃
+                    ruby_map[start_idx] = parts
             else:
-                # 旧格式: 漢字{かんじ}
-                ruby_text = content
-
-                if ruby_text and raw_chars:
-                    # 向前查找连续汉字块
-                    end_idx = len(raw_chars)
-                    start_idx = end_idx
-                    while start_idx > 0 and _is_kanji_char(raw_chars[start_idx - 1]):
-                        start_idx -= 1
-
-                    # 若前面没有汉字，退一格（允许给任意字符标注）
-                    if start_idx == end_idx and end_idx > 0:
-                        start_idx = end_idx - 1
-
-                    if start_idx < end_idx:
-                        # 检查是否与已有注音重叠
-                        overlap = any(
-                            ci in ruby_map for ci in range(start_idx, end_idx)
-                        )
-
-                        if not overlap:
-                            block_len = end_idx - start_idx
-                            split_parts = split_ruby_for_checkpoints(
-                                ruby_text, block_len
-                            )
-                            for ci in range(start_idx, end_idx):
-                                part_idx = ci - start_idx
-                                if (
-                                    part_idx < len(split_parts)
-                                    and split_parts[part_idx]
-                                ):
-                                    ruby_map[ci] = split_parts[part_idx]
+                # {text} 无 ruby → 纯文本
+                for ch in content:
+                    raw_chars.append(ch)
 
             i = close + 1
         else:
@@ -297,9 +324,9 @@ class RubyInterface(QWidget):
 
         # 说明
         desc = QLabel(
-            "全文本编辑：新格式 {原文|读音1,读音2,...} 逗号分隔每字读音，\n"
-            "例：{大冒険|だい,ぼう,けん}\n"
-            "仍兼容旧格式 赤{あか}い花{はな}。切换标签页时自动保存修改"
+            "全文本编辑：格式 {原文||读音1,读音2,...}，`||` 分开原文与读音，\n"
+            "`,` 分开不同字，`|` 分开同一字的多 mora。例：{大冒険||だ|い,ぼ|う,け|ん}\n"
+            "切换标签页时只做增删字符/行，不会重新自动注音，请主动点击「自动分析」"
         )
         desc.setStyleSheet("color: gray;")
         layout.addWidget(desc)
@@ -336,7 +363,7 @@ class RubyInterface(QWidget):
         self.text_edit.setFont(QFont("Microsoft YaHei", 12))
         self.text_edit.setPlaceholderText(
             "加载项目后，歌词将以注音标注格式显示在此处...\n"
-            "示例: {大冒険|だい,ぼう,けん} 或 赤{あか}い花{はな}"
+            "示例: {大冒険||だ|い,ぼ|う,け|ん}"
         )
         self.text_edit.setMinimumHeight(300)
         layout.addWidget(self.text_edit, stretch=1)
@@ -466,10 +493,13 @@ class RubyInterface(QWidget):
             self.lbl_stats.setText("共 0 行，0 个注音")
 
     def _lines_to_text(self) -> str:
-        """将项目歌词转为带注音标注的文本。
+        """将项目歌词转为带注音标注的文本（新格式，保留 RubyPart 切分）。
 
-        格式: {大冒険|だい,ぼう,けん} — 用 linked_to_next 判断连词组，
-        花括号内原文|逗号分隔各字符注音。非连词字符单独标注 {字|读音}。
+        格式: ``{大冒険||だ|い,ぼ|う,け|ん}`` — ``||`` 分开汉字块与 ruby，
+        ``,`` 分开不同字，``|`` 分开同一字的多个 RubyPart（mora）。
+
+        连词组通过 linked_to_next 链合并为同一 ``{...||...}`` 块；
+        非连词且有 ruby 的字符单独输出为 ``{字||mora|mora|...}``；
         无注音的字符照常输出。
         """
         if not self._project:
@@ -488,10 +518,12 @@ class RubyInterface(QWidget):
                         i += 1
                     i += 1  # 包含链中最后一个字符
                     text_part = "".join(ch.char for ch in chars[group_start:i])
+                    # 每字的 RubyPart 列表用 `|` 拼接；不同字之间用 `,`
                     readings = ",".join(
-                        ch.ruby.text if ch.ruby else "" for ch in chars[group_start:i]
+                        "|".join(p.text for p in ch.ruby.parts) if ch.ruby else ""
+                        for ch in chars[group_start:i]
                     )
-                    annotated += f"{{{text_part}|{readings}}}"
+                    annotated += f"{{{text_part}||{readings}}}"
                 else:
                     annotated += chars[i].char
                     i += 1
