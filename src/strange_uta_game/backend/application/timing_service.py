@@ -557,6 +557,17 @@ class TimingService:
         """设置播放速度"""
         self._audio_engine.set_speed(speed)
 
+    def set_render_progress_callback(self, callback) -> None:
+        """注册音频渲染进度回调（变速时的后台 WSOLA 渲染）。
+
+        签名 ``(speed: float, progress: float)``；``progress`` ∈ [0, 1]，
+        1.0 表示已就绪。回调可能从音频渲染 worker 线程触发，UI 层需自行
+        marshal 到主线程。若引擎不支持则静默忽略。
+        """
+        fn = getattr(self._audio_engine, "set_render_progress_callback", None)
+        if fn is not None:
+            fn(callback)
+
     def release(self) -> None:
         self.stop()
         self._audio_engine.release()

@@ -114,6 +114,11 @@ class SoundDeviceEngine(IAudioEngine):
         self._callback_thread: Optional[threading.Thread] = None
         self._callback_stop = threading.Event()
 
+        # ---- 渲染进度回调 ----
+        # 签名 ``(speed, progress∈[0,1])``；progress=1.0 表示已就绪/切换完成。
+        # 可能从 TSMRenderCache 的 worker 线程调用——UI 侧需自行 marshal。
+        self._render_progress_cb: Optional[Callable[[float, float], None]] = None
+
     # ==================== 加载 / 资源 ====================
 
     def load(self, file_path: str) -> None:
@@ -270,7 +275,18 @@ class SoundDeviceEngine(IAudioEngine):
         # 触发后台渲染（如已缓存或 1.0x 则立即返回 ndarray，producer 下一
         # tick 会自动 pickup；这里不在 UI 线程做切换以避免持锁等待）
         if self._original_data is not None:
-            self._cache.ensure(self._speed)
+            q = _quantize(self._speed)
+            cb = self._render_progress_cb
+            result = self._cache.ensure(
+                self._speed,
+                progress_cb=cb,
+            )
+            # 命中缓存 / 1.0x 直通：立刻通知 UI "已就绪"
+            if result is not None and cb is not None:
+                try:
+                    cb(q, 1.0)
+                except Exception:
+                    pass
 
     def get_speed(self) -> float:
         return self._speed
@@ -298,6 +314,17 @@ class SoundDeviceEngine(IAudioEngine):
 
     def clear_position_callback(self) -> None:
         self._position_callback = None
+
+    def set_render_progress_callback(
+        self, callback: Optional[Callable[[float, float], None]]
+    ) -> None:
+        """注册渲染进度回调。
+
+        签名 ``(speed, progress)``；``progress`` ∈ [0, 1]，1.0 表示已就绪。
+        **注意**：回调可能在 TSMRenderCache 的 worker 线程被调用，UI 侧
+        需通过 Qt 信号或 ``QMetaObject.invokeMethod`` marshal 到主线程。
+        """
+        self._render_progress_cb = callback
 
     def get_audio_info(self) -> Optional[AudioInfo]:
         if self._file_path is None:

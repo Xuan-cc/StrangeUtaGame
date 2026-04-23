@@ -163,6 +163,13 @@ class TransportBar(QFrame):
         self.edit_speed.editingFinished.connect(self._on_speed_editing_finished)
         layout.addWidget(self.edit_speed)
 
+        # 渲染进度提示：固定宽度避免速度输入框被挤动；默认空字符串隐身。
+        self.lbl_render = QLabel("", self)
+        self.lbl_render.setFixedWidth(96)
+        self.lbl_render.setStyleSheet("font-size: 11px; color: #888;")
+        self.lbl_render.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.lbl_render)
+
         # 音量
         lbl_vol = QLabel("音量")
         lbl_vol.setStyleSheet("font-size: 11px; color: gray;")
@@ -231,6 +238,17 @@ class TransportBar(QFrame):
             return max(50, min(200, int(text)))
         except ValueError:
             return 100
+
+    def set_render_progress(self, speed: float, progress: float) -> None:
+        """更新渲染进度指示。``progress>=1.0`` 时清空。
+
+        ``speed`` 已经由引擎量化（保留 2 位小数），直接 ``{:.2f}`` 显示。
+        """
+        if progress >= 0.999:
+            self.lbl_render.setText("")
+        else:
+            pct = max(0, min(99, int(progress * 100)))
+            self.lbl_render.setText(f"{speed:.2f}× 渲染 {pct}%")
 
 
 # ──────────────────────────────────────────────
@@ -1768,6 +1786,9 @@ class EditorInterface(QWidget):
     _checkpoint_moved_signal = pyqtSignal(object)
     _timetag_added_signal = pyqtSignal()
     _timing_error_signal = pyqtSignal(str, str)
+    # 渲染进度：(speed, progress)。内部从音频 worker 线程触发，经此信号
+    # 自动 marshal 到 UI 线程（Qt 跨线程默认 queued connection）。
+    _render_progress_signal = pyqtSignal(float, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1790,6 +1811,11 @@ class EditorInterface(QWidget):
         self._checkpoint_moved_signal.connect(self._handle_checkpoint_moved)
         self._timetag_added_signal.connect(self._handle_timetag_added)
         self._timing_error_signal.connect(self._handle_timing_error)
+        self._render_progress_signal.connect(self._handle_render_progress)
+
+    def _handle_render_progress(self, speed: float, progress: float) -> None:
+        """UI 线程：把进度转交给 TransportBar 显示。"""
+        self.transport.set_render_progress(speed, progress)
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -1905,6 +1931,10 @@ class EditorInterface(QWidget):
     def set_timing_service(self, timing_service: TimingService):
         self._timing_service = timing_service
         self._timing_service.set_callbacks(self)
+        # 注册渲染进度回调：经 pyqtSignal 自动 marshal 到 UI 线程。
+        self._timing_service.set_render_progress_callback(
+            lambda spd, prog: self._render_progress_signal.emit(float(spd), float(prog))
+        )
 
     def set_store(self, store):
         """接入 ProjectStore 统一数据中心。"""
