@@ -656,23 +656,24 @@ class AutoCheckService:
                 while len(parts) < block_len:
                     parts.append("")
                 split_parts = parts[:block_len]
-                # 劣质拆分检测：若存在「对应字符是汉字」且 part 为空的位置，
-                # 视为字典条目错漏，避免汉字无注音 —— 丢弃字典拆分，改走 fallback
-                # 重算（与 library 分支一致）。注意：part 为空 + 对应字符是假名
-                # 是合法的「连词首字承载」语义，不触发 fallback。
-                has_empty_kanji_part = False
-                for pos in range(block_len):
+                # 劣质拆分检测：仅当「最末尾 part 为空且对应字符是汉字」时，
+                # 视为字典条目错漏（尾部汉字无注音承载对象）。走 fallback 重算。
+                # 中间空 part 视为用户显式的「首字/前字承载 mora」连词语义，尊重之。
+                # 末尾空 part 对应假名属送り仮名模式，由后续首尾剥离处理。
+                has_empty_tail_kanji = False
+                for pos in range(block_len - 1, -1, -1):
+                    if split_parts[pos]:
+                        # 从尾往前遇到非空即停（只看真正的尾部空）
+                        break
                     idx = result.start_idx + pos
                     if idx >= len(chars):
-                        continue
-                    if split_parts[pos]:
                         continue
                     ch = chars[idx]
                     ct = get_char_type(ch) if len(ch) == 1 else CharType.OTHER
                     if ct not in (CharType.HIRAGANA, CharType.KATAKANA):
-                        has_empty_kanji_part = True
+                        has_empty_tail_kanji = True
                         break
-                if has_empty_kanji_part:
+                if has_empty_tail_kanji:
                     # 从字典 reading 中剥离逗号，用完整读音重算 peel_kana
                     full_reading = result.reading.replace(",", "")
                     split_parts = self._fallback_split_peel_kana(
