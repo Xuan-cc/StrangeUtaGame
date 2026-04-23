@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QFormLayout,
     QLineEdit,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QRect
 from PyQt6.QtGui import (
@@ -1161,67 +1162,72 @@ class KaraokePreview(QWidget):
 
 
 class ModifyCharacterDialog(QDialog):
-    """修改所选字符对话框 — 允许替换选中字符的文本、注音和节奏点"""
+    """修改所选字符对话框 — 替换选中区间的文本、注音、节奏点。
+
+    字符级独立输入框方案（批 18 #1/#2/#3）：
+      - 顶部"新字符"文本框决定字符序列
+      - 下方按新文本长度动态生成每字符一行：[字符] [注音] [节奏点]
+      - 注音框内用半角逗号分隔 RubyPart（如 わ,た,し → 3 个 RubyPart）
+      - 文本修改时自动重建字符行，并按位置尽量保留已输入值
+      - 单字符修改时直接原地 set_ruby/check_count/push_to_ruby，保留 timestamps
+      - 字符数变化时才走替换 slice 流程（必然丢旧 timestamps）
+    """
 
     def __init__(self, sentence, start_idx, end_idx, parent=None):
-        """
-        Args:
-            sentence: Sentence object
-            start_idx: inclusive start char index
-            end_idx: inclusive end char index
-            parent: parent widget
-        """
         super().__init__(parent)
         self._sentence = sentence
         self._start_idx = start_idx
         self._end_idx = end_idx
         self._modified = False
+        self._char_rows: list[tuple[QLabel, QLineEdit, QLineEdit]] = []
 
         self.setWindowTitle("修改所选字符")
-        self.resize(420, 300)
+        self.resize(520, 440)
         self.setFont(QFont("Microsoft YaHei", 10))
 
         layout = QVBoxLayout(self)
 
-        form = QFormLayout()
-
-        # Field 1: Current selected chars (readonly)
+        # 原字符显示 + 新字符输入
         chars = sentence.characters[start_idx : end_idx + 1]
         current_text = "".join(c.char for c in chars)
+
+        top_form = QFormLayout()
         lbl_current = QLabel(current_text)
         lbl_current.setStyleSheet("font-size: 16px; font-weight: bold;")
-        form.addRow("当前选中字符:", lbl_current)
-
-        # Field 2: New chars
+        top_form.addRow("当前选中字符:", lbl_current)
         self.edit_new_chars = QLineEdit(current_text)
         self.edit_new_chars.setPlaceholderText("输入新字符")
-        form.addRow("新字符:", self.edit_new_chars)
+        top_form.addRow("新字符:", self.edit_new_chars)
+        layout.addLayout(top_form)
 
-        # Field 3: New ruby (comma-separated for multi-char; '#' 用于组内 cp 分组)
-        rubies = []
+        # 字符级编辑区标题
+        hint = QLabel("按字符编辑（注音用半角逗号分隔 RubyPart；节奏点为非负整数）:")
+        hint.setStyleSheet("font-size: 11px; color: gray;")
+        layout.addWidget(hint)
+
+        # Scroll area with per-char rows
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        self._rows_container = QWidget()
+        self._rows_layout = QVBoxLayout(self._rows_container)
+        self._rows_layout.setContentsMargins(4, 4, 4, 4)
+        self._rows_layout.setSpacing(4)
+        scroll.setWidget(self._rows_container)
+        layout.addWidget(scroll, stretch=1)
+
+        # 初始按当前字符填充
         for c in chars:
-            # 对话框显示剥离 '#'，用户可重新用 '#' 标注分组
-            rubies.append(c.ruby.text if c.ruby else "")
-        initial_ruby = ",".join(rubies) if any(rubies) else ""
-        self.edit_new_ruby = QLineEdit(initial_ruby)
-        self.edit_new_ruby.setPlaceholderText(
-            "注音（多字符用逗号分隔；同字符内多节奏点可用 # 分组，如 わ#た#し）"
-        )
-        form.addRow("新注音:", self.edit_new_ruby)
+            ruby_str = (
+                ",".join(p.text for p in c.ruby.parts) if c.ruby and c.ruby.parts else ""
+            )
+            self._append_char_row(c.char, ruby_str, str(c.check_count))
 
-        # Field 4: New check counts (comma-separated for multi-char)
-        check_counts = [str(c.check_count) for c in chars]
-        self.edit_new_checks = QLineEdit(",".join(check_counts))
-        self.edit_new_checks.setPlaceholderText("节奏点数量（多字符用逗号分隔）")
-        form.addRow("新节奏点:", self.edit_new_checks)
+        # 文本变更 → 重建行，保留已输入值
+        self.edit_new_chars.textChanged.connect(self._rebuild_rows_on_text_change)
 
-        layout.addLayout(form)
-
-        # Checkbox: register to dictionary
+        # 注册词典
         self.chk_register = QCheckBox("将此词注册到读音词典")
         layout.addWidget(self.chk_register)
-
-        layout.addStretch()
 
         # Buttons
         btn_layout = QHBoxLayout()
@@ -1234,86 +1240,119 @@ class ModifyCharacterDialog(QDialog):
         btn_layout.addWidget(btn_close)
         layout.addLayout(btn_layout)
 
+    def _append_char_row(self, char_str: str, ruby_str: str, check_str: str):
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
+        lbl = QLabel(char_str)
+        lbl.setFixedWidth(32)
+        lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+        edit_ruby = QLineEdit(ruby_str)
+        edit_ruby.setPlaceholderText("注音（逗号分隔多 RubyPart）")
+        edit_check = QLineEdit(check_str)
+        edit_check.setPlaceholderText("节奏点")
+        edit_check.setFixedWidth(64)
+        row_layout.addWidget(lbl)
+        row_layout.addWidget(edit_ruby, stretch=1)
+        row_layout.addWidget(edit_check)
+        self._rows_layout.addWidget(row_widget)
+        self._char_rows.append((lbl, edit_ruby, edit_check))
+
+    def _rebuild_rows_on_text_change(self, new_text: str):
+        # 保留旧输入值按索引对齐
+        old_vals = [(e_r.text(), e_c.text()) for _, e_r, e_c in self._char_rows]
+        # 清空现有行
+        while self._rows_layout.count():
+            item = self._rows_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        self._char_rows.clear()
+        for i, ch in enumerate(new_text):
+            if i < len(old_vals):
+                r_val, c_val = old_vals[i]
+            else:
+                r_val, c_val = "", "1"
+            self._append_char_row(ch, r_val, c_val)
+
+    def _parse_ruby(self, raw: str):
+        from strange_uta_game.backend.domain.models import Ruby, RubyPart
+
+        text = raw.strip()
+        if not text:
+            return None
+        parts = [p.strip() for p in text.split(",") if p.strip()]
+        if not parts:
+            return None
+        return Ruby(parts=[RubyPart(text=p) for p in parts])
+
     def _on_execute(self):
-        from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
-        from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-            align_ruby_parts_to_checkpoints,
-            split_ruby_for_checkpoints,
-        )
+        from strange_uta_game.backend.domain.models import Character
 
         new_text = self.edit_new_chars.text().strip()
         if not new_text:
             return
 
-        ruby_text = self.edit_new_ruby.text().strip()
-        checks_text = self.edit_new_checks.text().strip()
-
-        # Parse rubies
-        if ruby_text:
-            ruby_parts = [r.strip() for r in ruby_text.split(",")]
-        else:
-            ruby_parts = []
-
-        # Parse check counts
-        if checks_text:
+        # 收集每行值
+        per_char_ruby = []
+        per_char_check = []
+        for i in range(len(new_text)):
+            if i >= len(self._char_rows):
+                per_char_ruby.append(None)
+                per_char_check.append(1)
+                continue
+            _, edit_ruby, edit_check = self._char_rows[i]
+            per_char_ruby.append(self._parse_ruby(edit_ruby.text()))
             try:
-                check_parts = [int(c.strip()) for c in checks_text.split(",")]
+                per_char_check.append(max(0, int(edit_check.text().strip())))
             except ValueError:
-                check_parts = [1] * len(new_text)
-        else:
-            check_parts = [1] * len(new_text)
+                per_char_check.append(1)
 
-        # Pad lists to match new_text length
-        while len(ruby_parts) < len(new_text):
-            ruby_parts.append("")
-        while len(check_parts) < len(new_text):
-            check_parts.append(1)
-
-        # Preserve is_sentence_end from old last char
         old_chars = self._sentence.characters[self._start_idx : self._end_idx + 1]
         old_last_is_sentence_end = old_chars[-1].is_sentence_end if old_chars else False
         old_last_is_line_end = old_chars[-1].is_line_end if old_chars else False
-
-        # Inherit singer_id from first old char
         singer_id = old_chars[0].singer_id if old_chars else ""
 
-        # Build new Character objects
-        new_chars = []
-        for i, ch_str in enumerate(new_text):
-            cc = max(0, check_parts[i])
-            raw_ruby = ruby_parts[i]
-            # is_sentence_end 仅作用于最后一个新字符（若旧末字为句尾）
-            is_se = (i == len(new_text) - 1) and old_last_is_sentence_end
-            if raw_ruby:
-                initial = split_ruby_for_checkpoints(raw_ruby, max(cc, 1))
-                aligned = align_ruby_parts_to_checkpoints(initial, cc, is_se)
-                parts = [RubyPart(text=p) for p in aligned if p]
-                ruby_obj = Ruby(parts=parts) if parts else None
-            else:
-                ruby_obj = None
-            new_ch = Character(
-                char=ch_str,
-                ruby=ruby_obj,
-                check_count=cc,
-                singer_id=singer_id,
-                linked_to_next=False,
-                is_line_end=False,
-                is_sentence_end=False,
-            )
-            new_chars.append(new_ch)
+        if len(new_text) == len(old_chars):
+            # 字符数不变 → 原地修改，保留 timestamps 和 offset
+            for i, ch_str in enumerate(new_text):
+                tgt = old_chars[i]
+                tgt.char = ch_str
+                tgt.check_count = per_char_check[i]
+                tgt.set_ruby(per_char_ruby[i])
+                tgt.push_to_ruby()
+            # 句尾 / 行末仍由旧末字转移到新末字（同位置即原字符）
+            # 不动 is_sentence_end / is_line_end
+        else:
+            # 字符数变化 → 替换 slice（无法保留 timestamps）
+            new_chars = []
+            for i, ch_str in enumerate(new_text):
+                new_ch = Character(
+                    char=ch_str,
+                    ruby=per_char_ruby[i],
+                    check_count=per_char_check[i],
+                    singer_id=singer_id,
+                    linked_to_next=False,
+                    is_line_end=False,
+                    is_sentence_end=False,
+                )
+                new_chars.append(new_ch)
+            if old_last_is_sentence_end:
+                new_chars[-1].is_sentence_end = True
+            if old_last_is_line_end:
+                new_chars[-1].is_line_end = True
+            self._sentence.characters[self._start_idx : self._end_idx + 1] = new_chars
 
-        # Transfer sentence_end / line_end to new last char
-        if old_last_is_sentence_end:
-            new_chars[-1].is_sentence_end = True
-        if old_last_is_line_end:
-            new_chars[-1].is_line_end = True
-
-        # Replace in sentence.characters list
-        self._sentence.characters[self._start_idx : self._end_idx + 1] = new_chars
-
-        # Register to dictionary if checked
+        # 词典注册：用户输入的第一段 ruby 拼接
         if self.chk_register.isChecked():
-            self._register_to_dictionary(new_text, ruby_parts)
+            readings = []
+            for r in per_char_ruby:
+                if r and r.parts:
+                    readings.append("".join(p.text for p in r.parts))
+                else:
+                    readings.append("")
+            self._register_to_dictionary(new_text, readings)
 
         self._modified = True
         self.accept()
@@ -2371,6 +2410,8 @@ class EditorInterface(QWidget):
             self._update_time_tags_display()
             self._update_status()
             if hasattr(self, "_store") and self._store:
+                self._store.notify("rubies")
+                self._store.notify("checkpoints")
                 self._store.notify("lyrics")
 
     def _on_insert_guide(self):
@@ -2652,6 +2693,8 @@ class EditorInterface(QWidget):
             self._update_time_tags_display()
             self._update_status()
             if hasattr(self, "_store"):
+                self._store.notify("rubies")
+                self._store.notify("checkpoints")
                 self._store.notify("lyrics")
 
     def _add_checkpoint(self):
