@@ -290,8 +290,11 @@ class MainWindow(MSFluentWindow):
             self._timing_service._rebuild_global_checkpoints()
         elif change_type == "audio":
             # 音频路径变更 → 全局加载到 editor
+            # 幂等守卫：editor 已加载相同路径时跳过，避免
+            # Editor.load_audio → store.set_audio_path → emit("audio")
+            # → MainWindow → Editor.load_audio 的重入回环导致 UI 卡死。
             audio_path = self._store.audio_path
-            if audio_path:
+            if audio_path and getattr(self.editorInterface, "_audio_file_path", None) != audio_path:
                 self.editorInterface.load_audio(audio_path)
 
     # ==================== 自动保存配置 ====================

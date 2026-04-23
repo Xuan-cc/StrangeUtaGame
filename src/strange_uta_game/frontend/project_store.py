@@ -92,7 +92,9 @@ class ProjectStore(QObject):
         return self._audio_path
 
     def set_audio_path(self, path: Optional[str]) -> None:
-        """设置音频路径并广播变更。"""
+        """设置音频路径并广播变更。路径未变则不广播，避免回环。"""
+        if self._audio_path == path:
+            return
         self._audio_path = path
         self.data_changed.emit("audio")
 
