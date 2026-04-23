@@ -1193,14 +1193,21 @@ class AutoCheckService:
         check_counts = check_counts[: len(sentence.characters)]
 
         # 根据现有 per-char 注音更新 check_count
+        # 规则：汉字的 cp 严格由它自己的 ruby parts 决定
+        #   - 无 ruby → cp=0（典型场景：连词块内后字，mora 已压在首字上）
+        #   - 有 ruby 且非自注音 → 按 parts 的 mora 总数
+        #   - 自注音（ruby==char）→ 保留默认 cp（走下游过滤规则）
+        # 非汉字（假名/字母/符号）：保留默认，由下游过滤规则处理。
         for i, char in enumerate(sentence.characters):
+            if len(char.char) != 1 or get_char_type(char.char) != CharType.KANJI:
+                continue  # 只对汉字按 ruby 重算
             if not char.ruby:
+                # 空 ruby 的汉字：cp 必须为 0（连词块内后字不打拍）
+                check_counts[i] = 0
                 continue
-            # Stage 0: Ruby 已迁移为 parts 模型，ruby.parts: List[RubyPart]
             ruby_groups = [p.text for p in char.ruby.parts]
             if len(ruby_groups) == 1 and char.char == ruby_groups[0]:
-                continue  # 自注音（假名等），保留默认 check_count
-            # 汉字等：按 Ruby 分组数量/组内 mora 数分配节奏点
+                continue  # 自注音汉字（罕见），保留默认
             check_counts[i] = sum(len(split_into_moras(group)) for group in ruby_groups)
 
         # 单一平假名/片假名封顶：最多 1 cp（同 analyze_sentence）

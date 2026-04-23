@@ -332,3 +332,69 @@ class TestKanaSingleCheckpointCap:
         assert ccs == [1, 1, 1], (
             f"update_checkpoints 后 cp 未封顶：{ccs}"
         )
+
+
+class TestKanjiEmptyRubyZeroCheckpoint:
+    """空 ruby 的汉字 cp 必须为 0（连词块内后字）。
+
+    规则：汉字的 cp 严格由它自己的 ruby parts 决定；连词块内 mora 已压在
+    首字上时，块内后续汉字 ruby=None，cp 必须=0，不能因默认规则留 1。
+
+    典型场景：`可愛い + かわい,,い` → 可=[か,わ,い]/cp=3、愛=None/cp=0、
+    い=自注音/cp=1。此前 update_checkpoints_from_rubies 对 `not char.ruby`
+    的汉字 continue 跳过，保留默认 cp=1，导致连词块内错误多拍。
+    """
+
+    def setup_method(self):
+        if _get_sudachi() is None:
+            pytest.skip("SudachiAnalyzer 不可用")
+
+    def test_kawaii_middle_kanji_empty_ruby_cp_zero(self):
+        """`可愛い + かわい,,い` update_checkpoints 后 愛.cp 必须 = 0。"""
+        from strange_uta_game.backend.domain.project import Project
+
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "可愛い", "reading": "かわい,,い"}
+            ],
+        )
+        sent = _make_sentence("可愛い")
+        service.apply_to_sentence(sent)
+
+        # analyze 阶段已经正确
+        assert sent.characters[1].ruby is None, "愛 应为空 ruby"
+        assert sent.characters[1].check_count == 0, "愛 初始 cp 应为 0"
+
+        # update_checkpoints 不得把空 ruby 的汉字 cp 改回非 0
+        project = Project(sentences=[sent])
+        service.update_checkpoints_for_project(project)
+
+        assert sent.characters[1].check_count == 0, (
+            f"update_checkpoints 后 愛.cp={sent.characters[1].check_count}，期望 0"
+        )
+        # 另外两字不应被影响
+        assert sent.characters[0].check_count == 3, (
+            f"可.cp 应为 3（かわい），实际 {sent.characters[0].check_count}"
+        )
+
+    def test_kanji_with_ruby_still_uses_mora_count(self):
+        """有 ruby 的汉字仍按 mora 数计 cp（回归保护）。"""
+        from strange_uta_game.backend.domain.project import Project
+
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "大冒険", "reading": "だい,ぼう,けん"}
+            ],
+        )
+        sent = _make_sentence("大冒険")
+        service.apply_to_sentence(sent)
+
+        project = Project(sentences=[sent])
+        service.update_checkpoints_for_project(project)
+
+        ccs = [c.check_count for c in sent.characters]
+        assert ccs == [2, 2, 2], (
+            f"汉字按 mora 计数错误：{ccs}"
+        )
