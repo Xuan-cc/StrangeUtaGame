@@ -489,9 +489,12 @@ class StartupInterface(QWidget):
             default_singer = Singer(name="演唱者1", color="#FF6B6B", is_default=True)
             lines = parse_to_sentences(parsed_lines, default_singer.id)
 
-            # 应用自动分析到每一行
+            # 应用自动分析到每一行（仅对无注音字符；失败不阻止导入）
             for line in lines:
-                self._auto_check_service.apply_to_sentence(line)
+                try:
+                    self._auto_check_service.apply_to_sentence(line, only_noruby=True)
+                except Exception:
+                    pass
 
             # 显示在输入区
             text = "\n".join(line.text for line in lines)
@@ -536,8 +539,11 @@ class StartupInterface(QWidget):
                     continue
 
                 line = Sentence.from_text(line_text, default_singer.id)
-                # 应用自动分析
-                self._auto_check_service.apply_to_sentence(line)
+                # 应用自动分析（仅对无注音字符；失败不阻止粘贴解析）
+                try:
+                    self._auto_check_service.apply_to_sentence(line, only_noruby=True)
+                except Exception:
+                    pass
                 lines.append(line)
 
             self._current_lines = lines

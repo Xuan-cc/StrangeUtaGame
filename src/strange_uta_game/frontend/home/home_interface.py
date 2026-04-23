@@ -445,7 +445,7 @@ class HomeInterface(QWidget):
                     auto_check = AutoCheckService(
                         auto_check_flags=auto_check_flags, user_dictionary=user_dict
                     )
-                    auto_check.apply_to_project(project)
+                    auto_check.apply_to_project(project, only_noruby=True)
             except Exception:
                 pass  # 注音分析失败不阻止项目创建
 

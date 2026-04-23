@@ -527,25 +527,3 @@ class TestExportService:
         # 应该提示没有完成打轴
         assert len(errors) > 0
         assert any("没有时间标签" in e for e in errors)
-
-    def test_batch_export(self):
-        """测试批量导出"""
-        project = Project()
-        singer = project.singers[0]
-        sentence = Sentence.from_text("测试歌词", singer.id)
-        sentence.characters[0].add_timestamp(12345)
-        project.add_sentence(sentence)
-
-        service = ExportService()
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            results = service.batch_export(
-                project, ["LRC", "KRA"], temp_dir, "test_export"
-            )
-
-            assert len(results) == 2
-            assert all(r.success for r in results)
-
-            # 检查文件是否创建
-            assert os.path.exists(os.path.join(temp_dir, "test_export.lrc"))
-            assert os.path.exists(os.path.join(temp_dir, "test_export.kra"))

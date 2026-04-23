@@ -524,15 +524,42 @@ class RubyInterface(QWidget):
     # ==================== 批量操作 ====================
 
     def _on_auto_analyze_all(self):
-        """自动分析全部注音：拆成注音与节奏点两步；节奏点失败不影响注音更新。"""
+        """自动分析全部注音：拆成注音与节奏点两步；节奏点失败不影响注音更新。
+
+        弹三选项对话框：
+        - 全部重新分析（覆盖已有注音）
+        - 仅分析未注音字符（保留已有注音）
+        - 取消
+        """
         if not self._project:
             return
+
+        # 三选项对话框
+        msg = QMessageBox(self)
+        msg.setWindowTitle("自动分析全部注音")
+        msg.setText("请选择分析范围：")
+        msg.setInformativeText(
+            "「全部重新分析」会覆盖现有注音。\n"
+            "「仅分析未注音字符」会保留已有的人工/字典注音。"
+        )
+        btn_all = msg.addButton("全部重新分析", QMessageBox.ButtonRole.DestructiveRole)
+        btn_only_noruby = msg.addButton(
+            "仅分析未注音字符", QMessageBox.ButtonRole.AcceptRole
+        )
+        btn_cancel = msg.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_only_noruby)
+        msg.exec()
+
+        clicked = msg.clickedButton()
+        if clicked is btn_cancel or clicked is None:
+            return
+        only_noruby = clicked is btn_only_noruby
 
         auto_check = self._create_auto_check_service()
 
         # 第一步：应用注音
         try:
-            auto_check.apply_to_project(self._project)
+            auto_check.apply_to_project(self._project, only_noruby=only_noruby)
             self._refresh_display()
             if hasattr(self, "_store"):
                 self._store.notify("rubies")
