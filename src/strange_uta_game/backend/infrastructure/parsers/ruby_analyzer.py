@@ -227,15 +227,9 @@ class SudachiAnalyzer(RubyAnalyzer):
                 segments, reading, seg_idx + 1, read_idx + try_len
             )
             if rest is not None:
-                if len(seg_text) == 1:
-                    return [(seg_text, portion)] + rest
-
-                # 多漢字：尝试按单字分配
-                per_kanji = self._try_distribute_kanji_block(seg_text, portion)
-                if per_kanji is not None:
-                    return per_kanji + rest
-
-                # 分配失败：整块保留
+                # 多漢字段按 morpheme 整块返回（同一 RubyResult → 同一 block_id），
+                # 由下游 auto_check 的 library→fallback 路径按库候选切分到单字。
+                # 不在分析器内拆单字，避免同 morpheme 字符被打散到多个 block。
                 return [(seg_text, portion)] + rest
 
         return None

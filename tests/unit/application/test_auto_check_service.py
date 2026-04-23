@@ -352,3 +352,57 @@ class TestFallbackSplitPeelKana:
         parts = service._fallback_split_peel_kana("漢字", "")
         assert parts == ["", ""]
 
+
+class TestLibraryBlockFallbackLinking:
+    """library 块走 fallback 路径后同块汉字自动连词（端到端）"""
+
+    def test_kawaii_library_block_links_kanji(self):
+        """可愛い：同一 morpheme 的 可→愛 应 linked"""
+        analyzer = _get_sudachi_analyzer()
+        if analyzer is None:
+            pytest.skip("SudachiAnalyzer 不可用")
+        service = AutoCheckService(analyzer)
+        sentence = Sentence.from_text("可愛い", "s1")
+        service.apply_to_sentence(sentence)
+
+        chars = sentence.characters
+        assert len(chars) == 3
+        assert chars[0].char == "可"
+        assert chars[1].char == "愛"
+        assert chars[2].char == "い"
+        # 关键：可→愛 linked（同 morpheme 同 block）
+        assert chars[0].linked_to_next, "可→愛 应 linked"
+        # 愛 仍展示自己的 ruby（后字继续展示自己的 ruby）
+        assert chars[1].ruby is not None and len(chars[1].ruby.parts) == 2
+        # い 是假名独立块，不参与连词
+        assert not chars[1].linked_to_next, "愛→い 不应 linked（い 是独立假名块）"
+
+    def test_daibouken_dict_path_links_all(self):
+        """大冒険（字典逗号分隔路径）：大→冒→険 全 linked"""
+        analyzer = _get_sudachi_analyzer()
+        if analyzer is None:
+            pytest.skip("SudachiAnalyzer 不可用")
+        service = AutoCheckService(analyzer)
+        sentence = Sentence.from_text("大冒険", "s1")
+        service.apply_to_sentence(sentence)
+
+        chars = sentence.characters
+        assert len(chars) == 3
+        assert chars[0].linked_to_next, "大→冒 应 linked"
+        assert chars[1].linked_to_next, "冒→険 应 linked"
+        # 各字有自己的 mora ruby
+        assert all(c.ruby is not None and len(c.ruby.parts) == 2 for c in chars)
+
+    def test_ashita_library_block_links(self):
+        """明日：morpheme 整块 → 明→日 linked"""
+        analyzer = _get_sudachi_analyzer()
+        if analyzer is None:
+            pytest.skip("SudachiAnalyzer 不可用")
+        service = AutoCheckService(analyzer)
+        sentence = Sentence.from_text("明日", "s1")
+        service.apply_to_sentence(sentence)
+
+        chars = sentence.characters
+        assert len(chars) == 2
+        assert chars[0].linked_to_next, "明→日 应 linked"
+
