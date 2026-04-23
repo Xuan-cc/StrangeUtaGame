@@ -1,7 +1,13 @@
-"""批量変更对话框 (Ctrl+H)。
+"""批量变更对话框 (Ctrl+H)。
 
-搜索项目中的指定词汇，批量修改其注音读法和节奏点数量，
-可选择将该词注册到用户读音词典中。
+以"修改所选字符"对话框为模板的批量版：顶部加一个"搜索词"字段，
+对项目中所有匹配该词的字符区间应用同一份字符级编辑。
+
+行为契约：
+- 搜索词空 → 禁用执行
+- 新字符长度 == 搜索词长度 → 每处匹配原地修改，保留 timestamps
+- 新字符长度 != 搜索词长度 → 弹确认，确认后逐处替换 slice（丢所有匹配处 timestamps）
+- 执行后不关闭对话框，显示"已修改 N 处"
 """
 
 from PyQt6.QtWidgets import (
@@ -10,44 +16,31 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QCheckBox,
+    QFormLayout,
+    QLineEdit,
+    QScrollArea,
+    QWidget,
+    QMessageBox,
 )
 from PyQt6.QtGui import QFont
 from qfluentwidgets import (
-    LineEdit,
     PushButton,
     PrimaryPushButton,
-    InfoBar,
-    InfoBarPosition,
 )
-from typing import Optional
-from strange_uta_game.backend.domain import Project, Ruby, RubyPart
-from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-    split_ruby_for_checkpoints,
-    align_ruby_parts_to_checkpoints,
-)
+from typing import Optional, List, Tuple
 
-
-def _build_ruby_from_text(raw: str, check_count: int, is_sentence_end: bool):
-    """UI 整串 ruby 字符串 → Ruby 对象；空串返回 None。"""
-    text = raw.strip()
-    if not text:
-        return None
-    initial = split_ruby_for_checkpoints(text, max(check_count, 1))
-    aligned = align_ruby_parts_to_checkpoints(initial, check_count, is_sentence_end)
-    parts = [RubyPart(text=p) for p in aligned if p]
-    if not parts:
-        return None
-    return Ruby(parts=parts)
+from strange_uta_game.backend.domain import Project
+from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
 
 
 class BulkChangeDialog(QDialog):
-    """批量変更对话框
+    """批量变更对话框 — 搜索词 + 字符级编辑，批量应用到所有匹配处。
 
-    功能：
-    - 搜索词：在项目中查找匹配的词汇
-    - 修改注音：替换匹配词的 Ruby 读音
-    - 修改节奏点数量（所有匹配字符 +N）
-    - 可选注册到用户读音词典
+    构造参数：
+        project: 当前项目（None 时执行按钮不起作用）
+        parent: 父窗口（期望具备 _store / _timing_service / refresh_lyric_display 等）
+        initial_word: 初始搜索词
+        initial_reading: 初始注音（逗号分隔，对应每个字符）
     """
 
     def __init__(
@@ -59,272 +52,388 @@ class BulkChangeDialog(QDialog):
     ):
         super().__init__(parent)
         self._project = project
+        self._char_rows: List[Tuple[QLabel, QLineEdit, QLineEdit]] = []
+        # 用户是否已手动编辑过 rows / 新字符框；一旦手动编辑，搜索词变化不再覆盖
+        self._rows_user_edited = False
+        self._new_chars_user_edited = False
+        # 抑制程序性 textChanged 触发的标志
+        self._suppress_row_signals = False
+        self._suppress_new_chars_signal = False
+
         self.setWindowTitle("批量变更 (Ctrl+H)")
-        self.setMinimumWidth(440)
+        self.resize(520, 480)
+        self.setFont(QFont("Microsoft YaHei", 10))
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(14)
 
-        title = QLabel("批量变更")
-        title.setFont(QFont("Microsoft YaHei", 14))
-        layout.addWidget(title)
+        # 搜索词行
+        search_row = QHBoxLayout()
+        self.edit_word = QLineEdit(initial_word)
+        self.edit_word.setPlaceholderText("输入要搜索的词")
+        self.lbl_match = QLabel("")
+        self.lbl_match.setStyleSheet("font-size: 11px; color: gray;")
+        search_row.addWidget(QLabel("搜索词:"))
+        search_row.addWidget(self.edit_word, stretch=1)
+        search_row.addWidget(self.lbl_match)
+        layout.addLayout(search_row)
 
-        desc = QLabel("搜索项目中的词汇，批量修改其注音或节奏点数量。")
-        desc.setFont(QFont("Microsoft YaHei", 10))
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
+        # 新字符行
+        top_form = QFormLayout()
+        self.edit_new_chars = QLineEdit(initial_word)
+        self.edit_new_chars.setPlaceholderText("输入替换后的字符（默认=搜索词）")
+        top_form.addRow("替换为:", self.edit_new_chars)
+        layout.addLayout(top_form)
 
-        # 搜索词
-        row1 = QHBoxLayout()
-        lbl1 = QLabel("搜索词：")
-        lbl1.setFont(QFont("Microsoft YaHei", 10))
-        lbl1.setFixedWidth(100)
-        self.edit_word = LineEdit()
-        self.edit_word.setPlaceholderText("输入要替换的词汇...")
-        self.edit_word.setFont(QFont("Microsoft YaHei", 10))
-        if initial_word:
-            self.edit_word.setText(initial_word)
-        row1.addWidget(lbl1)
-        row1.addWidget(self.edit_word)
-        layout.addLayout(row1)
-
-        # 新注音
-        row2 = QHBoxLayout()
-        lbl2 = QLabel("新注音：")
-        lbl2.setFont(QFont("Microsoft YaHei", 10))
-        lbl2.setFixedWidth(100)
-        self.edit_reading = LineEdit()
-        self.edit_reading.setPlaceholderText(
-            "留空将删除注音（假名，逗号分隔多段）"
+        hint = QLabel(
+            "按字符编辑（注音用半角逗号分隔 RubyPart；节奏点为非负整数）。\n"
+            "字符数与搜索词相同 → 保留时间戳；不同 → 丢失所有匹配处时间戳。"
         )
-        self.edit_reading.setFont(QFont("Microsoft YaHei", 10))
-        if initial_reading:
-            self.edit_reading.setText(initial_reading)
-        row2.addWidget(lbl2)
-        row2.addWidget(self.edit_reading)
-        layout.addLayout(row2)
+        hint.setStyleSheet("font-size: 11px; color: gray;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
 
-        # 不修改注音复选框
-        self.chk_skip_ruby = QCheckBox("不修改注音（勾选后忽略上方注音栏）")
-        self.chk_skip_ruby.setFont(QFont("Microsoft YaHei", 10))
-        layout.addWidget(self.chk_skip_ruby)
-
-        # 节奏点数量设置
-        row3 = QHBoxLayout()
-        lbl3 = QLabel("设置节奏点：")
-        lbl3.setFont(QFont("Microsoft YaHei", 10))
-        lbl3.setFixedWidth(100)
-        self.edit_delta = LineEdit()
-        self.edit_delta.setText("-1")
-        self.edit_delta.setPlaceholderText("整数或逗号分隔，如 -1、0、1,2,1")
-        self.edit_delta.setFont(QFont("Microsoft YaHei", 10))
-        self.edit_delta.setFixedWidth(160)
-        # 用户手动编辑过后不再自动覆盖
-        self._delta_user_edited = False
-        self.edit_delta.textEdited.connect(self._on_delta_user_edited)
-        hint = QLabel("（-1=不修改，0=设为0，逗号分隔对应各字符）")
-        hint.setFont(QFont("Microsoft YaHei", 9))
-        row3.addWidget(lbl3)
-        row3.addWidget(self.edit_delta)
-        row3.addWidget(hint)
-        row3.addStretch()
-        layout.addLayout(row3)
+        # Scroll area with per-char rows
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        self._rows_container = QWidget()
+        self._rows_layout = QVBoxLayout(self._rows_container)
+        self._rows_layout.setContentsMargins(4, 4, 4, 4)
+        self._rows_layout.setSpacing(4)
+        scroll.setWidget(self._rows_container)
+        layout.addWidget(scroll, stretch=1)
 
         # 注册到词典
         self.chk_register = QCheckBox("将此词注册到读音词典")
-        self.chk_register.setFont(QFont("Microsoft YaHei", 10))
         layout.addWidget(self.chk_register)
 
-        # 预览（匹配数量）
-        self.lbl_preview = QLabel("")
-        self.lbl_preview.setFont(QFont("Microsoft YaHei", 10))
-        layout.addWidget(self.lbl_preview)
-        self.edit_word.textChanged.connect(self._update_preview)
-
-        layout.addStretch()
-
-        # 按钮行
+        # 按钮
         btn_row = QHBoxLayout()
-        btn_apply = PrimaryPushButton("执行", self)
-        btn_apply.setFont(QFont("Microsoft YaHei", 10))
-        btn_apply.clicked.connect(self._on_apply)
-        btn_cancel = PushButton("关闭", self)
-        btn_cancel.setFont(QFont("Microsoft YaHei", 10))
-        btn_cancel.clicked.connect(self.reject)
         btn_row.addStretch()
-        btn_row.addWidget(btn_apply)
-        btn_row.addWidget(btn_cancel)
+        self.btn_exec = PrimaryPushButton("执行", self)
+        self.btn_exec.clicked.connect(self._on_execute)
+        btn_row.addWidget(self.btn_exec)
+        btn_close = PushButton("关闭", self)
+        btn_close.clicked.connect(self.reject)
+        btn_row.addWidget(btn_close)
         layout.addLayout(btn_row)
 
-    def _on_delta_user_edited(self, _text: str):
-        self._delta_user_edited = True
+        # 信号连接
+        self.edit_word.textChanged.connect(self._on_word_changed)
+        self.edit_new_chars.textChanged.connect(self._on_new_chars_changed)
 
-    def _update_preview(self, word: str):
-        if not self._project or not word.strip():
-            self.lbl_preview.setText("")
+        # 首次填充：按初始搜索词首匹配
+        self._refresh_match_count()
+        self._refill_from_first_match(initial_reading)
+
+    # ---------- 行管理 ----------
+
+    def _append_char_row(self, char_str: str, ruby_str: str, check_str: str):
+        """追加一行：[字符] [注音] [节奏点]。"""
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
+        lbl = QLabel(char_str)
+        lbl.setFixedWidth(32)
+        lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+        edit_ruby = QLineEdit(ruby_str)
+        edit_ruby.setPlaceholderText("注音（逗号分隔多 RubyPart）")
+        edit_check = QLineEdit(check_str)
+        edit_check.setPlaceholderText("节奏点")
+        edit_check.setFixedWidth(64)
+        # 监控用户手动编辑
+        edit_ruby.textEdited.connect(self._on_row_user_edited)
+        edit_check.textEdited.connect(self._on_row_user_edited)
+        row_layout.addWidget(lbl)
+        row_layout.addWidget(edit_ruby, stretch=1)
+        row_layout.addWidget(edit_check)
+        self._rows_layout.addWidget(row_widget)
+        self._char_rows.append((lbl, edit_ruby, edit_check))
+
+    def _clear_rows(self):
+        while self._rows_layout.count():
+            item = self._rows_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        self._char_rows.clear()
+
+    def _rebuild_rows_for_text(
+        self,
+        new_text: str,
+        ruby_list: Optional[List[str]] = None,
+        check_list: Optional[List[str]] = None,
+    ):
+        """按 new_text 重建行；ruby_list/check_list 为初始值（按索引对齐，不足补空/1）。"""
+        # 若未传初始值，尝试保留现有 rows 的输入值
+        if ruby_list is None or check_list is None:
+            old_vals = [(e_r.text(), e_c.text()) for _, e_r, e_c in self._char_rows]
+        else:
+            old_vals = list(zip(ruby_list, check_list))
+        self._suppress_row_signals = True
+        try:
+            self._clear_rows()
+            for i, ch in enumerate(new_text):
+                if i < len(old_vals):
+                    r_val, c_val = old_vals[i]
+                else:
+                    r_val, c_val = "", "1"
+                self._append_char_row(ch, r_val, c_val)
+        finally:
+            self._suppress_row_signals = False
+
+    # ---------- 信号处理 ----------
+
+    def _on_row_user_edited(self, _text: str):
+        if self._suppress_row_signals:
             return
-        w = word.strip()
-        count = self._count_matches(w)
-        self.lbl_preview.setText(f"找到 {count} 处匹配")
-        # 预填首个匹配的现有节奏点，方便用户修改
-        if count > 0 and not self._delta_user_edited:
-            cps = self._first_match_checkpoints(w)
-            if cps:
-                self.edit_delta.setText(",".join(str(c) for c in cps))
+        self._rows_user_edited = True
 
-    def _first_match_checkpoints(self, word: str) -> list[int]:
-        """返回第一个匹配词各字符的 check_count 列表。"""
-        if not self._project:
-            return []
-        word_len = len(word)
+    def _on_new_chars_changed(self, new_text: str):
+        if not self._suppress_new_chars_signal:
+            self._new_chars_user_edited = True
+        # 文本变化 → 按新长度重建行，保留现有输入
+        self._rebuild_rows_for_text(new_text)
+
+    def _on_word_changed(self, _word: str):
+        self._refresh_match_count()
+        # 若用户未手动改过 rows 和新字符框 → 用新搜索词首匹配覆盖
+        if not self._rows_user_edited and not self._new_chars_user_edited:
+            self._refill_from_first_match("")
+
+    # ---------- 匹配扫描 ----------
+
+    def _iter_matches(self, word: str):
+        """生成 (sentence, start_pos) 非重叠匹配；空词返回空。"""
+        if not self._project or not word:
+            return
+        w_len = len(word)
         for sentence in self._project.sentences:
             text = sentence.text
             pos = 0
-            while pos <= len(text) - word_len:
-                if text[pos : pos + word_len] == word:
-                    return [
-                        sentence.characters[pos + k].check_count
-                        for k in range(word_len)
-                        if pos + k < len(sentence.characters)
-                    ]
-                pos += 1
-        return []
-
-    def _count_matches(self, word: str) -> int:
-        if not self._project:
-            return 0
-        count = 0
-        for sentence in self._project.sentences:
-            text = sentence.text
-            pos = 0
-            while pos <= len(text) - len(word):
-                if text[pos : pos + len(word)] == word:
-                    count += 1
-                    pos += len(word)
+            while pos <= len(text) - w_len:
+                if text[pos : pos + w_len] == word:
+                    yield sentence, pos
+                    pos += w_len
                 else:
                     pos += 1
-        return count
 
-    def _on_apply(self):
+    def _refresh_match_count(self):
+        word = self.edit_word.text().strip()
+        if not word:
+            self.lbl_match.setText("")
+            return
+        count = sum(1 for _ in self._iter_matches(word))
+        self.lbl_match.setText(f"找到 {count} 处")
+
+    def _refill_from_first_match(self, fallback_reading: str):
+        """用首个匹配的字符/注音/节奏点填充新字符框和 rows。
+
+        若无匹配：用搜索词填新字符框，rows 用搜索词字符 + fallback_reading 拆分。
+        """
+        word = self.edit_word.text().strip()
+        if not word:
+            self._suppress_new_chars_signal = True
+            try:
+                self.edit_new_chars.setText("")
+            finally:
+                self._suppress_new_chars_signal = False
+            self._rebuild_rows_for_text("")
+            return
+
+        first = next(iter(self._iter_matches(word)), None)
+        w_len = len(word)
+        if first is not None:
+            sentence, pos = first
+            chars = sentence.characters[pos : pos + w_len]
+            new_text = "".join(c.char for c in chars)
+            ruby_list = [
+                ",".join(p.text for p in c.ruby.parts)
+                if c.ruby and c.ruby.parts
+                else ""
+                for c in chars
+            ]
+            check_list = [str(c.check_count) for c in chars]
+        else:
+            # 无匹配：用搜索词 + fallback reading
+            new_text = word
+            if fallback_reading:
+                parts = [p.strip() for p in fallback_reading.split(",")]
+                ruby_list = [parts[i] if i < len(parts) else "" for i in range(w_len)]
+            else:
+                ruby_list = ["" for _ in range(w_len)]
+            check_list = ["1" for _ in range(w_len)]
+
+        self._suppress_new_chars_signal = True
+        try:
+            self.edit_new_chars.setText(new_text)
+        finally:
+            self._suppress_new_chars_signal = False
+        self._rebuild_rows_for_text(new_text, ruby_list, check_list)
+
+    # ---------- 解析 ----------
+
+    def _parse_ruby(self, raw: str) -> Optional[Ruby]:
+        text = raw.strip()
+        if not text:
+            return None
+        parts = [p.strip() for p in text.split(",") if p.strip()]
+        if not parts:
+            return None
+        return Ruby(parts=[RubyPart(text=p) for p in parts])
+
+    def _collect_per_char(self, new_text: str) -> Tuple[List[Optional[Ruby]], List[int]]:
+        per_char_ruby: List[Optional[Ruby]] = []
+        per_char_check: List[int] = []
+        for i in range(len(new_text)):
+            if i >= len(self._char_rows):
+                per_char_ruby.append(None)
+                per_char_check.append(1)
+                continue
+            _, edit_ruby, edit_check = self._char_rows[i]
+            per_char_ruby.append(self._parse_ruby(edit_ruby.text()))
+            try:
+                per_char_check.append(max(0, int(edit_check.text().strip())))
+            except ValueError:
+                per_char_check.append(1)
+        return per_char_ruby, per_char_check
+
+    # ---------- 执行 ----------
+
+    def _on_execute(self):
+        if not self._project:
+            return
         word = self.edit_word.text().strip()
         if not word:
             return
-        if not self._project:
+        new_text = self.edit_new_chars.text().strip()
+        if not new_text:
             return
 
-        reading = self.edit_reading.text().strip()
-        skip_ruby = self.chk_skip_ruby.isChecked()
-        checkpoint_str = self.edit_delta.text().strip() or "-1"
-        # 支持逗号分隔的per-char节奏点值（如 "1,2,1"）
-        checkpoint_vals = []
-        try:
-            for v in checkpoint_str.split(","):
-                checkpoint_vals.append(int(v.strip()))
-        except ValueError:
-            checkpoint_vals = [-1]
-        word_len = len(word)
+        per_char_ruby, per_char_check = self._collect_per_char(new_text)
+
+        # 收集所有匹配（按 sentence 分组，位置升序）
+        matches_by_sentence: dict = {}
+        for sentence, pos in self._iter_matches(word):
+            matches_by_sentence.setdefault(id(sentence), (sentence, []))[1].append(pos)
+        total_matches = sum(len(v[1]) for v in matches_by_sentence.values())
+        if total_matches == 0:
+            self.lbl_match.setText("找到 0 处（无改动）")
+            return
+
+        same_len = len(new_text) == len(word)
+        if not same_len:
+            # 丢时间戳确认
+            reply = QMessageBox.question(
+                self,
+                "确认批量替换",
+                f"替换后字符数 ({len(new_text)}) 与搜索词 ({len(word)}) 不同，\n"
+                f"将丢失全部 {total_matches} 处匹配的时间戳。是否继续？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
         changed = 0
-
-        for sentence in self._project.sentences:
-            text = sentence.text
-            pos = 0
-            while pos <= len(text) - word_len:
-                if text[pos : pos + word_len] == word:
-                    # 修改注音
-                    if not skip_ruby:
-                        if reading:
-                            if "," in reading and word_len > 1:
-                                # 逗号分隔 → per-char Ruby
-                                parts = reading.split(",")
-                                for k in range(word_len):
-                                    ci = pos + k
-                                    if ci < len(sentence.characters):
-                                        part = (
-                                            parts[k].strip() if k < len(parts) else ""
-                                        )
-                                        if part:
-                                            tgt = sentence.characters[ci]
-                                            ruby_obj = _build_ruby_from_text(
-                                                part,
-                                                tgt.check_count,
-                                                tgt.is_sentence_end,
-                                            )
-                                            if ruby_obj is not None:
-                                                tgt.set_ruby(ruby_obj)
-                                            else:
-                                                tgt.set_ruby(None)
-                                        else:
-                                            sentence.characters[ci].set_ruby(None)
-                            else:
-                                # 整词 Ruby：按字符数拆分
-                                split_parts = split_ruby_for_checkpoints(
-                                    reading, word_len
-                                )
-                                for k in range(word_len):
-                                    ci = pos + k
-                                    if ci < len(sentence.characters):
-                                        if k < len(split_parts) and split_parts[k]:
-                                            tgt = sentence.characters[ci]
-                                            ruby_obj = _build_ruby_from_text(
-                                                split_parts[k],
-                                                tgt.check_count,
-                                                tgt.is_sentence_end,
-                                            )
-                                            if ruby_obj is not None:
-                                                tgt.set_ruby(ruby_obj)
-                                            else:
-                                                tgt.set_ruby(None)
-                                        else:
-                                            sentence.characters[ci].set_ruby(None)
-                        else:
-                            # 留空 = 删除注音
-                            for k in range(word_len):
-                                ci = pos + k
-                                if ci < len(sentence.characters):
-                                    sentence.characters[ci].set_ruby(None)
-
-                    # 设置节奏点（-1=不修改，0=设为0，>0=设为指定值）
-                    for ci_offset in range(word_len):
-                        ci = pos + ci_offset
-                        # 取对应位置的值，超出则循环最后一个值
-                        val_idx = min(ci_offset, len(checkpoint_vals) - 1)
-                        cp_val = checkpoint_vals[val_idx]
-                        if cp_val < 0:
-                            continue  # -1 表示不修改
-                        if ci < len(sentence.characters):
-                            sentence.characters[ci].check_count = cp_val
-
+        word_len = len(word)
+        for sentence, positions in matches_by_sentence.values():
+            if same_len:
+                # 原地修改，正向遍历即可（长度不变，索引稳定）
+                for pos in positions:
+                    for i, ch_str in enumerate(new_text):
+                        ci = pos + i
+                        if ci >= len(sentence.characters):
+                            break
+                        tgt = sentence.characters[ci]
+                        tgt.char = ch_str
+                        tgt.check_count = per_char_check[i]
+                        tgt.set_ruby(per_char_ruby[i])
+                        tgt.push_to_ruby()
                     changed += 1
-                    pos += word_len
-                else:
-                    pos += 1
+            else:
+                # 替换 slice，必须倒序以保持前序位置稳定
+                for pos in sorted(positions, reverse=True):
+                    old_chars = sentence.characters[pos : pos + word_len]
+                    if not old_chars:
+                        continue
+                    old_last_is_sentence_end = old_chars[-1].is_sentence_end
+                    old_last_is_line_end = old_chars[-1].is_line_end
+                    singer_id = old_chars[0].singer_id
+                    new_chars = []
+                    for i, ch_str in enumerate(new_text):
+                        # per_char_ruby 每次新建独立 Ruby 对象避免共享
+                        src_ruby = per_char_ruby[i]
+                        ruby_copy = (
+                            Ruby(parts=[RubyPart(text=p.text) for p in src_ruby.parts])
+                            if src_ruby is not None
+                            else None
+                        )
+                        new_ch = Character(
+                            char=ch_str,
+                            ruby=ruby_copy,
+                            check_count=per_char_check[i],
+                            singer_id=singer_id,
+                            linked_to_next=False,
+                            is_line_end=False,
+                            is_sentence_end=False,
+                        )
+                        new_chars.append(new_ch)
+                    if old_last_is_sentence_end:
+                        new_chars[-1].is_sentence_end = True
+                    if old_last_is_line_end:
+                        new_chars[-1].is_line_end = True
+                    sentence.characters[pos : pos + word_len] = new_chars
+                    changed += 1
 
         # 注册到词典
-        if self.chk_register.isChecked() and reading:
-            try:
-                from strange_uta_game.frontend.settings.settings_interface import (
-                    AppSettings,
-                )
-
-                app_settings = AppSettings()
-                entries = app_settings.load_dictionary()
-                # 避免重复
-                entries = [e for e in entries if e.get("word") != word]
-                # 新条目插入到顶部（最高优先级）
-                entries.insert(0, {"enabled": True, "word": word, "reading": reading})
-                app_settings.save_dictionary(entries)
-            except Exception:
-                pass
-
-        self.lbl_preview.setText(f"已修改 {changed} 处")
+        if self.chk_register.isChecked():
+            self._register_to_dictionary(new_text, per_char_ruby)
 
         # 通知父窗口刷新
         parent = self.parent()
+        timing_service = getattr(parent, "_timing_service", None)
+        if timing_service is not None:
+            try:
+                timing_service._rebuild_global_checkpoints()
+            except Exception:
+                pass
+        refresh = getattr(parent, "refresh_lyric_display", None)
+        if callable(refresh):
+            refresh()
+        update_time_tags = getattr(parent, "_update_time_tags_display", None)
+        if callable(update_time_tags):
+            update_time_tags()
+        update_status = getattr(parent, "_update_status", None)
+        if callable(update_status):
+            update_status()
         store = getattr(parent, "_store", None)
         if store is not None:
             store.notify("rubies")
             store.notify("checkpoints")
-        refresh = getattr(parent, "refresh_lyric_display", None)
-        if refresh is not None:
-            refresh()
+            store.notify("lyrics")
+            store.notify("timetags")
+
+        self.lbl_match.setText(f"已修改 {changed} 处")
+        # 一次执行后，后续搜索词变化不应再覆盖 rows（用户已 commit 过）
+        self._rows_user_edited = True
+
+    def _register_to_dictionary(
+        self, word: str, per_char_ruby: List[Optional[Ruby]]
+    ):
+        """将词注册到用户字典（去重 + 顶部插入）。"""
+        try:
+            from strange_uta_game.frontend.settings.settings_interface import (
+                AppSettings,
+            )
+
+            readings = []
+            for r in per_char_ruby:
+                if r and r.parts:
+                    readings.append("".join(p.text for p in r.parts))
+                else:
+                    readings.append("")
+            reading = ",".join(s for s in readings if s)
+            AppSettings().register_dictionary_word(word, reading)
+        except Exception:
+            pass
