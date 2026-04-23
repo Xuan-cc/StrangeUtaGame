@@ -65,8 +65,11 @@ class TXTExporter(BaseExporter):
         lines.append(f"# 进度: {stats.get('timing_progress', '0/0')}")
         lines.append("")
 
-        # 导出行
+        # 导出行（批 18 #6：空行 sentence 直接输出空字符串保留排版）
         for i, sentence in enumerate(project.sentences):
+            if not sentence.text.strip() and not sentence.has_timetags:
+                lines.append("")
+                continue
             line_text = self._export_sentence(sentence, i + 1)
             if line_text:
                 lines.append(line_text)

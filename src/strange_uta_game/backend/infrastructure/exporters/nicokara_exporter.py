@@ -93,11 +93,8 @@ class NicokaraExporter(BaseExporter):
                 ):
                     continue
 
-            # 段落间距 >5 秒时插入空行
-            if i > 0 and sentence.has_timetags:
-                line_start = sentence.timing_start_ms
-                if line_start is not None and line_start - prev_end_ms > 5000:
-                    output_lines.append("")
+            # 段落间距不再自动插入空行：由 project.sentences 原始空行负责
+            # （批 18 #6：导入剥空行 / 导出保留空行，双向对称）
 
             line_text, prev_singer_id = self._export_sentence_with_singer(
                 sentence,
@@ -293,10 +290,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 ):
                     continue
 
-            if i > 0 and sentence.has_timetags:
-                line_start = sentence.timing_start_ms
-                if line_start is not None and line_start - prev_end_ms > 5000:
-                    output_lines.append("")
+            # 段落间距不再自动插入空行（批 18 #6）
 
             line_text, prev_singer_id = self._export_sentence_with_singer(
                 sentence,

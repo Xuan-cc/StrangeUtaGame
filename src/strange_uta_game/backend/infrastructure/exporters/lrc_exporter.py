@@ -57,11 +57,10 @@ class LRCExporter(BaseExporter):
 
         lines.append("")  # 空行分隔
 
-        # 导出行
+        # 导出行（批 18 #6：空行也输出以保留用户排版）
         for sentence in project.sentences:
             line_text = self._export_sentence(sentence)
-            if line_text:
-                lines.append(line_text)
+            lines.append(line_text)
 
         # 写入文件
         try:

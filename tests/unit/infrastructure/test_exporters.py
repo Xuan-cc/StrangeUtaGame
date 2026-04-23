@@ -321,38 +321,6 @@ class TestNicokaraExporter:
         exporter = NicokaraExporter()
         assert exporter.file_extension == ".lrc"
 
-    def test_export_paragraph_separation(self):
-        """测试段落间距 >5 秒时插入空行"""
-        project = Project()
-        singer = project.singers[0]
-
-        sentence1 = Sentence.from_text("第一行", singer.id)
-        sentence1.characters[0].add_timestamp(1000)
-        project.add_sentence(sentence1)
-
-        sentence2 = Sentence.from_text("第二行", singer.id)
-        sentence2.characters[0].add_timestamp(10000)
-        project.add_sentence(sentence2)
-
-        exporter = NicokaraExporter()
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
-        ) as f:
-            temp_path = f.name
-
-        try:
-            exporter.export(project, temp_path)
-
-            with open(temp_path, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            # 两行之间应有空行（间隔 9 秒 > 5 秒阈值）
-            assert "\n\n" in content
-        finally:
-            os.unlink(temp_path)
-
-
 class TestNicokaraWithRubyExporter:
     """测试带注音的 Nicokara 导出器"""
 
