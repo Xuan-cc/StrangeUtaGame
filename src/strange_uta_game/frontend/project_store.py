@@ -189,11 +189,11 @@ class ProjectStore(QObject):
             self._auto_save_timer.start()
 
     def _do_auto_save(self) -> None:
-        """执行 auto-save 到 ``<原路径>.autosave.sug``。"""
+        """执行 auto-save 到 ``<原路径>.autosave``。"""
         if not self._project or not self._save_path:
             return
 
-        autosave_path = self._save_path + ".autosave.sug"
+        autosave_path = self._save_path + ".autosave"
         try:
             SugProjectParser.save(self._project, autosave_path)
         except Exception:
@@ -230,7 +230,7 @@ class ProjectStore(QObject):
         return _UNTITLED_TEMP
 
     def cleanup_temp_files(self) -> None:
-        """删除当前项目关联的临时文件（含 .temp 和 .autosave.sug）。"""
+        """删除当前项目关联的临时文件（含 .temp 与 .autosave，兼容旧 .autosave.sug）。"""
         temp = self.get_temp_path()
         try:
             if temp.exists():
@@ -238,14 +238,18 @@ class ProjectStore(QObject):
         except Exception:
             pass
 
-        # 删除 autosave 文件（仅已保存项目才有）
-        try:
-            if self._save_path:
-                autosave = Path(self._save_path + ".autosave.sug")
-                if autosave.exists():
-                    autosave.unlink()
-        except Exception:
-            pass
+        # 删除 autosave 文件（仅已保存项目才有）；兼容旧命名
+        if self._save_path:
+            for name in (
+                self._save_path + ".autosave",
+                self._save_path + ".autosave.sug",
+            ):
+                try:
+                    p = Path(name)
+                    if p.exists():
+                        p.unlink()
+                except Exception:
+                    pass
 
     @staticmethod
     def has_crash_recovery() -> bool:
