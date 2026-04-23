@@ -382,6 +382,140 @@ class AutoCheckService:
         result = self._partition_reading(clean_reading, n, empty_refs)
         return result
 
+    def _get_single_char_candidates(self, ch: str) -> List[str]:
+        """收集单个字符的候选读音（用户字典 + 库分析器 + pykakasi）。
+
+        用于连词回退时的「头尾假名剥离」策略。
+        """
+        options: List[str] = []
+        # 1. 用户字典单字条目
+        for dict_word, dict_reading in self._dict:
+            if dict_word == ch and dict_reading:
+                clean = dict_reading.replace(",", "")
+                if clean and clean not in options:
+                    options.append(clean)
+        # 2. 库分析器
+        try:
+            results = self._analyzer.analyze(ch)
+            for r in results:
+                if r.reading and r.reading != ch and r.reading not in options:
+                    options.append(r.reading)
+        except Exception:
+            pass
+        # 3. pykakasi 参考读音
+        if self._pykakasi_conv is not None:
+            try:
+                converted = self._pykakasi_conv.do(ch)
+                if converted and converted != ch and converted not in options:
+                    options.append(converted)
+            except Exception:
+                pass
+        return options
+
+    def _fallback_split_peel_kana(
+        self, word: str, reading: str
+    ) -> List[str]:
+        """连词回退策略：从 reading 头尾剥离能匹配的自注音字符。
+
+        当 ``_try_split_to_chars`` 失败时调用。算法：
+        1. 每字查候选读音（假名=自身，汉字查字典，其他=自身）。
+        2. 从 reading 尾部递归剥离：若末字候选中某读音匹配 reading 尾部 → 扣除。
+        3. 从 reading 头部递归剥离：同理。
+        4. 对剩余的中间块（reading + 字符），首字承载全部剩余 reading。
+
+        返回长度为 ``len(word)`` 的 split_parts 列表。
+        中间连续汉字区域由 ``apply_to_sentence`` 基于 check_count==0 自动连词。
+
+        Example:
+            _fallback_split_peel_kana("可愛い", "かわいい")
+                → ["かわい", "", "い"]   # 可吃汉字段 + い 自注音
+            _fallback_split_peel_kana("明日", "あした")
+                → ["あした", ""]         # 纯汉字，首字全吃
+            _fallback_split_peel_kana("食べ物", "たべもの")
+                → ["た", "べ", "もの"]   # 头剥食(た) + 尾剥物(もの) + べ 自注音
+        """
+        n = len(word)
+        if n <= 1 or not reading:
+            return [reading] + [""] * (n - 1)
+
+        # Step 1: 收集每字的候选自注音
+        def char_candidates(ch: str) -> List[str]:
+            ct = get_char_type(ch) if len(ch) == 1 else CharType.OTHER
+            if ct == CharType.KANJI:
+                return self._get_single_char_candidates(ch)
+            # 非汉字（假名/符号/字母/数字等）→ 自身作为唯一候选
+            return [ch]
+
+        candidates: List[List[str]] = [char_candidates(c) for c in word]
+
+        # 选择优先匹配的候选：优先使用与字符本身一致的（假名自匹配），
+        # 否则取第一个能匹配的候选
+        def try_match_suffix(opts: List[str], s: str) -> Optional[str]:
+            for opt in opts:
+                if opt and s.endswith(opt):
+                    return opt
+            return None
+
+        def try_match_prefix(opts: List[str], s: str) -> Optional[str]:
+            for opt in opts:
+                if opt and s.startswith(opt):
+                    return opt
+            return None
+
+        split_parts: List[str] = [""] * n
+        remaining = reading
+        left = 0
+        right = n - 1
+
+        # Step 2: 尾部剥离（尝试所有字符，非汉字必须按自身剥；汉字按候选匹配）
+        while right > left:
+            ch = word[right]
+            ct = get_char_type(ch) if len(ch) == 1 else CharType.OTHER
+            match = try_match_suffix(candidates[right], remaining)
+            if match is None:
+                # 非汉字无法剥 → 停止（假名/符号在 reading 里位置不对，放弃）
+                # 汉字无法剥 → 也停止（候选不匹配）
+                break
+            split_parts[right] = match
+            remaining = remaining[: len(remaining) - len(match)]
+            right -= 1
+
+        # Step 3: 头部剥离
+        while left < right:
+            ch = word[left]
+            ct = get_char_type(ch) if len(ch) == 1 else CharType.OTHER
+            match = try_match_prefix(candidates[left], remaining)
+            if match is None:
+                break
+            split_parts[left] = match
+            remaining = remaining[len(match) :]
+            left += 1
+
+        # Step 4: 处理头尾相遇的单字符情况
+        if left == right:
+            # 单字：全吃剩余 reading（若为假名且剩余匹配自身，也自然成立）
+            split_parts[left] = remaining
+            return split_parts
+
+        # Step 5: 中间块 [left..right]，尝试对「纯汉字中间块」再次调用 _try_split_to_chars
+        # 若成功则按字分配；失败则首字全吃，其余空（后续 apply_to_sentence 会连词）
+        mid_word = word[left : right + 1]
+        all_kanji = all(
+            (get_char_type(c) if len(c) == 1 else CharType.OTHER) == CharType.KANJI
+            for c in mid_word
+        )
+        if all_kanji and len(mid_word) > 1:
+            sub_split = self._try_split_to_chars(mid_word, remaining)
+            if sub_split is not None:
+                for i, part in enumerate(sub_split):
+                    split_parts[left + i] = part
+                return split_parts
+
+        # 首字吃全部剩余（保留原回退语义）
+        split_parts[left] = remaining
+        # 中间块里 left+1..right 保持 ""（由 apply_to_sentence 基于 check_count==0 连词）
+        return split_parts
+
     def _partition_reading(
         self,
         reading: str,
@@ -533,13 +667,18 @@ class AutoCheckService:
                 split_parts = parts[:block_len]
             else:
                 if block_len > 1:
-                    # 尝试按单字读音拆分，不可拆分则连词
+                    # 尝试按单字读音拆分，不可拆分则走「头尾假名剥离」回退
                     char_split = self._try_split_to_chars(result.text, result.reading)
                     if char_split is not None:
                         split_parts = char_split
                     else:
-                        # 连词：第一字承载全部读音，其余为空
-                        split_parts = [result.reading] + [""] * (block_len - 1)
+                        # 连词回退：剥离头尾非汉字的自注音，保留假名 ruby，
+                        # 中间连续汉字由 apply_to_sentence 基于 check_count==0 自动连词
+                        split_parts = self._fallback_split_peel_kana(
+                            result.text, result.reading
+                        )
+                        # 升级来源为 "fallback"，让 apply_to_sentence 允许连续汉字间连词
+                        block_source[block_id] = "fallback"
                 else:
                     split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
@@ -587,7 +726,10 @@ class AutoCheckService:
                     if char_split is not None:
                         split_parts = char_split
                     else:
-                        split_parts = [result.reading] + [""] * (block_len - 1)
+                        # 与 analyze_sentence 一致的连词回退
+                        split_parts = self._fallback_split_peel_kana(
+                            result.text, result.reading
+                        )
                 else:
                     split_parts = split_ruby_for_checkpoints(result.reading, block_len)
             for idx in range(result.start_idx, result.end_idx):
@@ -839,7 +981,9 @@ class AutoCheckService:
         # 空格字符不应触发连词（空格 check_count==0 是过滤规则的结果，不代表连读）
         # #10: 仅当注音来源是「用户词典」或「e2k 英语词典」或「英文词组 fallback」
         #      时才允许连词；库函数（Sudachi/pykakasi）和自注音的结果一律不连词。
-        _LINKABLE_SOURCES = {"dict", "e2k", "english_fallback"}
+        # 补丁：library 来源走了「头尾假名剥离」回退（block_source="fallback"）时
+        #      也允许连词（此时连续汉字间必须连词以保证 ruby 正确显示）。
+        _LINKABLE_SOURCES = {"dict", "e2k", "english_fallback", "fallback"}
         for i in range(len(new_characters) - 1):
             next_ch = new_characters[i + 1]
             if next_ch.char and next_ch.char.isspace():

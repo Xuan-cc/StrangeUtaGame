@@ -313,3 +313,42 @@ class TestBlankLineLineStartEndGuard:
         for c in sentence.characters:
             assert not c.is_line_end, "空行 update 后不应 is_line_end"
             assert not c.is_sentence_end, "空行 update 后不应 is_sentence_end"
+
+
+class TestFallbackSplitPeelKana:
+    """连词回退：头尾假名剥离策略（_fallback_split_peel_kana）"""
+
+    def test_kana_suffix_preserved(self):
+        """可愛い / かわいい → 尾部い自注音保留"""
+        service = AutoCheckService(DummyAnalyzer())
+        parts = service._fallback_split_peel_kana("可愛い", "かわいい")
+        assert len(parts) == 3
+        assert parts[2] == "い", f"末尾 い 应自注音，实际 {parts[2]}"
+        assert parts[0], "首汉字应有注音"
+
+    def test_pure_kanji_no_candidates_first_char_all(self):
+        """无候选回退：XYZ/ABC → 首字全吃（保留原语义）"""
+        service = AutoCheckService(DummyAnalyzer())
+        parts = service._fallback_split_peel_kana("XYZ", "ABC")
+        assert parts == ["ABC", "", ""], f"无候选应首字全吃，实际 {parts}"
+
+    def test_kana_prefix_and_suffix_preserved(self):
+        """お可愛い / おかわいい → 头尾假名都保留自注音"""
+        service = AutoCheckService(DummyAnalyzer())
+        parts = service._fallback_split_peel_kana("お可愛い", "おかわいい")
+        assert len(parts) == 4
+        assert parts[0] == "お", f"头部 お 应自注音，实际 {parts[0]}"
+        assert parts[3] == "い", f"末尾 い 应自注音，实际 {parts[3]}"
+
+    def test_single_char_returns_full_reading(self):
+        """单字：直接返回 reading"""
+        service = AutoCheckService(DummyAnalyzer())
+        parts = service._fallback_split_peel_kana("漢", "かん")
+        assert parts == ["かん"]
+
+    def test_empty_reading_fallback(self):
+        """空 reading：全空"""
+        service = AutoCheckService(DummyAnalyzer())
+        parts = service._fallback_split_peel_kana("漢字", "")
+        assert parts == ["", ""]
+
