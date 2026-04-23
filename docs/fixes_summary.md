@@ -25,6 +25,7 @@
 | 15 | 2026-04-22 | #9 选中 checkpoint 大白框根治（防御性 clip / 透明 BGMode 等若干尝试）。 |
 | 16 | 2026-04-22 | #9 架构性根治选中高亮大白框（最终方案）。 |
 | 17 | 2026-04-23 | Ruby 数据结构 Ruby(text=) → Ruby(parts=[RubyPart]) 全量重构；十项需求：英文 fallback、重复注音空组防护、自动注音解耦节奏点、用户字典 # 隔离、标点节奏点开关（默认关）、句中编辑（删除/插空/合并行）、快捷键冲突阻止、选中 cp 越界自动顺延；TimingService 重构为 `on_key_changed` 统一入口，句尾末尾 cp 仅 key-up 写入。 |
+| 18 | 2026-04-23 | 快捷键冲突检测与即时生效修复（#4+#5）；ModifyCharacterDialog 重建为字符级行 + `,` 分 RubyPart（#1+#2+#3）；空行导入剥除/导出不再自动补空行（#6）；英文 contraction 词边界加 apostrophe，修复 `what's` 被 `what` 半覆盖导致 `'s` 裸露（#7）；`update_checkpoints_from_rubies` 插入英文词组节奏点规则：首字=1 cp、中间=0、末字标句尾（#9）。 |
 
 ---
 

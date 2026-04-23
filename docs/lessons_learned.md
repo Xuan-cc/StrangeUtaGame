@@ -31,6 +31,9 @@
 - `apply_to_project` / `update_checkpoints_from_rubies` 改 `check_count` 后必须调用 `Project.shift_selected_checkpoint_if_lost()`。
 - startup / home 自动注音用 `only_noruby=True`，不弹窗——避免覆盖用户已带注音的导入文本。
 - ruby_editor 的"自动分析全部注音"用三选项弹窗：全部重新分析 / 仅未注音 / 取消。
+- **英文词条的词边界必须把 apostrophe（`'` U+0027 和 `’` U+2019）视为词内字符**，否则 `what` 会命中 `what's` 中部，导致 `'s` 被占用冲突、裸露无注音。用户词典子串匹配的边界检查不能只看 `isalpha()`。
+- 用户词典在 `analyze_sentence` 中**先于** e2k 执行（dict_covered → e2k_covered → fallback）。这与直觉"英文优先 e2k"相反，是有意的覆盖优先级设计（允许用户词典强制改写英文读音）。影响：用户词典的英文词条边界必须严格，否则污染下游 e2k。
+- `update_checkpoints_from_rubies` 的节奏点覆写要在"标点/flag 过滤之后"插入英文词组规则（首=1/中=0/末=句尾），否则会被 flag 过滤抹掉。英文句尾判定合并进 `is_sentence_end` 逻辑，不单独一段。
 
 ## TimingService / Checkpoint
 
@@ -53,3 +56,11 @@
 - 中文文案 + Microsoft YaHei 字体。
 - 设置 SwitchSettingCard 模式：DEFAULT_SETTINGS 加 key → init UI → load (`_load_settings_to_ui`) → save (`_save_ui_to_settings`)。
 - 快捷键冲突时直接弹 warning + 恢复原键，不允许冲突共存。
+- **ShortcutSettingCard 的 `value_changed` 信号必须在 `_init_shortcut_group` 创建卡片时立即 connect**（非 `_connect_auto_save_signals` 里统一 connect）——后者路径会漏掉部分 scope，导致冲突检测与即时保存都失效。
+- 字符级编辑对话框用字符行布局（`[字][ruby][check]`）比"整句输入框 + # 分隔"更直观；RubyPart 分组用逗号 `,`，与词典条目惯例一致，避免歧义。
+- 字符数相同的修改走 `push_to_ruby` 原地改、保留 timestamps；字符数变化走 slice 替换（新建 Character），这是"修改节奏点无效"的根因修复模式。
+
+## 导入导出
+
+- 空行处理的原则：**导入剥除 + 导出原样**。不要在导出阶段根据时间间隔自动补空行——这会与导入剥除形成双重失配（导入少一行、导出多一行）。
+- LRC/TXT/Nicokara 三个 exporter 的空 sentence 都应 append `""`（保留用户原始段落分隔），而不是过滤掉。
