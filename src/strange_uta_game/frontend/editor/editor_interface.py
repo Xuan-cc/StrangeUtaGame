@@ -413,8 +413,15 @@ class KaraokePreview(QWidget):
         self._line_number_margin = 45  # 行号左侧区域宽度
 
         # 逐句渲染数据缓存（避免每帧重复计算）
+        # 播放期间使用缓存；暂停时 paintEvent 旁路缓存直接重算，
+        # 以便打轴/改连词等编辑动作立即反映到 wipe 时间线
         self._sentence_cache: dict = {}
         self._cache_version: int = 0
+        self._is_playing: bool = False
+
+    def set_playing(self, playing: bool):
+        """由外部同步播放状态，用于决定 paintEvent 是否旁路缓存。"""
+        self._is_playing = bool(playing)
 
     def set_project(self, project: Project):
         self._project = project
@@ -435,11 +442,59 @@ class KaraokePreview(QWidget):
         self._current_char_idx = char_idx
         # 自动跟随：当前行始终居中（强制整数，避免其他 float 路径污染）
         self._scroll_center_line = new_line
+        # 行切换时重新锚定预热中心（仅播放期间）
+        if self._is_playing:
+            self._warm_nearby_cache(budget=2)
         self._update_display()
 
     def set_current_time_ms(self, time_ms: int):
         self._current_time_ms = time_ms
+        # 播放期间按就近扩散顺序预热少量邻近行，降低视口内首帧卡顿
+        if self._is_playing:
+            self._warm_nearby_cache(budget=2)
         self.update()
+
+    def _warm_nearby_cache(self, budget: int = 2) -> None:
+        """按 L, L+1, L-1, L+2, L-2, ... 的就近扩散顺序预热 _sentence_cache。
+
+        - 仅在播放期间调用（暂停已旁路缓存，预热无意义）
+        - 每次最多预热 budget 句，避免阻塞 paint
+        - 已缓存/版本匹配的行直接跳过，不重复计算
+        - 行号边界：center 被 clamp 到 [0, n-1]，扩散候选再次越界检查；
+          两端都越界后早退，避免无意义空转
+        """
+        if not self._project or not self._project.sentences:
+            return
+        sentences = self._project.sentences
+        n = len(sentences)
+        if n <= 0:
+            return
+        center = max(0, min(self._current_line_idx, n - 1))
+        warmed = 0
+        for offset in range(n):
+            # 扩散序：0, +1, -1, +2, -2, +3, -3, ...
+            if offset == 0:
+                candidates = (center,)
+            else:
+                candidates = (center + offset, center - offset)
+            any_valid = False
+            for idx in candidates:
+                if idx < 0 or idx >= n:
+                    continue
+                any_valid = True
+                entry = self._sentence_cache.get(idx)
+                is_current_line = idx == self._current_line_idx
+                fk = "cur" if is_current_line else "ctx"
+                if entry and entry["v"] == self._cache_version and entry["fk"] == fk:
+                    continue
+                main_fm = self._fm_current if is_current_line else self._fm_context
+                self._get_sentence_render_data(idx, sentences[idx], main_fm, fk)
+                warmed += 1
+                if warmed >= budget:
+                    return
+            # 两端都越界（向前到 0、向后到 n-1 之外）→ 无需继续扩散
+            if offset > 0 and not any_valid:
+                return
 
     def set_render_offset(self, offset_ms: int):
         """设置渲染偏移量（毫秒），与导出偏移联动，更新所有字符的渲染时间戳"""
@@ -667,21 +722,37 @@ class KaraokePreview(QWidget):
     def _get_sentence_render_data(
         self, idx: int, sentence, main_fm, font_key: str
     ) -> dict:
-        """返回缓存的逐句渲染数据，过期时重新计算。"""
-        entry = self._sentence_cache.get(idx)
-        if entry and entry["v"] == self._cache_version and entry["fk"] == font_key:
-            return entry
+        """返回逐句渲染数据。
+
+        渲染模型：
+          - wipe 时间线的单位 = 一整行（sentence），与打轴的连词组解耦
+          - 行内所有带 render_timestamps 的字符 + 行尾（is_sentence_end +
+            render_sentence_end_ts）构成"锚点"
+          - 相邻锚点之间的所有字符（含无时间戳的）按字符像素宽度加权线性插值
+            分配 wipe 区间——解决等字符数分配导致的宽度/节奏不匹配跳变
+          - 首锚之前 / 末锚之后的字符贴首/末锚（wipe 恒 0 或 1）
+          - linked_to_next 只影响视觉渲染层（连词不拆字画），不参与 wipe 计算
+
+        缓存策略：
+          - 播放期间命中 (_cache_version, font_key) 匹配的缓存
+          - 暂停时 paintEvent 旁路缓存（_is_playing==False 时直接重算并跳过写入）
+        """
+        use_cache = self._is_playing
+        if use_cache:
+            entry = self._sentence_cache.get(idx)
+            if entry and entry["v"] == self._cache_version and entry["fk"] == font_key:
+                return entry
 
         chars = sentence.chars
         characters = sentence.characters
         n_chars = len(chars)
 
-        # 字符宽度
+        # 字符像素宽度
         char_widths = [main_fm.horizontalAdvance(ch) for ch in chars]
 
-        # 字符组（linked_to_next 分组）
+        # ---------- 连词组（仅用于视觉层，与 wipe 计算无关） ----------
         char_groups: list = []
-        cur_grp = None
+        cur_grp: Optional[list] = None
         for ci in range(n_chars):
             if cur_grp is None:
                 cur_grp = [ci]
@@ -692,54 +763,6 @@ class KaraokePreview(QWidget):
                 cur_grp = [ci]
                 char_groups.append(cur_grp)
 
-        # 字符起始时间（使用渲染时间戳，已含偏移）
-        char_start_times: dict = {}
-        for ci, ch in enumerate(characters):
-            if ch.render_timestamps:
-                char_start_times[ci] = ch.render_timestamps[0]
-
-        # 字符 wipe 时间区间
-        char_wipe_times: dict = {}
-        for group in char_groups:
-            leader = group[0]
-            group_start = char_start_times.get(leader)
-            if group_start is None:
-                for ci in group:
-                    if ci in char_start_times:
-                        group_start = char_start_times[ci]
-                        break
-            if group_start is None:
-                for pci in range(leader - 1, -1, -1):
-                    if pci in char_wipe_times:
-                        group_start = char_wipe_times[pci][1]
-                        break
-            if group_start is None:
-                continue
-            leader_ch = characters[leader]
-            if leader_ch.is_sentence_end:
-                if leader_ch.render_sentence_end_ts is not None:
-                    group_end = leader_ch.render_sentence_end_ts
-                else:
-                    group_end = group_start + 300
-            else:
-                group_end = None
-                last_in_group = group[-1]
-                for nci in range(last_in_group + 1, n_chars):
-                    if nci in char_start_times:
-                        group_end = char_start_times[nci]
-                        break
-                if group_end is None:
-                    group_end = group_start + 300
-
-            n = len(group)
-            dur = group_end - group_start
-            for i, ci in enumerate(group):
-                char_wipe_times[ci] = (
-                    group_start + dur * i / n,
-                    group_start + dur * (i + 1) / n,
-                )
-
-        # 连词组信息
         linked_leader_groups: dict = {}
         linked_non_leader: set = set()
         for group in char_groups:
@@ -747,6 +770,72 @@ class KaraokePreview(QWidget):
                 linked_leader_groups[group[0]] = group
                 for _ci in group[1:]:
                     linked_non_leader.add(_ci)
+
+        # ---------- wipe 时间线（一行为单位，按像素宽度插值） ----------
+        # 锚点列表：[(char_idx, timestamp_ms)]，char_idx == n_chars 表示行尾锚
+        anchors: list[tuple[int, int]] = []
+        for ci, ch in enumerate(characters):
+            if ch.render_timestamps:
+                anchors.append((ci, int(ch.render_timestamps[0])))
+
+        # 行尾锚：优先使用最后一个带 is_sentence_end 的字符的 render_sentence_end_ts
+        end_ts: Optional[int] = None
+        for ci in range(n_chars - 1, -1, -1):
+            ch = characters[ci]
+            if ch.is_sentence_end and ch.render_sentence_end_ts is not None:
+                end_ts = int(ch.render_sentence_end_ts)
+                break
+        if end_ts is not None:
+            anchors.append((n_chars, end_ts))
+
+        char_wipe_times: dict = {}
+        if anchors:
+            # 累积像素宽度前缀和（char 左边界），长度 n_chars+1
+            # cum_w[i] = sum(char_widths[:i])；char i 的像素区间 [cum_w[i], cum_w[i+1]]
+            cum_w = [0]
+            for w in char_widths:
+                cum_w.append(cum_w[-1] + w)
+
+            # 相邻锚点之间按像素宽度加权插值
+            # 对每个 char i，取其像素中点 mid_i = (cum_w[i] + cum_w[i+1]) / 2
+            # 在覆盖该 mid 的锚区间 [a_pos, b_pos] 上按比例映射时间
+            # wipe 区间 = [左边界映射时间, 右边界映射时间]
+            for seg_idx in range(len(anchors) - 1):
+                a_ci, a_ts = anchors[seg_idx]
+                b_ci, b_ts = anchors[seg_idx + 1]
+                a_pos = cum_w[a_ci] if a_ci <= n_chars else cum_w[n_chars]
+                b_pos = cum_w[b_ci] if b_ci <= n_chars else cum_w[n_chars]
+                span_pos = b_pos - a_pos
+                span_ts = b_ts - a_ts
+                if span_pos <= 0:
+                    # 锚点像素位置重合（极端情况）——退化为等分
+                    seg_chars = list(range(a_ci, min(b_ci, n_chars)))
+                    n_seg = len(seg_chars)
+                    if n_seg == 0:
+                        continue
+                    for k, ci in enumerate(seg_chars):
+                        char_wipe_times[ci] = (
+                            a_ts + int(span_ts * k / n_seg),
+                            a_ts + int(span_ts * (k + 1) / n_seg),
+                        )
+                    continue
+                for ci in range(a_ci, min(b_ci, n_chars)):
+                    left_pos = cum_w[ci]
+                    right_pos = cum_w[ci + 1]
+                    t_start = a_ts + span_ts * (left_pos - a_pos) / span_pos
+                    t_end = a_ts + span_ts * (right_pos - a_pos) / span_pos
+                    char_wipe_times[ci] = (int(t_start), int(t_end))
+
+            # 首锚之前：贴首锚（wipe 立即填满）
+            first_ci, first_ts = anchors[0]
+            for ci in range(0, first_ci):
+                char_wipe_times[ci] = (first_ts, first_ts)
+
+            # 末锚之后：贴末锚（wipe 恒为 0）
+            last_ci, last_ts = anchors[-1]
+            for ci in range(max(last_ci, 0), n_chars):
+                if ci not in char_wipe_times:
+                    char_wipe_times[ci] = (last_ts, last_ts)
 
         entry = {
             "v": self._cache_version,
@@ -757,7 +846,8 @@ class KaraokePreview(QWidget):
             "linked_leader_groups": linked_leader_groups,
             "linked_non_leader": linked_non_leader,
         }
-        self._sentence_cache[idx] = entry
+        if use_cache:
+            self._sentence_cache[idx] = entry
         return entry
 
     def mouseDoubleClickEvent(self, a0: Optional[QMouseEvent]):
@@ -3689,7 +3779,9 @@ class EditorInterface(QWidget):
         self.timeline.set_position(position_ms)
         self.preview.set_current_time_ms(position_ms)
         if self._timing_service:
-            self.transport.set_playing(self._timing_service.is_playing())
+            playing = self._timing_service.is_playing()
+            self.transport.set_playing(playing)
+            self.preview.set_playing(playing)
 
     def _handle_checkpoint_moved(self, position: CheckpointPosition):
         self._apply_checkpoint_position(position)
