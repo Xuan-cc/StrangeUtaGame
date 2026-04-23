@@ -656,6 +656,30 @@ class AutoCheckService:
                 while len(parts) < block_len:
                     parts.append("")
                 split_parts = parts[:block_len]
+                # 劣质拆分检测：若存在「对应字符是汉字」且 part 为空的位置，
+                # 视为字典条目错漏，避免汉字无注音 —— 丢弃字典拆分，改走 fallback
+                # 重算（与 library 分支一致）。注意：part 为空 + 对应字符是假名
+                # 是合法的「连词首字承载」语义，不触发 fallback。
+                has_empty_kanji_part = False
+                for pos in range(block_len):
+                    idx = result.start_idx + pos
+                    if idx >= len(chars):
+                        continue
+                    if split_parts[pos]:
+                        continue
+                    ch = chars[idx]
+                    ct = get_char_type(ch) if len(ch) == 1 else CharType.OTHER
+                    if ct not in (CharType.HIRAGANA, CharType.KATAKANA):
+                        has_empty_kanji_part = True
+                        break
+                if has_empty_kanji_part:
+                    # 从字典 reading 中剥离逗号，用完整读音重算 peel_kana
+                    full_reading = result.reading.replace(",", "")
+                    split_parts = self._fallback_split_peel_kana(
+                        result.text, full_reading
+                    )
+                    # 升级来源让 apply_to_sentence 允许连续汉字间连词
+                    block_source[block_id] = "fallback"
             else:
                 if block_len > 1:
                     # library 来源：跳过 _try_split_to_chars，直接走 fallback
@@ -689,6 +713,49 @@ class AutoCheckService:
                     if pos < len(split_parts) and split_parts[pos]:
                         char_to_ruby_raw[idx] = split_parts[pos]
                     char_to_block[idx] = block_id
+
+        # 首尾假名剥离：若连词块的首/尾字符是假名（送り仮名/接头假名模式），
+        # 将它们从 char_to_block 中移除，使其成为独立自注音字符，
+        # 避免 linked_to_next 把送り仮名吸入连词块（如 "可愛い" 字典条目
+        # reading="かわい,,い" 使 char_to_block 覆盖全 3 字，导致末尾 い 错误连词）。
+        # 剥离条件：对应 split_parts[pos] 为空字符串 或 等于字符本身（即明确表示
+        # "该字符由自身注音，不应作为连词成员"）。
+        for block_id, result in enumerate(ruby_results):
+            block_len = result.end_idx - result.start_idx
+            if block_len < 2:
+                continue
+            # 从末尾向前剥离
+            for pos in range(block_len - 1, 0, -1):
+                idx = result.start_idx + pos
+                if idx >= len(chars):
+                    continue
+                char = chars[idx]
+                ct = get_char_type(char) if len(char) == 1 else CharType.OTHER
+                if ct not in (CharType.HIRAGANA, CharType.KATAKANA):
+                    break
+                part = char_to_ruby_raw.get(idx, "")
+                if part and part != char:
+                    break
+                # 剥离：移出 block，让后续自注音兜底
+                char_to_block.pop(idx, None)
+                char_to_ruby_raw.pop(idx, None)
+            # 从首部向后剥离（保留至少 1 个字符在块中）
+            for pos in range(0, block_len - 1):
+                idx = result.start_idx + pos
+                if idx >= len(chars):
+                    continue
+                # 已被末尾剥离阶段移出的不再处理
+                if idx not in char_to_block:
+                    continue
+                char = chars[idx]
+                ct = get_char_type(char) if len(char) == 1 else CharType.OTHER
+                if ct not in (CharType.HIRAGANA, CharType.KATAKANA):
+                    break
+                part = char_to_ruby_raw.get(idx, "")
+                if part and part != char:
+                    break
+                char_to_block.pop(idx, None)
+                char_to_ruby_raw.pop(idx, None)
 
         # 未被分析器覆盖的字符使用自注音（保证所有字符都有 ruby）
         # #11：连词块内 split_parts 为空的字符（如 e2k "hello" 的 e/l/l/o 位置）
