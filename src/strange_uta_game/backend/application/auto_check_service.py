@@ -1321,11 +1321,9 @@ class AutoCheckService:
         # #10: 此函数仅更新节奏点，不改变 linked_to_next。
         # linked_to_next 已由 analyze_sentence/apply_to_sentence 根据注音来源
         # （用户词典/e2k/库函数）正确设置，不应被此函数覆盖。
-        # 仅清理与当前 check_count 不符的连词关系（例如原本连词但下一字符 check_count 变为非0）。
-        for i in range(len(sentence.characters) - 1):
-            next_ch = sentence.characters[i + 1]
-            if sentence.characters[i].linked_to_next and next_ch.check_count != 0:
-                sentence.characters[i].linked_to_next = False
+        # （历史：曾有 "next_ch.check_count != 0 时断开 linked" 的清理逻辑，
+        #  但新规则允许"连词不强制后字 cc==0；后字继续展示自己的 ruby"，
+        #  该清理会错误断开合法连词 [可,愛]→[い] 此类链，已移除。）
 
     def update_checkpoints_for_project(
         self,

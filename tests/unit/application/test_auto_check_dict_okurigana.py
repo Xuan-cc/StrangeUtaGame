@@ -190,3 +190,67 @@ class TestDictOkuriganaPeel:
         i_ch = sent.characters[-1]
         if i_ch.ruby is not None:
             assert "".join(p.text for p in i_ch.ruby.parts) == "い"
+
+
+class TestUpdateCheckpointsPreservesLinkedToNext:
+    """回归：`update_checkpoints_for_project` 不得擦 linked_to_next。
+
+    历史 bug：#10 清理逻辑在「linked=True 且下一字 cc != 0」时断开连词，
+    但新规则允许「连词不强制后字 cc==0；后字继续展示自己的 ruby」，该清理
+    会错误断开合法连词链 [可,愛]→[い]，导致切换页面时 `{可愛||か|わ|い,}い`
+    退化为 `{可||か|わ|い}愛い`。
+    """
+
+    def setup_method(self):
+        if _get_sudachi() is None:
+            pytest.skip("SudachiAnalyzer 不可用")
+
+    def test_update_checkpoints_preserves_kawaii_linked_chain(self):
+        """`可愛い + かわい,,い`：analyze 后 update_checkpoints 不得断链。"""
+        from strange_uta_game.backend.domain.project import Project
+
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "可愛い", "reading": "かわい,,い"}
+            ],
+        )
+        sent = _make_sentence("可愛い")
+        service.apply_to_sentence(sent)
+
+        # analyze 后状态
+        assert _serialize(sent.characters) == "{可愛||か|わ|い,}い"
+        assert sent.characters[0].linked_to_next is True
+        assert sent.characters[1].linked_to_next is False
+
+        # 模拟 "自动分析全部注音" 第二步：update_checkpoints_for_project
+        project = Project(sentences=[sent])
+        service.update_checkpoints_for_project(project)
+
+        # linked 链必须保留
+        assert sent.characters[0].linked_to_next is True, (
+            "可.linked 被 update_checkpoints 错误断开"
+        )
+        # 序列化必须保持连词形态
+        assert _serialize(sent.characters) == "{可愛||か|わ|い,}い"
+
+    def test_update_checkpoints_preserves_kyou_linked_chain(self):
+        """`今日 + きょ,う`：同样不得断 今→日 连词。"""
+        from strange_uta_game.backend.domain.project import Project
+
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "今日", "reading": "きょ,う"}
+            ],
+        )
+        sent = _make_sentence("今日")
+        service.apply_to_sentence(sent)
+
+        linked_before = sent.characters[0].linked_to_next
+        project = Project(sentences=[sent])
+        service.update_checkpoints_for_project(project)
+
+        assert sent.characters[0].linked_to_next is linked_before, (
+            "今.linked 被 update_checkpoints 错误改动"
+        )
