@@ -387,8 +387,9 @@ class BulkChangeDialog(QDialog):
                             break
                         tgt = sentence.characters[ci]
                         tgt.char = ch_str
-                        tgt.check_count = per_char_check[i]
+                        # 已配套 set_ruby 替换，force=True 安全（无 mora 退化）
                         tgt.set_ruby(per_char_ruby[i])
+                        tgt.set_check_count(per_char_check[i], force=True)
                         tgt.push_to_ruby()
                         # linked_to_next 校验：末字/句尾/行尾禁止连词
                         req_linked = per_char_linked_req[i]

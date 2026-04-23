@@ -76,8 +76,8 @@ def _rebuild_characters(
                 # ruby 文本一致，保留 old_ch.ruby 的完整 RubyPart 切分
                 continue
             # 用户改了注音：用新 parts 覆盖，check_count 同步为 parts 长度
-            ch.check_count = len(new_parts)
             ch.set_ruby(Ruby(parts=[RubyPart(text=t) for t in new_parts]))
+            ch.set_check_count(len(new_parts), force=True)
         return old_sentence.characters
 
     # 构建 old_idx → new_idx 映射
@@ -117,8 +117,8 @@ def _rebuild_characters(
                 new_text = "".join(new_parts)
                 old_text = old_ch.ruby.text if old_ch.ruby else ""
                 if new_text != old_text:
-                    ch.check_count = len(new_parts)
                     ch.set_ruby(Ruby(parts=[RubyPart(text=t) for t in new_parts]))
+                    ch.set_check_count(len(new_parts), force=True)
         else:
             # 新插入字符：默认 check_count=1，空 ruby
             ch = Character(
@@ -131,8 +131,8 @@ def _rebuild_characters(
             # 仅当用户在文本框里显式给新字符加了 ruby 才应用
             if j in ruby_map:
                 new_parts = ruby_map[j]
-                ch.check_count = len(new_parts)
                 ch.set_ruby(Ruby(parts=[RubyPart(text=t) for t in new_parts]))
+                ch.set_check_count(len(new_parts), force=True)
 
         characters.append(ch)
 
@@ -147,10 +147,10 @@ def _apply_ruby_map(sentence: Sentence, ruby_map: Dict[int, List[str]]) -> None:
     """
     for ci, parts in ruby_map.items():
         if 0 <= ci < len(sentence.characters) and parts:
-            sentence.characters[ci].check_count = len(parts)
             sentence.characters[ci].set_ruby(
                 Ruby(parts=[RubyPart(text=t) for t in parts])
             )
+            sentence.characters[ci].set_check_count(len(parts), force=True)
 
 
 def _is_kanji_char(char: str) -> bool:

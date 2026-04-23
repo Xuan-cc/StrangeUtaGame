@@ -1135,7 +1135,9 @@ class AutoCheckService:
             for i, (old_ruby, old_cc, old_link) in preserved.items():
                 if i < len(sentence.characters):
                     sentence.characters[i].ruby = old_ruby
-                    sentence.characters[i].check_count = old_cc
+                    # 已先恢复 ruby，此时 set_check_count 走 force=True 安全
+                    # （ruby.parts 与 old_cc 在原 Character 上本就匹配）
+                    sentence.characters[i].set_check_count(old_cc, force=True)
                     sentence.characters[i].linked_to_next = old_link
 
     def analyze_project(
@@ -1364,7 +1366,8 @@ class AutoCheckService:
                 is_sentence_end = True
             if i in english_sentence_end_idx:
                 is_sentence_end = True
-            char.check_count = check_counts[i]
+            # 自动流程：force=True，允许 cc==0 退化为 Nicokara 无 mora 格式
+            char.set_check_count(check_counts[i], force=True)
             char.is_line_end = is_last and add_line_end
             char.is_sentence_end = is_sentence_end
             if not char.is_sentence_end:

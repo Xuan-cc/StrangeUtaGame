@@ -63,6 +63,7 @@ from strange_uta_game.backend.domain import (
     Ruby,
     RubyPart,
 )
+from strange_uta_game.backend.domain.models import RubyMoraDegradeError
 from strange_uta_game.backend.application import (
     CheckpointPosition,
     TimingService,
@@ -1448,8 +1449,9 @@ class ModifyCharacterDialog(QDialog):
             for i, ch_str in enumerate(new_text):
                 tgt = old_chars[i]
                 tgt.char = ch_str
-                tgt.check_count = per_char_check[i]
+                # 已配套 set_ruby 替换，force=True 安全（无 mora 退化）
                 tgt.set_ruby(per_char_ruby[i])
+                tgt.set_check_count(per_char_check[i], force=True)
                 tgt.push_to_ruby()
                 # linked_to_next 校验：末字/句尾/行尾字符禁止连词
                 req_linked = per_char_linked_req[i]
@@ -3210,7 +3212,24 @@ class EditorInterface(QWidget):
             if delta > 0:
                 sentence.add_checkpoint(char_idx)
             else:
-                sentence.remove_checkpoint(char_idx)
+                try:
+                    sentence.remove_checkpoint(char_idx)
+                except RubyMoraDegradeError:
+                    # 减到 0 会从有 mora 退化为 Nicokara 无 mora 格式（注音文本保留）
+                    ch_text = sentence.characters[char_idx].char
+                    reply = QMessageBox.question(
+                        self,
+                        "退化为无 mora 格式",
+                        f"字符 '{ch_text}' 的节奏点将减至 0，注音将从有 mora 退化为 Nicokara 无 mora 格式。\n"
+                        f"注音文本会完整保留。是否继续？",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No,
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        # 用户取消：返回当前状态，不变更
+                        cp_idx = self.preview._current_checkpoint_idx
+                        return line_idx, char_idx, cp_idx if cp_idx is not None else 0, "checkpoints"
+                    sentence.remove_checkpoint(char_idx, force=True)
             cp_idx = self.preview._current_checkpoint_idx
             if cp_idx is not None and delta < 0:
                 cp_idx = min(cp_idx, sentence.characters[char_idx].check_count)
@@ -3430,14 +3449,27 @@ class EditorInterface(QWidget):
         if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
             return
         project = self._project
+        sentence = project.sentences[line_idx]
 
-        self._execute_structural_edit(
-            "减少节奏点",
-            lambda: (
-                project.sentences[line_idx].remove_checkpoint(char_idx)
-                or (line_idx, char_idx, 0, "checkpoints")
-            ),
-        )
+        def _mutate():
+            try:
+                sentence.remove_checkpoint(char_idx)
+            except RubyMoraDegradeError:
+                ch_text = sentence.characters[char_idx].char
+                reply = QMessageBox.question(
+                    self,
+                    "退化为无 mora 格式",
+                    f"字符 '{ch_text}' 的节奏点将减至 0，注音将从有 mora 退化为 Nicokara 无 mora 格式。\n"
+                    f"注音文本会完整保留。是否继续？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return line_idx, char_idx, 0, "checkpoints"
+                sentence.remove_checkpoint(char_idx, force=True)
+            return line_idx, char_idx, 0, "checkpoints"
+
+        self._execute_structural_edit("减少节奏点", _mutate)
 
     def _on_toggle_sentence_end_requested(self, line_idx: int, char_idx: int):
         if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):

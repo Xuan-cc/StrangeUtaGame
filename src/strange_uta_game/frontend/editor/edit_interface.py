@@ -26,7 +26,7 @@ from strange_uta_game.backend.domain import (
     Character,
     Ruby,
 )
-from strange_uta_game.backend.domain.models import RubyPart
+from strange_uta_game.backend.domain.models import RubyMoraDegradeError, RubyPart
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     align_ruby_parts_to_checkpoints,
     split_ruby_for_checkpoints,
@@ -129,7 +129,7 @@ def _fix_sentence_character_invariants(sentence: Sentence):
     if not last_character.is_sentence_end:
         last_character.is_sentence_end = True
     if last_character.check_count < 1:
-        last_character.check_count = 1
+        last_character.set_check_count(1)
     last_character.linked_to_next = False
     last_character.push_to_ruby()
 
@@ -510,7 +510,14 @@ class LineDetailDialog(QDialog):
                             new_count = int(parts[k].strip()) if k < len(parts) else 0
                             if new_count < 0:
                                 new_count = 0
-                            characters[ci].check_count = new_count
+                            try:
+                                characters[ci].set_check_count(new_count)
+                            except RubyMoraDegradeError:
+                                # 用户在表格里直接置 0：force=True 退化为无 mora，文本保留
+                                characters[ci].set_check_count(new_count, force=True)
+                                errors.append(
+                                    f"字符 {ci + 1}: 已退化为 Nicokara 无 mora 格式（注音文本保留）"
+                                )
                         except ValueError:
                             errors.append(f"字符 {ci + 1}: Checkpoint数必须为整数")
                 else:
@@ -518,7 +525,14 @@ class LineDetailDialog(QDialog):
                         new_count = int(raw_cp)
                         if new_count < 0:
                             new_count = 0
-                        characters[group[0]].check_count = new_count
+                        ci0 = group[0]
+                        try:
+                            characters[ci0].set_check_count(new_count)
+                        except RubyMoraDegradeError:
+                            characters[ci0].set_check_count(new_count, force=True)
+                            errors.append(
+                                f"字符 {ci0 + 1}: 已退化为 Nicokara 无 mora 格式（注音文本保留）"
+                            )
                     except ValueError:
                         errors.append(f"行 {row_idx + 1}: Checkpoint数必须为整数")
 
