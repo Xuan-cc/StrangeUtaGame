@@ -1649,9 +1649,8 @@ class SettingsInterface(ScrollArea):
                 card.index_changed.connect(self._schedule_auto_save)
             elif isinstance(card, BrowseSettingCard):
                 card.path_changed.connect(self._schedule_auto_save)
-            elif isinstance(card, ShortcutSettingCard):
-                # #3 使用专门的冲突检测处理
-                card.value_changed.connect(lambda v, c=card: self._on_shortcut_changed(c, v))
+        # 快捷键卡片存在嵌套 dict self._shortcut_cards[mode][action]，
+        # dir(self) 无法遍历到，改由 _init_shortcut_group 创建时直接 connect。
 
     def _schedule_auto_save(self, *_args):
         """防抖调度自动保存（500ms 内无新操作则保存）。"""
@@ -2282,16 +2281,19 @@ class SettingsInterface(ScrollArea):
                 self._shortcut_cards["timing_mode"][action_key] = card
                 self._shortcut_cards["edit_mode"][action_key] = card
                 group.addSettingCard(card)
+                card.value_changed.connect(lambda v, c=card: self._on_shortcut_changed(c, v))
             elif scope == "timing_only":
                 card = ShortcutSettingCard(icon, "", content, default_timing, parent=group)
                 card.setTitle(_wrap_title(title, "timing_only"))
                 self._shortcut_cards["timing_mode"][action_key] = card
                 group.addSettingCard(card)
+                card.value_changed.connect(lambda v, c=card: self._on_shortcut_changed(c, v))
             elif scope == "edit_only":
                 card = ShortcutSettingCard(icon, "", content, default_edit, parent=group)
                 card.setTitle(_wrap_title(title, "edit_only"))
                 self._shortcut_cards["edit_mode"][action_key] = card
                 group.addSettingCard(card)
+                card.value_changed.connect(lambda v, c=card: self._on_shortcut_changed(c, v))
             elif scope == "split":
                 # #5 使用独立的 content
                 t_content = timing_content if timing_content else content
@@ -2301,11 +2303,13 @@ class SettingsInterface(ScrollArea):
                 card_t.setTitle(_wrap_title(title, "split_timing"))
                 self._shortcut_cards["timing_mode"][action_key] = card_t
                 group.addSettingCard(card_t)
+                card_t.value_changed.connect(lambda v, c=card_t: self._on_shortcut_changed(c, v))
                 
                 card_e = ShortcutSettingCard(icon, "", e_content, default_edit, parent=group)
                 card_e.setTitle(_wrap_title(title, "split_edit"))
                 self._shortcut_cards["edit_mode"][action_key] = card_e
                 group.addSettingCard(card_e)
+                card_e.value_changed.connect(lambda v, c=card_e: self._on_shortcut_changed(c, v))
         
         self.expandLayout.addWidget(group)
 
