@@ -254,3 +254,81 @@ class TestUpdateCheckpointsPreservesLinkedToNext:
         assert sent.characters[0].linked_to_next is linked_before, (
             "今.linked 被 update_checkpoints 错误改动"
         )
+
+
+class TestKanaSingleCheckpointCap:
+    """单一平假名/片假名封顶 1 cp 回归。
+
+    规则（用户 2026-04-23）：单字假名最多 1 个节奏点，可以是 0。
+    典型场景：`ロミオ + e2k(Ro,me,o)` 之前被 split_into_moras 按字符误计为
+    2/2/1，应封顶为 1/1/1。
+    """
+
+    def setup_method(self):
+        if _get_sudachi() is None:
+            pytest.skip("SudachiAnalyzer 不可用")
+
+    def test_katakana_with_e2k_english_reading_caps_to_one(self):
+        """`ロミオ → Ro,me,o`（e2k 用户词典模拟）：cp 必须 1/1/1。"""
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "ロミオ", "reading": "Ro,me,o"}
+            ],
+        )
+        sent = _make_sentence("ロミオ")
+        service.apply_to_sentence(sent)
+
+        ccs = [c.check_count for c in sent.characters]
+        assert ccs == [1, 1, 1], f"期望 [1,1,1]，实际 {ccs}"
+
+    def test_katakana_with_long_dict_reading_caps_to_one(self):
+        """`カ + reading=かあ`（假设 mora=2）：片假名单字封顶 1。"""
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "カタ", "reading": "かあ,た"}
+            ],
+        )
+        sent = _make_sentence("カタ")
+        service.apply_to_sentence(sent)
+
+        # カ 尽管 reading=かあ（2 mora），也必须封顶 1
+        assert sent.characters[0].check_count <= 1
+        # タ 同理
+        assert sent.characters[1].check_count <= 1
+
+    def test_kanji_unaffected_by_cap(self):
+        """汉字不受封顶影响：`大冒険 → だい,ぼう,けん` 仍是 2/2/2。"""
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "大冒険", "reading": "だい,ぼう,けん"}
+            ],
+        )
+        sent = _make_sentence("大冒険")
+        service.apply_to_sentence(sent)
+
+        ccs = [c.check_count for c in sent.characters]
+        assert ccs == [2, 2, 2], f"汉字 cp 被错误封顶：{ccs}"
+
+    def test_update_checkpoints_also_caps_kana(self):
+        """`update_checkpoints_for_project` 路径也必须封顶。"""
+        from strange_uta_game.backend.domain.project import Project
+
+        service = AutoCheckService(
+            ruby_analyzer=_get_sudachi(),
+            user_dictionary=[
+                {"enabled": True, "word": "ロミオ", "reading": "Ro,me,o"}
+            ],
+        )
+        sent = _make_sentence("ロミオ")
+        service.apply_to_sentence(sent)
+
+        project = Project(sentences=[sent])
+        service.update_checkpoints_for_project(project)
+
+        ccs = [c.check_count for c in sent.characters]
+        assert ccs == [1, 1, 1], (
+            f"update_checkpoints 后 cp 未封顶：{ccs}"
+        )

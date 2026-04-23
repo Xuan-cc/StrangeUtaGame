@@ -817,6 +817,20 @@ class AutoCheckService:
                     else:
                         check_counts[idx] = 0
 
+        # 单一平假名/片假名封顶：单个假名字符最多 1 cp（可以是 0）。
+        # 场景：`ロミオ → Ro,me,o` 经 e2k 路径，split_parts 是英文音节，
+        # 被 split_into_moras 按字符计数误拿到 2/2/1，应统一封顶为 1/1/1。
+        # 汉字/英文字母不受限，允许按 mora 分配。
+        for i, ch in enumerate(chars):
+            if i >= len(check_counts):
+                break
+            if len(ch) == 1 and get_char_type(ch) in (
+                CharType.HIRAGANA,
+                CharType.KATAKANA,
+            ):
+                if check_counts[i] > 1:
+                    check_counts[i] = 1
+
         # 应用自动打勾过滤规则
         if self._flags:
             for i, char in enumerate(chars):
@@ -1188,6 +1202,18 @@ class AutoCheckService:
                 continue  # 自注音（假名等），保留默认 check_count
             # 汉字等：按 Ruby 分组数量/组内 mora 数分配节奏点
             check_counts[i] = sum(len(split_into_moras(group)) for group in ruby_groups)
+
+        # 单一平假名/片假名封顶：最多 1 cp（同 analyze_sentence）
+        chars_for_cap = [c.char for c in sentence.characters]
+        for i, ch in enumerate(chars_for_cap):
+            if i >= len(check_counts):
+                break
+            if len(ch) == 1 and get_char_type(ch) in (
+                CharType.HIRAGANA,
+                CharType.KATAKANA,
+            ):
+                if check_counts[i] > 1:
+                    check_counts[i] = 1
 
         # 应用自动打勾过滤规则（与 analyze_sentence 相同逻辑）
         chars = [c.char for c in sentence.characters]
