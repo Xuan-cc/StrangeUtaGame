@@ -142,13 +142,14 @@ class AutoCheckService:
             pos = 0
             while pos <= len(text) - wlen:
                 if text[pos : pos + wlen] == word:
-                    # 英文词条的词边界检查：前后字符都不能是英文字母。
+                    # 英文词条的词边界检查：前后字符都不能是英文字母或 apostrophe
+                    # （批 18 #7：' 和 ’ 属词内字符，否则 what 会在 what's 中部命中）
                     if is_latin:
-                        left_ok = pos == 0 or not (
-                            text[pos - 1].isascii() and text[pos - 1].isalpha()
-                        )
-                        right_ok = pos + wlen == len(text) or not (
-                            text[pos + wlen].isascii() and text[pos + wlen].isalpha()
+                        def _is_word_inner(c: str) -> bool:
+                            return (c.isascii() and c.isalpha()) or c in ("'", "\u2019")
+                        left_ok = pos == 0 or not _is_word_inner(text[pos - 1])
+                        right_ok = pos + wlen == len(text) or not _is_word_inner(
+                            text[pos + wlen]
                         )
                         if not (left_ok and right_ok):
                             pos += 1
@@ -1042,6 +1043,19 @@ class AutoCheckService:
             if i < len(check_counts) and ch in PUNCTUATION_SET:
                 check_counts[i] = max(check_counts[i], 1) if _enable_punct_cp2 else 0
 
+        # 批 18 #9：英文词组节奏点规则（首字=1，其余=0，末字母标句尾）
+        # find_english_words 基于 sentence.text 的字符索引，与 sentence.characters 一一对应
+        # （文本拆分器对英文走逐字符路径，保持字符-文本索引对齐）。
+        english_sentence_end_idx: set[int] = set()
+        for start, end, word in find_english_words(sentence.text):
+            if end - start <= 1:
+                continue  # 单字母词：无词组概念
+            for idx in range(start, end):
+                if idx < len(check_counts):
+                    check_counts[idx] = 1 if idx == start else 0
+            if end - 1 < len(sentence.characters):
+                english_sentence_end_idx.add(end - 1)
+
         # 更新字符属性
         add_line_end = self._flags.get("check_line_end", True)
         check_space_as_line_end = self._flags.get("check_space_as_line_end", True)
@@ -1060,6 +1074,8 @@ class AutoCheckService:
             if is_last and add_line_end:
                 is_sentence_end = True
             if is_before_space:
+                is_sentence_end = True
+            if i in english_sentence_end_idx:
                 is_sentence_end = True
             char.check_count = check_counts[i]
             char.is_line_end = is_last and add_line_end
