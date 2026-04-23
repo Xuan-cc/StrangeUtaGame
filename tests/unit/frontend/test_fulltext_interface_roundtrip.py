@@ -13,7 +13,7 @@ from strange_uta_game.backend.domain import (
     Ruby,
     RubyPart,
 )
-from strange_uta_game.frontend.settings.ruby_editor import (
+from strange_uta_game.frontend.editor.fulltext_interface import (
     _parse_annotated_line,
     _rebuild_characters,
 )

@@ -2410,7 +2410,7 @@ class EditorInterface(QWidget):
             if store:
                 success = store.save(path)
             else:
-                from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
+                from strange_uta_game.backend.infrastructure.persistence.sug_io import (
                     SugProjectParser,
                 )
 

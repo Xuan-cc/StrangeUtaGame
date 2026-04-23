@@ -30,7 +30,7 @@ def _get_sudachi():
 
 
 def _serialize(chars):
-    """将 characters 序列化为 `{汉字||读音}` 形式（同 ruby_editor._lines_to_text）。"""
+    """将 characters 序列化为 `{汉字||读音}` 形式（同 fulltext_interface._lines_to_text）。"""
     out = ""
     i = 0
     n = len(chars)

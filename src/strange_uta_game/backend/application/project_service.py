@@ -8,7 +8,7 @@ from typing import Optional, Callable, List
 from dataclasses import dataclass
 
 from strange_uta_game.backend.domain import Project, Singer, Sentence
-from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
+from strange_uta_game.backend.infrastructure.persistence.sug_io import (
     SugProjectParser,
     SugParseError,
 )

@@ -527,7 +527,7 @@ class BulkChangeDialog(QDialog):
             return
         try:
             # 延迟导入避免循环依赖
-            from strange_uta_game.frontend.editor.editor_interface import (
+            from strange_uta_game.frontend.editor.timing_interface import (
                 _SentenceSnapshotCommand,
             )
         except Exception:

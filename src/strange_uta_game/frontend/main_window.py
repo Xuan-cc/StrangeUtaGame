@@ -109,12 +109,12 @@ class MainWindow(MSFluentWindow):
     def _init_interfaces(self):
         """初始化所有子界面"""
         from .home.home_interface import HomeInterface
-        from .editor.editor_interface import EditorInterface
+        from .editor.timing_interface import EditorInterface
         from .export.export_interface import ExportInterface
-        from .settings.singer_manager import SingerManagerInterface
-        from .settings.ruby_editor import RubyInterface
+        from .settings.singer_interface import SingerManagerInterface
+        from .editor.fulltext_interface import RubyInterface
         from .settings.settings_interface import SettingsInterface
-        from .editor.edit_interface import EditInterface
+        from .editor.line_interface import EditInterface
         from .online.online_interface import OnlineQueryInterface
 
         self.homeInterface = HomeInterface(self)

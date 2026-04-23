@@ -12,7 +12,7 @@ from typing import Optional
 from pathlib import Path
 
 from strange_uta_game.backend.domain import Project
-from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
+from strange_uta_game.backend.infrastructure.persistence.sug_io import (
     SugProjectParser,
 )
 

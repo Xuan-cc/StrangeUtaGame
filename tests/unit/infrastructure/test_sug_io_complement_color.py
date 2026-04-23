@@ -6,7 +6,7 @@ from pathlib import Path
 
 from strange_uta_game.backend.domain.entities import Singer
 from strange_uta_game.backend.domain.project import Project
-from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
+from strange_uta_game.backend.infrastructure.persistence.sug_io import (
     SugProjectParser,
 )
 

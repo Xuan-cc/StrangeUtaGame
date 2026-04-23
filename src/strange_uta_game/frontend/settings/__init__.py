@@ -1,18 +1,16 @@
 """设置界面模块。
 
-提供应用设置管理界面组件。
+提供应用设置管理与演唱者管理界面。
 """
 
 from .settings_interface import (
     SettingsInterface,
     AppSettings,
 )
-from .singer_manager import SingerManagerInterface
-from .ruby_editor import RubyInterface
+from .singer_interface import SingerManagerInterface
 
 __all__ = [
     "SettingsInterface",
     "AppSettings",
     "SingerManagerInterface",
-    "RubyInterface",
 ]

@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from datetime import datetime
 
-from strange_uta_game.backend.infrastructure.persistence.sug_parser import (
+from strange_uta_game.backend.infrastructure.persistence.sug_io import (
     SugProjectParser,
     SugParseError,
 )
