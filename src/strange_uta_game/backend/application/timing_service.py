@@ -496,6 +496,42 @@ class TimingService:
         if self._callbacks:
             self._callbacks.on_timing_error(error_type, message)
 
+    def adjust_current_timestamp(self, delta_ms: int) -> bool:
+        """微调当前选中 checkpoint 的时间戳（批 18 #8）。
+
+        TimingService 作为时间戳唯一写入入口，统一处理普通 cp / 句尾 cp
+        两分支：
+          - 句尾 cp（is_sentence_end 且 cp_idx == check_count）走
+            Character.set_sentence_end_ts，内部已 _update_offset_timestamps +
+            push_to_ruby。
+          - 普通 cp 直接覆写 Character.timestamps[cp_idx]，必须显式调
+            _update_offset_timestamps() 重算 render/export，再 push_to_ruby()
+            同步 Ruby.timestamps 和 RubyPart.offset_ms。
+
+        Args:
+            delta_ms: 时间戳增量（毫秒，可正可负）
+
+        Returns:
+            True 表示写入成功，False 表示当前位置无可调时间戳
+        """
+        if not self._project:
+            return False
+        sentence, char = self._get_current_checkpoint_info()
+        if not sentence or not char:
+            return False
+        cp_idx = self._current_position.checkpoint_idx
+        if char.is_sentence_end and cp_idx == char.check_count:
+            if char.sentence_end_ts is None:
+                return False
+            char.set_sentence_end_ts(max(0, char.sentence_end_ts + delta_ms))
+        else:
+            if cp_idx >= len(char.timestamps):
+                return False
+            char.timestamps[cp_idx] = max(0, char.timestamps[cp_idx] + delta_ms)
+            char._update_offset_timestamps()
+            char.push_to_ruby()
+        return True
+
     # ==================== 音频控制 ====================
 
     def play(self) -> None:

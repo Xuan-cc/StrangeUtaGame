@@ -2708,33 +2708,13 @@ class EditorInterface(QWidget):
     def _adjust_current_timestamp(self, delta_ms: int):
         """Alt+↑/↓ 微调当前选中 checkpoint 的时间戳。
 
-        #3：调整对象从"当前字符"改为"当前选中的 checkpoint"（以
-        TimingService.get_current_position().checkpoint_idx 为准）。
-        #4：步长由 timing.timing_adjust_step_ms 设置项决定（调用方传入）。
+        批 18 #8：委托给 TimingService.adjust_current_timestamp 统一处理，
+        由服务层保证 _update_offset_timestamps + push_to_ruby 双同步。
         """
         if not self._project or not self._timing_service:
             return
-        pos = self._timing_service.get_current_position()
-        line_idx = pos.line_idx
-        char_idx = pos.char_idx
-        cp_idx = pos.checkpoint_idx
-        if line_idx >= len(self._project.sentences):
+        if not self._timing_service.adjust_current_timestamp(delta_ms):
             return
-        sentence = self._project.sentences[line_idx]
-        if char_idx >= len(sentence.characters):
-            return
-        ch = sentence.characters[char_idx]
-        # 判断是句尾 checkpoint 还是普通 checkpoint
-        if ch.is_sentence_end and cp_idx == ch.check_count:
-            if ch.sentence_end_ts is None:
-                return
-            ch.set_sentence_end_ts(max(0, ch.sentence_end_ts + delta_ms))
-        else:
-            if cp_idx >= len(ch.timestamps):
-                return
-            new_ts = max(0, ch.timestamps[cp_idx] + delta_ms)
-            ch.timestamps[cp_idx] = new_ts
-            ch.push_to_ruby()
         self._update_time_tags_display()
         self.refresh_lyric_display()
         self._update_line_info()
