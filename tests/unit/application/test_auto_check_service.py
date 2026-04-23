@@ -247,3 +247,81 @@ class TestSelectedCheckpointShift:
         sentence.characters[0].check_count = 0
         project.shift_selected_checkpoint_if_lost()
         assert project.get_selected_checkpoint() is None
+
+
+class TestBlankLineLineStartEndGuard:
+    """Q1：空行（text.strip() 为空）不应被 check_line_start/check_line_end 强制打 CP。
+
+    即使 check_line_start=True / check_line_end=True，只要句子文本 strip 后为空，
+    行首 CP 和行尾 CP 都必须被压制。这是"空行不自动 CP"语义相对于 line_start/end 的优先级。
+    """
+
+    def test_blank_line_whitespace_line_start_suppressed(self):
+        """空行（全是空格）+ check_line_start=True → 不强制 max(count,1)"""
+        flags = {"check_line_start": True, "space": False}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        sentence = Sentence.from_text("   ", "s1")
+
+        results = service.analyze_sentence(sentence)
+
+        for r in results:
+            assert r.check_count == 0, f"空行首字符不应被强制 CP，实际 {r.check_count}"
+
+    def test_blank_line_whitespace_line_end_suppressed(self):
+        """空行（全是空格）+ check_line_end=True → is_line_end/is_sentence_end 均为 False"""
+        flags = {"check_line_end": True, "space": False}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        sentence = Sentence.from_text("   ", "s1")
+
+        service.apply_to_sentence(sentence)
+
+        assert sentence.characters, "空格行应保留字符"
+        for c in sentence.characters:
+            assert not c.is_line_end, "空行不应有 is_line_end"
+            assert not c.is_sentence_end, "空行不应有 is_sentence_end"
+
+    def test_non_blank_line_line_start_still_works(self):
+        """非空行 + check_line_start=True → 首字符 check_count >= 1（回归保护）"""
+        flags = {"check_line_start": True}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        sentence = Sentence.from_text("あい", "s1")
+
+        results = service.analyze_sentence(sentence)
+
+        assert results[0].check_count >= 1, "非空行首字符应被 check_line_start 强制 >=1"
+
+    def test_non_blank_line_line_end_still_works(self):
+        """非空行 + check_line_end=True → 末字符 is_line_end=True（回归保护）"""
+        flags = {"check_line_end": True}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        sentence = Sentence.from_text("あい", "s1")
+
+        service.apply_to_sentence(sentence)
+
+        assert sentence.characters[-1].is_line_end, "非空行末字符应 is_line_end=True"
+        assert sentence.characters[-1].is_sentence_end, "非空行末字符应 is_sentence_end=True"
+
+    def test_blank_line_update_checkpoints_from_rubies_line_start_suppressed(self):
+        """update_checkpoints_from_rubies：空行 + check_line_start=True → 首字符 check_count=0"""
+        flags = {"check_line_start": True, "space": False}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        sentence = Sentence.from_text("   ", "s1")
+        for c in sentence.characters:
+            c.check_count = 0
+
+        service.update_checkpoints_from_rubies(sentence)
+
+        for c in sentence.characters:
+            assert c.check_count == 0, f"空行 update 后不应被强制 CP，实际 {c.check_count}"
+
+    def test_blank_line_update_checkpoints_from_rubies_line_end_suppressed(self):
+        """update_checkpoints_from_rubies：空行 + check_line_end=True → is_line_end=False"""
+        flags = {"check_line_end": True, "space": False}
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        sentence = Sentence.from_text("   ", "s1")
+
+        service.update_checkpoints_from_rubies(sentence)
+
+        for c in sentence.characters:
+            assert not c.is_line_end, "空行 update 后不应 is_line_end"
+            assert not c.is_sentence_end, "空行 update 后不应 is_sentence_end"

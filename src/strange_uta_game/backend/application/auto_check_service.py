@@ -672,7 +672,12 @@ class AutoCheckService:
                     elif in_paren and i < len(check_counts):
                         check_counts[i] = 0
 
-            if self._flags.get("check_line_start", False) and check_counts:
+            # 空行（text.strip() 为空）不应被 check_line_start 强制打 CP
+            if (
+                self._flags.get("check_line_start", False)
+                and check_counts
+                and text.strip()
+            ):
                 check_counts[0] = max(check_counts[0], 1)
 
         # 标点符号：默认不参与节奏点；开关启用时强制 1
@@ -785,8 +790,12 @@ class AutoCheckService:
             old_singer_map[i] = char.singer_id
 
         # 构建新的 Character 对象列表
-        add_line_end = self._flags.get("check_line_end", True)
-        check_space_as_line_end = self._flags.get("check_space_as_line_end", True)
+        # 空行（text.strip() 为空）不应被 check_line_end/check_space_as_line_end 强制打句尾 CP
+        _is_blank_line = not sentence.text.strip()
+        add_line_end = self._flags.get("check_line_end", True) and not _is_blank_line
+        check_space_as_line_end = (
+            self._flags.get("check_space_as_line_end", True) and not _is_blank_line
+        )
         new_characters: List[Character] = []
         for i, result in enumerate(results):
             is_last = i == len(results) - 1
@@ -1032,7 +1041,12 @@ class AutoCheckService:
                     elif in_paren and i < len(check_counts):
                         check_counts[i] = 0
 
-            if self._flags.get("check_line_start", False) and check_counts:
+            # 空行（text.strip() 为空）不应被 check_line_start 强制打 CP
+            if (
+                self._flags.get("check_line_start", False)
+                and check_counts
+                and sentence.text.strip()
+            ):
                 check_counts[0] = max(check_counts[0], 1)
 
         # 标点符号：默认不参与节奏点；开关启用时强制 1
@@ -1057,8 +1071,12 @@ class AutoCheckService:
                 english_sentence_end_idx.add(end - 1)
 
         # 更新字符属性
-        add_line_end = self._flags.get("check_line_end", True)
-        check_space_as_line_end = self._flags.get("check_space_as_line_end", True)
+        # 空行（text.strip() 为空）不应被 check_line_end/check_space_as_line_end 强制打句尾 CP
+        _is_blank_line = not sentence.text.strip()
+        add_line_end = self._flags.get("check_line_end", True) and not _is_blank_line
+        check_space_as_line_end = (
+            self._flags.get("check_space_as_line_end", True) and not _is_blank_line
+        )
         for i, char in enumerate(sentence.characters):
             is_last = i == len(sentence.characters) - 1
             # 空格视为句尾：当前字符后面紧跟空格时额外+1
