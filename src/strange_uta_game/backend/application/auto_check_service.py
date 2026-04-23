@@ -455,8 +455,17 @@ class AutoCheckService:
             分析结果列表
         """
         text = sentence.text
-        # 空行（用户排版意图）不生成任何 checkpoint：与 Nicokara 导出器同款判定。
-        if not text or (not text.strip() and not sentence.characters):
+        if not text:
+            if self._flags.get("check_empty_lines", False):
+                return [
+                    AutoCheckResult(
+                        line_idx=0,
+                        char_idx=0,
+                        char="",
+                        check_count=1,
+                        ruby=None,
+                    )
+                ]
             return []
 
         split_config = split_config or SplitConfig()
