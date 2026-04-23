@@ -35,6 +35,9 @@
 ## TimingService / Checkpoint
 
 - TimingService 是节奏点时间戳的**唯一**写入入口（domain 层只读取）。
+- 按键事件统一走 `on_key_changed(timestamp_ms, key_type)`：按下/抬起都推送给当前选中 cp，由 cp 角色过滤——普通 cp 仅响应 `pressed`，句尾末尾 cp 仅响应 `released`。写入后单次推进。
+- 句尾末尾 cp 判定：`Character.is_sentence_end_tail_cp(cp_idx)`，即 `is_sentence_end and cp_idx == check_count`。
+- 打轴游标 = `Project.selected_cp` = TimingService 的 `_current_position`，三者必须同步，是同一个概念。
 - 选中 cp（selected_checkpoint_idx）全局唯一不变量：增删对称，每次 set 必先 clear。
 - 标点 cp 默认 0；启用 `checkpoint_on_punctuation` 时 max(1)。
 - 选中 cp 因 check_count 缩减而越界时，按"同字截断 → 同行后字 → 跨行首字 → 全部失效则清除"顺延。
