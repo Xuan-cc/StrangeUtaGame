@@ -2726,17 +2726,39 @@ class EditorInterface(QWidget):
             self._store.notify("timetags")
 
     def _cycle_current_checkpoint(self):
-        """#2：Tab 键循环切换当前字符的 checkpoint 索引。
+        """#2：Tab 键循环切换"当前选中字符"的 checkpoint 索引。
 
-        以 TimingService.get_current_position() 为起点，将 checkpoint_idx
-        推进到下一个（到尾后回到 0）。句尾字符若带 is_sentence_end，则
-        句尾 checkpoint 也在循环序列内（位置为 check_count）。
+        目标字符优先级：
+        1. 若 KaraokePreview 存在有效选中范围，使用选中字符的起点
+           (line = _sel_line_idx, char = min(sel_start, sel_end))。
+        2. 否则回退到 TimingService.get_current_position()（播放/打轴上下文）。
+
+        句尾字符若带 is_sentence_end，则句尾 checkpoint 也在循环序列内
+        （位置为 check_count）。
         """
         if not self._project or not self._timing_service:
             return
-        pos = self._timing_service.get_current_position()
-        line_idx = pos.line_idx
-        char_idx = pos.char_idx
+        # 优先用选中字符
+        if (
+            self.preview._sel_line_idx >= 0
+            and self.preview._sel_start_char >= 0
+            and self.preview._sel_end_char >= 0
+        ):
+            line_idx = self.preview._sel_line_idx
+            char_idx = min(self.preview._sel_start_char, self.preview._sel_end_char)
+            # 以 TimingService 当前 checkpoint_idx 为起点（若行/字匹配），
+            # 否则从 0 起。
+            pos = self._timing_service.get_current_position()
+            base_idx = (
+                pos.checkpoint_idx
+                if (pos.line_idx == line_idx and pos.char_idx == char_idx)
+                else 0
+            )
+        else:
+            pos = self._timing_service.get_current_position()
+            line_idx = pos.line_idx
+            char_idx = pos.char_idx
+            base_idx = pos.checkpoint_idx
         if line_idx >= len(self._project.sentences):
             return
         sentence = self._project.sentences[line_idx]
@@ -2746,7 +2768,7 @@ class EditorInterface(QWidget):
         total = ch.check_count + (1 if ch.is_sentence_end else 0)
         if total <= 0:
             return
-        next_idx = (pos.checkpoint_idx + 1) % total
+        next_idx = (base_idx + 1) % total
         self._timing_service.move_to_checkpoint(line_idx, char_idx, next_idx)
         self._update_line_info()
         self.refresh_lyric_display()
@@ -2931,14 +2953,31 @@ class EditorInterface(QWidget):
         )
 
     def _change_checkpoint(self, delta: int):
-        """增加或减少当前字符的节奏点数量。"""
+        """增加或减少"当前选中字符"的节奏点数量。
+
+        目标字符优先级：
+        1. 若 KaraokePreview 在当前行存在有效选中范围 (_sel_line_idx == 当前行)，
+           作用于选中范围的起始字符 (min(sel_start, sel_end))。
+        2. 否则回退到 preview._current_char_idx（光标所在字符）。
+
+        这样 F5/F6/Space/Backspace 快捷键始终作用于用户选中的字符，
+        而非"当前选中的 checkpoint 所属字符"。
+        """
         if not self._project:
             return
         line_idx = self._current_line_idx
         if line_idx >= len(self._project.sentences):
             return
         sentence = self._project.sentences[line_idx]
-        char_idx = self.preview._current_char_idx
+        # 优先使用用户显式选中字符；若选中范围落在当前行则取其起点。
+        if (
+            self.preview._sel_line_idx == line_idx
+            and self.preview._sel_start_char >= 0
+            and self.preview._sel_end_char >= 0
+        ):
+            char_idx = min(self.preview._sel_start_char, self.preview._sel_end_char)
+        else:
+            char_idx = self.preview._current_char_idx
         if char_idx >= len(sentence.characters):
             return
 
