@@ -634,11 +634,6 @@ class AutoCheckService:
                     check_counts[i] = 0
                     continue
 
-                if ct == CharType.KANJI and self._flags.get(
-                    "kanji_single_check", False
-                ):
-                    check_counts[i] = min(check_counts[i], 1)
-
                 if ct == CharType.SPACE and i > 0:
                     prev_char = chars[i - 1]
                     prev_ct = (
@@ -1002,11 +997,6 @@ class AutoCheckService:
                 if ch in _SMALL_KANA and not self._flags.get("small_kana", False):
                     check_counts[i] = 0
                     continue
-
-                if ct == CharType.KANJI and self._flags.get(
-                    "kanji_single_check", False
-                ):
-                    check_counts[i] = min(check_counts[i], 1)
 
                 if ct == CharType.SPACE and i > 0:
                     prev_char = chars[i - 1]

@@ -92,18 +92,6 @@ class TestAutoCheckService:
 
         assert results[1].check_count == 0
 
-    def test_flags_kanji_single_check(self):
-        """测试汉字节奏点限定为1"""
-        flags = {"kanji_single_check": True}
-        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
-        sentence = Sentence.from_text("赤い花", "s1")
-
-        results = service.analyze_sentence(sentence)
-
-        for result in results:
-            if result.char in ("赤", "花"):
-                assert result.check_count <= 1
-
     def test_flags_check_line_end_disabled(self):
         """测试关闭行尾打勾"""
         flags = {"check_line_end": False}

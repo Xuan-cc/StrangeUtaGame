@@ -80,7 +80,6 @@ class AppSettings:
             "check_empty_lines": False,
             "check_line_start": False,
             "check_line_end": True,
-            "kanji_single_check": False,
             "space_after_japanese": True,
             "space_after_alphabet": True,
             "space_after_symbol": True,
@@ -2042,12 +2041,6 @@ class SettingsInterface(ScrollArea):
             "在每行末尾增加一个节奏点（用于记录行结束时间）",
             parent=self.auto_check_group,
         )
-        self.card_kanji_single = SwitchSettingCard(
-            FIF.ACCEPT,
-            "汉字节奏点限定为1",
-            "每个汉字最多只设置1个节奏点",
-            parent=self.auto_check_group,
-        )
         self.card_space_after_jp = SwitchSettingCard(
             FIF.ACCEPT,
             "日语后空格check",
@@ -2093,7 +2086,6 @@ class SettingsInterface(ScrollArea):
         self.auto_check_group.addSettingCard(self.card_check_empty_lines)
         self.auto_check_group.addSettingCard(self.card_check_line_start)
         self.auto_check_group.addSettingCard(self.card_check_line_end)
-        self.auto_check_group.addSettingCard(self.card_kanji_single)
         self.auto_check_group.addSettingCard(self.card_space_after_jp)
         self.auto_check_group.addSettingCard(self.card_space_after_alpha)
         self.auto_check_group.addSettingCard(self.card_space_after_symbol)
@@ -2603,9 +2595,6 @@ class SettingsInterface(ScrollArea):
         self.card_check_line_end.setChecked(
             self._settings.get("auto_check.check_line_end", True)
         )
-        self.card_kanji_single.setChecked(
-            self._settings.get("auto_check.kanji_single_check", False)
-        )
         self.card_space_after_jp.setChecked(
             self._settings.get("auto_check.space_after_japanese", True)
         )
@@ -2724,9 +2713,6 @@ class SettingsInterface(ScrollArea):
         )
         self._settings.set(
             "auto_check.check_line_end", self.card_check_line_end.isChecked()
-        )
-        self._settings.set(
-            "auto_check.kanji_single_check", self.card_kanji_single.isChecked()
         )
         self._settings.set(
             "auto_check.space_after_japanese", self.card_space_after_jp.isChecked()
