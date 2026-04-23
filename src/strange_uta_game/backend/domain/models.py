@@ -30,6 +30,23 @@ class ValidationError(DomainError):
     pass
 
 
+class RubyMoraDegradeError(DomainError):
+    """缩减 check_count 至 0 会使 ruby 从有 mora 退化为无 mora 格式。
+
+    语义：当 check_count > 0 时，每个 RubyPart 拥有独立 offset_ms，渲染按 mora 走字；
+          当 check_count == 0 时，整段 ruby 跟随父 Character 时间戳渲染（Nicokara 无 mora 格式）。
+    抛出场景：set_check_count(0) 且 ruby 非空且 force=False。
+    调用方（前端层）应捕获后弹窗告知用户「将退化为无 mora 格式」，
+    用户确认后用 force=True 重调；ruby 文本数据完整保留，仅渲染粒度改变。
+    """
+
+    pass
+
+
+# 历史别名（保持向后兼容，可后续清理）
+RubyDataLossError = RubyMoraDegradeError
+
+
 # ──────────────────────────────────────────────
 # 枚举
 # ──────────────────────────────────────────────
@@ -84,7 +101,10 @@ class Ruby:
     时间戳 (timestamps) 和演唱者 (singer_id) 由父对象 (Character) 推送更新。
 
     Attributes:
-        parts: Ruby 分段列表；不变量：len(parts) == character.check_count
+        parts: Ruby 分段列表
+               - 有 mora 模式：len(parts) == character.check_count，每段独立 offset_ms
+               - 无 mora 模式：character.check_count == 0 时整段 ruby 跟父字符渲染
+                 （Nicokara 无 mora 格式，文本完整保留）
         timestamps: checkpoint 绝对时间戳列表（毫秒，Character 推送，渲染使用）
         singer_id: 演唱者 ID（Character 推送）
 
@@ -182,17 +202,19 @@ class Character:
         """将自己的时间戳、演唱者推送给 Ruby；同时计算每个 RubyPart 的 offset_ms。
 
         offset_ms 相对父 Character 的第一个时间戳（timestamps[0]）。
-        仅当父字符的 timestamps 长度 >= 1 且 RubyPart 索引 i 在 timestamps 范围内时写入；
-        否则 offset_ms 保持 0（未打轴状态）。
+        - 若 part 索引 i < len(timestamps)：写入 timestamps[i] - base_ts
+        - 否则（未打轴的尾部 part）：清零，避免删 timestamp 后旧 offset 残留
         """
-        if self.ruby:
-            self.ruby.timestamps = self.all_timestamps
-            self.ruby.singer_id = self.singer_id
-            if self.timestamps:
-                base_ts = self.timestamps[0]
-                for i, part in enumerate(self.ruby.parts):
-                    if i < len(self.timestamps):
-                        part.offset_ms = self.timestamps[i] - base_ts
+        if not self.ruby:
+            return
+        self.ruby.timestamps = self.all_timestamps
+        self.ruby.singer_id = self.singer_id
+        base_ts = self.timestamps[0] if self.timestamps else 0
+        for i, part in enumerate(self.ruby.parts):
+            if i < len(self.timestamps):
+                part.offset_ms = self.timestamps[i] - base_ts
+            else:
+                part.offset_ms = 0
 
     def add_timestamp(self, timestamp_ms: int, checkpoint_idx: int = -1) -> None:
         """添加时间戳
@@ -254,6 +276,73 @@ class Character:
     def clear_sentence_end_ts(self) -> None:
         """清除句尾释放时间戳"""
         self.sentence_end_ts = None
+        self._update_offset_timestamps()
+        self.push_to_ruby()
+
+    def set_check_count(self, new_count: int, *, force: bool = False) -> None:
+        """权威 setter：变更 check_count 并维护 timestamps / ruby.parts 不变式。
+
+        不变式：
+          - len(timestamps) <= check_count
+          - check_count >= 1 时 len(ruby.parts) == check_count（有 mora 格式）
+          - check_count == 0 且 ruby 非空：退化为 Nicokara 无 mora 格式
+            （ruby 文本完整保留，整段跟随父字符 timestamp 渲染）
+
+        缩小行为：
+          - timestamps 截断到 new_count
+          - new_count >= 1 且 ruby.parts 超出：合并尾段
+            （示例：parts=[A,B,C,D], new_count=2 → parts=[A, B+C+D]）
+          - new_count == 0 且 ruby 非空：
+              * force=False → 抛 RubyMoraDegradeError（调用方应弹窗告知用户退化）
+              * force=True  → 保留 ruby 整段（Nicokara 无 mora 格式，文本不丢失）
+
+        Args:
+            new_count: 新的节奏点数量（>= 0）
+            force: 允许 new_count==0 时退化为无 mora 格式
+
+        Raises:
+            ValidationError: new_count < 0
+            RubyMoraDegradeError: new_count==0 且 ruby 非空且 !force
+        """
+        if new_count < 0:
+            raise ValidationError(f"节奏点数量不能为负数: {new_count}")
+
+        # mora 退化告知保护
+        if (
+            new_count == 0
+            and self.ruby is not None
+            and len(self.ruby.parts) > 0
+            and not force
+        ):
+            raise RubyMoraDegradeError(
+                f"将 check_count 减至 0 会使字符 '{self.char}' 的注音从有 mora 退化为"
+                f"Nicokara 无 mora 格式（ruby 文本保留），需用户确认后传入 force=True"
+            )
+
+        old_count = self.check_count
+        self.check_count = new_count
+
+        # 缩小：trim timestamps + 合并 ruby.parts 尾段
+        if new_count < old_count:
+            if len(self.timestamps) > new_count:
+                self.timestamps = self.timestamps[:new_count]
+            if (
+                self.ruby is not None
+                and new_count >= 1
+                and len(self.ruby.parts) > new_count
+            ):
+                # 合并 parts[new_count-1:] 到 parts[new_count-1]
+                keep = self.ruby.parts[: new_count - 1]
+                merged_text = "".join(
+                    p.text for p in self.ruby.parts[new_count - 1 :]
+                )
+                merged_part = RubyPart(
+                    text=merged_text,
+                    offset_ms=self.ruby.parts[new_count - 1].offset_ms,
+                )
+                self.ruby.parts = keep + [merged_part]
+            # new_count == 0 且 force=True：ruby 整段保留（Nicokara 无 mora 格式）
+
         self._update_offset_timestamps()
         self.push_to_ruby()
 

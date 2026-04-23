@@ -10,6 +10,7 @@
 from .models import (
     DomainError,
     ValidationError,
+    RubyMoraDegradeError,
     TimeTagType,
     PUNCTUATION_SET,
     RubyPart,
@@ -32,6 +33,7 @@ __all__ = [
     # 错误
     "DomainError",
     "ValidationError",
+    "RubyMoraDegradeError",
     # 枚举
     "TimeTagType",
     "PUNCTUATION_SET",

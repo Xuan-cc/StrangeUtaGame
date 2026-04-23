@@ -277,21 +277,25 @@ class Sentence:
             raise ValidationError(
                 f"字符索引 {idx} 超出范围 [0, {len(self.characters)})"
             )
-        char.check_count += 1
+        char.set_check_count(char.check_count + 1)
 
-    def remove_checkpoint(self, idx: int) -> None:
-        """减少指定字符的普通节奏点。"""
+    def remove_checkpoint(self, idx: int, *, force: bool = False) -> None:
+        """减少指定字符的普通节奏点。
+
+        Args:
+            idx: 字符索引
+            force: 当减至 0 会丢失 ruby 时是否强制（透传给 set_check_count）
+
+        Raises:
+            RubyDataLossError: 减至 0 且 ruby 非空且 !force（调用方应弹窗确认）
+        """
         char = self.get_character(idx)
         if not char:
             raise ValidationError(
                 f"字符索引 {idx} 超出范围 [0, {len(self.characters)})"
             )
-
-        char.check_count = max(0, char.check_count - 1)
-        if len(char.timestamps) > char.check_count:
-            char.timestamps = char.timestamps[: char.check_count]
-            char._update_offset_timestamps()
-            char.push_to_ruby()
+        new_count = max(0, char.check_count - 1)
+        char.set_check_count(new_count, force=force)
 
     def split_at(self, idx: int) -> "Sentence":
         """在指定字符后断行，返回后半句。"""
