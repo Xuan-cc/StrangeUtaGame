@@ -212,6 +212,10 @@ class UpdateCharacterCommand(Command):
         for key, value in self.updates.items():
             setattr(char, key, value)
 
+        # check_count 变更可能使选中 cp 越界，自动顺延
+        if "check_count" in self.updates:
+            self.project.shift_selected_checkpoint_if_lost()
+
     def undo(self) -> None:
         if self._old_values:
             sentence = self.project.get_sentence(self.sentence_id)

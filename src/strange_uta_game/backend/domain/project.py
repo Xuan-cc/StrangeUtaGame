@@ -482,6 +482,62 @@ class Project:
             return False
         return self.set_selected_checkpoint(0, 0, 0)
 
+    def shift_selected_checkpoint_if_lost(self) -> bool:
+        """若当前选中 cp 因 check_count 缩减而失效，则顺延到下一个有效 cp。
+
+        触发场景：自动注音/标点开关变更后，原选中位置的 check_count 变小，
+        导致 cp_idx 越界（含选中标点 cp 后标点开关被关闭的情况）。
+
+        顺延策略：
+            1. 同字内：cp_idx 截断到 check_count - 1。
+            2. 同行内向后：跳到首个 check_count > 0 的字符 cp 0。
+            3. 跨行向后：下一行首个 check_count > 0 的字符 cp 0。
+            4. 全部失效：清除选中。
+
+        Returns:
+            True 表示发生了顺延或清除；False 表示选中仍有效。
+        """
+        loc = self.get_selected_checkpoint()
+        if loc is None:
+            return False
+        line_idx, char_pos, cp_idx = loc
+
+        if line_idx >= len(self.sentences):
+            self.clear_selected_checkpoint()
+            return True
+        sentence = self.sentences[line_idx]
+        if char_pos >= len(sentence.characters):
+            self.clear_selected_checkpoint()
+            return True
+
+        char = sentence.characters[char_pos]
+        # 仍有效：在 [0, check_count) 区间内
+        if char.check_count > 0 and 0 <= cp_idx < char.check_count:
+            return False
+
+        # 同字截断
+        if char.check_count > 0:
+            sentence.characters[char_pos].selected_checkpoint_idx = char.check_count - 1
+            return True
+
+        # 同行向后
+        for next_pos in range(char_pos + 1, len(sentence.characters)):
+            if sentence.characters[next_pos].check_count > 0:
+                self.set_selected_checkpoint(line_idx, next_pos, 0)
+                return True
+
+        # 跨行向后
+        for next_line in range(line_idx + 1, len(self.sentences)):
+            sent = self.sentences[next_line]
+            for next_pos in range(len(sent.characters)):
+                if sent.characters[next_pos].check_count > 0:
+                    self.set_selected_checkpoint(next_line, next_pos, 0)
+                    return True
+
+        # 全部失效
+        self.clear_selected_checkpoint()
+        return True
+
     # ==================== 内部方法 ====================
 
     def _update_timestamp(self) -> None:

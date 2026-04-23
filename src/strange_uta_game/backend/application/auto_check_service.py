@@ -916,6 +916,9 @@ class AutoCheckService:
                 sentence, split_config, keep_existing_timetags, only_noruby
             )
 
+        # check_count 变更后，自动顺延越界的选中 cp
+        project.shift_selected_checkpoint_if_lost()
+
     def update_checkpoints_from_rubies(
         self,
         sentence: Sentence,

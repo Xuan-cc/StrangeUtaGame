@@ -201,3 +201,49 @@ class TestPunctuationCheckpointFlag:
         for c in sentence.characters:
             if c.char in PUNCTUATION_SET:
                 assert c.check_count == 0, f"标点 {c.char!r} 默认 check_count 必须为 0"
+
+
+class TestSelectedCheckpointShift:
+    """选中 cp 在 check_count 缩减后顺延。"""
+
+    def test_shift_within_char_truncates(self):
+        from strange_uta_game.backend.domain import Project, Sentence
+
+        project = Project()
+        sentence = Sentence.from_text("赤い花", "s1")
+        for c in sentence.characters:
+            c.check_count = 3
+        project.sentences.append(sentence)
+        project.set_selected_checkpoint(0, 0, 2)
+        # 缩减
+        sentence.characters[0].check_count = 1
+        project.shift_selected_checkpoint_if_lost()
+        loc = project.get_selected_checkpoint()
+        assert loc == (0, 0, 0), f"应截断到 cp 0，实际 {loc}"
+
+    def test_shift_to_next_char_when_zero(self):
+        from strange_uta_game.backend.domain import Project, Sentence
+
+        project = Project()
+        sentence = Sentence.from_text("、あ", "s1")
+        sentence.characters[0].check_count = 1  # 标点先有 cp
+        sentence.characters[1].check_count = 1
+        project.sentences.append(sentence)
+        project.set_selected_checkpoint(0, 0, 0)
+        # 模拟开关关闭 → 标点变 0
+        sentence.characters[0].check_count = 0
+        project.shift_selected_checkpoint_if_lost()
+        loc = project.get_selected_checkpoint()
+        assert loc == (0, 1, 0), f"应顺延到下一字符 cp 0，实际 {loc}"
+
+    def test_shift_clears_when_all_lost(self):
+        from strange_uta_game.backend.domain import Project, Sentence
+
+        project = Project()
+        sentence = Sentence.from_text("、", "s1")
+        sentence.characters[0].check_count = 1
+        project.sentences.append(sentence)
+        project.set_selected_checkpoint(0, 0, 0)
+        sentence.characters[0].check_count = 0
+        project.shift_selected_checkpoint_if_lost()
+        assert project.get_selected_checkpoint() is None
