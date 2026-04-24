@@ -504,31 +504,18 @@ class EditorInterface(QWidget):
             )
             return
         try:
-            from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
-                LyricParserFactory,
-                LRCParser,
-                parse_to_sentences,
+            from strange_uta_game.backend.application import (
+                ProjectImportService,
+                ProjectImportError,
             )
-            from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-                sentences_from_inline_text,
-            )
-            import re
 
-            content = Path(path).read_text(encoding="utf-8")
             default_singer = self._project.get_default_singer()
-
-            # 检测内联格式
-            if bool(re.search(r"\[\d+\|\d{2}:\d{2}:\d{2}\]", content)):
-                sentences = sentences_from_inline_text(content, default_singer.id)
-            else:
-                parsed_lines = LyricParserFactory.parse_file(path)
-                ext = Path(path).suffix.lower()
-                if ext == ".txt" and bool(
-                    re.search(r"\[\d{1,2}:\d{2}[.:]\d{2,3}\]", content)
-                ):
-                    lrc_parser = LRCParser()
-                    parsed_lines = lrc_parser.parse(content)
-                sentences = parse_to_sentences(parsed_lines, default_singer.id)
+            try:
+                sentences = ProjectImportService.load_lyrics_from_file(
+                    path, default_singer.id
+                )
+            except ProjectImportError as e:
+                raise RuntimeError(str(e)) from e
 
             # 替换项目歌词
             self._project.sentences.clear()

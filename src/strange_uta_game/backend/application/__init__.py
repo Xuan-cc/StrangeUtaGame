@@ -6,6 +6,7 @@ from .auto_check_service import AutoCheckService, AutoCheckResult
 from .singer_service import SingerService, SingerCallbacks
 from .export_service import ExportService, ExportResult
 from .timing_service import TimingService, TimingCallbacks, CheckpointPosition
+from .project_import_service import ProjectImportService, ProjectImportError
 from .commands import (
     Command,
     BatchCommand,
@@ -36,6 +37,8 @@ __all__ = [
     "TimingService",
     "TimingCallbacks",
     "CheckpointPosition",
+    "ProjectImportService",
+    "ProjectImportError",
     "Command",
     "BatchCommand",
     "CommandState",
