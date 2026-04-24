@@ -318,48 +318,24 @@ class CalibrationDialog(QDialog):
         self.canvas.setFocus()
 
     def _calculate_tap_offset_ms(self, tap_time: float) -> Optional[float]:
-        """计算 tap 偏移量（毫秒）。
+        """计算 tap 偏移量（毫秒）。委托后端 :func:`compute_tap_offset_ms`。
 
-        基于视觉中心穿越时间计算：perfect_time = start_time + n * beat_interval
         正值 = 按早了（实际 tap 在完美时间之前），负值 = 按晚了。
         """
+        from strange_uta_game.backend.application import compute_tap_offset_ms
+
         with self._state_lock:
             start_time = self._start_time
             beat_interval = self._beat_interval
             if not self._running:
                 return None
 
-        elapsed = tap_time - start_time
-        if elapsed < 0:
-            return None
-
-        # 找到最近的视觉中心穿越时间点
-        n = round(elapsed / beat_interval)
-        perfect_time = start_time + n * beat_interval
-        return (perfect_time - tap_time) * 1000.0
+        return compute_tap_offset_ms(tap_time, start_time, beat_interval)
 
     def _filtered_average_offset_ms(self) -> Optional[float]:
-        if not self._tap_offsets_ms:
-            return None
+        from strange_uta_game.backend.application import filtered_average_offset_ms
 
-        values = sorted(self._tap_offsets_ms)
-        filtered = values
-        if len(values) >= 4:
-            q1 = values[len(values) // 4]
-            q3 = values[len(values) * 3 // 4]
-            iqr = q3 - q1
-            lower = q1 - 1.5 * iqr
-            upper = q3 + 1.5 * iqr
-            filtered = [value for value in values if lower <= value <= upper]
-            if not filtered:
-                filtered = values
-
-        trim_count = len(filtered) // 10
-        trimmed = filtered
-        if trim_count > 0 and len(filtered) - trim_count * 2 > 0:
-            trimmed = filtered[trim_count : len(filtered) - trim_count]
-
-        return sum(trimmed) / len(trimmed)
+        return filtered_average_offset_ms(self._tap_offsets_ms)
 
     def _format_offset_text(self, value: Optional[float]) -> str:
         if value is None:

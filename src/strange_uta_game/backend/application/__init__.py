@@ -7,6 +7,10 @@ from .singer_service import SingerService, SingerCallbacks
 from .export_service import ExportService, ExportResult
 from .timing_service import TimingService, TimingCallbacks, CheckpointPosition
 from .project_import_service import ProjectImportService, ProjectImportError
+from .calibration_service import (
+    compute_tap_offset_ms,
+    filtered_average_offset_ms,
+)
 from .commands import (
     Command,
     BatchCommand,
@@ -39,6 +43,8 @@ __all__ = [
     "CheckpointPosition",
     "ProjectImportService",
     "ProjectImportError",
+    "compute_tap_offset_ms",
+    "filtered_average_offset_ms",
     "Command",
     "BatchCommand",
     "CommandState",
