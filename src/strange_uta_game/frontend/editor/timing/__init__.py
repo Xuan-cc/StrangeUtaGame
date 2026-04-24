@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from .bulk_change_dialog import BulkChangeDialog
-from .commands import _SentenceSnapshotCommand
+from .commands import SentenceSnapshotCommand, _SentenceSnapshotCommand
 from .dialogs import (
     CharEditDialog,
     InsertGuideSymbolDialog,
@@ -18,6 +18,7 @@ from .toolbar import EditorToolBar
 from .transport_bar import TransportBar
 
 __all__ = [
+    "SentenceSnapshotCommand",
     "_SentenceSnapshotCommand",
     "TransportBar",
     "EditorToolBar",

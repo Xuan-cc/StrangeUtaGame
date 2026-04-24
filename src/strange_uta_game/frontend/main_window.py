@@ -287,7 +287,7 @@ class MainWindow(MSFluentWindow):
             self._apply_auto_save_settings()
         elif change_type in ("lyrics", "checkpoints"):
             # 歌词/轴点变更后重建全局 checkpoint 列表
-            self._timing_service._rebuild_global_checkpoints()
+            self._timing_service.rebuild_global_checkpoints()
         elif change_type == "audio":
             # 音频路径变更 → 全局加载到 editor
             # 幂等守卫：editor 已加载相同路径时跳过，避免

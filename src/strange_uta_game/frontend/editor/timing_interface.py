@@ -48,6 +48,7 @@ from strange_uta_game.backend.infrastructure.audio import AudioLoadError
 
 from .timing import (
     _SentenceSnapshotCommand,
+    SentenceSnapshotCommand,
     CharEditDialog,
     EditorToolBar,
     InsertGuideSymbolDialog,
@@ -61,6 +62,7 @@ __all__ = [
     "EditorInterface",
     # re-exports for backward compatibility
     "_SentenceSnapshotCommand",
+    "SentenceSnapshotCommand",
     "TransportBar",
     "EditorToolBar",
     "KaraokePreview",
@@ -798,15 +800,13 @@ class EditorInterface(QWidget):
         dialog.exec()
 
         if dialog.was_modified():
-            # 将本次修改登记为一次 _SentenceSnapshotCommand（支持撤销/重做）
+            # 将本次修改登记为一次 SentenceSnapshotCommand（支持撤销/重做）
             command_manager = None
             if self._timing_service:
-                command_manager = getattr(
-                    self._timing_service, "_command_manager", None
-                )
+                command_manager = self._timing_service.command_manager
             if command_manager is not None:
                 after_sentences = deepcopy(self._project.sentences)
-                cmd = _SentenceSnapshotCommand(
+                cmd = SentenceSnapshotCommand(
                     self._project,
                     before_sentences,
                     after_sentences,
@@ -818,7 +818,7 @@ class EditorInterface(QWidget):
 
             # Rebuild global checkpoints
             if self._timing_service:
-                self._timing_service._rebuild_global_checkpoints()
+                self._timing_service.rebuild_global_checkpoints()
             self.refresh_lyric_display()
             self._update_time_tags_display()
             self._update_status()
@@ -866,7 +866,7 @@ class EditorInterface(QWidget):
         if dialog.was_modified():
             # Rebuild global checkpoints
             if self._timing_service:
-                self._timing_service._rebuild_global_checkpoints()
+                self._timing_service.rebuild_global_checkpoints()
             self.refresh_lyric_display()
             self._update_time_tags_display()
             self._update_status()
@@ -1210,7 +1210,7 @@ class EditorInterface(QWidget):
             if hasattr(self._timing_service, "rebuild_global_checkpoints"):
                 self._timing_service.rebuild_global_checkpoints()
             else:
-                self._timing_service._rebuild_global_checkpoints()
+                self._timing_service.rebuild_global_checkpoints()
 
     def _sync_after_structure_change(
         self,
@@ -1275,9 +1275,9 @@ class EditorInterface(QWidget):
         after_sentences = deepcopy(self._project.sentences)
         command_manager = None
         if self._timing_service:
-            command_manager = getattr(self._timing_service, "_command_manager", None)
+            command_manager = self._timing_service.command_manager
         if command_manager is not None:
-            command = _SentenceSnapshotCommand(
+            command = SentenceSnapshotCommand(
                 self._project,
                 before_sentences,
                 after_sentences,
@@ -1495,7 +1495,7 @@ class EditorInterface(QWidget):
         ch.linked_to_next = new_linked
 
         if self._timing_service:
-            self._timing_service._rebuild_global_checkpoints()
+            self._timing_service.rebuild_global_checkpoints()
         self.refresh_lyric_display()
         self.preview.repaint()  # 强制同步重绘，确保连词视觉立即更新
         self._update_status()

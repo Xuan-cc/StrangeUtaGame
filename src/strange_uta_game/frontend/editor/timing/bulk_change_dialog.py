@@ -487,7 +487,7 @@ class BulkChangeDialog(QDialog):
         timing_service = getattr(parent, "_timing_service", None)
         if timing_service is not None:
             try:
-                timing_service._rebuild_global_checkpoints()
+                timing_service.rebuild_global_checkpoints()
             except Exception:
                 pass
         refresh = getattr(parent, "refresh_lyric_display", None)
@@ -515,27 +515,27 @@ class BulkChangeDialog(QDialog):
         self._rows_user_edited = True
 
     def _register_snapshot_command(self, before_sentences, changed: int) -> None:
-        """将批量变更包成 _SentenceSnapshotCommand 放进 CommandManager。"""
+        """将批量变更包成 SentenceSnapshotCommand 放进 CommandManager。"""
         if not self._project or changed == 0:
             return
         parent = self.parent()
         timing_service = getattr(parent, "_timing_service", None)
         if timing_service is None:
             return
-        command_manager = getattr(timing_service, "_command_manager", None)
+        command_manager = getattr(timing_service, "command_manager", None)
         if command_manager is None:
             return
         try:
             # 延迟导入避免循环依赖
-            from strange_uta_game.frontend.editor.timing.commands import (
-                _SentenceSnapshotCommand,
+            from strange_uta_game.backend.application.commands import (
+                SentenceSnapshotCommand,
             )
         except Exception:
             return
         after_sentences = deepcopy(self._project.sentences)
         word = self.edit_word.text().strip()
         description = f"批量变更「{word}」（{changed} 处）"
-        command = _SentenceSnapshotCommand(
+        command = SentenceSnapshotCommand(
             self._project, before_sentences, after_sentences, description
         )
         command_manager.execute(command)
