@@ -40,6 +40,23 @@
 
 命令模式封装修改操作，维护 undo/redo 栈。所有破坏性 domain 操作走 CommandManager.execute。
 
+`SentenceSnapshotCommand`（`backend.application.commands.sentence_snapshot`）用于把整句快照式 diff（如 `BulkChangeDialog` 批量字符替换、`fulltext_interface` 同步文本编辑）接入 undo/redo 栈；前端 `frontend/editor/timing/commands._SentenceSnapshotCommand` 是其历史路径别名，仅作兼容。
+
+### ProjectImportService（项目导入辅助）
+
+`backend.application.project_import_service` — 静态服务：
+
+- `load_lyrics_from_file(path, singer_id) -> List[Sentence]`：根据扩展名分派 `LyricParserFactory`，统一把 parser 底层异常包装为 `ProjectImportError`（含原异常 chain）。
+- 前端 `timing_interface._load_lyrics_from_path` 改为薄委托，不再自行处理 IO/parser 异常分支。
+
+### CalibrationService（Offset 校准算式）
+
+`backend.application.calibration_service` — 无状态纯函数（不是类，避免伪 OO）：
+
+- `compute_tap_offset_ms(tap_time, metronome_start, beat_interval_ms) -> int`：相位折叠到 `[-beat/2, beat/2)` 返回签名偏移。
+- `filtered_average_offset_ms(offsets: Sequence[int]) -> Optional[int]`：`|offset| ≥ beat/2` 剔除（防相位跳点），样本不足返回 `None`。
+- `frontend/settings/calibration_dialog` 两个同名私有方法改为薄委托。
+
 ## 数据管理
 
 ### ProjectStore（前端数据中心）

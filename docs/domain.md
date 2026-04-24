@@ -79,6 +79,12 @@ class Project:
     audio_duration_ms: int = 0
 ```
 
+核心辅助方法：
+
+- `find_prev_line_with_checkpoints(current_idx) -> int`：从 `current_idx - 1` 起向上查找首个"有 checkpoint"的句子（任一字符 `check_count > 0` 或 `is_sentence_end`）；找不到返回 `-1`。供打轴界面「上一行」导航使用。
+- `collect_all_timestamp_ms() -> List[int]`：按原始顺序展平收集所有字符的 `ch.all_timestamps`（毫秒，未排序、未去重），供前端时间轴显示等只需毫秒值的场景使用。
+- `get_all_timestamps()`（既有）返回五元组集合（含位置信息），与上述两个辅助方法互补，不冲突。
+
 ## 数据层级关系
 
 Ruby（由 RubyPart 组成） ⊂ Character ⊂ Sentence ⊂ Project；Character 按 `linked_to_next` 连成 Word（逻辑分组）；Singer 属 Project，Character 持有 singer_id 引用。

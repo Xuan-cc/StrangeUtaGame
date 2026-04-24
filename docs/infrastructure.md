@@ -40,6 +40,22 @@
     - **SRT 解析器**：解析 SRT 字幕的块结构（序号、`HH:MM:SS,mmm --> HH:MM:SS,mmm` 时间戳、文本），自动剥离 HTML 标签。
     - **工厂模式**：`LyricParserFactory` 根据文件扩展名（.txt/.lrc/.kra/.ass/.srt）自动选择解析器。
 
+### rl_dictionary (RhythmicaLyrics 词典解析器)
+用户字典导入的纯文本解析。
+
+- **职责**：
+    - `parse_rl_dictionary(text) -> List[Dict]`：解析 `原文\t注音1,注音2,...` 格式，全角 `＋`（U+FF0B）作为连词占位符剥离；仅含 `＋` 的尾部读音项与空串一并去除；读音全空则丢弃整条。
+    - 返回 `[{"enabled": True, "word": str, "reading": str}, ...]`，顺序与输入一致。
+    - 前端 `frontend/settings/app_settings._parse_rl_dictionary` 改为薄包装，历史导入路径保留。
+
+### annotated_text (带注音行级文本格式)
+服务于全文本编辑界面（`frontend/editor/fulltext_interface`）的 parse/serialize。
+
+- **职责**：
+    - `parse_annotated_line(line_text) -> (raw_text, raw_chars, ruby_map)`：解析 `{大冒険||だ|い,ぼ|う,け|ん}` 主格式及兼容格式（`{漢|か|ん|じ}` 单字多 mora、`{赤|あか}` 单字单段、`{text}` 纯文本），ruby_map 仅收录有读音的字符索引。
+    - `sentence_to_annotated_line(characters) -> str`：按 `linked_to_next` 链合并连词组为一个 `{...||...}` 块，非连词带 ruby 字符输出单字块，无 ruby 字符原样输出。
+    - 前端 `_parse_annotated_line` 与 `_lines_to_text` 改为薄委托；parse ↔ serialize 在典型输入上可往返保形。
+
 ### Exporters (导出器集合)
 为不同的播放器和编辑软件提供兼容的数据格式。
 
