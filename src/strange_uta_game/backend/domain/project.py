@@ -360,6 +360,38 @@ class Project:
         result.sort(key=lambda x: x[4])
         return result
 
+    def collect_all_timestamp_ms(self) -> List[int]:
+        """收集所有字符 checkpoint 的时间戳（毫秒），按原始顺序返回，未排序。
+
+        用于前端时间轴显示等只关心毫秒值的场景。如需附带位置信息请使用
+        :py:meth:`get_all_timestamps`。
+        """
+        tags_ms: List[int] = []
+        for sentence in self.sentences:
+            for ch in sentence.characters:
+                tags_ms.extend(ch.all_timestamps)
+        return tags_ms
+
+    def find_prev_line_with_checkpoints(self, current_idx: int) -> int:
+        """从 current_idx 之前向上查找第一个存在 checkpoint 的行索引。
+
+        判定一行"有 checkpoint" 的条件：任一字符 ``check_count > 0`` 或
+        ``is_sentence_end``（与前端打轴导航语义保持一致）。
+
+        Args:
+            current_idx: 当前行索引，将从 ``current_idx - 1`` 开始向上扫描。
+
+        Returns:
+            匹配的行索引；若不存在则返回 ``-1``。
+        """
+        cand = current_idx - 1
+        while cand >= 0:
+            s = self.sentences[cand]
+            if any(ch.check_count > 0 or ch.is_sentence_end for ch in s.characters):
+                return cand
+            cand -= 1
+        return -1
+
     def get_timing_statistics(self) -> Dict[str, Any]:
         """获取打轴统计信息"""
         total_chars = sum(len(s.characters) for s in self.sentences)

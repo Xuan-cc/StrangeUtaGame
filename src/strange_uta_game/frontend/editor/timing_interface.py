@@ -732,22 +732,8 @@ class EditorInterface(QWidget):
                         if any(readings):
                             initial_reading = ",".join(readings)
                 elif 0 <= char_idx < len(chars):
-                    # 回退到连词逻辑
-                    start = char_idx
-                    while (
-                        start > 0
-                        and start - 1 < len(chars)
-                        and chars[start - 1].linked_to_next
-                    ):
-                        start -= 1
-                    end = char_idx
-                    while (
-                        end < len(text)
-                        and end < len(chars)
-                        and chars[end].linked_to_next
-                    ):
-                        end += 1
-                    end += 1  # exclusive
+                    # 回退到连词逻辑（由领域方法 Sentence.get_word_char_range 计算）
+                    start, end = sentence.get_word_char_range(char_idx)
                     initial_word = text[start:end]
                     readings = []
                     for ci in range(start, end):
@@ -1516,21 +1502,14 @@ class EditorInterface(QWidget):
         """方向键导航：上一行 (delta=-1) 或下一行 (delta=+1)。
 
         空行无 checkpoint，TimingService.move_to_checkpoint 向下搜索时天然跳过；
-        但向上时不会跨空行。此处对 delta=-1 补上跳空行逻辑，首行处停止。
+        但向上时不会跨空行。此处对 delta=-1 调用领域方法
+        :py:meth:`Project.find_prev_line_with_checkpoints` 补上跳空行逻辑，首行处停止。
         """
         if not self._project:
             return
         sentences = self._project.sentences
         if delta < 0:
-            # 向上寻找最近的有 checkpoint 的行（有 check_count>0 或 is_sentence_end 的字符）
-            cand = self._current_line_idx + delta
-            while cand >= 0:
-                s = sentences[cand]
-                if any(
-                    ch.check_count > 0 or ch.is_sentence_end for ch in s.characters
-                ):
-                    break
-                cand -= 1
+            cand = self._project.find_prev_line_with_checkpoints(self._current_line_idx)
             if cand < 0:
                 return
             new_idx = cand
@@ -2125,12 +2104,7 @@ class EditorInterface(QWidget):
     def _update_time_tags_display(self):
         if not self._project:
             return
-        tags_ms = []
-        for sentence in self._project.sentences:
-            for ch in sentence.characters:
-                for ts in ch.all_timestamps:
-                    tags_ms.append(ts)
-        self.timeline.set_time_tags(tags_ms)
+        self.timeline.set_time_tags(self._project.collect_all_timestamp_ms())
 
     def _update_status(self):
         if not self._project:
