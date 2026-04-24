@@ -168,79 +168,16 @@ def _is_kanji_char(char: str) -> bool:
 def _parse_annotated_line(
     line_text: str,
 ) -> Tuple[str, List[str], Dict[int, List[str]]]:
-    """解析带注音标注的文本行（新格式）。
+    """解析带注音标注的文本行（薄包装，实现位于后端
+    :mod:`strange_uta_game.backend.infrastructure.parsers.annotated_text`）。
 
-    新格式: ``{大冒険||だ|い,ぼ|う,け|ん}``
-      - ``||`` 分开汉字块与 ruby 部分
-      - ``,`` 分开不同字的 ruby
-      - ``|`` 分开同一字的多个 RubyPart（mora）
-
-    示例：
-      - ``{大冒険||だ|い,ぼ|う,け|ん}`` → 大(だ・い) 冒(ぼ・う) 険(け・ん)
-      - ``{漢|か|ん|じ}`` → 漢(か・ん・じ)（单字多段 mora）
-      - ``{赤|あか}`` → 赤(あか)（单字单段，向后兼容）
-
-    不再支持旧的 ``漢字{かんじ}`` 后置格式。
-
-    Returns:
-        (原文, 字符列表, ruby_map: char_idx → List[RubyPart.text])
+    保留此函数以兼容模块内历史调用路径。
     """
-    raw_chars: List[str] = []
-    ruby_map: Dict[int, List[str]] = {}
-    i = 0
-    n = len(line_text)
+    from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
+        parse_annotated_line,
+    )
 
-    while i < n:
-        if line_text[i] == "{":
-            close = line_text.find("}", i)
-            if close == -1:
-                # 无配对右括号，当普通字符处理
-                raw_chars.append(line_text[i])
-                i += 1
-                continue
-
-            content = line_text[i + 1 : close]
-
-            if "||" in content:
-                # 新主格式：text||mora|mora,mora|mora
-                text_part, readings_part = content.split("||", 1)
-                per_char_readings = readings_part.split(",")
-                start_idx = len(raw_chars)
-                for ch in text_part:
-                    raw_chars.append(ch)
-
-                for j, reading_group in enumerate(per_char_readings):
-                    # reading_group 内部用 "|" 分 mora；空串代表无 ruby
-                    parts = [p for p in reading_group.split("|") if p != ""]
-                    if parts and (start_idx + j) < len(raw_chars):
-                        ruby_map[start_idx + j] = parts
-            elif "|" in content:
-                # 兼容简短格式：{text|mora|mora|mora}（单字多段 mora）
-                # 或 {text|reading}（单字单段）
-                text_part, _, readings_part = content.partition("|")
-                parts = [p for p in readings_part.split("|") if p != ""]
-
-                start_idx = len(raw_chars)
-                for ch in text_part:
-                    raw_chars.append(ch)
-
-                if len(text_part) == 1 and parts:
-                    ruby_map[start_idx] = parts
-                elif len(text_part) > 1 and parts:
-                    # 歧义：多字只给一个 reading，兜底当作首字全吃
-                    ruby_map[start_idx] = parts
-            else:
-                # {text} 无 ruby → 纯文本
-                for ch in content:
-                    raw_chars.append(ch)
-
-            i = close + 1
-        else:
-            raw_chars.append(line_text[i])
-            i += 1
-
-    raw_text = "".join(raw_chars)
-    return raw_text, raw_chars, ruby_map
+    return parse_annotated_line(line_text)
 
 
 class DeleteRubyByTypeDialog(QDialog):
@@ -495,40 +432,19 @@ class RubyInterface(QWidget):
     def _lines_to_text(self) -> str:
         """将项目歌词转为带注音标注的文本（新格式，保留 RubyPart 切分）。
 
-        格式: ``{大冒険||だ|い,ぼ|う,け|ん}`` — ``||`` 分开汉字块与 ruby，
-        ``,`` 分开不同字，``|`` 分开同一字的多个 RubyPart（mora）。
-
-        连词组通过 linked_to_next 链合并为同一 ``{...||...}`` 块；
-        非连词且有 ruby 的字符单独输出为 ``{字||mora|mora|...}``；
-        无注音的字符照常输出。
+        序列化委托给后端
+        :func:`strange_uta_game.backend.infrastructure.parsers.annotated_text.sentence_to_annotated_line`。
         """
         if not self._project:
             return ""
+        from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
+            sentence_to_annotated_line,
+        )
 
-        result = []
-        for sentence in self._project.sentences:
-            annotated = ""
-            chars = sentence.characters
-            i = 0
-            while i < len(chars):
-                if chars[i].ruby:
-                    # 收集连词组（linked_to_next 链）
-                    group_start = i
-                    while i < len(chars) - 1 and chars[i].linked_to_next:
-                        i += 1
-                    i += 1  # 包含链中最后一个字符
-                    text_part = "".join(ch.char for ch in chars[group_start:i])
-                    # 每字的 RubyPart 列表用 `|` 拼接；不同字之间用 `,`
-                    readings = ",".join(
-                        "|".join(p.text for p in ch.ruby.parts) if ch.ruby else ""
-                        for ch in chars[group_start:i]
-                    )
-                    annotated += f"{{{text_part}||{readings}}}"
-                else:
-                    annotated += chars[i].char
-                    i += 1
-            result.append(annotated)
-        return "\n".join(result)
+        return "\n".join(
+            sentence_to_annotated_line(sentence.characters)
+            for sentence in self._project.sentences
+        )
 
     def _update_stats(self):
         """更新统计标签"""
