@@ -404,42 +404,13 @@ class AppSettings:
 
 
 def _parse_rl_dictionary(text: str) -> list:
-    """解析 RL 字典文件格式。
+    """解析 RL 字典文件格式（薄包装，实现位于后端
+    :mod:`strange_uta_game.backend.infrastructure.parsers.rl_dictionary`）。
 
-    格式：每行 ``[原文]\\t[注音1],[注音2]...``
-    注音中 ``＋``（全角加号）代表连词标记，解析时剥离。
-    只有 ``＋`` 的部分表示该字符无独立读音（与前字符连词）。
-
-    Returns:
-        [{"enabled": True, "word": str, "reading": str}, ...]
+    保留此函数以兼容 ``dictionary_dialog`` / ``settings_interface`` 的历史导入路径。
     """
-    entries: list = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or "\t" not in line:
-            continue
-        parts = line.split("\t", 1)
-        if len(parts) != 2:
-            continue
-        word = parts[0].strip()
-        raw_readings = parts[1].strip()
-        if not word or not raw_readings:
-            continue
+    from strange_uta_game.backend.infrastructure.parsers.rl_dictionary import (
+        parse_rl_dictionary,
+    )
 
-        # 按逗号分隔各字符读音
-        reading_parts = raw_readings.split(",")
-        cleaned: list = []
-        for part in reading_parts:
-            part = part.strip()
-            # 剥离全角加号 ＋
-            part = part.replace("\uff0b", "")
-            cleaned.append(part)
-
-        # 去除尾部多余的空读音
-        while cleaned and not cleaned[-1]:
-            cleaned.pop()
-
-        reading = ",".join(cleaned)
-        if reading:
-            entries.append({"enabled": True, "word": word, "reading": reading})
-    return entries
+    return parse_rl_dictionary(text)
