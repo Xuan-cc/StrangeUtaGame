@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from .bulk_change_dialog import BulkChangeDialog
 from .commands import _SentenceSnapshotCommand
 from .dialogs import (
     CharEditDialog,
@@ -25,4 +26,5 @@ __all__ = [
     "ModifyCharacterDialog",
     "InsertGuideSymbolDialog",
     "CharEditDialog",
+    "BulkChangeDialog",
 ]

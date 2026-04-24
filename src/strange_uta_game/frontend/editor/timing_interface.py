@@ -702,7 +702,7 @@ class EditorInterface(QWidget):
 
     def _on_bulk_change(self):
         """Ctrl+H — 打开批量変更对话框，自动填充当前焦点字符的连词或划选区域"""
-        from strange_uta_game.frontend.editor.bulk_change_dialog import BulkChangeDialog
+        from strange_uta_game.frontend.editor.timing import BulkChangeDialog
 
         initial_word = ""
         initial_reading = ""
