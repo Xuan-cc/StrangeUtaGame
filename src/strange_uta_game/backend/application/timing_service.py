@@ -169,6 +169,15 @@ class TimingService:
         """Set volume 0-100 (converts to 0.0-1.0 for engine)"""
         self._audio_engine.set_volume(volume_percent / 100.0)
 
+    @property
+    def command_manager(self):
+        """暴露底层 CommandManager，供前端登记 ``SentenceSnapshotCommand`` 等结构化命令。
+
+        直接访问私有属性 ``_command_manager`` 是 frontend→backend 分层破坏，
+        统一经此只读属性访问。
+        """
+        return self._command_manager
+
     def can_undo(self) -> bool:
         """是否可以撤销打轴命令"""
         return self._command_manager.can_undo() if self._command_manager else False

@@ -13,6 +13,7 @@ from .domain_commands import (
     AddSingerCommand,
     RemoveSingerCommand,
 )
+from .sentence_snapshot import SentenceSnapshotCommand
 
 __all__ = [
     "Command",
@@ -28,4 +29,5 @@ __all__ = [
     "RemoveSentenceCommand",
     "AddSingerCommand",
     "RemoveSingerCommand",
+    "SentenceSnapshotCommand",
 ]
