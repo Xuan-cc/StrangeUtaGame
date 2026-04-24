@@ -60,9 +60,10 @@ strange-uta-game/
 │       │   └── infrastructure/ # 基础设施层：具体实现
 │       ├── frontend/           # 前端 UI 层（PyQt）
 │       │   ├── startup/        # 启动界面
-│       │   ├── editor/         # 编辑器界面
+│       │   ├── editor/         # 编辑器界面（timing_interface + timing/ 子包）
+│       │   ├── singer/         # 演唱者管理界面
 │       │   ├── online/         # 在线查询界面（占位）
-│       │   └── settings/       # 设置界面
+│       │   └── settings/       # 设置界面（拆分为 app_settings / cards / dialogs 等子模块）
 │       ├── resource/           # 应用资源（图标等）
 │       └── config/             # 内嵌默认配置文件
 ├── tests/                      # 测试文件（与应用代码分离）
