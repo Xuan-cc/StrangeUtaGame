@@ -59,6 +59,8 @@
 - **ShortcutSettingCard 的 `value_changed` 信号必须在 `_init_shortcut_group` 创建卡片时立即 connect**（非 `_connect_auto_save_signals` 里统一 connect）——后者路径会漏掉部分 scope，导致冲突检测与即时保存都失效。
 - 字符级编辑对话框用字符行布局（`[字][ruby][check]`）比"整句输入框 + # 分隔"更直观；RubyPart 分组用逗号 `,`，与词典条目惯例一致，避免歧义。
 - 字符数相同的修改走 `push_to_ruby` 原地改、保留 timestamps；字符数变化走 slice 替换（新建 Character），这是"修改节奏点无效"的根因修复模式。
+- **快捷键调试先确认实际分发分支**：`keyPressEvent` 内常存在两套机制——配置化 `action == "..."` 映射（来自 ShortcutSettingCard）和硬编码 `a0.text() in (...)` / `key == Qt.Key.X` 的 elif 串。当用户已在 settings 配置过该键时，硬编码 elif 会变成**永远不被命中的死代码**。改 `.` 句尾切换时曾连续 4 次改错那段死分支（`elif a0.text() in (".", "。")`），实际入口是 `elif action == "toggle_line_end"`。**调试键盘问题第一步：搜 action 字符串 + 硬编码 key/text，确认哪条 elif 真正被命中**（最简单的验证：临时 print，而不是凭代码阅读推断）。
+- **同一 widget 上键盘快捷键和右键菜单做"同一件事"时，应共用 emit 信号路径**（让键盘也 emit 右键用的信号），而不是两套各自 resolve target 的代码。`.` 句尾切换的最终修复就是让键盘走 `toggle_sentence_end_requested.emit(line, char)` 复用右键 slot——单一事实源、单一目标解析点，避免长期分歧。
 
 ## 导入导出
 
