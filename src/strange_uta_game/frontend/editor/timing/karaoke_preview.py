@@ -104,6 +104,19 @@ class KaraokePreview(QWidget):
         self._project = project
         self._scroll_center_line = 0.0
         self._sentence_cache.clear()
+        # focus 域默认值：首个非空行的首字符。空项目保持 -1。
+        # focus 是用户视觉/操作真理来源（点字符/拖选/纯←→），与 current（cp 域反馈）独立。
+        self._focus_line_idx = -1
+        self._focus_char_idx = -1
+        self._focus_char_range_end = -1
+        self._focus_dragging = False
+        if project and project.sentences:
+            for idx, sentence in enumerate(project.sentences):
+                if sentence.characters:
+                    self._focus_line_idx = idx
+                    self._focus_char_idx = 0
+                    self._focus_char_range_end = 0
+                    break
         self._update_display()
 
     def set_current_position(self, line_idx: int, char_idx: int = 0):
