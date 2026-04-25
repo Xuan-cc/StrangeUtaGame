@@ -105,6 +105,12 @@ class EditorInterface(QWidget):
         self._fast_forward_ms = 5000
         self._rewind_ms = 5000
         self._key_map = {}  # key_string -> action_name, populated by _apply_settings
+        # 当 cp 标记被点击时，沿 _on_checkpoint_clicked → move_to_checkpoint →
+        # on_checkpoint_moved (signal) → _handle_checkpoint_moved →
+        # _apply_checkpoint_position 链路同步执行；此标志使后者跳过
+        # set_current_position，从而不污染"选中字符"光标 (_current_char_idx)。
+        # 区分：selected_cp（cp 标记选中态）vs selected_char（光标/选中字符态）。
+        self._suppress_cp_cursor_move = False
         self._init_ui()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAcceptDrops(True)
@@ -1138,11 +1144,26 @@ class EditorInterface(QWidget):
         self._update_line_info()
 
     def _on_checkpoint_clicked(self, line_idx: int, char_idx: int, cp_idx: int):
-        """点击 checkpoint 标记跳转到对应打轴位置"""
-        if self._timing_service:
+        """点击 checkpoint 标记：仅切换 selected_cp 与音频跳转，不移动光标。
+
+        selected_cp（Character.selected_checkpoint_idx + preview._current_checkpoint_idx）
+        与 selected_char（preview._current_char_idx + _sel_*）是两个独立状态：
+        - 点击 cp 标记 → 仅 selected_cp 改变；selected_char（光标）保持
+        - 点击字符文本 / 方向键 → selected_char（光标）改变
+        - F4/F5/F6/Alt+←→ 等编辑/循环操作 → 作用于 selected_char
+
+        通过临时设置 _suppress_cp_cursor_move 阻止
+        _apply_checkpoint_position 调用 set_current_position。
+        """
+        if not self._timing_service:
+            return
+        self._suppress_cp_cursor_move = True
+        try:
             self._timing_service.move_to_checkpoint(line_idx, char_idx, cp_idx)
-            self._update_time_tags_display()
-            self._update_status()
+        finally:
+            self._suppress_cp_cursor_move = False
+        self._update_time_tags_display()
+        self._update_status()
 
     def _on_char_selected(self, line_idx: int, char_idx: int):
         """点击字符选中 — 移动到该字符的第一个 checkpoint。
@@ -2218,7 +2239,12 @@ class EditorInterface(QWidget):
         line_idx = max(0, min(position.line_idx, len(self._project.sentences) - 1))
         self._current_line_idx = line_idx
         self._update_selected_checkpoint(line_idx, position.char_idx, position.checkpoint_idx)
-        self.preview.set_current_position(line_idx, position.char_idx)
+        # cp 标记点击路径：跳过光标移动，保持 selected_char 不被污染。
+        # 仍需要刷新 preview 显示以反映新的 selected_cp 高亮。
+        if self._suppress_cp_cursor_move:
+            self.preview._update_display()
+        else:
+            self.preview.set_current_position(line_idx, position.char_idx)
         self._update_line_info()
 
     def _show_runtime_error(self, message: str):

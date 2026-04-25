@@ -455,15 +455,20 @@ class KaraokePreview(QWidget):
             if ch.render_timestamps:
                 anchors.append((ci, int(ch.render_timestamps[0])))
 
-        # 行尾锚：优先使用最后一个带 is_sentence_end 的字符的 render_sentence_end_ts
+        # 行尾锚：使用最后一个带 is_sentence_end 的字符的 render_sentence_end_ts
+        # 锚定到该字符的右沿位置 (sentence_end_char_idx + 1)，与普通 cp 锚 (ci, ts)
+        # （字符左沿）保持对称——普通 cp 是字符开始，sentence_end 是字符结束。
+        # 若 sentence_end 不在最后一字，wipe 进度才能正确停在该字右沿，而非延伸到行末。
         end_ts: Optional[int] = None
+        end_anchor_pos: int = n_chars
         for ci in range(n_chars - 1, -1, -1):
             ch = characters[ci]
             if ch.is_sentence_end and ch.render_sentence_end_ts is not None:
                 end_ts = int(ch.render_sentence_end_ts)
+                end_anchor_pos = ci + 1
                 break
         if end_ts is not None:
-            anchors.append((n_chars, end_ts))
+            anchors.append((end_anchor_pos, end_ts))
 
         char_wipe_times: dict = {}
         if anchors:
