@@ -885,10 +885,13 @@ class KaraokePreview(QWidget):
                         is_sentence_end_marker = (
                             ch_obj.is_sentence_end and cp_idx == ch_obj.check_count
                         )
+                        # Issue #Q1：CP marker 的"已打轴"判定与 wipe 渲染保持
+                        # 同源——使用 render_* 时间戳字段。否则当存在 render
+                        # offset 时句尾标记会与走字进度不同步。
                         has_timed = (
-                            ch_obj.sentence_end_ts is not None
+                            ch_obj.render_sentence_end_ts is not None
                             if is_sentence_end_marker
-                            else cp_idx < len(ch_obj.timestamps)
+                            else cp_idx < len(ch_obj.render_timestamps)
                         )
 
                         if is_sentence_end_marker:

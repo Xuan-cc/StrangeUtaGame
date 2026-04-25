@@ -392,6 +392,44 @@ class Project:
             cand -= 1
         return -1
 
+    def find_next_line_with_characters(self, current_idx: int) -> int:
+        """从 current_idx 之后向下查找第一个存在字符的行索引。
+
+        Q4 字符级跨行导航：与 ``find_prev_line_with_checkpoints`` 对称，
+        但只要求行内有字符即可（不要求已打 checkpoint），因为字符级导航
+        的目标只是把光标定位到下一行的"第一个字符"，无需该字符已打轴。
+
+        Args:
+            current_idx: 当前行索引，将从 ``current_idx + 1`` 开始向下扫描。
+
+        Returns:
+            匹配的行索引；若不存在则返回 ``-1``。
+        """
+        cand = current_idx + 1
+        while cand < len(self.sentences):
+            if len(self.sentences[cand].characters) > 0:
+                return cand
+            cand += 1
+        return -1
+
+    def find_prev_line_with_characters(self, current_idx: int) -> int:
+        """从 current_idx 之前向上查找第一个存在字符的行索引。
+
+        Q4 字符级跨行导航的反向版本（用于 LEFT 键在行首跨行）。
+
+        Args:
+            current_idx: 当前行索引，将从 ``current_idx - 1`` 开始向上扫描。
+
+        Returns:
+            匹配的行索引；若不存在则返回 ``-1``。
+        """
+        cand = current_idx - 1
+        while cand >= 0:
+            if len(self.sentences[cand].characters) > 0:
+                return cand
+            cand -= 1
+        return -1
+
     def get_timing_statistics(self) -> Dict[str, Any]:
         """获取打轴统计信息"""
         total_chars = sum(len(s.characters) for s in self.sentences)

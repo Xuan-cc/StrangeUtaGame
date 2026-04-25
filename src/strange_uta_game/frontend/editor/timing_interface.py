@@ -288,9 +288,12 @@ class EditorInterface(QWidget):
             "volume_down",
             "nav_prev_line",
             "nav_next_line",
+            "nav_prev_char",
+            "nav_next_char",
             "timestamp_up",
             "timestamp_down",
             "cycle_checkpoint",
+            "cycle_checkpoint_prev",
         ]
         # 默认值兜底（当设置未写入新 schema 时使用）
         defaults = {
@@ -306,13 +309,16 @@ class EditorInterface(QWidget):
             "remove_checkpoint": "F5",
             "toggle_line_end": "F6",
             "toggle_word_join": "F3",
-            "volume_up": "UP",
-            "volume_down": "DOWN",
-            "nav_prev_line": "LEFT",
-            "nav_next_line": "RIGHT",
+            "volume_up": "",
+            "volume_down": "",
+            "nav_prev_line": "UP",
+            "nav_next_line": "DOWN",
+            "nav_prev_char": "LEFT",
+            "nav_next_char": "RIGHT",
             "timestamp_up": "ALT+UP",
             "timestamp_down": "ALT+DOWN",
             "cycle_checkpoint": "ALT+RIGHT",
+            "cycle_checkpoint_prev": "ALT+LEFT",
         }
 
         def _collect_map(mode_key: str) -> tuple[dict, dict]:
@@ -1130,8 +1136,8 @@ class EditorInterface(QWidget):
         if hasattr(self, "_store") and self._store:
             self._store.notify("timetags")
 
-    def _cycle_current_checkpoint(self):
-        """#2：Tab 键循环切换"当前选中字符"的 checkpoint 索引。
+    def _cycle_current_checkpoint(self, direction: int = 1):
+        """#2：Alt+→/Alt+← 循环切换"当前选中字符"的 checkpoint 索引。
 
         目标字符优先级：
         1. 若 KaraokePreview 存在有效选中范围，使用选中字符的起点
@@ -1140,6 +1146,9 @@ class EditorInterface(QWidget):
 
         句尾字符若带 is_sentence_end，则句尾 checkpoint 也在循环序列内
         （位置为 check_count）。
+
+        Args:
+            direction: +1 表示下一个 checkpoint（Alt+→），-1 表示上一个（Alt+←）。
         """
         if not self._project or not self._timing_service:
             return
@@ -1173,7 +1182,8 @@ class EditorInterface(QWidget):
         total = ch.check_count + (1 if ch.is_sentence_end else 0)
         if total <= 0:
             return
-        next_idx = (base_idx + 1) % total
+        step = 1 if direction >= 0 else -1
+        next_idx = (base_idx + step) % total
         self._timing_service.move_to_checkpoint(line_idx, char_idx, next_idx)
         self._update_line_info()
         self.refresh_lyric_display()
@@ -1345,7 +1355,17 @@ class EditorInterface(QWidget):
         if line_idx < 0 or line_idx >= len(self._project.sentences):
             return
         sentence = self._project.sentences[line_idx]
-        char_idx = self.preview._current_char_idx
+        # Q2：与 add/remove checkpoint 保持一致——优先作用于"当前选中字符"
+        # 而非"选中 checkpoint 所在字符"。当 KaraokePreview 存在落在当前行
+        # 的有效选中范围时，取选中范围起点；否则回退到光标所在字符。
+        if (
+            self.preview._sel_line_idx == line_idx
+            and self.preview._sel_start_char >= 0
+            and self.preview._sel_end_char >= 0
+        ):
+            char_idx = min(self.preview._sel_start_char, self.preview._sel_end_char)
+        else:
+            char_idx = self.preview._current_char_idx
         if char_idx < 0 or char_idx >= len(sentence.characters):
             return
 
@@ -1508,6 +1528,51 @@ class EditorInterface(QWidget):
             self._timing_service.move_to_checkpoint(new_idx, 0, 0)
             self._update_time_tags_display()
             self._update_status()
+
+    def _on_nav_char(self, delta: int):
+        """方向键左右导航：上一字符 (delta=-1) 或下一字符 (delta=+1)。
+
+        行内移动：在当前行字符序列内 ±1。
+        跨行边界：
+        - delta=-1 且当前已在首字符 (char_idx == 0)：跳到上一行的末字符。
+        - delta=+1 且当前已在末字符：跳到下一行的首字符 (char_idx = 0)。
+        跨行使用 :py:meth:`Project.find_prev_line_with_characters` /
+        :py:meth:`Project.find_next_line_with_characters` 跳过空行。
+        到达项目首尾时停止（不循环）。
+
+        移动后将 checkpoint_idx 重置为 0，与 _on_nav_line 行为一致。
+
+        Args:
+            delta: -1 表示左移 (LEFT)，+1 表示右移 (RIGHT)。
+        """
+        if not self._project or not self._timing_service:
+            return
+        sentences = self._project.sentences
+        line_idx = self._current_line_idx
+        if line_idx < 0 or line_idx >= len(sentences):
+            return
+        char_idx = self.preview._current_char_idx
+        chars = sentences[line_idx].characters
+        if delta < 0:
+            if char_idx > 0:
+                new_line, new_char = line_idx, char_idx - 1
+            else:
+                cand = self._project.find_prev_line_with_characters(line_idx)
+                if cand < 0:
+                    return
+                prev_chars = sentences[cand].characters
+                new_line, new_char = cand, max(0, len(prev_chars) - 1)
+        else:
+            if char_idx < len(chars) - 1:
+                new_line, new_char = line_idx, char_idx + 1
+            else:
+                cand = self._project.find_next_line_with_characters(line_idx)
+                if cand < 0:
+                    return
+                new_line, new_char = cand, 0
+        self._timing_service.move_to_checkpoint(new_line, new_char, 0)
+        self._update_time_tags_display()
+        self._update_status()
 
     def _on_seek_to_char(self, line_idx: int, char_idx: int):
         """双击字符 → 跳转到该字符的 checkpoint 前指定毫秒数"""
@@ -1767,6 +1832,14 @@ class EditorInterface(QWidget):
             self._on_nav_line(1)
             a0.accept()
             return
+        elif action == "nav_prev_char":
+            self._on_nav_char(-1)
+            a0.accept()
+            return
+        elif action == "nav_next_char":
+            self._on_nav_char(1)
+            a0.accept()
+            return
         elif action == "timestamp_up":
             # #3/#4：以 checkpoint 为单位 + 步长可配置
             self._adjust_current_timestamp(self._timing_adjust_step_ms)
@@ -1777,8 +1850,13 @@ class EditorInterface(QWidget):
             a0.accept()
             return
         elif action == "cycle_checkpoint":
-            # #2：Tab 循环切换当前字符的 checkpoint
-            self._cycle_current_checkpoint()
+            # #2：Alt+→ 循环切换当前字符的 checkpoint（正向）
+            self._cycle_current_checkpoint(1)
+            a0.accept()
+            return
+        elif action == "cycle_checkpoint_prev":
+            # #2：Alt+← 循环切换当前字符的 checkpoint（反向）
+            self._cycle_current_checkpoint(-1)
             a0.accept()
             return
         elif action == "edit_ruby":
@@ -1930,12 +2008,14 @@ class EditorInterface(QWidget):
             "F4": "add_checkpoint",
             "F5": "remove_checkpoint",
             "F6": "toggle_line_end",
-            "UP": "volume_up",
-            "DOWN": "volume_down",
-            "LEFT": "nav_prev_line",
-            "RIGHT": "nav_next_line",
+            "UP": "nav_prev_line",
+            "DOWN": "nav_next_line",
+            "LEFT": "nav_prev_char",
+            "RIGHT": "nav_next_char",
             "ALT+UP": "timestamp_up",
             "ALT+DOWN": "timestamp_down",
+            "ALT+LEFT": "cycle_checkpoint_prev",
+            "ALT+RIGHT": "cycle_checkpoint",
         }
         return defaults.get(key_name.upper())
 
