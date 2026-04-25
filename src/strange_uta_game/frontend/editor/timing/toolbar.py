@@ -23,6 +23,7 @@ class EditorToolBar(QFrame):
     bulk_change_clicked = pyqtSignal()
     modify_char_clicked = pyqtSignal()
     insert_guide_clicked = pyqtSignal()
+    delete_rubies_by_type_clicked = pyqtSignal()
     offset_changed = pyqtSignal(int)  # 偏移量变化（毫秒）
 
     def __init__(self, parent=None):
@@ -74,6 +75,12 @@ class EditorToolBar(QFrame):
         self.btn_bulk_change.setFixedHeight(32)
         self.btn_bulk_change.clicked.connect(self.bulk_change_clicked.emit)
         layout.addWidget(self.btn_bulk_change)
+
+        self.btn_delete_rubies_by_type = PushButton("按类型删除注音", self)
+        self.btn_delete_rubies_by_type.setIcon(FIF.DELETE)
+        self.btn_delete_rubies_by_type.setFixedHeight(32)
+        self.btn_delete_rubies_by_type.clicked.connect(self.delete_rubies_by_type_clicked.emit)
+        layout.addWidget(self.btn_delete_rubies_by_type)
 
         layout.addSpacing(10)
 

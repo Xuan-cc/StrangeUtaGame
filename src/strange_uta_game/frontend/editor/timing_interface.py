@@ -23,6 +23,7 @@ from typing import Callable, Optional
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QKeyEvent
 from PyQt6.QtWidgets import (
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -45,6 +46,10 @@ from strange_uta_game.backend.application import (
 from strange_uta_game.backend.domain import Character, Project
 from strange_uta_game.backend.domain.models import RubyMoraDegradeError
 from strange_uta_game.backend.infrastructure.audio import AudioLoadError
+from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
+    CharType,
+    get_char_type,
+)
 
 from .timing import (
     _SentenceSnapshotCommand,
@@ -129,6 +134,7 @@ class EditorInterface(QWidget):
         self.toolbar.modify_char_clicked.connect(self._on_modify_char)
         self.toolbar.insert_guide_clicked.connect(self._on_insert_guide)
         self.toolbar.bulk_change_clicked.connect(self._on_bulk_change)
+        self.toolbar.delete_rubies_by_type_clicked.connect(self._on_delete_rubies_by_type)
         self.toolbar.offset_changed.connect(self._on_offset_changed)
         layout.addWidget(self.toolbar)
 
@@ -824,6 +830,94 @@ class EditorInterface(QWidget):
                     + "\n".join(lines)
                     + more,
                 )
+
+    def _on_delete_rubies_by_type(self):
+        """工具栏「按类型删除注音」入口。
+
+        与全文本编辑界面的同名功能逻辑保持一致（复用 DeleteRubyByTypeDialog 与
+        扩展类型集合规则），但通过 :py:meth:`_execute_structural_edit` 包装为
+        SentenceSnapshotCommand，支持撤销/重做并自动同步 timing_service。
+
+        勾选 HIRAGANA → 同时移除小假名(ぁぃ等)与促音 っ；
+        勾选 KATAKANA → 同时移除小假名(ァィ等)与促音 ッ。
+        """
+        if not self._project:
+            return
+        # 复用 fulltext_interface 的对话框（CharType 复选 + 默认勾选平假名/片假名）
+        from .fulltext_interface import DeleteRubyByTypeDialog
+
+        dlg = DeleteRubyByTypeDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        selected = dlg.selected_types()
+        if not selected:
+            return
+
+        # 扩展匹配集：与 fulltext_interface._on_delete_rubies_by_type 完全一致
+        _SMALL_HIRAGANA = set("ぁぃぅぇぉゃゅょゎ")
+        _SMALL_KATAKANA = set("ァィゥェォャュョヮゕゖ")
+        extended = set(selected)
+        if CharType.HIRAGANA in selected:
+            extended.add(CharType.SOKUON)  # っ
+        if CharType.KATAKANA in selected:
+            extended.add(CharType.SOKUON)  # ッ
+
+        removed_box = [0]
+
+        def _mutate() -> Optional[tuple[int, int, Optional[int], str]]:
+            assert self._project is not None
+            removed = 0
+            for sentence in self._project.sentences:
+                for ch in sentence.characters:
+                    if not ch.ruby:
+                        continue
+                    ct = get_char_type(ch.char)
+                    if ct in extended:
+                        if ct == CharType.SOKUON:
+                            if ch.char == "っ" and CharType.HIRAGANA not in selected:
+                                continue
+                            if ch.char == "ッ" and CharType.KATAKANA not in selected:
+                                continue
+                        ch.set_ruby(None)
+                        removed += 1
+                    elif CharType.HIRAGANA in selected and ch.char in _SMALL_HIRAGANA:
+                        ch.set_ruby(None)
+                        removed += 1
+                    elif CharType.KATAKANA in selected and ch.char in _SMALL_KATAKANA:
+                        ch.set_ruby(None)
+                        removed += 1
+            if removed == 0:
+                return None
+            removed_box[0] = removed
+            # 焦点保持在当前位置；ruby 变更使用 "rubies" 通道刷新（与 fulltext 一致）
+            return (self._current_line_idx, self.preview._current_char_idx, None, "rubies")
+
+        ok = self._execute_structural_edit("按类型删除注音", _mutate)
+        if not ok:
+            InfoBar.info(
+                title="无变化",
+                content="所选类型范围内没有需要删除的注音",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2500,
+                parent=self,
+            )
+            return
+
+        labels = ", ".join(
+            label for ct, label in DeleteRubyByTypeDialog._TYPE_LABELS if ct in selected
+        )
+        InfoBar.success(
+            title="删除完成",
+            content=f"已删除 {removed_box[0]} 个注音（类型: {labels}）",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=4000,
+            parent=self,
+        )
 
     def _on_insert_guide(self):
         """打开插入导唱符对话框"""
