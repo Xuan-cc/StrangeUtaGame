@@ -467,21 +467,14 @@ class KaraokePreview(QWidget):
         for ci, ch in enumerate(characters):
             if ch.render_timestamps:
                 anchors.append((ci, int(ch.render_timestamps[0])))
-
-        # 行尾锚：使用最后一个带 is_sentence_end 的字符的 render_sentence_end_ts
-        # 锚定到该字符的右沿位置 (sentence_end_char_idx + 1)，与普通 cp 锚 (ci, ts)
-        # （字符左沿）保持对称——普通 cp 是字符开始，sentence_end 是字符结束。
-        # 若 sentence_end 不在最后一字，wipe 进度才能正确停在该字右沿，而非延伸到行末。
-        end_ts: Optional[int] = None
-        end_anchor_pos: int = n_chars
-        for ci in range(n_chars - 1, -1, -1):
-            ch = characters[ci]
+            # 每个句尾都生成锚点，不只是行末最后一个。
+            # 行中句尾会把 wipe 区间截断在该字符右沿，避免延伸到后续句子。
             if ch.is_sentence_end and ch.render_sentence_end_ts is not None:
-                end_ts = int(ch.render_sentence_end_ts)
-                end_anchor_pos = ci + 1
-                break
-        if end_ts is not None:
-            anchors.append((end_anchor_pos, end_ts))
+                anchors.append((ci + 1, int(ch.render_sentence_end_ts)))
+
+        # 按字符位置排序，保证 wipe 区间严格从左到右计算。
+        # 同一位置（如句尾右沿与下一个字符左沿重合）按时间戳次之排序。
+        anchors.sort(key=lambda x: (x[0], x[1]))
 
         char_wipe_times: dict = {}
         if anchors:
