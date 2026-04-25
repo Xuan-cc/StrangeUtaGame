@@ -71,10 +71,10 @@ class KaraokePreview(QWidget):
         self.setMouseTracking(True)
 
         # 划词选中状态
-        self._sel_line_idx: int = -1
-        self._sel_start_char: int = -1
-        self._sel_end_char: int = -1
-        self._sel_dragging: bool = False
+        self._focus_line_idx: int = -1
+        self._focus_char_idx: int = -1
+        self._focus_char_range_end: int = -1
+        self._focus_dragging: bool = False
 
         # 缓存字体和 QFontMetrics，避免每帧重建
         self._font_current = QFont("Microsoft YaHei", 22, QFont.Weight.Bold)
@@ -223,19 +223,19 @@ class KaraokePreview(QWidget):
         # 检查字符文本点击 → 开始划词选择
         for char_rect, line_idx, char_idx in self._char_hitboxes:
             if char_rect.contains(click_x, click_y):
-                self._sel_line_idx = line_idx
-                self._sel_start_char = char_idx
-                self._sel_end_char = char_idx
-                self._sel_dragging = True
+                self._focus_line_idx = line_idx
+                self._focus_char_idx = char_idx
+                self._focus_char_range_end = char_idx
+                self._focus_dragging = True
                 self.char_selected.emit(line_idx, char_idx)
                 self.update()
                 return
 
         # 回退到行级别点击：根据 y 坐标反算行索引
         # 清除选中状态
-        self._sel_line_idx = -1
-        self._sel_start_char = -1
-        self._sel_end_char = -1
+        self._focus_line_idx = -1
+        self._focus_char_idx = -1
+        self._focus_char_range_end = -1
 
         h = self.height()
         line_height = h / self._visible_lines
@@ -250,22 +250,22 @@ class KaraokePreview(QWidget):
 
     def mouseMoveEvent(self, a0: Optional[QMouseEvent]):
         """鼠标拖拽 → 扩展划词选择范围"""
-        if not a0 or not self._sel_dragging:
+        if not a0 or not self._focus_dragging:
             return
 
         move_x = int(a0.position().x())
         move_y = int(a0.position().y())
 
         for char_rect, line_idx, char_idx in self._char_hitboxes:
-            if char_rect.contains(move_x, move_y) and line_idx == self._sel_line_idx:
-                self._sel_end_char = char_idx
+            if char_rect.contains(move_x, move_y) and line_idx == self._focus_line_idx:
+                self._focus_char_range_end = char_idx
                 self.update()
                 return
 
     def mouseReleaseEvent(self, a0: Optional[QMouseEvent]):
         """鼠标释放 → 结束划词"""
         if a0 and a0.button() == Qt.MouseButton.LeftButton:
-            self._sel_dragging = False
+            self._focus_dragging = False
 
     def _show_context_menu(self, global_pos, click_x: int, click_y: int):
         """显示字符上下文菜单。"""
@@ -293,12 +293,12 @@ class KaraokePreview(QWidget):
 
         in_selection = False
         if (
-            self._sel_line_idx == target_line_idx
-            and self._sel_start_char >= 0
-            and self._sel_end_char >= 0
+            self._focus_line_idx == target_line_idx
+            and self._focus_char_idx >= 0
+            and self._focus_char_range_end >= 0
         ):
-            sel_start = min(self._sel_start_char, self._sel_end_char)
-            sel_end = max(self._sel_start_char, self._sel_end_char)
+            sel_start = min(self._focus_char_idx, self._focus_char_range_end)
+            sel_end = max(self._focus_char_idx, self._focus_char_range_end)
             in_selection = sel_start <= target_char_idx <= sel_end
         else:
             sel_start = target_char_idx
@@ -687,9 +687,9 @@ class KaraokePreview(QWidget):
                     painter.fillRect(bg_rect, highlight_bg)
 
                 # 划词选中高亮背景
-                if idx == self._sel_line_idx and self._sel_start_char >= 0:
-                    sel_lo = min(self._sel_start_char, self._sel_end_char)
-                    sel_hi = max(self._sel_start_char, self._sel_end_char)
+                if idx == self._focus_line_idx and self._focus_char_idx >= 0:
+                    sel_lo = min(self._focus_char_idx, self._focus_char_range_end)
+                    sel_hi = max(self._focus_char_idx, self._focus_char_range_end)
                     if sel_lo <= char_pos <= sel_hi:
                         sel_bg = QColor("#BDE0FE")
                         sel_rect = QRect(

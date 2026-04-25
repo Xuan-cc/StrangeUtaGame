@@ -722,9 +722,9 @@ class EditorInterface(QWidget):
                 chars = sentence.characters
 
                 # 优先使用划选区域（多字符选择）
-                sel_line = self.preview._sel_line_idx
-                sel_start = self.preview._sel_start_char
-                sel_end = self.preview._sel_end_char
+                sel_line = self.preview._focus_line_idx
+                sel_start = self.preview._focus_char_idx
+                sel_end = self.preview._focus_char_range_end
                 if sel_line >= 0 and sel_start >= 0 and sel_line == line_idx:
                     lo = min(sel_start, sel_end)
                     hi = max(sel_start, sel_end)
@@ -762,9 +762,9 @@ class EditorInterface(QWidget):
 
         # Determine selection range
         line_idx = self.preview._current_line_idx
-        sel_line = self.preview._sel_line_idx
-        sel_start = self.preview._sel_start_char
-        sel_end = self.preview._sel_end_char
+        sel_line = self.preview._focus_line_idx
+        sel_start = self.preview._focus_char_idx
+        sel_end = self.preview._focus_char_range_end
 
         if sel_line >= 0 and sel_start >= 0:
             # Use drag selection
@@ -1147,7 +1147,7 @@ class EditorInterface(QWidget):
         """点击 checkpoint 标记：仅切换 selected_cp 与音频跳转，不移动光标。
 
         selected_cp（Character.selected_checkpoint_idx + preview._current_checkpoint_idx）
-        与 selected_char（preview._current_char_idx + _sel_*）是两个独立状态：
+        与 selected_char（preview._current_char_idx + _focus_*）是两个独立状态：
         - 点击 cp 标记 → 仅 selected_cp 改变；selected_char（光标）保持
         - 点击字符文本 / 方向键 → selected_char（光标）改变
         - F4/F5/F6/Alt+←→ 等编辑/循环操作 → 作用于 selected_char
@@ -1256,7 +1256,7 @@ class EditorInterface(QWidget):
 
         目标字符优先级：
         1. 若 KaraokePreview 存在有效选中范围，使用选中字符的起点
-           (line = _sel_line_idx, char = min(sel_start, sel_end))。
+           (line = _focus_line_idx, char = min(sel_start, sel_end))。
         2. 否则回退到 TimingService.get_current_position()（播放/打轴上下文）。
 
         句尾字符若带 is_sentence_end，则句尾 checkpoint 也在循环序列内
@@ -1269,12 +1269,12 @@ class EditorInterface(QWidget):
             return
         # 优先用选中字符
         if (
-            self.preview._sel_line_idx >= 0
-            and self.preview._sel_start_char >= 0
-            and self.preview._sel_end_char >= 0
+            self.preview._focus_line_idx >= 0
+            and self.preview._focus_char_idx >= 0
+            and self.preview._focus_char_range_end >= 0
         ):
-            line_idx = self.preview._sel_line_idx
-            char_idx = min(self.preview._sel_start_char, self.preview._sel_end_char)
+            line_idx = self.preview._focus_line_idx
+            char_idx = min(self.preview._focus_char_idx, self.preview._focus_char_range_end)
             # 以 TimingService 当前 checkpoint_idx 为起点（若行/字匹配），
             # 否则从 0 起。
             pos = self._timing_service.get_current_position()
@@ -1451,12 +1451,12 @@ class EditorInterface(QWidget):
         start = self.preview._current_char_idx
         end = start + 1
         if (
-            self.preview._sel_line_idx == line_idx
-            and self.preview._sel_start_char >= 0
-            and self.preview._sel_end_char >= 0
+            self.preview._focus_line_idx == line_idx
+            and self.preview._focus_char_idx >= 0
+            and self.preview._focus_char_range_end >= 0
         ):
-            start = min(self.preview._sel_start_char, self.preview._sel_end_char)
-            end = max(self.preview._sel_start_char, self.preview._sel_end_char) + 1
+            start = min(self.preview._focus_char_idx, self.preview._focus_char_range_end)
+            end = max(self.preview._focus_char_idx, self.preview._focus_char_range_end) + 1
 
         self._execute_structural_edit(
             "删除字符",
@@ -1474,11 +1474,11 @@ class EditorInterface(QWidget):
         # 而非"选中 checkpoint 所在字符"。当 KaraokePreview 存在落在当前行
         # 的有效选中范围时，取选中范围起点；否则回退到光标所在字符。
         if (
-            self.preview._sel_line_idx == line_idx
-            and self.preview._sel_start_char >= 0
-            and self.preview._sel_end_char >= 0
+            self.preview._focus_line_idx == line_idx
+            and self.preview._focus_char_idx >= 0
+            and self.preview._focus_char_range_end >= 0
         ):
-            char_idx = min(self.preview._sel_start_char, self.preview._sel_end_char)
+            char_idx = min(self.preview._focus_char_idx, self.preview._focus_char_range_end)
         else:
             char_idx = self.preview._current_char_idx
         if char_idx < 0 or char_idx >= len(sentence.characters):
@@ -1496,7 +1496,7 @@ class EditorInterface(QWidget):
         """增加或减少"当前选中字符"的节奏点数量。
 
         目标字符优先级：
-        1. 若 KaraokePreview 在当前行存在有效选中范围 (_sel_line_idx == 当前行)，
+        1. 若 KaraokePreview 在当前行存在有效选中范围 (_focus_line_idx == 当前行)，
            作用于选中范围的起始字符 (min(sel_start, sel_end))。
         2. 否则回退到 preview._current_char_idx（光标所在字符）。
 
@@ -1511,11 +1511,11 @@ class EditorInterface(QWidget):
         sentence = self._project.sentences[line_idx]
         # 优先使用用户显式选中字符；若选中范围落在当前行则取其起点。
         if (
-            self.preview._sel_line_idx == line_idx
-            and self.preview._sel_start_char >= 0
-            and self.preview._sel_end_char >= 0
+            self.preview._focus_line_idx == line_idx
+            and self.preview._focus_char_idx >= 0
+            and self.preview._focus_char_range_end >= 0
         ):
-            char_idx = min(self.preview._sel_start_char, self.preview._sel_end_char)
+            char_idx = min(self.preview._focus_char_idx, self.preview._focus_char_range_end)
         else:
             char_idx = self.preview._current_char_idx
         if char_idx >= len(sentence.characters):
