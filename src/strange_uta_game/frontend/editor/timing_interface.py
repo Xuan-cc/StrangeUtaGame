@@ -1143,6 +1143,39 @@ class EditorInterface(QWidget):
         self._current_line_idx = idx
         self._update_line_info()
 
+    def _resolve_target_char(self) -> tuple[int, int]:
+        """解析字符级操作的目标 (line_idx, char_idx)。
+
+        双域设计：
+        - focus 域 (`preview._focus_*`)：用户视觉/操作真理，由点击/拖选/纯←→驱动，
+          不被 cp 自动跳跃污染。字符级操作的优先来源。
+        - current 域 (`self._current_line_idx` + `preview._current_char_idx`)：
+          后台 TimingService 反馈的合法 cp 位置，会被 cp 跳跃污染。打轴模式
+          (TimingService.is_playing()) 下字符级操作目标 — 因为打轴时 TimingService
+          自动推进，focus 是用户上次点的位置，可能不是当前正在打的字符。
+
+        Returns:
+            (line_idx, char_idx)：目标字符。无 focus 时回退 current；
+            两域都无效时返回 (-1, -1)。
+        """
+        playing = bool(self._timing_service and self._timing_service.is_playing())
+        if not playing:
+            # 编辑模式：focus 域优先（line + char 一起取，避免 cp 跳跃后
+            # _current_line_idx 与 _focus_line_idx 不一致导致目标错位）
+            if (
+                self.preview._focus_line_idx >= 0
+                and self.preview._focus_char_idx >= 0
+                and self.preview._focus_char_range_end >= 0
+            ):
+                line_idx = self.preview._focus_line_idx
+                char_idx = min(
+                    self.preview._focus_char_idx,
+                    self.preview._focus_char_range_end,
+                )
+                return line_idx, char_idx
+        # 打轴模式 / focus 无效：回退 current
+        return self._current_line_idx, self.preview._current_char_idx
+
     def _on_checkpoint_clicked(self, line_idx: int, char_idx: int, cp_idx: int):
         """点击 checkpoint 标记：仅切换 selected_cp 与音频跳转，不移动光标。
 
@@ -1447,16 +1480,20 @@ class EditorInterface(QWidget):
         if not self._project:
             return
 
-        line_idx = self._current_line_idx
-        start = self.preview._current_char_idx
-        end = start + 1
+        # Del 仅在编辑模式触发（keyPressEvent 路由）。focus 域为真理：
+        # 用户拖选范围 → 删整段；单点 focus → 删该字符；focus 无效 → 删 current。
         if (
-            self.preview._focus_line_idx == line_idx
+            self.preview._focus_line_idx >= 0
             and self.preview._focus_char_idx >= 0
             and self.preview._focus_char_range_end >= 0
         ):
+            line_idx = self.preview._focus_line_idx
             start = min(self.preview._focus_char_idx, self.preview._focus_char_range_end)
             end = max(self.preview._focus_char_idx, self.preview._focus_char_range_end) + 1
+        else:
+            line_idx = self._current_line_idx
+            start = self.preview._current_char_idx
+            end = start + 1
 
         self._execute_structural_edit(
             "删除字符",
@@ -1466,21 +1503,12 @@ class EditorInterface(QWidget):
     def _toggle_sentence_end_at_current(self):
         if not self._project:
             return
-        line_idx = self._current_line_idx
+        # `.` (编辑模式) / F4 (打轴模式) 共用入口；目标字符由 `_resolve_target_char()`
+        # 按模式分流：编辑模式 focus 优先，打轴模式 current。
+        line_idx, char_idx = self._resolve_target_char()
         if line_idx < 0 or line_idx >= len(self._project.sentences):
             return
         sentence = self._project.sentences[line_idx]
-        # Q2：与 add/remove checkpoint 保持一致——优先作用于"当前选中字符"
-        # 而非"选中 checkpoint 所在字符"。当 KaraokePreview 存在落在当前行
-        # 的有效选中范围时，取选中范围起点；否则回退到光标所在字符。
-        if (
-            self.preview._focus_line_idx == line_idx
-            and self.preview._focus_char_idx >= 0
-            and self.preview._focus_char_range_end >= 0
-        ):
-            char_idx = min(self.preview._focus_char_idx, self.preview._focus_char_range_end)
-        else:
-            char_idx = self.preview._current_char_idx
         if char_idx < 0 or char_idx >= len(sentence.characters):
             return
 
@@ -1495,30 +1523,17 @@ class EditorInterface(QWidget):
     def _change_checkpoint(self, delta: int):
         """增加或减少"当前选中字符"的节奏点数量。
 
-        目标字符优先级：
-        1. 若 KaraokePreview 在当前行存在有效选中范围 (_focus_line_idx == 当前行)，
-           作用于选中范围的起始字符 (min(sel_start, sel_end))。
-        2. 否则回退到 preview._current_char_idx（光标所在字符）。
-
-        这样 F5/F6/Space/Backspace 快捷键始终作用于用户选中的字符，
-        而非"当前选中的 checkpoint 所属字符"。
+        通过 `_resolve_target_char()` 解析目标：编辑模式下 focus 域优先
+        （用户点击/拖选/纯←→设置的字符，不被 cp 自动跳跃污染）；打轴模式
+        下走 current 域（TimingService 自动推进的当前字符）。
         """
         if not self._project:
             return
-        line_idx = self._current_line_idx
-        if line_idx >= len(self._project.sentences):
+        line_idx, char_idx = self._resolve_target_char()
+        if line_idx < 0 or line_idx >= len(self._project.sentences):
             return
         sentence = self._project.sentences[line_idx]
-        # 优先使用用户显式选中字符；若选中范围落在当前行则取其起点。
-        if (
-            self.preview._focus_line_idx == line_idx
-            and self.preview._focus_char_idx >= 0
-            and self.preview._focus_char_range_end >= 0
-        ):
-            char_idx = min(self.preview._focus_char_idx, self.preview._focus_char_range_end)
-        else:
-            char_idx = self.preview._current_char_idx
-        if char_idx >= len(sentence.characters):
+        if char_idx < 0 or char_idx >= len(sentence.characters):
             return
 
         def _mutate():
@@ -1647,15 +1662,17 @@ class EditorInterface(QWidget):
     def _on_nav_char(self, delta: int):
         """方向键左右导航：上一字符 (delta=-1) 或下一字符 (delta=+1)。
 
-        行内移动：在当前行字符序列内 ±1。
+        字符级操作 → 读 focus 域（用户视觉真理），不读被 cp 跳跃污染的
+        current 域。同时直接更新 focus 域字段，并驱动 current 跟随
+        (move_to_checkpoint 让 TimingService 找最近 cp 反馈到 current)。
+
+        行内移动：在当前 focus 行的字符序列内 ±1。
         跨行边界：
-        - delta=-1 且当前已在首字符 (char_idx == 0)：跳到上一行的末字符。
-        - delta=+1 且当前已在末字符：跳到下一行的首字符 (char_idx = 0)。
+        - delta=-1 且 focus 已在首字符 (char_idx == 0)：跳到上一行的末字符。
+        - delta=+1 且 focus 已在末字符：跳到下一行的首字符 (char_idx = 0)。
         跨行使用 :py:meth:`Project.find_prev_line_with_characters` /
         :py:meth:`Project.find_next_line_with_characters` 跳过空行。
         到达项目首尾时停止（不循环）。
-
-        移动后将 checkpoint_idx 重置为 0，与 _on_nav_line 行为一致。
 
         Args:
             delta: -1 表示左移 (LEFT)，+1 表示右移 (RIGHT)。
@@ -1663,10 +1680,20 @@ class EditorInterface(QWidget):
         if not self._project or not self._timing_service:
             return
         sentences = self._project.sentences
-        line_idx = self._current_line_idx
+        # focus 域作为真理来源；focus 无效则回退 current 一次
+        if self.preview._focus_line_idx >= 0 and self.preview._focus_char_idx >= 0:
+            line_idx = self.preview._focus_line_idx
+            char_idx = min(
+                self.preview._focus_char_idx,
+                self.preview._focus_char_range_end
+                if self.preview._focus_char_range_end >= 0
+                else self.preview._focus_char_idx,
+            )
+        else:
+            line_idx = self._current_line_idx
+            char_idx = self.preview._current_char_idx
         if line_idx < 0 or line_idx >= len(sentences):
             return
-        char_idx = self.preview._current_char_idx
         chars = sentences[line_idx].characters
         if delta < 0:
             if char_idx > 0:
@@ -1685,6 +1712,12 @@ class EditorInterface(QWidget):
                 if cand < 0:
                     return
                 new_line, new_char = cand, 0
+        # 直接更新 focus 域（不依赖 cp 回调链）
+        self.preview._focus_line_idx = new_line
+        self.preview._focus_char_idx = new_char
+        self.preview._focus_char_range_end = new_char
+        # 驱动 current 跟随：让 TimingService 找最近 cp，
+        # 反馈经 _apply_checkpoint_position 更新 current 域。
         self._timing_service.move_to_checkpoint(new_line, new_char, 0)
         self._update_time_tags_display()
         self._update_status()
