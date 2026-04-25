@@ -406,3 +406,79 @@ class TestLibraryBlockFallbackLinking:
         assert len(chars) == 2
         assert chars[0].linked_to_next, "明→日 应 linked"
 
+
+class TestEnglishWordCheckpoints:
+    """批 18 #9：英文词组节奏点规则
+    - 多字母英文词：首字 cp=1，中间字母 cp=0，末字母自动标 is_sentence_end
+    - 适用于自动分析节奏点路径（apply_to_sentence / analyze_sentence）
+    - 同时覆盖 e2k 命中（Hello/Happy/honey/day）和 fallback（Heyyyyy）两条分支
+    """
+
+    def _apply(self, text: str):
+        service = AutoCheckService(DummyAnalyzer())
+        sentence = Sentence.from_text(text, "s1")
+        service.apply_to_sentence(sentence)
+        return sentence.characters
+
+    def _assert_word_rule(self, chars, start: int, end: int, label: str):
+        """断言 chars[start:end] 满足 首=1cp/中=0/末=is_sentence_end 规则"""
+        assert chars[start].check_count == 1, (
+            f"{label}: 首字 '{chars[start].char}' 应 cp=1, 实际 {chars[start].check_count}"
+        )
+        for i in range(start + 1, end):
+            assert chars[i].check_count == 0, (
+                f"{label}: 字 '{chars[i].char}' (idx={i}) 应 cp=0, 实际 {chars[i].check_count}"
+            )
+        assert chars[end - 1].is_sentence_end, (
+            f"{label}: 末字 '{chars[end - 1].char}' 应 is_sentence_end=True"
+        )
+
+    def test_hello_world(self):
+        """Hello world：两词均按规则；e2k 命中分支"""
+        chars = self._apply("Hello world")
+        self._assert_word_rule(chars, 0, 5, "Hello")
+        self._assert_word_rule(chars, 6, 11, "world")
+
+    def test_hello_comma_world(self):
+        """Hello, world：comma 在 'o' 之后，'o' 仍应 is_sentence_end"""
+        chars = self._apply("Hello, world")
+        self._assert_word_rule(chars, 0, 5, "Hello")
+        # comma idx=5，space idx=6，world idx=7..11
+        self._assert_word_rule(chars, 7, 12, "world")
+
+    def test_i_love_you(self):
+        """I love you：'I' 单字母词跳过规则；love/you 按规则"""
+        chars = self._apply("I love you")
+        # love: idx 2..6 ('l','o','v','e')
+        self._assert_word_rule(chars, 2, 6, "love")
+        # you: idx 7..10
+        self._assert_word_rule(chars, 7, 10, "you")
+
+    def test_japanese_mixed_english(self):
+        """今日はHappy honey day：日文 + 多个英文词混排"""
+        text = "今日はHappy honey day"
+        chars = self._apply(text)
+        # 'Happy' = idx 3..8
+        self._assert_word_rule(chars, 3, 8, "Happy")
+        # 'honey' = idx 9..14
+        self._assert_word_rule(chars, 9, 14, "honey")
+        # 'day' = idx 15..18
+        self._assert_word_rule(chars, 15, 18, "day")
+
+    def test_one_apple_one_day(self):
+        """One apple one day, doctor go away.：每词的末字应 is_sentence_end"""
+        text = "One apple one day, doctor go away."
+        chars = self._apply(text)
+        self._assert_word_rule(chars, 0, 3, "One")
+        self._assert_word_rule(chars, 4, 9, "apple")
+        self._assert_word_rule(chars, 10, 13, "one")
+        self._assert_word_rule(chars, 14, 17, "day")
+        self._assert_word_rule(chars, 19, 25, "doctor")
+        self._assert_word_rule(chars, 26, 28, "go")
+        self._assert_word_rule(chars, 29, 33, "away")
+
+    def test_heyyyyy_fallback(self):
+        """Heyyyyy...：OOV 词走 english_fallback 分支，规则同样应用"""
+        chars = self._apply("Heyyyyyyyyyyyyyyy")
+        self._assert_word_rule(chars, 0, len(chars), "Heyyyyy")
+

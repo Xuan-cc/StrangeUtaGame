@@ -935,6 +935,17 @@ class AutoCheckService:
             if i < len(check_counts) and ch in PUNCTUATION_SET:
                 check_counts[i] = max(check_counts[i], 1) if _enable_punct_cp else 0
 
+        # 批 18 #9：英文词组节奏点规则（首字=1，其余=0）
+        # 必须放在 e2k mora 分配之后，覆盖 e2k 命中分支的 per-char mora 计数。
+        # english_fallback 分支已在前面手动应用过同样规则；此处再次覆盖是幂等的。
+        # find_english_words 基于 text 的字符索引，与 chars/check_counts 一一对应。
+        for _start, _end, _word in find_english_words(text):
+            if _end - _start <= 1:
+                continue  # 单字母词不强制（"I"/"a" 保留默认行为）
+            for _idx in range(_start, _end):
+                if _idx < len(check_counts):
+                    check_counts[_idx] = 1 if _idx == _start else 0
+
         # 构建结果
         results = []
         for i, (char, count) in enumerate(zip(chars, check_counts)):
@@ -1043,6 +1054,17 @@ class AutoCheckService:
         check_space_as_line_end = (
             self._flags.get("check_space_as_line_end", True) and not _is_blank_line
         )
+
+        # 批 18 #9：英文词组末字母自动标句尾。
+        # find_english_words 基于 sentence.text 的字符索引，与 results 一一对应
+        # （analyze_sentence 内 chars 由 split_text(text) 产出，逐字符英文路径保持索引对齐）。
+        english_sentence_end_idx: set = set()
+        for _start, _end, _word in find_english_words(sentence.text):
+            if _end - _start <= 1:
+                continue  # 单字母词不强制
+            if _end - 1 < len(results):
+                english_sentence_end_idx.add(_end - 1)
+
         new_characters: List[Character] = []
         for i, result in enumerate(results):
             is_last = i == len(results) - 1
@@ -1059,6 +1081,8 @@ class AutoCheckService:
             if is_last and add_line_end:
                 is_sentence_end = True
             if is_before_space:
+                is_sentence_end = True
+            if i in english_sentence_end_idx:
                 is_sentence_end = True
             check_count = result.check_count
 
