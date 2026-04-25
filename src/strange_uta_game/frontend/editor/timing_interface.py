@@ -1638,26 +1638,56 @@ class EditorInterface(QWidget):
     def _on_nav_line(self, delta: int):
         """方向键导航：上一行 (delta=-1) 或下一行 (delta=+1)。
 
-        空行无 checkpoint，TimingService.move_to_checkpoint 向下搜索时天然跳过；
-        但向上时不会跨空行。此处对 delta=-1 调用领域方法
-        :py:meth:`Project.find_prev_line_with_checkpoints` 补上跳空行逻辑，首行处停止。
+        编辑模式：focus 域为真理来源（与 ←→/Space/Backspace/`.` 一致）。
+        起点取 focus 行（无效则 current），目标行落在第一个字符 (char_idx=0)。
+        使用 :py:meth:`Project.find_prev_line_with_characters` /
+        :py:meth:`Project.find_next_line_with_characters` 跳过空行（无字符的行）。
+        到达项目首尾时停止。
+
+        打轴模式：保持原 cp 跳跃语义（focus 不跟随，current 由 TimingService 推进）。
         """
-        if not self._project:
+        if not self._project or not self._timing_service:
             return
         sentences = self._project.sentences
-        if delta < 0:
-            cand = self._project.find_prev_line_with_checkpoints(self._current_line_idx)
-            if cand < 0:
-                return
-            new_idx = cand
-        else:
-            new_idx = self._current_line_idx + delta
-            if new_idx < 0 or new_idx >= len(sentences):
-                return
-        if self._timing_service:
+
+        playing = bool(self._timing_service.is_playing())
+        if playing:
+            # 打轴模式：原行为不变（基于 current 行 + cp 跳跃）
+            if delta < 0:
+                cand = self._project.find_prev_line_with_checkpoints(self._current_line_idx)
+                if cand < 0:
+                    return
+                new_idx = cand
+            else:
+                new_idx = self._current_line_idx + delta
+                if new_idx < 0 or new_idx >= len(sentences):
+                    return
             self._timing_service.move_to_checkpoint(new_idx, 0, 0)
             self._update_time_tags_display()
             self._update_status()
+            return
+
+        # 编辑模式：focus 起点 + 跳空行 + 写 focus + 驱动 current
+        if self.preview._focus_line_idx >= 0:
+            line_idx = self.preview._focus_line_idx
+        else:
+            line_idx = self._current_line_idx
+        if delta < 0:
+            cand = self._project.find_prev_line_with_characters(line_idx)
+        else:
+            cand = self._project.find_next_line_with_characters(line_idx)
+        if cand < 0:
+            return
+        new_line, new_char = cand, 0
+        # 直接写 focus 域（与 _on_nav_char 同款，不依赖 cp 回调链污染）
+        self.preview._focus_line_idx = new_line
+        self.preview._focus_char_idx = new_char
+        self.preview._focus_char_range_end = new_char
+        # 驱动 current 跟随：找最近 cp 反馈到 current
+        self._timing_service.move_to_checkpoint(new_line, new_char, 0)
+        self._update_time_tags_display()
+        self._update_status()
+        self.preview.update()
 
     def _on_nav_char(self, delta: int):
         """方向键左右导航：上一字符 (delta=-1) 或下一字符 (delta=+1)。
