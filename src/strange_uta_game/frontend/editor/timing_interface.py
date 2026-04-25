@@ -2059,7 +2059,21 @@ class EditorInterface(QWidget):
             a0.accept()
             return
         elif a0.text() in (".", "。"):
-            self._toggle_sentence_end_at_current()
+            # `.` = 切换句尾（编辑模式专用，README 定义）。直接复用右键菜单
+            # "设置/取消句尾" 的信号路径：从 preview._focus_* 读用户视觉真理，
+            # emit toggle_sentence_end_requested(line, char) → _on_toggle_sentence_end_requested
+            # 用显式参数执行，**不经过** _resolve_target_char 的 playing 分支，
+            # 因此即使 timing_service.is_playing()==True 也始终作用于 focus 字符。
+            # 这与 "用户的点击高于一切" 的全局原则一致；F4（打轴模式）保留原 current 语义。
+            focus_line = self.preview._focus_line_idx
+            focus_char = self.preview._focus_char_idx
+            focus_end = self.preview._focus_char_range_end
+            if focus_line >= 0 and focus_char >= 0 and focus_end >= 0:
+                target_char = min(focus_char, focus_end)
+                self.preview.toggle_sentence_end_requested.emit(focus_line, target_char)
+            else:
+                # focus 无效（极少见，例如刚启动且未点击）→ 兜底走原路径
+                self._toggle_sentence_end_at_current()
             a0.accept()
             return
         elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
