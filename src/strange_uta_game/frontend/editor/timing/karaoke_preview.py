@@ -490,69 +490,59 @@ class KaraokePreview(QWidget):
                 for _ci in group[1:]:
                     linked_non_leader.add(_ci)
 
-        # ---------- wipe 时间线（一行为单位，按像素宽度插值） ----------
-        # 锚点列表：[(char_idx, timestamp_ms)]，char_idx == n_chars 表示行尾锚
-        anchors: list[tuple[int, int]] = []
+        # ---------- wipe 时间线（离散字符开始时间模型） ----------
+        # 每个字符的 wipe 开始时间 = 该字符第一个 cp 的时间戳（render_timestamps[0]）。
+        # 字符 wipe 结束时间 = 同句子内下一个有 start_ts 的字符的开始时间；
+        # 若后面无 start_ts，则使用句尾时间戳（render_sentence_end_ts）。
+        # 中间无 timestamp 的字符与上一个有 timestamp 的字符连读，共享同一段 wipe。
+        # 一行可能含多个句子（多个 is_sentence_end），各句子独立计算段。
+        start_times: dict[int, int] = {}
         for ci, ch in enumerate(characters):
             if ch.render_timestamps:
-                anchors.append((ci, int(ch.render_timestamps[0])))
-            # 每个句尾都生成锚点，不只是行末最后一个。
-            # 行中句尾会把 wipe 区间截断在该字符右沿，避免延伸到后续句子。
-            if ch.is_sentence_end and ch.render_sentence_end_ts is not None:
-                anchors.append((ci + 1, int(ch.render_sentence_end_ts)))
+                start_times[ci] = int(ch.render_timestamps[0])
 
-        # 按字符位置排序，保证 wipe 区间严格从左到右计算。
-        # 同一位置（如句尾右沿与下一个字符左沿重合）按时间戳次之排序。
-        anchors.sort(key=lambda x: (x[0], x[1]))
+        # 按 is_sentence_end 拆分为句子范围 [(sent_start, sent_end)]，含边界
+        sent_ranges: list[tuple[int, int]] = []
+        s_start = 0
+        for ci, ch in enumerate(characters):
+            if ch.is_sentence_end:
+                sent_ranges.append((s_start, ci))
+                s_start = ci + 1
+        if s_start < n_chars:
+            sent_ranges.append((s_start, n_chars - 1))
 
         char_wipe_times: dict = {}
-        if anchors:
-            # 累积像素宽度前缀和（char 左边界），长度 n_chars+1
-            # cum_w[i] = sum(char_widths[:i])；char i 的像素区间 [cum_w[i], cum_w[i+1]]
-            cum_w = [0]
-            for w in char_widths:
-                cum_w.append(cum_w[-1] + w)
+        for sent_start, sent_end in sent_ranges:
+            # 句子内有 start_ts 的 leader 字符索引
+            leaders = [ci for ci in range(sent_start, sent_end + 1) if ci in start_times]
+            if not leaders:
+                continue
 
-            # 相邻锚点之间按像素宽度加权插值
-            # 对每个 char i，取其像素中点 mid_i = (cum_w[i] + cum_w[i+1]) / 2
-            # 在覆盖该 mid 的锚区间 [a_pos, b_pos] 上按比例映射时间
-            # wipe 区间 = [左边界映射时间, 右边界映射时间]
-            for seg_idx in range(len(anchors) - 1):
-                a_ci, a_ts = anchors[seg_idx]
-                b_ci, b_ts = anchors[seg_idx + 1]
-                a_pos = cum_w[a_ci] if a_ci <= n_chars else cum_w[n_chars]
-                b_pos = cum_w[b_ci] if b_ci <= n_chars else cum_w[n_chars]
-                span_pos = b_pos - a_pos
-                span_ts = b_ts - a_ts
-                if span_pos <= 0:
-                    # 锚点像素位置重合（极端情况）——退化为等分
-                    seg_chars = list(range(a_ci, min(b_ci, n_chars)))
-                    n_seg = len(seg_chars)
-                    if n_seg == 0:
-                        continue
-                    for k, ci in enumerate(seg_chars):
-                        char_wipe_times[ci] = (
-                            a_ts + int(span_ts * k / n_seg),
-                            a_ts + int(span_ts * (k + 1) / n_seg),
-                        )
-                    continue
-                for ci in range(a_ci, min(b_ci, n_chars)):
-                    left_pos = cum_w[ci]
-                    right_pos = cum_w[ci + 1]
-                    t_start = a_ts + span_ts * (left_pos - a_pos) / span_pos
-                    t_end = a_ts + span_ts * (right_pos - a_pos) / span_pos
-                    char_wipe_times[ci] = (int(t_start), int(t_end))
+            for i, leader in enumerate(leaders):
+                next_leader = leaders[i + 1] if i + 1 < len(leaders) else None
+                seg_end = (next_leader - 1) if next_leader is not None else sent_end
 
-            # 首锚之前：贴首锚（wipe 立即填满）
-            first_ci, first_ts = anchors[0]
-            for ci in range(0, first_ci):
-                char_wipe_times[ci] = (first_ts, first_ts)
+                if next_leader is not None:
+                    end_ts = start_times[next_leader]
+                else:
+                    # 句子最后一段：找 sentence_end_ts
+                    end_ts = None
+                    for ci in range(leader, sent_end + 1):
+                        if characters[ci].is_sentence_end and characters[ci].render_sentence_end_ts is not None:
+                            end_ts = int(characters[ci].render_sentence_end_ts)
+                            break
+                    if end_ts is None:
+                        end_ts = start_times[leader]
 
-            # 末锚之后：贴末锚（wipe 恒为 0）
-            last_ci, last_ts = anchors[-1]
-            for ci in range(max(last_ci, 0), n_chars):
-                if ci not in char_wipe_times:
-                    char_wipe_times[ci] = (last_ts, last_ts)
+                for ci in range(leader, seg_end + 1):
+                    char_wipe_times[ci] = (start_times[leader], end_ts)
+
+            # 句子内第一个 leader 之前的无 ts 字符：与第一个 leader 一起 wipe
+            first_leader = leaders[0]
+            if first_leader > sent_start:
+                start_ts, end_ts = char_wipe_times[first_leader]
+                for ci in range(sent_start, first_leader):
+                    char_wipe_times[ci] = (start_ts, end_ts)
 
         entry = {
             "v": self._cache_version,
