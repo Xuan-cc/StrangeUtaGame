@@ -1,0 +1,3 @@
+*.txt linguist-vendored
+*.json linguist-vendored
+*.md linguist-vendored
