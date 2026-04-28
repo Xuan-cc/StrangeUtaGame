@@ -1,3 +1,4 @@
 *.txt linguist-vendored
 *.json linguist-vendored
 *.md linguist-vendored
+/src/strange_uta_game/config/* linguist-vendored
