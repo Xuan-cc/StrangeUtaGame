@@ -41,12 +41,14 @@ class KaraokePreview(QWidget):
     line_clicked = pyqtSignal(int)
     checkpoint_clicked = pyqtSignal(int, int, int)  # line_idx, char_idx, checkpoint_idx
     char_edit_requested = pyqtSignal(int, int)  # line_idx, char_idx (F2 key)
-    seek_to_char_requested = pyqtSignal(int, int)  # line_idx, char_idx (double-click)
+    seek_to_char_requested = pyqtSignal(int, int)  # line_idx, char_idx (click)
+    seek_to_checkpoint_requested = pyqtSignal(int, int ,int)  # line_idx, char_idx, checkpoint_idx (click)
     char_selected = pyqtSignal(int, int)  # line_idx, char_idx
     singer_change_requested = pyqtSignal(
         int, int, int, str
     )  # line_idx, start_char, end_char, singer_id
     delete_chars_requested = pyqtSignal(int, int, int)
+    delete_timestamp_requested = pyqtSignal(int, int, int)
     insert_space_after_requested = pyqtSignal(int, int)
     merge_line_up_requested = pyqtSignal(int)
     delete_line_requested = pyqtSignal(int)
@@ -117,6 +119,21 @@ class KaraokePreview(QWidget):
                     self._focus_char_idx = 0
                     self._focus_char_range_end = 0
                     break
+        self._update_display()
+
+    def set_focus_position(self, line_idx:int = 0,char_idx: int = 0):
+        # 用于打轴状态下更新foucs
+        new_line = float(line_idx)
+        if new_line == self._scroll_center_line and line_idx == self._current_char_idx:
+            self._focus_char_idx = char_idx
+            self._focus_char_range_end = char_idx
+            self._update_display()
+            return
+        self._focus_line_idx = line_idx
+        self._focus_char_idx = char_idx
+        self._focus_char_range_end = char_idx
+        if self._is_playing:
+            self._warm_nearby_cache(budget=2)
         self._update_display()
 
     def set_current_position(self, line_idx: int, char_idx: int = 0):
@@ -231,6 +248,8 @@ class KaraokePreview(QWidget):
         for marker_rect, line_idx, char_idx, cp_idx in self._checkpoint_hitboxes:
             if marker_rect.contains(click_x, click_y):
                 self.checkpoint_clicked.emit(line_idx, char_idx, cp_idx)
+                # 播放时 跳转到该字符 checkpoint 前 x 秒
+                self.seek_to_checkpoint_requested.emit(line_idx, char_idx, cp_idx)
                 return
 
         # 检查字符文本点击 → 开始划词选择
@@ -241,6 +260,8 @@ class KaraokePreview(QWidget):
                 self._focus_char_range_end = char_idx
                 self._focus_dragging = True
                 self.char_selected.emit(line_idx, char_idx)
+                 # 播放时 跳转到该字符 checkpoint 前 x 秒
+                self.seek_to_char_requested.emit(line_idx, char_idx)
                 self.update()
                 return
 
@@ -326,6 +347,14 @@ class KaraokePreview(QWidget):
         delete_action.triggered.connect(
             lambda checked=False: self.delete_chars_requested.emit(
                 target_line_idx, delete_start, delete_end
+            )
+        )
+        menu.addAction(delete_action)
+
+        delete_timestamp = Action("删除当前时间戳并回滚", menu)
+        delete_timestamp.triggered.connect(
+            lambda checked=False: self.delete_timestamp_requested.emit(
+                target_line_idx, target_char_idx
             )
         )
         menu.addAction(delete_action)
@@ -537,12 +566,13 @@ class KaraokePreview(QWidget):
         if use_cache:
             self._sentence_cache[idx] = entry
         return entry
-
+            
     def mouseDoubleClickEvent(self, a0: Optional[QMouseEvent]):
-        """双击字符 → 跳转到该字符 checkpoint 前 3 秒"""
+        """跳转到该字符 checkpoint 前 x 秒"""
         if not a0 or not self._project or not self._project.sentences:
             return
-
+        # 代码已迁移至单击任务
+        return
         click_x = int(a0.position().x())
         click_y = int(a0.position().y())
 
@@ -906,7 +936,7 @@ class KaraokePreview(QWidget):
                         )
 
                         if is_sentence_end_marker:
-                            marker_char = "。"
+                            marker_char = "  ◉" if has_timed else "  ◎"
                         elif cp_idx == 0:
                             marker_char = "▶" if has_timed else "▷"
                         else:
@@ -932,7 +962,7 @@ class KaraokePreview(QWidget):
                             ch_obj.selected_checkpoint_idx == cp_idx
                         )
                         if not has_timed:
-                            color = QColor("#ccc")
+                            color = QColor("black")
                         elif is_selected:
                             color = _char_complement_colors.get(
                                 char_pos, _char_singer_colors.get(char_pos, highlight_color)

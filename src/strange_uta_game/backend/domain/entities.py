@@ -341,6 +341,10 @@ class Sentence:
         """清空所有字符的时间戳"""
         for char in self.characters:
             char.clear_timestamps()
+    
+    def clear_one_timestamps(self, char_idx: int) -> None:
+        """清空一个字符的时间戳"""
+        self.characters[char_idx].clear_timestamps()
 
     # ── 查询 ──
 

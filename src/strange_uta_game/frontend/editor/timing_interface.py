@@ -166,8 +166,10 @@ class EditorInterface(QWidget):
         self.preview.char_selected.connect(self._on_char_selected)
         self.preview.char_edit_requested.connect(self._on_char_edit_requested)
         self.preview.seek_to_char_requested.connect(self._on_seek_to_char)
+        self.preview.seek_to_checkpoint_requested.connect(self._on_seek_to_checkpoint)
         self.preview.singer_change_requested.connect(self._on_singer_change_selection)
         self.preview.delete_chars_requested.connect(self._on_delete_chars_requested)
+        self.preview.delete_timestamp_requested.connect(self._on_delete_timestamp_requested)
         self.preview.insert_space_after_requested.connect(
             self._on_insert_space_after_requested
         )
@@ -207,7 +209,7 @@ class EditorInterface(QWidget):
         self.btn_tag.clicked.connect(self._on_tag_now)
         bottom.addWidget(self.btn_tag)
 
-        self.btn_clear_tags = PushButton("清除当前行标签", self)
+        self.btn_clear_tags = PushButton("清除当前行时间戳", self)
         self.btn_clear_tags.setIcon(FIF.DELETE)
         self.btn_clear_tags.clicked.connect(self._on_clear_current_line_tags)
         bottom.addWidget(self.btn_clear_tags)
@@ -246,6 +248,8 @@ class EditorInterface(QWidget):
         self._timing_service.set_render_progress_callback(
             lambda spd, prog: self._render_progress_signal.emit(float(spd), float(prog))
         )
+        # 注册timing_servive焦点时间戳改变回调
+        self._timing_service._global_qt._focus_moved_signal.connect(self._handle_foucus_moved)
 
     def set_store(self, store):
         """接入 ProjectStore 统一数据中心。"""
@@ -306,6 +310,7 @@ class EditorInterface(QWidget):
             "timestamp_down",
             "cycle_checkpoint",
             "cycle_checkpoint_prev",
+            "delete_timestamp",
         ]
         # 默认值兜底（当设置未写入新 schema 时使用）
         defaults = {
@@ -331,6 +336,7 @@ class EditorInterface(QWidget):
             "timestamp_down": "ALT+DOWN",
             "cycle_checkpoint": "ALT+RIGHT",
             "cycle_checkpoint_prev": "ALT+LEFT",
+            "delete_timestamp": "Backspace",
         }
 
         def _collect_map(mode_key: str) -> tuple[dict, dict]:
@@ -1084,6 +1090,7 @@ class EditorInterface(QWidget):
             try:
                 self._timing_service.play()
                 self.transport.set_playing(self._timing_service.is_playing())
+                self.preview.set_playing(self._timing_service.is_playing())
                 self.lbl_status.setText("播放中")
                 self._update_mode_indicator()
             except Exception as e:
@@ -1093,6 +1100,7 @@ class EditorInterface(QWidget):
         if self._timing_service:
             self._timing_service.pause()
             self.transport.set_playing(False)
+            self.preview.set_playing(False)
             self.lbl_status.setText("已暂停")
             self._update_mode_indicator()
 
@@ -1100,6 +1108,7 @@ class EditorInterface(QWidget):
         if self._timing_service:
             self._timing_service.stop()
             self.transport.set_playing(False)
+            self.preview.set_playing(False)
             self.transport.set_position(0)
             self.timeline.set_position(0)
             self.lbl_status.setText("已停止")
@@ -1147,7 +1156,7 @@ class EditorInterface(QWidget):
         """解析字符级操作的目标 (line_idx, char_idx)。
 
         双域设计：
-        - focus 域 (`preview._focus_*`)：用户视觉/操作真理，由点击/拖选/纯←→驱动，
+        - focus 域 (`preview._focus_*`)：用户视觉/操作真理，由点击/拖选/纯←→/打轴驱动，
           不被 cp 自动跳跃污染。字符级操作的优先来源。
         - current 域 (`self._current_line_idx` + `preview._current_char_idx`)：
           后台 TimingService 反馈的合法 cp 位置，会被 cp 跳跃污染。打轴模式
@@ -1158,22 +1167,20 @@ class EditorInterface(QWidget):
             (line_idx, char_idx)：目标字符。无 focus 时回退 current；
             两域都无效时返回 (-1, -1)。
         """
-        playing = bool(self._timing_service and self._timing_service.is_playing())
-        if not playing:
-            # 编辑模式：focus 域优先（line + char 一起取，避免 cp 跳跃后
-            # _current_line_idx 与 _focus_line_idx 不一致导致目标错位）
-            if (
-                self.preview._focus_line_idx >= 0
-                and self.preview._focus_char_idx >= 0
-                and self.preview._focus_char_range_end >= 0
-            ):
-                line_idx = self.preview._focus_line_idx
-                char_idx = min(
-                    self.preview._focus_char_idx,
-                    self.preview._focus_char_range_end,
-                )
-                return line_idx, char_idx
-        # 打轴模式 / focus 无效：回退 current
+        # focus 域优先（line + char 一起取，避免 cp 跳跃后
+        # _current_line_idx 与 _focus_line_idx 不一致导致目标错位）
+        if (
+            self.preview._focus_line_idx >= 0
+            and self.preview._focus_char_idx >= 0
+            and self.preview._focus_char_range_end >= 0
+        ):
+            line_idx = self.preview._focus_line_idx
+            char_idx = min(
+                self.preview._focus_char_idx,
+                self.preview._focus_char_range_end,
+            )
+            return line_idx, char_idx
+        # focus 无效：回退 current
         return self._current_line_idx, self.preview._current_char_idx
 
     def _on_checkpoint_clicked(self, line_idx: int, char_idx: int, cp_idx: int):
@@ -1454,6 +1461,16 @@ class EditorInterface(QWidget):
 
         new_char_idx = min(start, len(sentence.characters) - 1)
         return line_idx, new_char_idx, 0, "lyrics"
+    
+    def _delete_timestamp(self, line_idx: int, char_idx: int) :
+        if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
+            return None
+
+        sentence = self._project.sentences[line_idx]
+        if not sentence.characters:
+            return None
+        
+        sentence.clear_one_timestamps(char_idx)
 
     def _insert_line_break_at_current(self):
         if not self._project:
@@ -1523,9 +1540,8 @@ class EditorInterface(QWidget):
     def _change_checkpoint(self, delta: int):
         """增加或减少"当前选中字符"的节奏点数量。
 
-        通过 `_resolve_target_char()` 解析目标：编辑模式下 focus 域优先
+        通过 `_resolve_target_char()` 解析目标：编辑/编辑模式下都 focus 域优先
         （用户点击/拖选/纯←→设置的字符，不被 cp 自动跳跃污染）；打轴模式
-        下走 current 域（TimingService 自动推进的当前字符）。
         """
         if not self._project:
             return
@@ -1650,22 +1666,22 @@ class EditorInterface(QWidget):
             return
         sentences = self._project.sentences
 
-        playing = bool(self._timing_service.is_playing())
-        if playing:
-            # 打轴模式：原行为不变（基于 current 行 + cp 跳跃）
-            if delta < 0:
-                cand = self._project.find_prev_line_with_checkpoints(self._current_line_idx)
-                if cand < 0:
-                    return
-                new_idx = cand
-            else:
-                new_idx = self._current_line_idx + delta
-                if new_idx < 0 or new_idx >= len(sentences):
-                    return
-            self._timing_service.move_to_checkpoint(new_idx, 0, 0)
-            self._update_time_tags_display()
-            self._update_status()
-            return
+        # playing = bool(self._timing_service.is_playing())
+        # if playing:
+        #     # 打轴模式：原行为不变（基于 current 行 + cp 跳跃）
+        #     if delta < 0:
+        #         cand = self._project.find_prev_line_with_checkpoints(self._current_line_idx)
+        #         if cand < 0:
+        #             return
+        #         new_idx = cand
+        #     else:
+        #         new_idx = self._current_line_idx + delta
+        #         if new_idx < 0 or new_idx >= len(sentences):
+        #             return
+        #     self._timing_service.move_to_checkpoint(new_idx, 0, 0)
+        #     self._update_time_tags_display()
+        #     self._update_status()
+        #     return
 
         # 编辑模式：focus 起点 + 跳空行 + 写 focus + 驱动 current
         if self.preview._focus_line_idx >= 0:
@@ -1753,7 +1769,7 @@ class EditorInterface(QWidget):
         self._update_status()
 
     def _on_seek_to_char(self, line_idx: int, char_idx: int):
-        """双击字符 → 跳转到该字符的 checkpoint 前指定毫秒数"""
+        """单击字符 → 跳转到该字符的 checkpoint 前指定毫秒数"""
         if not self._project or line_idx >= len(self._project.sentences):
             return
         sentence = self._project.sentences[line_idx]
@@ -1771,12 +1787,55 @@ class EditorInterface(QWidget):
             self._timing_service.move_to_checkpoint(line_idx, char_idx, 0)
             self._update_time_tags_display()
             self._update_status()
+    
+    def _on_seek_to_checkpoint(self, line_idx: int, char_idx: int, cp_idx: int):
+        """单击字符 → 跳转到 checkpoint 前指定毫秒数"""
+        if not self._project or line_idx >= len(self._project.sentences):
+            return
+        sentence = self._project.sentences[line_idx]
+        if char_idx >= len(sentence.chars):
+            return
+        if cp_idx:
+            # 未开发
+            pass
+        jump_before = getattr(self, "_jump_before_ms", 3000)
+        tags = sentence.get_timetags_for_char(char_idx)
+        if tags:
+            target_ms = max(0, tags[0] - jump_before)
+            self._on_seek(target_ms)
+
+        # 同时移动打轴位置到该字符
+        if self._timing_service:
+            self._timing_service.move_to_checkpoint(line_idx, char_idx, 0)
+            self._update_time_tags_display()
+            self._update_status()
 
     def _on_delete_chars_requested(self, line_idx: int, start: int, end: int):
         self._execute_structural_edit(
             "删除字符",
             lambda: self._delete_char_range(line_idx, start, end),
         )
+    
+    def _on_delete_timestamp_requested(self, line_idx: int, char_idx: int):
+        if not self._project or line_idx >= len(self._project.sentences):
+            return
+        sentence = self._project.sentences[line_idx]
+        if char_idx >= len(sentence.chars):
+            return
+
+        jump_before = getattr(self, "_jump_before_ms", 3000)
+        tags = sentence.get_timetags_for_char(char_idx)
+        if tags:
+            target_ms = max(0, tags[0] - jump_before)
+            self._on_seek(target_ms)
+
+        # 同时移动打轴位置到该字符
+        if self._timing_service:
+            self._timing_service.move_to_checkpoint(line_idx, char_idx, 0)
+            self._update_time_tags_display()
+            self._update_status()
+        # 清除当前字符的时间戳
+        self._delete_timestamp(line_idx, char_idx)
 
     def _on_insert_space_after_requested(self, line_idx: int, char_idx: int):
         if not self._project or line_idx < 0 or line_idx >= len(self._project.sentences):
@@ -2059,6 +2118,11 @@ class EditorInterface(QWidget):
                 else:
                     self._toggle_sentence_end_at_current()
                 a0.accept()
+        elif action == "delete_timestamp":
+            if self._project:
+                line_idx = self._current_line_idx
+                char_idx = self.preview._current_char_idx
+                self._on_delete_timestamp_requested(line_idx, char_idx)
         elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self._insert_line_break_at_current()
             a0.accept()
@@ -2244,6 +2308,9 @@ class EditorInterface(QWidget):
     def _handle_checkpoint_moved(self, position: CheckpointPosition):
         self._apply_checkpoint_position(position)
         self._update_status()
+    
+    def _handle_foucus_moved(self, line_idx: int, char_idx: int):
+        self.preview.set_focus_position(line_idx, char_idx)
 
     def _handle_timetag_added(self):
         self._update_time_tags_display()

@@ -109,6 +109,7 @@ class AppSettings:
                 "cycle_checkpoint": "ALT+RIGHT",
                 "break_line_here": "Return",
                 "delete_char": "Delete",
+                "delete_timestamp":"BackSpace",
             },
             # 编辑模式：音乐暂停/停止时生效（以歌词/注音编辑为主）
             "edit_mode": {
@@ -136,6 +137,7 @@ class AppSettings:
                 "cycle_checkpoint": "ALT+RIGHT",
                 "break_line_here": "Return",
                 "delete_char": "Delete",
+                "delete_timestamp":"",
             },
         },
     }

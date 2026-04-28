@@ -15,6 +15,8 @@ from typing import Optional, Dict, List, Callable, Protocol, Literal
 from enum import Enum, auto
 import time
 
+from PyQt6.QtCore import QObject, pyqtSignal
+
 from strange_uta_game.backend.domain import (
     Project,
     Sentence,
@@ -87,6 +89,11 @@ class TimingCallbacks(Protocol):
         """打轴错误回调（如时间倒退警告）"""
         ...
 
+class TimingServiceQt(QObject):
+    # 通知Karaoke渲染位置更新信号
+    _focus_moved_signal = pyqtSignal(int, int) # line_idx , char_idx
+    def __init__(self):
+        super().__init__()
 
 class TimingService:
     """打轴服务
@@ -100,7 +107,7 @@ class TimingService:
 
     def __init__(
         self,
-        audio_engine: IAudioEngine,
+        audio_engine: IAudioEngine, # 目前实际使用SoundDeviceEngine
         command_manager: Optional[CommandManager] = None,
     ):
         """
@@ -127,6 +134,9 @@ class TimingService:
 
         # 音频播放位置回调
         self._audio_engine.set_position_callback(self._on_audio_position_changed)
+
+        # karaoke预览focus信号
+        self._global_qt = TimingServiceQt()
 
     def set_project(self, project: Project) -> None:
         """设置当前项目"""
@@ -272,6 +282,10 @@ class TimingService:
         """通知 checkpoint 移动"""
         if self._callbacks:
             self._callbacks.on_checkpoint_moved(self._current_position)
+    
+    def _notify_focus_moved(self) -> None:
+        """通知 focus 移动"""
+        self._global_qt._focus_moved_signal.emit(self._current_position.line_idx, self._current_position.char_idx)
 
     def _notify_singer_changed(self, new_singer_id: str, prev_singer_id: str) -> None:
         """通知演唱者切换"""
@@ -429,6 +443,8 @@ class TimingService:
         # 写入 + 单次推进
         self._add_timetag_at_current_checkpoint(timestamp_ms)
         self.move_to_next_checkpoint()
+        # 打轴键也会更新焦点
+        self._notify_focus_moved()
 
     def on_timing_key_pressed(self, key: str) -> None:
         """打轴按键按下处理（Space 或 F1-F9）

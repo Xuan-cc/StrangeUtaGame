@@ -295,7 +295,7 @@ class SettingsInterface(ScrollArea):
         self.card_offset = SpinSettingCard(
             FIF.DATE_TIME,
             "打轴偏移",
-            "补偿反应延迟（负值=提前，正值=延后）",
+            "建议用下方的offset校正来矫正，补偿反应延迟（负值=提前，正值=延后）",
             min_val=-1000,
             max_val=1000,
             step=10,
@@ -698,6 +698,7 @@ class SettingsInterface(ScrollArea):
         ("tag_now", FIF.PLAY, "打轴键", "打轴操作的按键【仅打轴模式】", "Space", "", "timing_only", None, None),
         ("seek_back", FIF.LEFT_ARROW, "后退", "后退跳转【仅打轴模式】", "Z", "", "timing_only", None, None),
         ("seek_forward", FIF.CHEVRON_RIGHT, "前进", "前进跳转【仅打轴模式】", "X", "", "timing_only", None, None),
+        ("delete_timestamp", FIF.DELETE, "删除当前时间戳并回滚", "删除跳转【仅打轴模式】", "Backspace", "", "timing_only", None, None),
         # — 两模式下按键不同 —
         ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量", "F5", "Space", "split", "增加当前字符的节奏点数量（默认 F5）", "增加当前字符的节奏点数量（默认 Space）"),
         ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量", "F6", "Backspace", "split", "减少当前字符的节奏点数量（默认 F6）", "减少当前字符的节奏点数量（默认 Backspace）"),
