@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-__version__ = "1.1.1" #v1.0.3
+__version__ = "1.1.2" #v1.0.3
 
 # 构建变体标识。build.py 在打包前将此行替换为对应变体值，打包后还原。
 # 运行时只读，请勿在应用逻辑中修改。

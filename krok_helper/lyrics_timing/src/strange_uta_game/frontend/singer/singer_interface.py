@@ -1587,9 +1587,12 @@ class SingerManagerInterface(QWidget):
                     group=preset.get("group", ""),
                 )
                 if added == 0 and unnamed_default_id:
-                    # 第一个导入的演唱者：设为默认，再删除初始占位符（先加后删保证至少有一个）
+                    # 第一个导入的演唱者：设为默认，再删除初始占位符（先加后删保证至少有一个）。
+                    # 必须把占位符名下的句子转移给新演唱者，否则原默认演唱者的歌词会被级联删除。
                     self._singer_service.set_default_singer(singer.id)
-                    self._singer_service.remove_singer(unnamed_default_id)
+                    self._singer_service.remove_singer(
+                        unnamed_default_id, transfer_to=singer.id
+                    )
                     unnamed_default_id = None
                 elif preset.get("is_default", False):
                     self._singer_service.set_default_singer(singer.id)
