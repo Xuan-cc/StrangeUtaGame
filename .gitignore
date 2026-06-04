@@ -19,6 +19,14 @@ ENV/
 .coverage.*
 htmlcov/
 
+# AI coding agent session state — never commit
+# (Claude Code's worktree submodule gitlinks were accidentally
+# committed by StrangeUtaGame and removed in this PR; this rule
+# prevents recurrence.)
+.claude/
+.cursor/
+.aider*
+
 # Build artifacts
 build/
 dist/
