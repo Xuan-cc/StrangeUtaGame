@@ -120,7 +120,12 @@ from krok_helper.pipeline import (
     run_pipeline,
     validate_output_name_template,
 )
-from krok_helper.settings import load_app_settings, save_app_settings
+from krok_helper.settings import (
+    AppSettings,
+    load_app_settings,
+    migrate_strange_uta_game_settings,
+    save_app_settings,
+)
 from krok_helper.video_download import VideoDownloadPage
 from krok_helper.windows import set_explicit_app_user_model_id
 
@@ -153,6 +158,21 @@ LYRICS_PREVIEW_MODE_OPTIONS = [
     ("按字 LRC", LYRICS_PREVIEW_VERBATIM),
 ]
 LYRICS_PREVIEW_MODE_MAP = {label: mode for label, mode in LYRICS_PREVIEW_MODE_OPTIONS}
+
+
+class KrokHelperSettingsBridge:
+    """Bridge StrangeUtaGame config into krok-helper's settings namespace."""
+
+    def __init__(self, app_settings: AppSettings, save_callback: Callable[[], object]) -> None:
+        self._app_settings = app_settings
+        self._save_callback = save_callback
+
+    def load(self) -> dict:
+        return dict(self._app_settings.lyrics_timing)
+
+    def save(self, data: dict) -> None:
+        self._app_settings.lyrics_timing = dict(data)
+        self._save_callback()
 LYRICS_LANGUAGE_OPTIONS = [
     ("原文", LYRICS_LANGUAGE_ORIGINAL),
     ("中文译文", LYRICS_LANGUAGE_TRANSLATION),
@@ -1762,6 +1782,11 @@ class KrokHelperQtApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.settings = load_app_settings()
+        lyrics_timing_migrated = self.settings.lyrics_timing_migrated_v1
+        if migrate_strange_uta_game_settings(self.settings) or (
+            self.settings.lyrics_timing_migrated_v1 != lyrics_timing_migrated
+        ):
+            save_app_settings(self.settings)
         self.hires_task: BackgroundTask | None = None
         self.lyrics_search_task: BackgroundTask | None = None
         self.lyrics_fetch_task: BackgroundTask | None = None
@@ -2243,9 +2268,13 @@ class KrokHelperQtApp(QMainWindow):
         self.video_download_page = VideoDownloadPage(self.settings, self._save_all_settings, self)
         self.align_page = self._build_alignment_page()
         self.lyrics_page = self._build_lyrics_page()
-        self.lyrics_timing_page = PlaceholderPage(
-            title="歌词打轴",
-            description="根据歌词内容与音频节奏进行逐句或逐字时间轴制作。",
+        import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
+        from strange_uta_game.frontend.main_window import MainWindow as LyricsTimingMainWindow
+
+        lyrics_timing_settings = KrokHelperSettingsBridge(self.settings, self._save_all_settings)
+        self.lyrics_timing_page = LyricsTimingMainWindow.for_embedding(
+            parent=self.page_stack,
+            settings_provider=lyrics_timing_settings,
         )
         self.subtitle_render_page = PlaceholderPage(
             title="字幕视频生成",
@@ -2270,7 +2299,7 @@ class KrokHelperQtApp(QMainWindow):
         shell.addWidget(workflow_bar)
         shell.addWidget(self.page_stack, 1)
         self.setCentralWidget(central)
-        self.statusBar().showMessage("准备就绪")
+        self.statusBar().hide()
         self._show_module(WORKFLOW_VIDEO_DOWNLOAD)
 
     def _show_module(self, module_id: str) -> None:
@@ -2287,9 +2316,6 @@ class KrokHelperQtApp(QMainWindow):
         self.active_module = module_id
         self.page_stack.setCurrentWidget(self.module_pages[module_id])
         self.workflow_stepper.setCurrentModule(module_id)
-        current_step = next((step for step in WORKFLOW_STEPS if step.module_id == module_id), None)
-        if current_step is not None:
-            self.statusBar().showMessage(f"当前模块：{current_step.number}. {current_step.title}")
 
     def _handle_workflow_step_clicked(self, index: int) -> None:
         self._show_module(self.workflow_stepper.moduleIdAt(index))
@@ -6225,6 +6251,17 @@ class KrokHelperQtApp(QMainWindow):
             return
         self._stop_alignment_preview(log_message=False)
         try:
+            lyrics_timing_page = getattr(self, "lyrics_timing_page", None)
+            if (
+                lyrics_timing_page is not None
+                and hasattr(lyrics_timing_page, "has_unsaved_changes")
+                and lyrics_timing_page.has_unsaved_changes()
+                and hasattr(lyrics_timing_page, "flush_unsaved")
+            ):
+                lyrics_timing_page.flush_unsaved()
+        except Exception:
+            pass
+        try:
             self._save_all_settings()
         except Exception:
             pass
@@ -6241,4 +6278,7 @@ def launch_qt_app() -> int:
         app.setWindowIcon(app_icon)
     window = KrokHelperQtApp()
     window.show()
-    return app.exec()
+    exit_code = app.exec()
+    window.deleteLater()
+    app.processEvents()
+    return exit_code

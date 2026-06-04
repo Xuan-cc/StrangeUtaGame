@@ -3,18 +3,66 @@
 从 settings_interface.py 拆出，保留公共 API 不变：
 - ``AppSettings``：应用设置管理（config.json + dictionary.json + singers.json）
 - ``_parse_rl_dictionary``：RL 字典文本解析（模块内私有，被 AppSettings 和 DictionaryEditDialog 复用）
+
+PR #6B 增补：
+- ``SettingsProvider``：设置后端 Protocol，允许宿主（如 krok-helper）把
+  ``AppSettings`` 的持久化重定向到自己的存储。
+- ``AppSettings.__init__`` 增加可选 ``provider`` 参数；不传则保持完整
+  standalone 行为（文件读写 + dictionary 升级 + 独立 JSON 文件迁移）。
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional, Protocol, runtime_checkable
 import json
 import sys
 
 
+@runtime_checkable
+class SettingsProvider(Protocol):
+    """设置持久化后端协议。
+
+    Standalone 模式下，AppSettings 内部使用一个文件型默认实现读写
+    ``config.json``。Embedded 模式下，宿主实现本协议把读写桥接到自己的
+    存储（如 krok-helper 的 ``%APPDATA%/Karaoke Helper/settings.json``
+    里的 ``lyrics_timing`` namespace）。
+
+    协议只覆盖**主 config**（即 ``config.json`` 等价物）的整字典读写；
+    词典/演唱者/网络词典三个独立文件不在本协议范围内 —— embedded 模式
+    下，这三类数据由宿主自己的 namespace 字段（``lyrics_timing_dictionary``
+    等）独立持久化，AppSettings 中对应的 ``load_dictionary`` /
+    ``load_singer_presets`` 等方法在 provider 模式下会返回空列表/字典。
+
+    实现示例（host bridge）::
+
+        class KrokHelperConfigProvider:
+            def __init__(self, app_settings, save_callback):
+                self._app_settings = app_settings
+                self._save_callback = save_callback
+
+            def load(self) -> dict:
+                return dict(self._app_settings.lyrics_timing)
+
+            def save(self, data: dict) -> None:
+                self._app_settings.lyrics_timing = dict(data)
+                self._save_callback()
+    """
+
+    def load(self) -> Dict[str, Any]:
+        """返回当前完整的设置字典；首次启动 / 空存储时返回 ``{}``。"""
+        ...
+
+    def save(self, data: Dict[str, Any]) -> None:
+        """把完整设置字典持久化到后端存储。"""
+        ...
+
+
 class AppSettings:
     """应用设置管理"""
+
+    _default_provider: ClassVar[Optional[SettingsProvider]] = None
 
     DEFAULT_SETTINGS = {
         "audio": {
@@ -238,6 +286,16 @@ class AppSettings:
         },
     }
 
+    @classmethod
+    def set_default_provider(cls, provider: Optional[SettingsProvider]) -> None:
+        """设置当前进程内 ``AppSettings()`` 的默认后端。
+
+        Embedded 宿主会在构造主窗口时设置本值，使深层组件里保留的
+        ``AppSettings()`` 调用也能自动走宿主设置存储；standalone 默认
+        为 None，继续使用原有文件型配置。
+        """
+        cls._default_provider = provider
+
     @staticmethod
     def get_config_dir() -> Path:
         """获取配置文件目录（默认为程序所在目录）。
@@ -270,29 +328,75 @@ class AppSettings:
             return dev_path
         return None
 
-    def __init__(self, config_path: Optional[str] = None):
-        if config_path is None:
-            config_dir = self.get_config_dir()
-            try:
-                config_dir.mkdir(exist_ok=True)
-            except OSError:
-                # 程序目录不可写时回退到用户目录
-                config_dir = Path.home() / ".strange_uta_game"
-                config_dir.mkdir(exist_ok=True)
-            self._config_path = config_dir / "config.json"
-            # 如果用户配置不存在，从内嵌配置复制
-            if not self._config_path.exists():
-                self._copy_packaged_config()
-        else:
-            self._config_path = Path(config_path)
+    def __init__(
+        self,
+        config_path: Optional[str] = None,
+        *,
+        provider: Optional[SettingsProvider] = None,
+    ):
+        """初始化 AppSettings。
 
-        self._dict_path = self._config_path.parent / "dictionary.json"
-        self._network_dict_path = self._config_path.parent / "network_dictionary.json"
-        self._singers_path = self._config_path.parent / "singers.json"
-        self._settings = self._load_settings()
-        self._migrate_to_separate_files()
-        self._ensure_default_dictionary()
-        self._force_upgrade_dictionary_if_needed()
+        参数:
+            config_path: 显式 config.json 路径（standalone 调试用）。
+                仅在 ``provider`` 为 None 时生效。
+            provider: 设置后端 Protocol 实现。给定时**完全跳过**所有文件
+                路径初始化 —— 不解析 ``get_config_dir()``、不读写
+                ``config.json``、不做 dictionary 升级、不做独立文件
+                迁移。``self._settings`` 直接从 ``provider.load()`` 获取，
+                后续 ``save()`` 写回 provider。
+        """
+        if provider is not None:
+            effective_provider = provider
+        elif config_path is None:
+            effective_provider = self.__class__._default_provider
+        else:
+            effective_provider = None
+        self._provider = effective_provider
+
+        if effective_provider is None:
+            # ── standalone 模式：保持原有文件型行为 ──
+            if config_path is None:
+                config_dir = self.get_config_dir()
+                try:
+                    config_dir.mkdir(exist_ok=True)
+                except OSError:
+                    # 程序目录不可写时回退到用户目录
+                    config_dir = Path.home() / ".strange_uta_game"
+                    config_dir.mkdir(exist_ok=True)
+                self._config_path = config_dir / "config.json"
+                # 如果用户配置不存在，从内嵌配置复制
+                if not self._config_path.exists():
+                    self._copy_packaged_config()
+            else:
+                self._config_path = Path(config_path)
+
+            self._dict_path = self._config_path.parent / "dictionary.json"
+            self._network_dict_path = self._config_path.parent / "network_dictionary.json"
+            self._singers_path = self._config_path.parent / "singers.json"
+            self._settings = self._load_settings()
+            self._migrate_to_separate_files()
+            self._ensure_default_dictionary()
+            self._force_upgrade_dictionary_if_needed()
+        else:
+            # ── embedded 模式：通过 provider 桥接，不碰文件系统 ──
+            # 字段保留为 None 以保持类型一致；文件型方法（load_dictionary
+            # 等）在此模式下会因路径为 None 而返回空集合，由宿主单独
+            # 通过自己的 namespace 字段管理词典/演唱者/网络词典。
+            self._config_path = None  # type: ignore[assignment]
+            self._dict_path = None  # type: ignore[assignment]
+            self._network_dict_path = None  # type: ignore[assignment]
+            self._singers_path = None  # type: ignore[assignment]
+            # 先用内嵌默认值打底（保证 get() 取到合理默认），再用 provider
+            # 数据 deep-merge 覆盖。从 provider 接过来时 deepcopy，避免
+            # 后续 self.set 误改写到 provider 内部状态（一些朴素 provider
+            # 实现可能用浅拷贝传 dict 进来）。
+            self._settings = self._load_packaged_defaults()
+            try:
+                loaded = effective_provider.load() or {}
+            except Exception:
+                loaded = {}
+            if isinstance(loaded, dict):
+                self._deep_merge(self._settings, deepcopy(loaded))
 
     def _force_upgrade_dictionary_if_needed(self) -> None:
         """词典版本升级：比较内置词典版本号与用户已应用版本号。
@@ -483,6 +587,19 @@ class AppSettings:
                 base[key] = value
 
     def save(self) -> None:
+        """持久化当前设置。
+
+        Provider 模式委托给 ``provider.save``；standalone 模式写
+        ``config.json``。两条路径都吞异常并打印日志，不抛。
+        """
+        if self._provider is not None:
+            try:
+                # deepcopy 出去：provider 应能持有完全独立的副本，避免
+                # 后续 AppSettings.set 改写到 provider 内部状态。
+                self._provider.save(deepcopy(self._settings))
+            except Exception as e:
+                print(f"保存设置失败 (provider): {e}")
+            return
         try:
             with open(self._config_path, "w", encoding="utf-8") as f:
                 json.dump(self._settings, f, indent=2, ensure_ascii=False)
@@ -490,7 +607,20 @@ class AppSettings:
             print(f"保存设置失败: {e}")
 
     def reload(self) -> None:
-        """从磁盘重新加载配置文件。"""
+        """从后端存储重新加载配置（discard 内存内未保存的改动）。
+
+        Provider 模式：以内嵌默认值打底，再 deep-merge provider.load() 结果。
+        Standalone 模式：走 ``_load_settings()`` 重读 config.json。
+        """
+        if self._provider is not None:
+            self._settings = self._load_packaged_defaults()
+            try:
+                loaded = self._provider.load() or {}
+            except Exception:
+                loaded = {}
+            if isinstance(loaded, dict):
+                self._deep_merge(self._settings, deepcopy(loaded))
+            return
         self._settings = self._load_settings()
 
     def get(self, path: str, default=None) -> Any:
@@ -566,11 +696,23 @@ class AppSettings:
             return default if default is not None else []
 
     def load_dictionary(self) -> list:
-        """从 dictionary.json 加载用户词典条目。"""
+        """从 dictionary.json 加载用户词典条目。
+
+        Provider 模式下文件路径为 None；本期 PR #6B 范围内 provider 不管
+        词典数据，直接返回空列表（宿主用自己的
+        ``lyrics_timing_dictionary`` namespace 独立持久化）。
+        """
+        if self._provider is not None:
+            return []
         return self._load_json(self._dict_path, [])
 
     def save_dictionary(self, entries: list) -> None:
-        """保存用户词典条目到 dictionary.json。"""
+        """保存用户词典条目到 dictionary.json。
+
+        Provider 模式下 noop —— 宿主自己管 ``lyrics_timing_dictionary``。
+        """
+        if self._provider is not None:
+            return
         self._save_json(self._dict_path, entries)
 
     def register_dictionary_word(self, word: str, reading: str) -> None:
@@ -641,7 +783,19 @@ class AppSettings:
         读取；cache（每源 entries / last_fetched）从 ``network_dictionary.json`` 读取。
         缺失任一文件用 :data:`DEFAULT_NETWORK_DICTIONARY_META` 兜底；自动补齐内置源。
         旧版（一体式 ``network_dictionary.json``）会被自动迁移：拆分后写回。
+
+        Provider 模式下不持久化网络词典；返回内嵌默认 meta + 空 cache，
+        实际数据由宿主的 ``lyrics_timing_network_dictionary`` namespace 管理。
         """
+        if self._provider is not None:
+            from strange_uta_game.backend.infrastructure.network_dictionary import (
+                DEFAULT_NETWORK_DICTIONARY_META,
+                ensure_builtin_sources,
+            )
+            meta = json.loads(json.dumps(DEFAULT_NETWORK_DICTIONARY_META))
+            ensure_builtin_sources(meta)
+            return {"meta": meta, "sources": {}}
+
         from strange_uta_game.backend.infrastructure.network_dictionary import (
             DEFAULT_NETWORK_DICTIONARY_META,
             ensure_builtin_sources,
@@ -680,13 +834,19 @@ class AppSettings:
         return ensure_builtin_sources(doc)
 
     def save_network_dictionary(self, doc: dict) -> None:
-        """保存统一文档：meta → ``config.json``，cache → ``network_dictionary.json``。"""
+        """保存统一文档：meta → ``config.json``，cache → ``network_dictionary.json``。
+
+        Provider 模式下 meta 仍走 self.set / self.save（由 provider 接管），
+        但 cache（独立文件）不落盘 —— 宿主负责。
+        """
         from strange_uta_game.backend.infrastructure.network_dictionary import (
             split_meta_and_cache,
         )
         meta, cache = split_meta_and_cache(doc)
         self.set("network_dictionary", meta)
         self.save()  # 立即落盘 meta 到 config.json
+        if self._provider is not None:
+            return
         self._save_json(self._network_dict_path, cache)
 
     def maybe_auto_update_network_dictionary(self, force: bool = False) -> "tuple[list, list, bool]":
@@ -695,6 +855,10 @@ class AppSettings:
         触发条件：``network_dictionary.auto_update.enabled=True`` 且距离
         ``last_auto_update_at`` 已超过 ``(interval_value, interval_unit)``。
         ``force=True`` 时无视条件强制执行（"立即同步"按钮可用）。
+
+        Provider 模式下短路返回（无 cache 文件可写、宿主自管网络词典
+        namespace）。MainWindow 在 embedded 模式下不会调度本方法（PR #6A
+        已跳过启动期定时器），这里再做一次防御。
 
         非阻塞建议：调用方在后台线程中调用本方法（HTTP 慢，UI 线程不可阻塞）。
 
@@ -705,6 +869,10 @@ class AppSettings:
             ``(ok_msgs, fail_msgs, ran)``：成功/失败消息列表 + 是否真的执行了拉取。
             未到期 / 未启用 / ``enabled=False`` → ``ran=False`` 且 msgs 为空。
         """
+        if self._provider is not None:
+            # Embedded mode: 宿主管网络词典 namespace，本方法 noop。
+            return ([], [], False)
+
         from strange_uta_game.backend.infrastructure.network_dictionary import (
             auto_update_enabled_sources,
             is_auto_update_due,
@@ -795,11 +963,18 @@ class AppSettings:
         )
 
     def load_singer_presets(self) -> list:
-        """从 singers.json 加载演唱者预设。"""
+        """从 singers.json 加载演唱者预设。
+
+        Provider 模式下空返回；宿主用 ``lyrics_timing_singers`` namespace 自管。
+        """
+        if self._provider is not None:
+            return []
         return self._load_json(self._singers_path, [])
 
     def save_singer_presets(self, presets: list) -> None:
-        """保存演唱者预设到 singers.json。"""
+        """保存演唱者预设到 singers.json。Provider 模式下 noop。"""
+        if self._provider is not None:
+            return
         self._save_json(self._singers_path, presets)
 
 
