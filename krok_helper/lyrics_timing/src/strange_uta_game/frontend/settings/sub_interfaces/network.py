@@ -31,6 +31,8 @@ class NetworkSubInterface(SubSettingInterface):
             return
         self._settings_ref = settings
         self._updater_attached = True
+        if getattr(settings, "_provider", None) is not None:
+            return
         try:
             from strange_uta_game.updater.ui import attach_proxy_group, attach_update_group
             attach_proxy_group(self)

@@ -123,6 +123,11 @@ class SettingsInterface(ScrollArea):
         self._store = None
         self._settings_provider = settings_provider
         self._settings = AppSettings(provider=settings_provider)
+        self._embedded = settings_provider is not None
+        self._tab_config = [
+            item for item in self.TAB_CONFIG
+            if not (self._embedded and item[0] == "network")
+        ]
         self._initialized = False       # True = _preload 已调度（但可能还未完成）
         self._fully_initialized = False  # True = 所有子页面全部创建并连接完毕
 
@@ -197,7 +202,7 @@ class SettingsInterface(ScrollArea):
         self.pivot.setFixedHeight(40)
         self.vBoxLayout.addWidget(self.pivot)
 
-        for key, text in self.TAB_CONFIG:
+        for key, text in self._tab_config:
             self.pivot.addItem(
                 routeKey=key,
                 text=text,
@@ -206,7 +211,7 @@ class SettingsInterface(ScrollArea):
 
         self.vBoxLayout.addWidget(self.stackedWidget)
 
-        self.pivot.setCurrentItem(self.TAB_CONFIG[0][0])
+        self.pivot.setCurrentItem(self._tab_config[0][0])
         self.stackedWidget.setCurrentIndex(0)
 
     def _preload(self):
@@ -229,7 +234,7 @@ class SettingsInterface(ScrollArea):
         self.uiInterface        = UISubInterface(self)
         self.exportInterface    = ExportSubInterface(self)
         self.shortcutInterface  = ShortcutSubInterface(self)
-        self.networkInterface   = NetworkSubInterface(self)
+        self.networkInterface   = None if self._embedded else NetworkSubInterface(self)
         self.aboutInterface     = AboutSubInterface(self)
 
         QTimer.singleShot(0, self._preload_finalize)
@@ -237,12 +242,15 @@ class SettingsInterface(ScrollArea):
     def _preload_finalize(self):
         """第三批：连接信号、加载设置、注入 updater UI。"""
         # 把所有子页面按顺序加入 stackedWidget
-        for iface in [
+        interfaces = [
             self.playbackInterface, self.timingInterface, self.autoSaveInterface,
             self.autoCheckInterface, self.dictionaryInterface, self.uiInterface,
-            self.exportInterface, self.shortcutInterface, self.networkInterface,
+            self.exportInterface, self.shortcutInterface,
             self.aboutInterface,
-        ]:
+        ]
+        if self.networkInterface is not None:
+            interfaces.insert(-1, self.networkInterface)
+        for iface in interfaces:
             self.stackedWidget.addWidget(iface)
 
         # 传入 store（若已由外层设置）
@@ -267,14 +275,15 @@ class SettingsInterface(ScrollArea):
         self._load_current_settings()
 
         # 注入 updater UI（只在初始化阶段执行一次）
-        self.networkInterface.attach_updater_ui(self._settings)
+        if self.networkInterface is not None:
+            self.networkInterface.attach_updater_ui(self._settings)
 
         self._fully_initialized = True
 
     # ── 选项卡切换 ────────────────────────────────────────────────────
 
     def _on_tab_changed(self, routeKey: str):
-        tab_map = {k: i for i, (k, _) in enumerate(self.TAB_CONFIG)}
+        tab_map = {k: i for i, (k, _) in enumerate(self._tab_config)}
         self.stackedWidget.setCurrentIndex(tab_map.get(routeKey, 0))
 
     # ── 外部接口 ──────────────────────────────────────────────────────
@@ -329,7 +338,8 @@ class SettingsInterface(ScrollArea):
                 self.exportInterface, self.shortcutInterface, self.aboutInterface,
             ]:
                 iface.load_settings(s)
-            self.networkInterface.load_settings(s)
+            if self.networkInterface is not None:
+                self.networkInterface.load_settings(s)
             self._apply_theme_setting()
         finally:
             self._loading_settings = False
