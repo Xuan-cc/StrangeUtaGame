@@ -263,12 +263,15 @@ class SettingsInterface(ScrollArea):
 
         # 让每个子页面把控件变更信号连到各自的 _notify_changed，
         # 再通过 set_change_callback 冒泡到 _schedule_auto_save。
+        # 同时注入 _silent_save 通道：用于那些只在导出/导入时才被消费、
+        # 改完不影响任何运行时状态的设置项，绕开整条 settings cascade。
         for iface in [
             self.playbackInterface, self.timingInterface, self.autoSaveInterface,
             self.autoCheckInterface, self.dictionaryInterface, self.uiInterface,
             self.exportInterface, self.shortcutInterface,
         ]:
             iface.set_change_callback(self._schedule_auto_save)
+            iface.set_silent_save_callback(self._silent_save_setting)
             iface.connect_signals()
 
         # 初始加载设置
@@ -309,6 +312,22 @@ class SettingsInterface(ScrollArea):
         if self._loading_settings:
             return
         self._auto_save_timer.start()
+
+    def _silent_save_setting(self, path: str, value) -> None:
+        """直接持久化单个 key，不触发 settings_changed / notify("settings")。
+
+        子页面对"只在导出/导入时才被消费"的设置项调用本方法，避免每次
+        微调都跑一遍 timing_interface._apply_settings 全量重应用
+        （后者会遍历项目所有字符、可能触发 BASS 重载，是已知的 cascade
+        噪声源；参见 commit fccb832 关于 cascade 内异常变原生闪退的记录）。
+        """
+        if self._loading_settings:
+            return
+        try:
+            self._settings.set(path, value)
+            self._settings.save()
+        except Exception as e:
+            print(f"[Settings] 静默保存 {path} 失败: {e}")
 
     def _do_auto_save(self):
         if not self._fully_initialized:

@@ -14,7 +14,7 @@ SettingsInterface（外层）负责：
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget
@@ -34,6 +34,7 @@ class SubSettingInterface(ScrollArea):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._change_callback: Optional[Callable] = None
+        self._silent_save_callback: Optional[Callable[[str, Any], None]] = None
 
         self.scrollWidget = QWidget()
         self.expandLayout = ExpandLayout(self.scrollWidget)
@@ -53,10 +54,25 @@ class SubSettingInterface(ScrollArea):
         """由 SettingsInterface 注入，有设置变更时调用。"""
         self._change_callback = cb
 
+    def set_silent_save_callback(self, cb: Callable[[str, Any], None]) -> None:
+        """由 SettingsInterface 注入：把单个 key 静默写入 AppSettings 并落盘，
+        不触发 settings_changed / store.notify("settings") cascade。
+
+        用于"只在导出/导入时才被消费、改完不影响任何运行时状态"的设置项
+        （如 ``export.software_compensation_ms``），避免每次微调都跑一遍
+        timing_interface._apply_settings 全量重应用。
+        """
+        self._silent_save_callback = cb
+
     def _notify_changed(self, *_args) -> None:
         """控件变更时通知外层触发自动保存。"""
         if self._change_callback is not None:
             self._change_callback()
+
+    def _silent_save(self, path: str, value: Any) -> None:
+        """直接写 ``path → value`` 到 AppSettings 并落盘，不触发 cascade。"""
+        if self._silent_save_callback is not None:
+            self._silent_save_callback(path, value)
 
     # ── 子类必须实现的接口 ──────────────────────────────────────────
 

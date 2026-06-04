@@ -48,7 +48,12 @@ class ExportSubInterface(SubSettingInterface):
     def connect_signals(self):
         self.card_default_format.index_changed.connect(self._notify_changed)
         self.card_export_dir.path_changed.connect(self._notify_changed)
-        self.card_software_compensation.value_changed.connect(self._notify_changed)
+        # 软件导出补偿只在导出/导入时被消费，不影响任何运行时状态。
+        # 走静默保存通道，避免触发整条 settings cascade
+        # （_apply_settings 会遍历所有字符、可能触发 BASS 重载）。
+        self.card_software_compensation.value_changed.connect(
+            lambda v: self._silent_save("export.software_compensation_ms", v)
+        )
         self.card_nicokara_pause_char.value_changed.connect(self._notify_changed)
 
     def load_settings(self, s):
