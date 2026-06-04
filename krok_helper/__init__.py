@@ -1,0 +1,1 @@
+"""Karaoke Helper package."""
