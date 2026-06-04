@@ -183,24 +183,55 @@ class KrokHelperSettingsBridge:
         self._save_callback = save_callback
 
     def load(self) -> dict:
+        latest = load_app_settings()
+        self._app_settings.lyrics_timing = deepcopy(latest.lyrics_timing)
         return deepcopy(self._app_settings.lyrics_timing)
 
     def save(self, data: dict) -> None:
-        self._app_settings.lyrics_timing = deepcopy(data)
-        self._save_callback()
+        latest = load_app_settings()
+        latest.lyrics_timing = deepcopy(data)
+        save_app_settings(latest)
+        self._app_settings.lyrics_timing = deepcopy(latest.lyrics_timing)
+
+    def save_partial(self, changes: dict[str, object]) -> None:
+        latest = load_app_settings()
+        config = deepcopy(latest.lyrics_timing)
+        for path, value in changes.items():
+            self._set_nested(config, path, value)
+        latest.lyrics_timing = config
+        save_app_settings(latest)
+        self._app_settings.lyrics_timing = deepcopy(config)
 
     def load_extra(self, key: str, default):
         field_name = self._EXTRA_FIELDS.get(key)
         if field_name is None:
             return deepcopy(default)
+        latest = load_app_settings()
+        setattr(self._app_settings, field_name, deepcopy(getattr(latest, field_name, default)))
         return deepcopy(getattr(self._app_settings, field_name, default))
 
     def save_extra(self, key: str, data) -> None:
         field_name = self._EXTRA_FIELDS.get(key)
         if field_name is None:
             return
+        latest = load_app_settings()
+        setattr(latest, field_name, deepcopy(data))
+        save_app_settings(latest)
         setattr(self._app_settings, field_name, deepcopy(data))
-        self._save_callback()
+
+    @staticmethod
+    def _set_nested(target: dict, path: str, value: object) -> None:
+        cursor = target
+        keys = [key for key in str(path).split(".") if key]
+        if not keys:
+            return
+        for key in keys[:-1]:
+            child = cursor.get(key)
+            if not isinstance(child, dict):
+                child = {}
+                cursor[key] = child
+            cursor = child
+        cursor[keys[-1]] = deepcopy(value)
 
 
 LYRICS_LANGUAGE_OPTIONS = [
