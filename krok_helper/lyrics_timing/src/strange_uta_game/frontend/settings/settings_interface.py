@@ -118,10 +118,11 @@ class SettingsInterface(ScrollArea):
     _SHORTCUT_ACTIONS = ShortcutSubInterface._SHORTCUT_ACTIONS
     _SHORTCUT_MODES   = ShortcutSubInterface._SHORTCUT_MODES
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, settings_provider=None):
         super().__init__(parent)
         self._store = None
-        self._settings = AppSettings()
+        self._settings_provider = settings_provider
+        self._settings = AppSettings(provider=settings_provider)
         self._initialized = False       # True = _preload 已调度（但可能还未完成）
         self._fully_initialized = False  # True = 所有子页面全部创建并连接完毕
 
@@ -387,9 +388,14 @@ class SettingsInterface(ScrollArea):
         msg.exec()
         if msg.clickedButton() is btn_yes:
             try:
-                if self._settings._config_path.exists():
-                    self._settings._config_path.unlink()
-                self._settings = AppSettings()
+                if self._settings_provider is not None:
+                    self._settings = AppSettings(provider=self._settings_provider)
+                    self._settings._settings = self._settings._load_packaged_defaults()
+                    self._settings.save()
+                else:
+                    if self._settings._config_path.exists():
+                        self._settings._config_path.unlink()
+                    self._settings = AppSettings()
                 self._load_current_settings()
                 InfoBar.success(title="设置已重置", content="所有设置已恢复为默认值",
                     orient=Qt.Orientation.Horizontal, isClosable=True,

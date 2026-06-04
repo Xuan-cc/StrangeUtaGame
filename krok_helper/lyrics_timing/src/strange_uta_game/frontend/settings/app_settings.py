@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, ClassVar, Dict, Optional, Protocol, runtime_checkable
 import json
 import sys
 
@@ -61,6 +61,8 @@ class SettingsProvider(Protocol):
 
 class AppSettings:
     """应用设置管理"""
+
+    _default_provider: ClassVar[Optional[SettingsProvider]] = None
 
     DEFAULT_SETTINGS = {
         "audio": {
@@ -284,6 +286,16 @@ class AppSettings:
         },
     }
 
+    @classmethod
+    def set_default_provider(cls, provider: Optional[SettingsProvider]) -> None:
+        """设置当前进程内 ``AppSettings()`` 的默认后端。
+
+        Embedded 宿主会在构造主窗口时设置本值，使深层组件里保留的
+        ``AppSettings()`` 调用也能自动走宿主设置存储；standalone 默认
+        为 None，继续使用原有文件型配置。
+        """
+        cls._default_provider = provider
+
     @staticmethod
     def get_config_dir() -> Path:
         """获取配置文件目录（默认为程序所在目录）。
@@ -333,9 +345,15 @@ class AppSettings:
                 迁移。``self._settings`` 直接从 ``provider.load()`` 获取，
                 后续 ``save()`` 写回 provider。
         """
-        self._provider = provider
+        if provider is not None:
+            effective_provider = provider
+        elif config_path is None:
+            effective_provider = self.__class__._default_provider
+        else:
+            effective_provider = None
+        self._provider = effective_provider
 
-        if provider is None:
+        if effective_provider is None:
             # ── standalone 模式：保持原有文件型行为 ──
             if config_path is None:
                 config_dir = self.get_config_dir()
@@ -374,7 +392,7 @@ class AppSettings:
             # 实现可能用浅拷贝传 dict 进来）。
             self._settings = self._load_packaged_defaults()
             try:
-                loaded = self._provider.load() or {}
+                loaded = effective_provider.load() or {}
             except Exception:
                 loaded = {}
             if isinstance(loaded, dict):

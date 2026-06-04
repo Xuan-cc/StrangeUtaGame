@@ -47,7 +47,7 @@ class MainWindow(MSFluentWindow):
     # standalone 行为。
     _embedded: bool = False
 
-    def __init__(self, embedded: bool = False):
+    def __init__(self, embedded: bool = False, settings_provider=None):
         # ⚠ 必须在 super().__init__() 之前赋值！MSFluentWindow 初始化
         # 过程中可能触发 resizeEvent / changeEvent，那些 handler 会调
         # _schedule_geometry_save / _save_window_geometry / _restore_window_geometry
@@ -55,7 +55,12 @@ class MainWindow(MSFluentWindow):
         # AttributeError，而 Qt C++ 事件分发无法捕获 Python 异常，进程
         # 直接以 0xC0000409 stack-buffer-overrun 崩掉（已实测）。
         self._embedded = embedded
+        self._settings_provider = settings_provider
         super().__init__()
+
+        if self._embedded and self._settings_provider is not None:
+            from strange_uta_game.frontend.settings.app_settings import AppSettings
+            AppSettings.set_default_provider(self._settings_provider)
 
         # 引擎按"启用高质量音频变速"设置选择：
         #   开（默认）→ BassTsmEngine：离线 TSM 预渲染，变速不变调、无爆音；
@@ -159,6 +164,7 @@ class MainWindow(MSFluentWindow):
         if self._embedded:
             # 嵌入模式：宿主控制主题与几何。仅保留 widget 本地背景兜底，
             # 防止 Mica 失败时透出宿主背景与子界面冲突。
+            self._remove_embedded_title_bar()
             self._apply_win10_fallback_bg()
             return
 
@@ -195,6 +201,26 @@ class MainWindow(MSFluentWindow):
 
         # 应用用户上次的窗口大小/最大化习惯（覆盖上面的默认尺寸）
         self._restore_window_geometry()
+
+    def _remove_embedded_title_bar(self) -> None:
+        """Remove MSFluentWindow's top title-bar space for embedded mode."""
+        try:
+            self.hBoxLayout.setContentsMargins(0, 0, 0, 0)
+        except Exception:
+            pass
+        try:
+            self.setSystemTitleBarButtonVisible(False)
+        except Exception:
+            pass
+        try:
+            title_bar = getattr(self, "titleBar", None)
+            if title_bar is not None:
+                title_bar.hide()
+                title_bar.setFixedHeight(0)
+        except RuntimeError:
+            pass
+        except Exception:
+            pass
 
     def _restore_window_geometry(self):
         """启动时从 config.json 恢复窗口大小与最大化状态（仅读取一次）。
@@ -323,7 +349,7 @@ class MainWindow(MSFluentWindow):
         self.rubyInterface.setObjectName("rubyInterface")
         self.rubyInterface.hide()  # 已废弃，仅保留与 Timing 共用的功能
 
-        self.settingInterface = SettingsInterface(self)
+        self.settingInterface = SettingsInterface(self, settings_provider=self._settings_provider)
         self.settingInterface.setObjectName("settingInterface")
 
         self.editViewInterface = EditInterface(self)
@@ -1002,6 +1028,13 @@ class MainWindow(MSFluentWindow):
                     self.editorInterface.release_resources()
                 except Exception:
                     pass
+            if self._settings_provider is not None:
+                try:
+                    from strange_uta_game.frontend.settings.app_settings import AppSettings
+                    if AppSettings._default_provider is self._settings_provider:
+                        AppSettings.set_default_provider(None)
+                except Exception:
+                    pass
             self._clear_llm_logs()
             e.accept()
             return
@@ -1128,7 +1161,10 @@ class MainWindow(MSFluentWindow):
             pass
 
     @staticmethod
-    def for_embedding(parent: "Optional[object]" = None) -> "MainWindow":
+    def for_embedding(
+        parent: "Optional[object]" = None,
+        settings_provider=None,
+    ) -> "MainWindow":
         """创建一个可作为子 widget 嵌入宿主程序的 MainWindow 实例。
 
         本方法走轻量嵌入路径：构造时传 ``embedded=True`` 跳过所有顶层
@@ -1146,8 +1182,9 @@ class MainWindow(MSFluentWindow):
             一个 :class:`MainWindow` 实例，``_embedded=True``，无顶层
             窗口装饰，可以直接 ``addWidget`` 到任意 layout 中。
         """
-        instance = MainWindow(embedded=True)
+        instance = MainWindow(embedded=True, settings_provider=settings_provider)
         instance.setWindowFlags(Qt.WindowType.Widget)
+        instance._remove_embedded_title_bar()
         if parent is not None:
             instance.setParent(parent)  # type: ignore[arg-type]
         return instance
