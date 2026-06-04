@@ -1150,6 +1150,41 @@ class MainWindow(MSFluentWindow):
         """
         self._on_global_save()
 
+    def import_lyrics_from_text(self, content: str) -> bool:
+        """从宿主传入的文本直接导入歌词（公开 API）。
+
+        krok-helper 的歌词检索页会先按用户当前的预览选项筛掉介绍、
+        选择原文/译文和逐行/按字格式，再把最终文本交给本方法。
+        """
+        if not content or not content.strip():
+            InfoBar.warning(
+                title="歌词为空",
+                content="没有可导入的歌词内容",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return False
+
+        file_loader = getattr(getattr(self, "editorInterface", None), "_file_loader", None)
+        if file_loader is None:
+            InfoBar.error(
+                title="无法导入",
+                content="打轴编辑器尚未准备好",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            return False
+
+        self.switchTo(self.editorInterface)
+        file_loader.load_lyrics_from_text(content)
+        return True
+
     def has_unsaved_changes(self) -> bool:
         """报告当前是否有未保存的脏数据（公开 API）。
 

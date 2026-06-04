@@ -2191,6 +2191,27 @@ class KrokHelperQtApp(QMainWindow):
             QPushButton#LyricsCopyButton:pressed {
                 background: #EEF2F7;
             }
+            QPushButton#LyricsImportButton {
+                background: #FF5A6F;
+                border: 1px solid #FF5A6F;
+                border-radius: 8px;
+                color: #FFFFFF;
+                padding: 7px 14px;
+                font-weight: 700;
+            }
+            QPushButton#LyricsImportButton:hover {
+                background: #C94F60;
+                border-color: #C94F60;
+            }
+            QPushButton#LyricsImportButton:pressed {
+                background: #B94455;
+                border-color: #B94455;
+            }
+            QPushButton#LyricsImportButton:disabled {
+                background: #E8B5BD;
+                border-color: #E8B5BD;
+                color: #FFFFFF;
+            }
             QCheckBox#LyricsStripIntroCheck {
                 color: #475569;
                 spacing: 7px;
@@ -2589,6 +2610,8 @@ class KrokHelperQtApp(QMainWindow):
 
         preview_panel = CardWidget(radius=10, padding=(16, 16, 16, 16), spacing=12)
         preview_panel.setObjectName("LyricsPreviewPanel")
+        self.lyrics_preview_panel = preview_panel
+        preview_panel.installEventFilter(self)
         preview_layout = preview_panel.createVBoxLayout()
         preview_header = QHBoxLayout()
         preview_header.setContentsMargins(0, 0, 0, 0)
@@ -2597,19 +2620,25 @@ class KrokHelperQtApp(QMainWindow):
         preview_title.setObjectName("PanelTitle")
         preview_header.addWidget(preview_title)
         preview_header.addStretch(1)
+
+        preview_controls = QHBoxLayout()
+        preview_controls.setContentsMargins(0, 0, 0, 0)
+        preview_controls.setSpacing(8)
+
         self.copy_lyrics_button = QPushButton("复制歌词")
         self.copy_lyrics_button.setObjectName("LyricsCopyButton")
+        self.copy_lyrics_button.setIcon(FIF.COPY.icon())
+        self.copy_lyrics_button.setIconSize(QSize(16, 16))
         self.copy_lyrics_button.clicked.connect(self._copy_current_lyrics_preview)
         self.copy_lyrics_button.setFixedHeight(36)
-        preview_header.addWidget(self.copy_lyrics_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        preview_controls.addWidget(self.copy_lyrics_button)
         self.lyrics_strip_intro_checkbox = QCheckBox("省略歌曲介绍")
         self.lyrics_strip_intro_checkbox.setObjectName("LyricsStripIntroCheck")
         self.lyrics_strip_intro_checkbox.setMinimumHeight(36)
         self.lyrics_strip_intro_checkbox.setChecked(True)
         self.lyrics_strip_intro_checkbox.toggled.connect(lambda _: self._refresh_lyrics_preview())
         self.lyrics_strip_intro_checkbox.toggled.connect(self._persist_lyrics_preferences)
-        preview_header.addSpacing(12)
-        preview_header.addWidget(self.lyrics_strip_intro_checkbox, 0, Qt.AlignmentFlag.AlignVCenter)
+        preview_controls.addWidget(self.lyrics_strip_intro_checkbox)
         self.lyrics_language_combo = StyledComboBox()
         self.lyrics_language_combo.setObjectName("LyricsLanguageCombo")
         self.lyrics_language_combo.addItems([label for label, _value in LYRICS_LANGUAGE_OPTIONS])
@@ -2619,16 +2648,24 @@ class KrokHelperQtApp(QMainWindow):
         self.lyrics_language_combo.currentIndexChanged.connect(lambda _: self._refresh_lyrics_preview())
         self.lyrics_language_combo.currentIndexChanged.connect(self._persist_lyrics_preferences)
         self._install_single_click_combo_behavior(self.lyrics_language_combo)
-        preview_header.addWidget(self.lyrics_language_combo, 0, Qt.AlignmentFlag.AlignVCenter)
+        preview_controls.addWidget(self.lyrics_language_combo)
         self.lyrics_preview_mode_combo = StyledComboBox()
         self.lyrics_preview_mode_combo.setObjectName("LyricsPreviewModeCombo")
         self.lyrics_preview_mode_combo.addItems([label for label, _mode in LYRICS_PREVIEW_MODE_OPTIONS])
-        self.lyrics_preview_mode_combo.setFixedWidth(112)
+        self.lyrics_preview_mode_combo.setFixedWidth(138)
         self.lyrics_preview_mode_combo.setFixedHeight(36)
         self.lyrics_preview_mode_combo.currentIndexChanged.connect(lambda _: self._refresh_lyrics_preview())
         self.lyrics_preview_mode_combo.currentIndexChanged.connect(self._persist_lyrics_preferences)
         self._install_single_click_combo_behavior(self.lyrics_preview_mode_combo)
-        preview_header.addWidget(self.lyrics_preview_mode_combo, 0, Qt.AlignmentFlag.AlignVCenter)
+        preview_controls.addWidget(self.lyrics_preview_mode_combo)
+        self.import_lyrics_to_timing_button = QPushButton("导入到打轴", preview_panel)
+        self.import_lyrics_to_timing_button.setObjectName("LyricsImportButton")
+        self.import_lyrics_to_timing_button.setIcon(FIF.SEND.icon())
+        self.import_lyrics_to_timing_button.setIconSize(QSize(16, 16))
+        self.import_lyrics_to_timing_button.clicked.connect(self._import_current_lyrics_to_timing)
+        self.import_lyrics_to_timing_button.setFixedSize(138, 36)
+        self.import_lyrics_to_timing_button.raise_()
+        preview_header.addLayout(preview_controls)
 
         self.lyrics_preview_title_label = QLabel("未选择歌曲")
         self.lyrics_preview_title_label.setObjectName("LyricsPreviewTitle")
@@ -2646,6 +2683,7 @@ class KrokHelperQtApp(QMainWindow):
         self.lyrics_preview_hint_label.setObjectName("LyricsPreviewHint")
         self.lyrics_preview_hint_label.setWordWrap(True)
         self.lyrics_preview_hint_label.setFont(build_lyrics_ui_font(point_size=9.5))
+
         self.lyrics_preview_edit = QPlainTextEdit()
         self.lyrics_preview_edit.setReadOnly(True)
         self.lyrics_preview_edit.setObjectName("LyricsPreviewText")
@@ -2661,6 +2699,7 @@ class KrokHelperQtApp(QMainWindow):
         preview_layout.addWidget(self.lyrics_match_summary_label)
         preview_layout.addWidget(self.lyrics_preview_hint_label)
         preview_layout.addWidget(self.lyrics_preview_edit, 1)
+        QTimer.singleShot(0, self._position_lyrics_import_button)
         content.addWidget(preview_panel, 6)
 
         shell.addLayout(content, 1)
@@ -2781,6 +2820,12 @@ class KrokHelperQtApp(QMainWindow):
             and event.type() in {QEvent.Type.Resize, QEvent.Type.Show}
         ):
             QTimer.singleShot(0, self._resize_lyrics_results_columns)
+        if (
+            hasattr(self, "lyrics_preview_panel")
+            and watched is self.lyrics_preview_panel
+            and event.type() in {QEvent.Type.Resize, QEvent.Type.Show}
+        ):
+            QTimer.singleShot(0, self._position_lyrics_import_button)
         return super().eventFilter(watched, event)
 
     def _should_route_alignment_wheel(self, watched, event) -> bool:
@@ -2947,6 +2992,7 @@ class KrokHelperQtApp(QMainWindow):
             self.lyrics_match_summary_label.setText("匹配字段: -")
             self.lyrics_preview_hint_label.setText("搜索后选择一首歌，即可查看逐行或按字的 LRC 预览。")
             self.lyrics_preview_edit.clear()
+            self._refresh_lyrics_import_button(None)
             return
 
         if candidate.load_error:
@@ -2957,6 +3003,7 @@ class KrokHelperQtApp(QMainWindow):
             self.lyrics_match_summary_label.setText("歌词加载失败")
             self.lyrics_preview_hint_label.setText(candidate.load_error)
             self.lyrics_preview_edit.setPlainText(candidate.load_error)
+            self._refresh_lyrics_import_button(None)
             return
 
         if not candidate.lyrics_loaded:
@@ -2971,16 +3018,10 @@ class KrokHelperQtApp(QMainWindow):
             )
             self.lyrics_preview_hint_label.setText(f"正在从 {candidate.provider_name} 加载歌词…")
             self.lyrics_preview_edit.setPlainText("正在加载歌词…")
+            self._refresh_lyrics_import_button(None)
             return
 
-        preview_mode = self._current_lyrics_preview_mode()
-        language = self._current_lyrics_language()
-        preview = build_lyrics_preview(
-            candidate,
-            preview_mode,
-            strip_intro_lines=self.lyrics_strip_intro_checkbox.isChecked(),
-            language=language,
-        )
+        preview = self._build_current_lyrics_preview(candidate)
         self.lyrics_preview_title_label.setText(f"{candidate.title or '未命名'}")
         self.lyrics_preview_meta_label.setText(
             f"歌手: {candidate.artist or '-'}    专辑: {candidate.album or '-'}    来源: {candidate.provider_name}"
@@ -2993,6 +3034,38 @@ class KrokHelperQtApp(QMainWindow):
         )
         self.lyrics_preview_hint_label.setText(self._build_lyrics_preview_hint(candidate, preview))
         self.lyrics_preview_edit.setPlainText(preview.text or "当前结果没有可显示的歌词。")
+        self._refresh_lyrics_import_button(preview)
+
+    def _build_current_lyrics_preview(self, candidate: LyricsSearchCandidate) -> LyricsPreview:
+        return build_lyrics_preview(
+            candidate,
+            self._current_lyrics_preview_mode(),
+            strip_intro_lines=self.lyrics_strip_intro_checkbox.isChecked(),
+            language=self._current_lyrics_language(),
+        )
+
+    def _refresh_lyrics_import_button(self, preview: LyricsPreview | None) -> None:
+        button = getattr(self, "import_lyrics_to_timing_button", None)
+        if button is None:
+            return
+        button.setEnabled(bool(preview is not None and preview.text.strip()))
+        self._position_lyrics_import_button()
+
+    def _position_lyrics_import_button(self) -> None:
+        button = getattr(self, "import_lyrics_to_timing_button", None)
+        panel = getattr(self, "lyrics_preview_panel", None)
+        combo = getattr(self, "lyrics_preview_mode_combo", None)
+        if button is None or panel is None or combo is None:
+            return
+        if not panel.isVisible():
+            return
+        combo_pos = combo.mapTo(panel, combo.rect().topLeft())
+        x = combo_pos.x()
+        y = combo_pos.y() + combo.height() + 8
+        max_x = max(0, panel.width() - button.width() - 16)
+        max_y = max(0, panel.height() - button.height() - 16)
+        button.move(min(max(x, 0), max_x), min(max(y, 0), max_y))
+        button.raise_()
 
     def _build_lyrics_preview_hint(self, candidate: LyricsSearchCandidate, preview: LyricsPreview) -> str:
         if preview.used_synced_lyrics and preview.used_estimated_char_timing:
@@ -3016,6 +3089,30 @@ class KrokHelperQtApp(QMainWindow):
             self.copy_lyrics_button.rect(),
             1600,
         )
+
+    def _import_current_lyrics_to_timing(self) -> None:
+        candidate = self.lyrics_selected_candidate
+        if candidate is None or candidate.load_error or not candidate.lyrics_loaded:
+            QMessageBox.information(self, APP_TITLE, "请先选择并加载一条歌词。")
+            return
+        preview = self._build_current_lyrics_preview(candidate)
+        lyrics_text = preview.text.strip()
+        if not lyrics_text:
+            QMessageBox.information(self, APP_TITLE, "当前筛选结果没有可导入的歌词。")
+            self._refresh_lyrics_import_button(preview)
+            return
+        lyrics_timing_page = getattr(self, "lyrics_timing_page", None)
+        if lyrics_timing_page is None or not hasattr(lyrics_timing_page, "import_lyrics_from_text"):
+            QMessageBox.critical(self, APP_TITLE, "打轴模块尚未准备好，无法导入歌词。")
+            return
+        try:
+            imported = bool(lyrics_timing_page.import_lyrics_from_text(lyrics_text))
+        except Exception as exc:
+            QMessageBox.critical(self, APP_TITLE, f"导入到打轴失败：\n{exc}")
+            return
+        if not imported:
+            return
+        self._show_module(WORKFLOW_LYRICS_TIMING)
 
     def _ensure_selected_lyrics_loaded(self) -> None:
         candidate = self.lyrics_selected_candidate
