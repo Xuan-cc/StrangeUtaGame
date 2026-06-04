@@ -225,8 +225,7 @@ class FileLoader:
 
         # 应用设置中的默认音量和速度
         if self._timing_service:
-            main_window = self._editor.window()
-            setting_iface = getattr(main_window, "settingInterface", None)
+            setting_iface = self._editor._get_setting_interface()
             if setting_iface is not None:
                 settings = setting_iface.get_settings()
                 default_volume = int(settings.get("audio.default_volume", 80))

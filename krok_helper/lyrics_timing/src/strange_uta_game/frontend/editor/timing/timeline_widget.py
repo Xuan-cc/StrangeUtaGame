@@ -60,6 +60,7 @@ class WaveformDisplay(QWidget):
 
         # 缩放和滚动
         self._zoom_factor: float = 50.0  # 默认50x缩放，减少初始渲染压力
+        self._zoom_enabled: bool = True
         self._scroll_position: float = 0.0
 
         # 波形峰值缓存
@@ -161,6 +162,9 @@ class WaveformDisplay(QWidget):
         # 缩放变化后重新 clamp，避免当前滚动位置超出新的有效范围
         self._scroll_position = self._clamp_scroll(self._scroll_position)
         self.update()
+
+    def set_zoom_enabled(self, enabled: bool) -> None:
+        self._zoom_enabled = enabled
 
     def set_scroll_position(self, position: float):
         self._scroll_position = self._clamp_scroll(position)
@@ -392,6 +396,9 @@ class WaveformDisplay(QWidget):
     def wheelEvent(self, a0: Optional[QWheelEvent]):
         if a0 is None:
             return
+        if not self._zoom_enabled:
+            a0.ignore()
+            return
 
         delta = a0.angleDelta().y()
         new_zoom = self._zoom_factor * (1.2 if delta > 0 else 1 / 1.2)
@@ -427,6 +434,7 @@ class TimelineWidget(QWidget):
         super().__init__(parent)
         self._duration_ms = 0
         self._waveform_visible = True
+        self._zoom_enabled = True
         self._init_ui()
 
     def _init_ui(self):
@@ -501,6 +509,12 @@ class TimelineWidget(QWidget):
     def set_playing(self, playing: bool) -> None:
         self.waveform_display.set_playing(playing)
 
+    def set_zoom_enabled(self, enabled: bool) -> None:
+        self._zoom_enabled = enabled
+        self.waveform_display.set_zoom_enabled(enabled)
+        self.zoom_slider.setEnabled(enabled)
+        self.zoom_label.setEnabled(enabled)
+
     # ---- 缩放对数刻度转换（zoom 范围 1x-100x，slider 范围 0-10000）----
 
     @staticmethod
@@ -528,6 +542,8 @@ class TimelineWidget(QWidget):
         self.scroll_bar.blockSignals(False)
 
     def _on_zoom_slider_changed(self, value: int):
+        if not self._zoom_enabled:
+            return
         self.waveform_display._suspend_auto_scroll()
         zoom = self._slider_to_zoom(value)
         self.waveform_display.set_zoom(zoom)

@@ -2272,7 +2272,7 @@ class KrokHelperQtApp(QMainWindow):
         central = QWidget()
         central.setObjectName("AppRoot")
         shell = QVBoxLayout(central)
-        shell.setContentsMargins(24, 20, 24, 16)
+        shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(12)
 
         self.workflow_stepper = WorkflowStepper(WORKFLOW_STEPS, self)
@@ -2286,8 +2286,22 @@ class KrokHelperQtApp(QMainWindow):
         workflow_bar_layout.setSpacing(10)
         workflow_bar_layout.addWidget(self.workflow_stepper, 1)
 
+        workflow_bar_container = QWidget()
+        workflow_bar_shell = QVBoxLayout(workflow_bar_container)
+        workflow_bar_shell.setContentsMargins(24, 20, 24, 0)
+        workflow_bar_shell.setSpacing(0)
+        workflow_bar_shell.addWidget(workflow_bar)
+
         self.page_stack = QStackedWidget()
         self.page_stack.setObjectName("PageStack")
+        page_stack_container = QWidget()
+        self._page_stack_container_layout = QVBoxLayout(page_stack_container)
+        self._page_stack_normal_margins = (24, 0, 24, 16)
+        self._page_stack_flush_margins = (0, 0, 0, 16)
+        self._page_stack_container_layout.setContentsMargins(*self._page_stack_normal_margins)
+        self._page_stack_container_layout.setSpacing(0)
+        self._page_stack_container_layout.addWidget(self.page_stack)
+
         self.video_download_page = VideoDownloadPage(self.settings, self._save_all_settings, self)
         self.align_page = self._build_alignment_page()
         self.lyrics_page = self._build_lyrics_page()
@@ -2320,8 +2334,8 @@ class KrokHelperQtApp(QMainWindow):
         self.page_stack.addWidget(self.subtitle_render_page)
         self.page_stack.addWidget(self.hires_page)
 
-        shell.addWidget(workflow_bar)
-        shell.addWidget(self.page_stack, 1)
+        shell.addWidget(workflow_bar_container)
+        shell.addWidget(page_stack_container, 1)
         self.setCentralWidget(central)
         self.statusBar().hide()
         self._show_module(WORKFLOW_VIDEO_DOWNLOAD)
@@ -2338,8 +2352,20 @@ class KrokHelperQtApp(QMainWindow):
         ):
             self._stop_alignment_preview()
         self.active_module = module_id
+        self._sync_page_stack_margins(module_id)
         self.page_stack.setCurrentWidget(self.module_pages[module_id])
         self.workflow_stepper.setCurrentModule(module_id)
+
+    def _sync_page_stack_margins(self, module_id: str) -> None:
+        layout = getattr(self, "_page_stack_container_layout", None)
+        if layout is None:
+            return
+        margins = (
+            self._page_stack_flush_margins
+            if module_id == WORKFLOW_LYRICS_TIMING
+            else self._page_stack_normal_margins
+        )
+        layout.setContentsMargins(*margins)
 
     def _handle_workflow_step_clicked(self, index: int) -> None:
         self._show_module(self.workflow_stepper.moduleIdAt(index))
