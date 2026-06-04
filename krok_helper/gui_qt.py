@@ -5641,7 +5641,7 @@ class KrokHelperQtApp(QMainWindow):
         product_meta.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #475467;')
         product_text_layout.addWidget(product_name)
         product_text_layout.addWidget(product_meta)
-        product_layout.addWidget(product_icon, 0, Qt.AlignmentFlag.AlignTop)
+        product_layout.addWidget(product_icon, 0, Qt.AlignmentFlag.AlignVCenter)
         product_layout.addLayout(product_text_layout, 1)
         about_panel_layout.addWidget(product_card)
 
@@ -5664,7 +5664,7 @@ class KrokHelperQtApp(QMainWindow):
         github_text_layout.addWidget(github_link)
         open_github_button = QPushButton("打开")
         open_github_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(github_url)))
-        github_layout.addWidget(github_icon, 0, Qt.AlignmentFlag.AlignTop)
+        github_layout.addWidget(github_icon, 0, Qt.AlignmentFlag.AlignVCenter)
         github_layout.addLayout(github_text_layout, 1)
         github_layout.addWidget(open_github_button, 0, Qt.AlignmentFlag.AlignVCenter)
         about_panel_layout.addWidget(github_card)
