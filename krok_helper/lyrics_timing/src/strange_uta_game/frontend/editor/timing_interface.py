@@ -434,6 +434,16 @@ class EditorInterface(QWidget):
 
     def _apply_settings(self):
         """从 AppSettings 读取设定并应用到编辑器。"""
+        try:
+            self._apply_settings_inner()
+        except Exception as e:
+            # 此方法挂在 ProjectStore.data_changed("settings") 信号槽上，
+            # 任何未捕获的 Python 异常都可能在 Qt C++ 派发层变为 0xC0000409
+            # STATUS_STACK_BUFFER_OVERRUN 原生闪退（参见 commit fccb832）。
+            # 兜底打日志，决不让 cascade 击穿到 Qt。
+            print(f"[Settings] _apply_settings 失败: {e}")
+
+    def _apply_settings_inner(self):
         if not self._store:
             return
         # In embedded mode, self.window() is the host window. Walk parents to
@@ -628,7 +638,13 @@ class EditorInterface(QWidget):
             self._project.global_offset_ms = render_offset
             for sentence in self._project.sentences:
                 for ch in sentence.characters:
-                    ch.set_offset(render_offset)
+                    # 旧版 .sug 升级 / 第三方导入可能在 timestamps 中混入
+                    # 非 int（None / 字符串），ch.set_offset 内部的算术会抛
+                    # TypeError。单个脏字符不应阻断整次 settings cascade。
+                    try:
+                        ch.set_offset(render_offset)
+                    except Exception as e:
+                        print(f"[Settings] set_offset 跳过脏字符: {e}")
         # 应用歌词对齐方式
         lyrics_alignment = settings.get("ui.lyrics_alignment", "center")
         self.preview.set_alignment(lyrics_alignment)
@@ -741,13 +757,19 @@ class EditorInterface(QWidget):
         # 同步到Project对象
         if self._project:
             self._project.global_offset_ms = offset_ms
-        # 更新所有字符的偏移时间戳
+        # 更新所有字符的偏移时间戳（单个脏字符不能阻断整次更新）
         if self._project:
             for sentence in self._project.sentences:
                 for ch in sentence.characters:
-                    ch.set_offset(offset_ms)
+                    try:
+                        ch.set_offset(offset_ms)
+                    except Exception as e:
+                        print(f"[Offset] set_offset 跳过脏字符: {e}")
         # 更新渲染
-        self.preview.set_global_offset(offset_ms)
+        try:
+            self.preview.set_global_offset(offset_ms)
+        except Exception as e:
+            print(f"[Offset] preview.set_global_offset 失败: {e}")
         # 通知 ProjectStore，使 Settings 页面等监听者同步更新
         if hasattr(self, "_store") and self._store:
             self._store.notify("settings")
