@@ -51,6 +51,40 @@ VARIANT = _cli_args.variant
 PROJECT_ROOT = Path(__file__).parent.absolute()
 VERSION_FILE = PROJECT_ROOT / "src" / "strange_uta_game" / "__version__.py"
 
+# ── 防呆：让本地 src/ 屏蔽任何旧的 editable install ──────────────────────────
+# 历史上 strange_uta_game 曾以独立仓库 E:\KaraMaker\StrangeUtaGame\ 形式存在并
+# 被 `pip install -e .`，迁移到 krok_helper/lyrics_timing 之后那份 editable
+# install 仍会留在 Python 环境的 sys.path 里。PyInstaller 做 import 分析时
+# 命中的就是旧路径，最终 PYZ 里打进去的是旧 bytecode；--add-data 复制进
+# dist/_internal/strange_uta_game/ 的新源码只是陪跑，运行时不会被加载，
+# 表现就是"源码改了、dist 里也有新文件，可装好的 EXE 行为却照旧"。
+#
+# 把本地 src 放到 sys.path 最前并打印实际命中路径，让每次打包都能在控制台
+# 立刻看出"这次打的是哪份 strange_uta_game"。
+_SRC_DIR = str(PROJECT_ROOT / "src")
+while _SRC_DIR in sys.path:
+    sys.path.remove(_SRC_DIR)
+sys.path.insert(0, _SRC_DIR)
+try:
+    import strange_uta_game as _sug_probe
+
+    _sug_path = Path(_sug_probe.__file__).resolve()
+    _expected = (PROJECT_ROOT / "src" / "strange_uta_game" / "__init__.py").resolve()
+    if _sug_path != _expected:
+        raise SystemExit(
+            "✗ 打包前自检失败：import strange_uta_game 命中的不是本仓库源码。\n"
+            f"  期望: {_expected}\n"
+            f"  实际: {_sug_path}\n"
+            "  常见原因：环境里有旧位置的 `pip install -e .`（例如\n"
+            "  E:\\KaraMaker\\StrangeUtaGame\\）。先 `pip uninstall strange-uta-game`\n"
+            "  或确认 sys.path 头部为当前 src/ 后重试。"
+        )
+    print(f"✓ 打包将使用: {_sug_path}")
+    del _sug_probe
+except ImportError:
+    # 还没装/没找到都没关系，sys.path 已经放进去了，PyInstaller 自己也能找到
+    print(f"  (尚未 import strange_uta_game，将走 sys.path 首项: {_SRC_DIR})")
+
 # ── 变体配置 ──────────────────────────────────────────────────────────────────
 
 # 每个变体的 PyInstaller 额外参数（在公共参数基础上叠加）

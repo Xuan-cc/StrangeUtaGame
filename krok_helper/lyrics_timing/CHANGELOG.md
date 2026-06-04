@@ -11,6 +11,7 @@
 ### 修复项目
 - 从预设加载演唱者时，若项目仅有占位默认演唱者，其名下歌词会被级联删除
 - 设置 cascade 加防御性兜底：`_apply_settings` 与全局偏移更新中的 Python 异常不再透传到 Qt 派发层，避免出现 0xC0000409 原生闪退
+- `build.py` 强制把本地 `src/` 顶到 `sys.path` 最前，避免环境里旧位置的 `pip install -e .`（如 `E:\KaraMaker\StrangeUtaGame\`）让 PyInstaller 把旧 bytecode 打进 PYZ 导致打包后修复失效，同时打印实际命中的 `strange_uta_game` 路径便于自检
 
 
 ## [1.1.1] - 2026-06-04
