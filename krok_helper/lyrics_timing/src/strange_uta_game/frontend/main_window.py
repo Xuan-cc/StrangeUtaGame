@@ -121,7 +121,7 @@ class MainWindow(MSFluentWindow):
         #   宿主显式调度（保持本模块"嵌入后零启动副作用"）。
         if not self._embedded:
             # 延迟检查闪退恢复（等 UI 显示完毕后再弹窗）
-            QTimer.singleShot(500, self._check_crash_recovery)
+            QTimer.singleShot(500, self.check_crash_recovery)
             # 延迟检查应用自动更新（在闪退恢复之后，避免抢占用户注意力）。
             # 失败/无网时静默跳过，绝不阻塞主流程。
             QTimer.singleShot(2500, self._check_for_app_update)
@@ -622,12 +622,27 @@ class MainWindow(MSFluentWindow):
 
     # ==================== 闪退恢复 ====================
 
-    def _check_crash_recovery(self):
-        """启动时检查是否有未命名项目的闪退恢复文件。"""
-        if not ProjectStore.has_crash_recovery():
-            return
+    @staticmethod
+    def has_pending_crash_recovery() -> bool:
+        """是否存在待恢复的闪退临时文件（公开 API，供宿主在弹窗前查询）。"""
+        return ProjectStore.has_crash_recovery()
 
-        msg = QMessageBox(self)
+    def check_crash_recovery(self, dialog_parent: "Optional[object]" = None) -> bool:
+        """检查是否有闪退恢复文件，并询问用户是否加载。
+
+        standalone 模式由 :meth:`__init__` 启动期定时器自动触发，embedded 模式
+        由宿主在窗口显示后显式调用，并传入自己的顶层窗口作为弹窗 parent，
+        避免 QMessageBox 出现在尚未可见的子 widget 上。
+
+        Returns:
+            True 表示用户选择恢复且成功加载了项目；其余情况均为 False
+            （包括没有恢复文件、用户拒绝、加载失败）。
+        """
+        if not ProjectStore.has_crash_recovery():
+            return False
+
+        parent = dialog_parent if dialog_parent is not None else self
+        msg = QMessageBox(parent)
         msg.setWindowTitle("恢复未保存的项目")
         msg.setText("检测到上次异常退出时的未保存项目数据。\n是否加载恢复？")
         btn_yes = msg.addButton("是", QMessageBox.ButtonRole.AcceptRole)
@@ -651,6 +666,7 @@ class MainWindow(MSFluentWindow):
                 )
                 # 恢复后删除临时文件
                 ProjectStore.delete_crash_recovery()
+                return True
             else:
                 InfoBar.error(
                     title="恢复失败",
@@ -662,9 +678,11 @@ class MainWindow(MSFluentWindow):
                     parent=self,
                 )
                 ProjectStore.delete_crash_recovery()
+                return False
         else:
             # 用户拒绝恢复 → 删除临时文件
             ProjectStore.delete_crash_recovery()
+            return False
 
     # ==================== 自动更新检查 ====================
 

@@ -1919,6 +1919,7 @@ class KrokHelperQtApp(QMainWindow):
         self.preview_timer = QTimer(self)
         self.preview_timer.setInterval(300)
         self.preview_timer.timeout.connect(self._poll_alignment_preview)
+        QTimer.singleShot(800, self._check_lyrics_timing_crash_recovery)
         QTimer.singleShot(2500, self._check_for_workbench_update_on_startup)
 
     def _track_background_task(self, attr_name: str, task: BackgroundTask) -> BackgroundTask:
@@ -5139,6 +5140,30 @@ class KrokHelperQtApp(QMainWindow):
         self.ffmpeg_dir_text = str(path) if str(path).strip() else ""
         self._sync_ffmpeg_labels()
         self._sync_lyrics_timing_host_paths()
+
+    def _check_lyrics_timing_crash_recovery(self) -> None:
+        """启动时让嵌入的歌词打轴模块检查闪退恢复文件。
+
+        若发现待恢复的临时文件，先切到歌词打轴模块（让用户看到上下文），
+        再弹出"是否恢复"对话框。用户拒绝时停留在该模块，由用户自行返回。
+        """
+        page = getattr(self, "lyrics_timing_page", None)
+        if page is None or not hasattr(page, "check_crash_recovery"):
+            return
+        try:
+            has_pending = bool(
+                hasattr(page, "has_pending_crash_recovery")
+                and page.has_pending_crash_recovery()
+            )
+        except Exception:
+            return
+        if not has_pending:
+            return
+        self._show_module(WORKFLOW_LYRICS_TIMING)
+        try:
+            page.check_crash_recovery(dialog_parent=self)
+        except Exception:
+            pass
 
     def _sync_lyrics_timing_host_paths(self) -> None:
         """Inject host-managed runtime paths into the embedded timing module."""
