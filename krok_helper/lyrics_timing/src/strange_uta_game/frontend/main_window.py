@@ -95,6 +95,7 @@ class MainWindow(MSFluentWindow):
         self._init_window()
         self._init_interfaces()
         self._init_navigation()
+        self._apply_embedded_ui_policy()
 
         # 中央响应：store 的 project 变更 → 同步 timing_service 等
         self._store.data_changed.connect(self._on_data_changed)
@@ -221,6 +222,14 @@ class MainWindow(MSFluentWindow):
             pass
         except Exception:
             pass
+
+    def _apply_embedded_ui_policy(self) -> None:
+        """Apply host-owned UI behavior that only exists in embedded mode."""
+        if not self._embedded:
+            return
+        timeline = getattr(getattr(self, "editorInterface", None), "timeline", None)
+        if timeline is not None and hasattr(timeline, "set_zoom_enabled"):
+            timeline.set_zoom_enabled(False)
 
     def _restore_window_geometry(self):
         """启动时从 config.json 恢复窗口大小与最大化状态（仅读取一次）。
@@ -1185,6 +1194,7 @@ class MainWindow(MSFluentWindow):
         instance = MainWindow(embedded=True, settings_provider=settings_provider)
         instance.setWindowFlags(Qt.WindowType.Widget)
         instance._remove_embedded_title_bar()
+        instance._apply_embedded_ui_policy()
         if parent is not None:
             instance.setParent(parent)  # type: ignore[arg-type]
         return instance
