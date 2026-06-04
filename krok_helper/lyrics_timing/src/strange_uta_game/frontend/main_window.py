@@ -41,12 +41,21 @@ class MainWindow(MSFluentWindow):
       用 :meth:`for_embedding` 工厂方法创建即可。
     """
 
-    def __init__(self, embedded: bool = False):
-        super().__init__()
+    # 类级别 fallback：万一 super().__init__() 通过事件触发
+    # （如 resizeEvent / changeEvent → _schedule_geometry_save）在
+    # self._embedded 实例属性写入前就访问它，会落到这个 False，保留
+    # standalone 行为。
+    _embedded: bool = False
 
-        # standalone vs embedded 模式总开关；所有跟"顶层窗口"绑定的行为
-        # 在 embedded=True 时跳过，由宿主负责。
+    def __init__(self, embedded: bool = False):
+        # ⚠ 必须在 super().__init__() 之前赋值！MSFluentWindow 初始化
+        # 过程中可能触发 resizeEvent / changeEvent，那些 handler 会调
+        # _schedule_geometry_save / _save_window_geometry / _restore_window_geometry
+        # 等等，里面都读 self._embedded —— 若此时还未赋值会
+        # AttributeError，而 Qt C++ 事件分发无法捕获 Python 异常，进程
+        # 直接以 0xC0000409 stack-buffer-overrun 崩掉（已实测）。
         self._embedded = embedded
+        super().__init__()
 
         # 引擎按"启用高质量音频变速"设置选择：
         #   开（默认）→ BassTsmEngine：离线 TSM 预渲染，变速不变调、无爆音；
