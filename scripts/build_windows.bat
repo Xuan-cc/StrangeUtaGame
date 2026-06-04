@@ -27,6 +27,21 @@ call :ensure_pkg PyInstaller pyinstaller || exit /b 1
 call :ensure_pkg PyQt6 PyQt6 || exit /b 1
 call :ensure_pkg qfluentwidgets "PyQt6-Fluent-Widgets" || exit /b 1
 call :ensure_pkg yt_dlp yt-dlp || exit /b 1
+call :ensure_pkg requests requests || exit /b 1
+
+if not exist "krok_helper\lyrics_timing\updater_app\dist\Updater.exe" (
+    echo Building Updater.exe...
+    pushd krok_helper\lyrics_timing
+    %PYTHON_BIN% updater_app\build_updater.py
+    if errorlevel 1 (
+        popd
+        echo.
+        echo Updater build failed.
+        if not defined IS_CI pause
+        exit /b 1
+    )
+    popd
+)
 
 if not exist "%DIST_PATH%" mkdir "%DIST_PATH%"
 if not exist "%WORK_PATH%" mkdir "%WORK_PATH%"
@@ -131,6 +146,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 if errorlevel 1 (
     echo.
     echo Package rename failed.
+    if not defined IS_CI pause
+    exit /b 1
+)
+
+echo Copying Updater.exe...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$targetDir = Resolve-Path '%APP_DIST%';" ^
+    "$updater = Resolve-Path 'krok_helper\lyrics_timing\updater_app\dist\Updater.exe';" ^
+    "Copy-Item -LiteralPath $updater -Destination (Join-Path $targetDir 'Updater.exe') -Force"
+if errorlevel 1 (
+    echo.
+    echo Failed to copy Updater.exe.
     if not defined IS_CI pause
     exit /b 1
 )

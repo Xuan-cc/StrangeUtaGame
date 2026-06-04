@@ -31,6 +31,8 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QScrollArea,
@@ -51,6 +53,7 @@ from qfluentwidgets import (
     FluentIcon as FIF,
     LineEdit as QLineEdit,
     PlainTextEdit as QPlainTextEdit,
+    Pivot,
     PrimaryPushButton,
     ProgressBar as QProgressBar,
     PushButton as QPushButton,
@@ -90,6 +93,7 @@ from krok_helper.audio_alignment import (
 from krok_helper.config import (
     APP_NAME,
     APP_TITLE,
+    APP_VERSION,
     WINDOW_HEIGHT,
     WINDOW_MIN_HEIGHT,
     WINDOW_MIN_WIDTH,
@@ -128,6 +132,9 @@ from krok_helper.settings import (
     migrate_strange_uta_game_settings,
     save_app_settings,
 )
+from krok_helper.updater import CheckResult, UpdateChecker, ensure_updater_settings
+from krok_helper.updater.settings import UpdaterSettings
+from krok_helper.updater.sources import SOURCE_IDS, SOURCE_LABELS, normalize_order
 from krok_helper.video_download import VideoDownloadPage
 from krok_helper.windows import set_explicit_app_user_model_id
 
@@ -1816,6 +1823,7 @@ class KrokHelperQtApp(QMainWindow):
         self.align_analysis_task: BackgroundTask | None = None
         self.align_auto_task: BackgroundTask | None = None
         self.align_export_task: BackgroundTask | None = None
+        self._update_checker: UpdateChecker | None = None
         self.lyrics_search_service = LyricsSearchService()
         self.lyrics_search_results: list[LyricsSearchCandidate] = []
         self.lyrics_pending_results: list[LyricsSearchCandidate] = []
@@ -1880,6 +1888,7 @@ class KrokHelperQtApp(QMainWindow):
         self.preview_timer = QTimer(self)
         self.preview_timer.setInterval(300)
         self.preview_timer.timeout.connect(self._poll_alignment_preview)
+        QTimer.singleShot(2500, self._check_for_workbench_update_on_startup)
 
     def _track_background_task(self, attr_name: str, task: BackgroundTask) -> BackgroundTask:
         task.setObjectName(attr_name)
@@ -2014,6 +2023,15 @@ class KrokHelperQtApp(QMainWindow):
                 border: 1px solid #E3E8F0;
                 border-radius: 8px;
             }
+            QFrame#WhitePanel {
+                background: #FFFFFF;
+                border: 1px solid #E1E7F0;
+                border-radius: 8px;
+            }
+            Pivot {
+                background: transparent;
+                border: 0;
+            }
             QWidget#LyricsPage {
                 background: #F4F7FB;
             }
@@ -2044,6 +2062,16 @@ class KrokHelperQtApp(QMainWindow):
             ToolButton#AlignMaterialSettingsButton:hover {
                 background: #F3F4F6;
                 border-color: #E5E7EB;
+            }
+            ToolButton#GlobalSettingsButton {
+                background: #FFFFFF;
+                border: 1px solid #D7DEE9;
+                border-radius: 8px;
+                padding: 4px;
+            }
+            ToolButton#GlobalSettingsButton:hover {
+                background: #FFF6F7;
+                border-color: #F3A8B3;
             }
             QLabel#PageTitle {
                 color: #1f2937;
@@ -2285,6 +2313,13 @@ class KrokHelperQtApp(QMainWindow):
         workflow_bar_layout.setContentsMargins(10, 8, 10, 8)
         workflow_bar_layout.setSpacing(10)
         workflow_bar_layout.addWidget(self.workflow_stepper, 1)
+        self.global_settings_button = ToolButton(FIF.SETTING)
+        self.global_settings_button.setObjectName("GlobalSettingsButton")
+        self.global_settings_button.setToolTip("全局设置")
+        self.global_settings_button.setFixedSize(48, 48)
+        self.global_settings_button.setIconSize(QSize(20, 20))
+        self.global_settings_button.clicked.connect(self._open_global_settings_window)
+        workflow_bar_layout.addWidget(self.global_settings_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
         workflow_bar_container = QWidget()
         workflow_bar_shell = QVBoxLayout(workflow_bar_container)
@@ -3075,9 +3110,7 @@ class KrokHelperQtApp(QMainWindow):
         settings_button.clicked.connect(lambda: self._open_settings_window("hires"))
         settings_layout.addWidget(output_label, 0, 0)
         settings_layout.addWidget(self.output_dir_label, 0, 1)
-        settings_layout.addWidget(ffmpeg_title, 1, 0)
-        settings_layout.addWidget(self.hires_ffmpeg_label, 1, 1)
-        settings_layout.addWidget(settings_button, 1, 2)
+        settings_layout.addWidget(settings_button, 0, 2)
         settings_layout.setColumnStretch(1, 1)
         shell.addWidget(settings_card)
 
@@ -5129,34 +5162,6 @@ class KrokHelperQtApp(QMainWindow):
         heading.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 18pt; font-weight: 700;')
         shell.addWidget(heading)
 
-        ffmpeg_panel = QFrame()
-        ffmpeg_panel.setObjectName("WhitePanel")
-        ffmpeg_layout = QGridLayout(ffmpeg_panel)
-        ffmpeg_layout.setContentsMargins(14, 14, 14, 14)
-        ffmpeg_title = QLabel("FFmpeg 目录")
-        ffmpeg_title.setObjectName("PanelTitle")
-        ffmpeg_display = QLineEdit(dialog)
-        ffmpeg_display.setText(self.ffmpeg_dir_text)
-        ffmpeg_display.setPlaceholderText(FFMPEG_DIR_PLACEHOLDER)
-        choose_button = QPushButton("选择目录")
-        choose_button.clicked.connect(
-            lambda: self._choose_ffmpeg_for_dialog(dialog, ffmpeg_display)
-        )
-        system_button = QPushButton("使用系统 PATH")
-        system_button.clicked.connect(lambda: ffmpeg_display.setText(""))
-        ffmpeg_hint_1 = QLabel("推荐直接选择 ffmpeg 的 bin 目录，例如 D:\\tools\\ffmpeg\\bin。")
-        ffmpeg_hint_1.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
-        ffmpeg_hint_2 = QLabel("也可以选择 ffmpeg 根目录，程序会尝试其中的 bin\\ffmpeg.exe 和 bin\\ffprobe.exe。")
-        ffmpeg_hint_2.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
-        ffmpeg_layout.addWidget(ffmpeg_title, 0, 0)
-        ffmpeg_layout.addWidget(ffmpeg_display, 0, 1)
-        ffmpeg_layout.addWidget(choose_button, 0, 2)
-        ffmpeg_layout.addWidget(system_button, 0, 3)
-        ffmpeg_layout.addWidget(ffmpeg_hint_1, 1, 1, 1, 3)
-        ffmpeg_layout.addWidget(ffmpeg_hint_2, 2, 1, 1, 3)
-        ffmpeg_layout.setColumnStretch(1, 1)
-        shell.addWidget(ffmpeg_panel)
-
         status_label = QLabel("")
         status_label.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #177245;')
 
@@ -5259,7 +5264,7 @@ class KrokHelperQtApp(QMainWindow):
                     off_template=off_template,
                     align_video_template=align_video_template,
                     align_audio_template=align_audio_template,
-                    ffmpeg_dir_text=ffmpeg_display.text().strip(),
+                    ffmpeg_dir_text=self.ffmpeg_dir_text,
                 )
             except ProcessingError as exc:
                 QMessageBox.critical(dialog, APP_TITLE, str(exc))
@@ -5278,6 +5283,510 @@ class KrokHelperQtApp(QMainWindow):
         path = QFileDialog.getExistingDirectory(parent, "选择 ffmpeg 所在目录")
         if path:
             target.setText(path)
+
+    def _open_global_settings_window(self) -> None:
+        updater_settings = ensure_updater_settings(self.settings)
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"{APP_TITLE} - 全局设置")
+        dialog.resize(780, 520)
+
+        outer = QVBoxLayout(dialog)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+        shell = QVBoxLayout(content)
+        shell.setContentsMargins(20, 20, 20, 20)
+        shell.setSpacing(18)
+
+        heading = QLabel("全局设置")
+        heading.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 18pt; font-weight: 700;')
+        shell.addWidget(heading)
+
+        pivot = Pivot(dialog)
+        pivot.setFixedHeight(40)
+        shell.addWidget(pivot)
+
+        settings_stack = QStackedWidget(dialog)
+        tools_tab = QWidget(settings_stack)
+        tools_layout = QVBoxLayout(tools_tab)
+        tools_layout.setContentsMargins(0, 12, 0, 0)
+        tools_layout.setSpacing(14)
+        network_tab = QWidget(settings_stack)
+        network_layout = QVBoxLayout(network_tab)
+        network_layout.setContentsMargins(0, 12, 0, 0)
+        network_layout.setSpacing(14)
+        settings_stack.addWidget(tools_tab)
+        settings_stack.addWidget(network_tab)
+        pivot.addItem(routeKey="tools", text="工具", onClick=lambda _checked: settings_stack.setCurrentIndex(0))
+        pivot.addItem(routeKey="network", text="网络与更新", onClick=lambda _checked: settings_stack.setCurrentIndex(1))
+        pivot.setCurrentItem("tools")
+        settings_stack.setCurrentIndex(0)
+        shell.addWidget(settings_stack, 1)
+
+        ffmpeg_panel = QFrame()
+        ffmpeg_panel.setObjectName("WhitePanel")
+        ffmpeg_layout = QGridLayout(ffmpeg_panel)
+        ffmpeg_layout.setContentsMargins(14, 14, 14, 14)
+        ffmpeg_title = QLabel("FFmpeg 目录")
+        ffmpeg_title.setObjectName("PanelTitle")
+        ffmpeg_display = QLineEdit(dialog)
+        ffmpeg_display.setText(self.ffmpeg_dir_text)
+        ffmpeg_display.setPlaceholderText(FFMPEG_DIR_PLACEHOLDER)
+        choose_button = QPushButton("选择目录")
+        choose_button.clicked.connect(lambda: self._choose_ffmpeg_for_dialog(dialog, ffmpeg_display))
+        system_button = QPushButton("使用系统 PATH")
+        system_button.clicked.connect(lambda: ffmpeg_display.setText(""))
+        ffmpeg_hint_1 = QLabel("推荐选择 ffmpeg 的 bin 目录，例如 D:\\tools\\ffmpeg\\bin。")
+        ffmpeg_hint_1.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        ffmpeg_hint_2 = QLabel("波形对齐、Hi-Res 混流和嵌入式打轴模块都会使用这里的设置。")
+        ffmpeg_hint_2.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        ffmpeg_layout.addWidget(ffmpeg_title, 0, 0)
+        ffmpeg_layout.addWidget(ffmpeg_display, 0, 1)
+        ffmpeg_layout.addWidget(choose_button, 0, 2)
+        ffmpeg_layout.addWidget(system_button, 0, 3)
+        ffmpeg_layout.addWidget(ffmpeg_hint_1, 1, 1, 1, 3)
+        ffmpeg_layout.addWidget(ffmpeg_hint_2, 2, 1, 1, 3)
+        ffmpeg_layout.setColumnStretch(1, 1)
+        tools_layout.addWidget(ffmpeg_panel)
+        tools_layout.addStretch(1)
+
+        proxy_panel = QFrame()
+        proxy_panel.setObjectName("WhitePanel")
+        proxy_layout = QGridLayout(proxy_panel)
+        proxy_layout.setContentsMargins(14, 14, 14, 14)
+        proxy_layout.setHorizontalSpacing(12)
+        proxy_layout.setVerticalSpacing(10)
+        proxy_title = QLabel("网络与代理")
+        proxy_title.setObjectName("PanelTitle")
+        proxy_combo = StyledComboBox(dialog)
+        proxy_options = [("使用系统代理", "system"), ("自动检测代理", "auto"), ("不使用代理", "off"), ("手动指定代理", "manual")]
+        proxy_combo.addItems([label for label, _value in proxy_options])
+        for index, (_label, value) in enumerate(proxy_options):
+            if value == updater_settings.proxy_mode:
+                proxy_combo.setCurrentIndex(index)
+                break
+        self._install_single_click_combo_behavior(proxy_combo)
+        proxy_manual_edit = QLineEdit(dialog)
+        proxy_manual_edit.setText(updater_settings.proxy_manual_url)
+        proxy_manual_edit.setPlaceholderText("http://127.0.0.1:7890")
+        proxy_status_label = QLabel("")
+        proxy_status_label.setWordWrap(True)
+        proxy_status_label.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        auto_detect_button = QPushButton("自动检测")
+        test_proxy_button = QPushButton("测试连通性")
+
+        def current_proxy_mode() -> str:
+            return proxy_options[proxy_combo.currentIndex()][1]
+
+        def resolve_proxy_status() -> tuple[str, dict[str, str] | None]:
+            try:
+                import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
+                from strange_uta_game.updater.proxy import resolve_proxy
+
+                info, proxies = resolve_proxy(current_proxy_mode(), proxy_manual_edit.text().strip())
+                if info is not None and info.is_valid:
+                    source_names = {"system": "系统代理", "scan": "自动检测", "manual": "手动代理"}
+                    return f"当前生效代理: {info.url}（{source_names.get(info.source, info.source or '代理')}）", proxies
+                if current_proxy_mode() == "off":
+                    return "当前不使用代理。", None
+                return "当前未检测到可用代理。", None
+            except Exception as exc:  # noqa: BLE001
+                return f"代理解析失败: {exc}", None
+
+        def refresh_proxy_status() -> None:
+            text, _proxies = resolve_proxy_status()
+            proxy_status_label.setText(text)
+
+        def auto_detect_proxy() -> None:
+            previous_index = proxy_combo.currentIndex()
+            for index, (_label, value) in enumerate(proxy_options):
+                if value == "auto":
+                    proxy_combo.setCurrentIndex(index)
+                    break
+            text, _proxies = resolve_proxy_status()
+            proxy_status_label.setText(text)
+            if "未检测到" in text:
+                proxy_combo.setCurrentIndex(previous_index)
+
+        def test_proxy_connectivity() -> None:
+            proxy_status_label.setText("正在测试 GitHub API 连通性…")
+            QApplication.processEvents()
+            _text, proxies = resolve_proxy_status()
+            try:
+                import requests
+
+                response = requests.get(
+                    "https://api.github.com/repos/karaoke-studio/karaoke-studio/releases/latest",
+                    headers={"User-Agent": "KaraokeHelper-Updater/1.0"},
+                    proxies=proxies,
+                    timeout=(5, 15),
+                )
+                if response.status_code == 200:
+                    proxy_status_label.setText("连通性测试成功。")
+                else:
+                    proxy_status_label.setText(f"连通性测试失败: HTTP {response.status_code}")
+            except Exception as exc:  # noqa: BLE001
+                proxy_status_label.setText(f"连通性测试失败: {exc}")
+
+        auto_detect_button.clicked.connect(auto_detect_proxy)
+        test_proxy_button.clicked.connect(test_proxy_connectivity)
+
+        proxy_layout.addWidget(proxy_title, 0, 0)
+        proxy_layout.addWidget(QLabel("代理模式"), 1, 0)
+        proxy_layout.addWidget(proxy_combo, 1, 1, 1, 2)
+        proxy_layout.addWidget(QLabel("手动代理地址"), 2, 0)
+        proxy_layout.addWidget(proxy_manual_edit, 2, 1, 1, 2)
+        proxy_layout.addWidget(QLabel("当前生效代理"), 3, 0)
+        proxy_layout.addWidget(proxy_status_label, 3, 1)
+        proxy_layout.addWidget(auto_detect_button, 3, 2)
+        proxy_layout.addWidget(test_proxy_button, 3, 3)
+        proxy_layout.setColumnStretch(1, 1)
+        network_layout.addWidget(proxy_panel)
+
+        update_panel = QFrame()
+        update_panel.setObjectName("WhitePanel")
+        update_layout = QGridLayout(update_panel)
+        update_layout.setContentsMargins(14, 14, 14, 14)
+        update_layout.setHorizontalSpacing(12)
+        update_layout.setVerticalSpacing(10)
+        update_title = QLabel("应用更新")
+        update_title.setObjectName("PanelTitle")
+        updater_enabled_check = QCheckBox("启用工作台自动更新")
+        updater_enabled_check.setChecked(updater_settings.enabled)
+        startup_check = QCheckBox("启动时静默检查更新")
+        startup_check.setChecked(updater_settings.check_on_startup)
+        interval_edit = QLineEdit(dialog)
+        interval_edit.setText(str(updater_settings.min_check_interval_hours))
+        interval_edit.setFixedWidth(72)
+        source_order = list(updater_settings.source_order)
+        source_order_label = QLabel("")
+        source_order_label.setWordWrap(True)
+        source_order_label.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        update_status_label = QLabel(f"当前版本 v{APP_VERSION}")
+        update_status_label.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        edit_order_button = QPushButton("编辑顺序")
+        check_now_button = QPushButton("检查更新")
+
+        def refresh_source_order_label() -> None:
+            source_order_label.setText(" → ".join(SOURCE_LABELS.get(source, source) for source in source_order))
+
+        def edit_source_order() -> None:
+            nonlocal source_order
+            order_dialog = QDialog(dialog)
+            order_dialog.setWindowTitle("更新源优先级")
+            order_dialog.resize(520, 360)
+            order_shell = QVBoxLayout(order_dialog)
+            order_shell.setContentsMargins(16, 16, 16, 16)
+            order_shell.setSpacing(10)
+            hint = QLabel("按顺序尝试，前一项失败时自动降级到下一项。")
+            hint.setWordWrap(True)
+            order_shell.addWidget(hint)
+            order_list = QListWidget(order_dialog)
+            order_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+            order_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            for source in normalize_order(source_order):
+                item = QListWidgetItem(SOURCE_LABELS.get(source, source))
+                item.setData(Qt.ItemDataRole.UserRole, source)
+                order_list.addItem(item)
+            order_shell.addWidget(order_list, 1)
+            order_buttons = QHBoxLayout()
+            move_up_button = QPushButton("上移")
+            move_down_button = QPushButton("下移")
+            reset_order_button = QPushButton("恢复默认")
+            ok_button = QPushButton("确定")
+            cancel_button = QPushButton("取消")
+
+            def selected_row() -> int:
+                items = order_list.selectedItems()
+                return order_list.row(items[0]) if items else -1
+
+            def move_selected(delta: int) -> None:
+                row = selected_row()
+                target = row + delta
+                if row < 0 or target < 0 or target >= order_list.count():
+                    return
+                item = order_list.takeItem(row)
+                if item is None:
+                    return
+                order_list.insertItem(target, item)
+                order_list.setCurrentRow(target)
+
+            def reset_order() -> None:
+                order_list.clear()
+                for source in SOURCE_IDS:
+                    item = QListWidgetItem(SOURCE_LABELS.get(source, source))
+                    item.setData(Qt.ItemDataRole.UserRole, source)
+                    order_list.addItem(item)
+                order_list.setCurrentRow(0)
+
+            def accept_order() -> None:
+                nonlocal source_order
+                raw: list[str] = []
+                for row in range(order_list.count()):
+                    item = order_list.item(row)
+                    if item is not None:
+                        raw.append(str(item.data(Qt.ItemDataRole.UserRole)))
+                source_order = normalize_order(raw)
+                refresh_source_order_label()
+                order_dialog.accept()
+
+            move_up_button.clicked.connect(lambda: move_selected(-1))
+            move_down_button.clicked.connect(lambda: move_selected(1))
+            reset_order_button.clicked.connect(reset_order)
+            ok_button.clicked.connect(accept_order)
+            cancel_button.clicked.connect(order_dialog.reject)
+            order_buttons.addWidget(move_up_button)
+            order_buttons.addWidget(move_down_button)
+            order_buttons.addWidget(reset_order_button)
+            order_buttons.addStretch(1)
+            order_buttons.addWidget(ok_button)
+            order_buttons.addWidget(cancel_button)
+            order_shell.addLayout(order_buttons)
+            order_dialog.exec()
+
+        edit_order_button.clicked.connect(edit_source_order)
+        refresh_source_order_label()
+
+        def current_update_settings_from_ui() -> UpdaterSettings | None:
+            try:
+                interval = int(interval_edit.text().strip() or "0")
+                if interval < 0:
+                    raise ValueError
+            except ValueError:
+                update_status_label.setText("启动检查间隔必须是 0 或正整数。")
+                return None
+            updated = UpdaterSettings.load(self.settings)
+            updated.enabled = updater_enabled_check.isChecked()
+            updated.check_on_startup = startup_check.isChecked()
+            updated.min_check_interval_hours = interval
+            updated.proxy_mode = current_proxy_mode()
+            updated.proxy_manual_url = proxy_manual_edit.text().strip()
+            updated.source_order = normalize_order(source_order)
+            return updated
+
+        def check_now_with_current_ui() -> None:
+            settings_for_check = current_update_settings_from_ui()
+            if settings_for_check is None:
+                return
+            self._start_workbench_update_check(
+                manual=True,
+                updater_settings=settings_for_check,
+                status_label=update_status_label,
+                trigger_button=check_now_button,
+            )
+
+        check_now_button.clicked.connect(check_now_with_current_ui)
+
+        def sync_proxy_manual_enabled() -> None:
+            value = current_proxy_mode()
+            proxy_manual_edit.setEnabled(value == "manual")
+            refresh_proxy_status()
+
+        proxy_combo.currentIndexChanged.connect(lambda _index: sync_proxy_manual_enabled())
+        proxy_manual_edit.textChanged.connect(lambda _text: refresh_proxy_status())
+        sync_proxy_manual_enabled()
+
+        update_layout.addWidget(update_title, 0, 0)
+        update_layout.addWidget(updater_enabled_check, 1, 1, 1, 2)
+        update_layout.addWidget(startup_check, 2, 1, 1, 2)
+        update_layout.addWidget(QLabel("启动检查间隔"), 3, 0)
+        update_layout.addWidget(interval_edit, 3, 1)
+        update_layout.addWidget(QLabel("小时"), 3, 2)
+        update_layout.addWidget(QLabel("更新源优先级"), 4, 0)
+        update_layout.addWidget(source_order_label, 4, 1, 1, 2)
+        update_layout.addWidget(edit_order_button, 4, 3)
+        update_layout.addWidget(QLabel("立即检查更新"), 5, 0)
+        update_layout.addWidget(update_status_label, 5, 1, 1, 2)
+        update_layout.addWidget(check_now_button, 5, 3)
+        update_layout.setColumnStretch(2, 1)
+        network_layout.addWidget(update_panel)
+        network_layout.addStretch(1)
+
+        controls = QHBoxLayout()
+        controls.addStretch(1)
+        save_button = QPushButton("保存设置")
+        close_button = QPushButton("关闭")
+        close_button.clicked.connect(dialog.close)
+
+        def save_global_settings() -> None:
+            try:
+                ffmpeg_dir_text = ffmpeg_display.text().strip()
+                ffmpeg_dir = Path(ffmpeg_dir_text).expanduser() if ffmpeg_dir_text else None
+                if ffmpeg_dir is not None and not ffmpeg_dir.is_dir():
+                    raise ProcessingError("所选 ffmpeg 目录无效，请重新选择。")
+                interval = int(interval_edit.text().strip() or "0")
+                if interval < 0:
+                    raise ValueError
+            except ValueError:
+                QMessageBox.critical(dialog, APP_TITLE, "启动检查间隔必须是 0 或正整数。")
+                return
+            except ProcessingError as exc:
+                QMessageBox.critical(dialog, APP_TITLE, str(exc))
+                return
+
+            self.set_ffmpeg_dir(ffmpeg_dir or Path())
+            self.settings.ffmpeg_dir = self.ffmpeg_dir_text
+            updated = UpdaterSettings.load(self.settings)
+            updated.enabled = updater_enabled_check.isChecked()
+            updated.check_on_startup = startup_check.isChecked()
+            updated.min_check_interval_hours = interval
+            updated.proxy_mode = current_proxy_mode()
+            updated.proxy_manual_url = proxy_manual_edit.text().strip()
+            updated.source_order = normalize_order(source_order)
+            updated.save(self.settings)
+            update_status_label.setText("设置已保存到本地。")
+
+        save_button.clicked.connect(save_global_settings)
+        controls.addWidget(save_button)
+        controls.addWidget(close_button)
+        shell.addLayout(controls)
+        dialog.exec()
+
+    def _check_for_workbench_update_on_startup(self) -> None:
+        settings = ensure_updater_settings(self.settings)
+        self._start_workbench_update_check(manual=False, updater_settings=settings)
+
+    def _start_workbench_update_check(
+        self,
+        *,
+        manual: bool,
+        updater_settings: UpdaterSettings | None = None,
+        status_label: QLabel | None = None,
+        trigger_button: QPushButton | None = None,
+    ) -> None:
+        settings = updater_settings or UpdaterSettings.load(self.settings)
+        if not manual and (not settings.enabled or not settings.check_on_startup):
+            return
+        if self._update_checker is not None:
+            return
+        if status_label is not None:
+            status_label.setText("正在检查更新…")
+        if trigger_button is not None:
+            trigger_button.setEnabled(False)
+        checker = UpdateChecker(settings, manual=manual, parent=self)
+        self._update_checker = checker
+
+        def finish(result: object) -> None:
+            if self._update_checker is checker:
+                self._update_checker = None
+            if trigger_button is not None:
+                trigger_button.setEnabled(True)
+            self._handle_workbench_update_result(
+                result,
+                manual=manual,
+                checker_settings=settings,
+                status_label=status_label,
+            )
+
+        checker.finished.connect(finish)
+        checker.start()
+
+    def _handle_workbench_update_result(
+        self,
+        result: object,
+        *,
+        manual: bool,
+        checker_settings: UpdaterSettings,
+        status_label: QLabel | None = None,
+    ) -> None:
+        if not isinstance(result, CheckResult):
+            if manual:
+                QMessageBox.critical(self, APP_TITLE, "检查更新失败：返回结果无效。")
+            return
+        checker_settings.save(self.settings)
+        if result.skipped_due_to_cooldown:
+            if status_label is not None:
+                status_label.setText(f"当前版本 v{APP_VERSION}")
+            return
+        if not result.ok:
+            if status_label is not None:
+                status_label.setText("检查更新失败。")
+            if manual:
+                details = "\n".join(
+                    f"[{'OK' if not err else 'FAIL'}] {source} - {url}\n{err}"
+                    for source, url, err in result.attempts
+                )
+                QMessageBox.critical(self, APP_TITLE, f"{result.error}\n\n{details}" if details else result.error)
+            return
+        if not result.has_update or result.release is None:
+            if status_label is not None:
+                remote = result.release.version if result.release is not None else APP_VERSION
+                status_label.setText(f"已是最新版本。当前 v{APP_VERSION}，远端 v{remote}。")
+            elif manual:
+                QMessageBox.information(self, APP_TITLE, f"当前已经是最新版本：v{APP_VERSION}")
+            return
+        if status_label is not None:
+            status_label.setText(f"发现新版本 v{result.release.version}")
+        self._show_workbench_update_dialog(result, checker_settings)
+
+    def _show_workbench_update_dialog(self, result: CheckResult, settings: UpdaterSettings) -> None:
+        release = result.release
+        if release is None:
+            return
+        message = QMessageBox(self)
+        message.setWindowTitle(APP_TITLE)
+        message.setIcon(QMessageBox.Icon.Information)
+        source_label = SOURCE_LABELS.get(result.primary_source, result.primary_source)
+        message.setText(f"发现工作台新版本 v{release.version}")
+        message.setInformativeText(
+            f"当前版本 v{APP_VERSION}\n发布于 {release.published_at[:10] or '未知日期'}\n下载源：{source_label}"
+        )
+        if release.body.strip():
+            message.setDetailedText(release.body.strip())
+        update_button = message.addButton("立即更新", QMessageBox.ButtonRole.AcceptRole)
+        skip_button = message.addButton("跳过此版本", QMessageBox.ButtonRole.DestructiveRole)
+        later_button = message.addButton("稍后再说", QMessageBox.ButtonRole.RejectRole)
+        message.exec()
+
+        clicked = message.clickedButton()
+        if clicked is skip_button:
+            settings.skipped_version = release.version
+            settings.save(self.settings)
+            return
+        if clicked is later_button:
+            return
+        if clicked is update_button:
+            self._launch_workbench_updater(result)
+
+    def _launch_workbench_updater(self, result: CheckResult) -> None:
+        if not result.release or not result.download_candidates:
+            QMessageBox.critical(self, APP_TITLE, "缺少更新下载信息，请到 GitHub Release 手动下载。")
+            return
+        try:
+            import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
+            from strange_uta_game.updater import installer
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, APP_TITLE, f"无法加载更新器：\n{exc}")
+            return
+        if not installer.is_updater_available():
+            QMessageBox.information(self, APP_TITLE, "缺少 Updater.exe。请到 GitHub Release 手动下载最新版本。")
+            return
+        proxy_settings = UpdaterSettings.load(self.settings)
+        proxy_url = ""
+        if proxy_settings.proxy_mode == "manual" and proxy_settings.proxy_manual_url.strip():
+            proxy_url = proxy_settings.proxy_manual_url.strip()
+            if "://" not in proxy_url:
+                proxy_url = f"http://{proxy_url}"
+        plan = installer.LaunchPlan(
+            app_dir=installer.find_app_dir(),
+            app_exe_name=installer.find_app_exe_name(),
+            target_version=result.release.version,
+            target_tag=result.release.tag,
+            asset_name=result.primary_asset_name,
+            download_urls=[(source, url) for source, url in result.download_candidates],
+            proxy_url=proxy_url,
+        )
+        launch_result = installer.launch_updater(plan)
+        if not launch_result.launched:
+            QMessageBox.critical(self, APP_TITLE, f"无法启动 Updater：\n{launch_result.reason}")
+            return
+        QApplication.quit()
 
     def _save_settings_payload(
         self,
