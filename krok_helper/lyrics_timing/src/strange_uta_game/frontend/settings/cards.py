@@ -204,8 +204,20 @@ class FontSettingCard(SettingCard):
 
     def _on_click(self):
         from strange_uta_game.frontend.settings.font_picker_dialog import FontPickerDialog
+        from qfluentwidgets import MSFluentWindow
 
-        dlg = FontPickerDialog(self._family, title=self._title_text, parent=self.window())
+        # FontPickerDialog 是 MessageBoxBase（遮罩式伪模态对话框），它在 parent
+        # 上铺遮罩并拦截事件来实现"模态"。embedded 模式下 self.window() 是宿主
+        # （工作台）主窗口——一个普通 QMainWindow，遮罩伪模态在其上会卡死。
+        # 改用最近的 MSFluentWindow 祖先（即嵌入的 SUG 主窗口）作为 parent；
+        # standalone 下最近的 MSFluentWindow 就是顶层窗口，行为完全不变。
+        host = self
+        while host is not None and not isinstance(host, MSFluentWindow):
+            host = host.parentWidget()
+        if host is None:
+            host = self.window()
+
+        dlg = FontPickerDialog(self._family, title=self._title_text, parent=host)
         if dlg.exec():
             family = dlg.selected_family()
             if family and family != self._family:
