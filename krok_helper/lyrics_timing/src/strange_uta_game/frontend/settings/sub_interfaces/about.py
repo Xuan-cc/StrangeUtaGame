@@ -100,8 +100,12 @@ class AboutSubInterface(SubSettingInterface):
 
     def load_settings(self, s):
         self._settings_ref = s
-        self._path_card.setContent(str(s._config_path))
         embedded = getattr(s, "_provider", None) is not None
+        # embedded 模式下配置走宿主存储，没有"配置文件目录"概念：
+        # 隐藏整张「配置文件位置」卡片，并避免 setContent(str(None)) 显示 "None"。
+        self._path_card.setVisible(not embedded)
+        if not embedded:
+            self._path_card.setContent(str(s._config_path))
         self.tools_group.setVisible(not embedded)
         ffmpeg_path = s.get("tools.ffmpeg_path", "")
         self._update_ffmpeg_label(ffmpeg_path)
@@ -110,12 +114,12 @@ class AboutSubInterface(SubSettingInterface):
         pass  # 关于页的 FFmpeg 路径在浏览/清除时即时保存，无需在此收集
 
     def _open_config_dir(self):
-        if self._settings_ref is None:
+        if self._settings_ref is None or self._settings_ref._config_path is None:
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._settings_ref._config_path.parent)))
 
     def _change_config_dir(self):
-        if self._settings_ref is None:
+        if self._settings_ref is None or self._settings_ref._config_path is None:
             return
         s = self._settings_ref
         new_dir = QFileDialog.getExistingDirectory(self, "选择配置文件存储目录", str(s._config_path.parent))
