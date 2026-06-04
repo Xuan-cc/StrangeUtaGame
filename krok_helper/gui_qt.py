@@ -15,8 +15,8 @@ DWMWCP_DONOTROUND = 1
 
 os.environ["QFLUENT_WIDGETS_NO_PROMOTION"] = "1"
 
-from PyQt6.QtCore import QEvent, QSize, QThread, QTimer, Qt, pyqtSignal as Signal
-from PyQt6.QtGui import QColor, QBrush, QFont, QFontMetrics, QIcon, QKeySequence, QPainter, QPen, QShortcut
+from PyQt6.QtCore import QEvent, QSize, QThread, QTimer, Qt, QUrl, pyqtSignal as Signal
+from PyQt6.QtGui import QColor, QBrush, QDesktopServices, QFont, QFontMetrics, QIcon, QKeySequence, QPainter, QPen, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -5321,10 +5321,16 @@ class KrokHelperQtApp(QMainWindow):
         network_layout = QVBoxLayout(network_tab)
         network_layout.setContentsMargins(0, 12, 0, 0)
         network_layout.setSpacing(14)
+        about_tab = QWidget(settings_stack)
+        about_layout = QVBoxLayout(about_tab)
+        about_layout.setContentsMargins(0, 12, 0, 0)
+        about_layout.setSpacing(14)
         settings_stack.addWidget(tools_tab)
         settings_stack.addWidget(network_tab)
+        settings_stack.addWidget(about_tab)
         pivot.addItem(routeKey="tools", text="工具", onClick=lambda _checked: settings_stack.setCurrentIndex(0))
         pivot.addItem(routeKey="network", text="网络与更新", onClick=lambda _checked: settings_stack.setCurrentIndex(1))
+        pivot.addItem(routeKey="about", text="关于", onClick=lambda _checked: settings_stack.setCurrentIndex(2))
         pivot.setCurrentItem("tools")
         settings_stack.setCurrentIndex(0)
         shell.addWidget(settings_stack, 1)
@@ -5607,6 +5613,63 @@ class KrokHelperQtApp(QMainWindow):
         update_layout.setColumnStretch(2, 1)
         network_layout.addWidget(update_panel)
         network_layout.addStretch(1)
+
+        github_url = "https://github.com/karaoke-studio/karaoke-studio"
+        about_panel = QFrame()
+        about_panel.setObjectName("WhitePanel")
+        about_panel_layout = QVBoxLayout(about_panel)
+        about_panel_layout.setContentsMargins(14, 14, 14, 14)
+        about_panel_layout.setSpacing(8)
+        about_title = QLabel("关于")
+        about_title.setObjectName("PanelTitle")
+        about_panel_layout.addWidget(about_title)
+
+        product_card = QFrame()
+        product_card.setObjectName("WhitePanel")
+        product_layout = QHBoxLayout(product_card)
+        product_layout.setContentsMargins(14, 12, 14, 12)
+        product_layout.setSpacing(12)
+        product_icon = QLabel()
+        product_icon.setFixedSize(24, 24)
+        product_icon.setPixmap(FIF.INFO.icon(color=QColor("#111827")).pixmap(QSize(20, 20)))
+        product_text_layout = QVBoxLayout()
+        product_text_layout.setContentsMargins(0, 0, 0, 0)
+        product_text_layout.setSpacing(2)
+        product_name = QLabel("Karaoke-Studio 卡拉OK工作台")
+        product_name.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 11pt; color: #111827;')
+        product_meta = QLabel(f"版本 v{APP_VERSION}  |  B站 @凛夜delin")
+        product_meta.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #475467;')
+        product_text_layout.addWidget(product_name)
+        product_text_layout.addWidget(product_meta)
+        product_layout.addWidget(product_icon, 0, Qt.AlignmentFlag.AlignTop)
+        product_layout.addLayout(product_text_layout, 1)
+        about_panel_layout.addWidget(product_card)
+
+        github_card = QFrame()
+        github_card.setObjectName("WhitePanel")
+        github_layout = QHBoxLayout(github_card)
+        github_layout.setContentsMargins(14, 12, 14, 12)
+        github_layout.setSpacing(12)
+        github_icon = QLabel()
+        github_icon.setFixedSize(24, 24)
+        github_icon.setPixmap(FIF.GITHUB.icon(color=QColor("#111827")).pixmap(QSize(20, 20)))
+        github_text_layout = QVBoxLayout()
+        github_text_layout.setContentsMargins(0, 0, 0, 0)
+        github_text_layout.setSpacing(2)
+        github_name = QLabel("GitHub")
+        github_name.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 11pt; color: #111827;')
+        github_link = QLabel(github_url)
+        github_link.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #475467;')
+        github_text_layout.addWidget(github_name)
+        github_text_layout.addWidget(github_link)
+        open_github_button = QPushButton("打开")
+        open_github_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(github_url)))
+        github_layout.addWidget(github_icon, 0, Qt.AlignmentFlag.AlignTop)
+        github_layout.addLayout(github_text_layout, 1)
+        github_layout.addWidget(open_github_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        about_panel_layout.addWidget(github_card)
+        about_layout.addWidget(about_panel)
+        about_layout.addStretch(1)
 
         controls = QHBoxLayout()
         controls.addStretch(1)
