@@ -61,8 +61,8 @@ class AppSettings:
     # 内部继续按它自己的 ``get("audio.default_volume")`` 风格读写。
     # 大字典/列表型字段单独建独立 namespace，避免 lyrics_timing 主 dict 过大。
     lyrics_timing: dict = field(default_factory=dict)
-    lyrics_timing_dictionary: dict = field(default_factory=dict)
-    lyrics_timing_singers: dict = field(default_factory=dict)
+    lyrics_timing_dictionary: list = field(default_factory=list)
+    lyrics_timing_singers: list = field(default_factory=list)
     lyrics_timing_network_dictionary: dict = field(default_factory=dict)
     # 一次性迁移 marker（见 :func:`migrate_strange_uta_game_settings`）
     lyrics_timing_migrated_v1: bool = False
@@ -140,8 +140,8 @@ def load_app_settings() -> AppSettings:
         video_download_cookie_path=str(payload.get("video_download_cookie_path", "")),
         video_download_source=str(payload.get("video_download_source", SOURCE_YOUTUBE)),
         lyrics_timing=_safe_dict(payload.get("lyrics_timing")),
-        lyrics_timing_dictionary=_safe_dict(payload.get("lyrics_timing_dictionary")),
-        lyrics_timing_singers=_safe_dict(payload.get("lyrics_timing_singers")),
+        lyrics_timing_dictionary=_safe_list(payload.get("lyrics_timing_dictionary")),
+        lyrics_timing_singers=_safe_list(payload.get("lyrics_timing_singers")),
         lyrics_timing_network_dictionary=_safe_dict(payload.get("lyrics_timing_network_dictionary")),
         lyrics_timing_migrated_v1=bool(payload.get(LYRICS_TIMING_MIGRATED_KEY, False)),
     )
@@ -167,6 +167,11 @@ def _safe_dict(value: object) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _safe_list(value: object) -> list:
+    """Return ``value`` if it's a list, otherwise an empty list."""
+    return value if isinstance(value, list) else []
+
+
 # ════════════════════════════════════════════════════════════════════
 # StrangeUtaGame 一次性配置迁移
 # ════════════════════════════════════════════════════════════════════
@@ -180,6 +185,7 @@ _LEGACY_FILES = {
     "lyrics_timing_singers": "singers.json",
     "lyrics_timing_network_dictionary": "network_dictionary.json",
 }
+_LEGACY_LIST_FIELDS = {"lyrics_timing_dictionary", "lyrics_timing_singers"}
 
 
 def migrate_strange_uta_game_settings(
@@ -225,7 +231,10 @@ def migrate_strange_uta_game_settings(
         except Exception:
             log.warning("legacy StrangeUtaGame file unreadable: %s", legacy_path, exc_info=True)
             continue
-        if not isinstance(payload, dict):
+        if namespace_field in _LEGACY_LIST_FIELDS:
+            if not isinstance(payload, list):
+                continue
+        elif not isinstance(payload, dict):
             continue
         # 直接覆盖整个 namespace；老用户首次启动我们以"老配置为准"。
         setattr(settings, namespace_field, payload)

@@ -4,6 +4,7 @@ import ctypes
 import os
 import subprocess
 import time
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from string import Formatter
@@ -163,16 +164,37 @@ LYRICS_PREVIEW_MODE_MAP = {label: mode for label, mode in LYRICS_PREVIEW_MODE_OP
 class KrokHelperSettingsBridge:
     """Bridge StrangeUtaGame config into krok-helper's settings namespace."""
 
+    _EXTRA_FIELDS = {
+        "dictionary": "lyrics_timing_dictionary",
+        "singers": "lyrics_timing_singers",
+        "network": "lyrics_timing_network_dictionary",
+    }
+
     def __init__(self, app_settings: AppSettings, save_callback: Callable[[], object]) -> None:
         self._app_settings = app_settings
         self._save_callback = save_callback
 
     def load(self) -> dict:
-        return dict(self._app_settings.lyrics_timing)
+        return deepcopy(self._app_settings.lyrics_timing)
 
     def save(self, data: dict) -> None:
-        self._app_settings.lyrics_timing = dict(data)
+        self._app_settings.lyrics_timing = deepcopy(data)
         self._save_callback()
+
+    def load_extra(self, key: str, default):
+        field_name = self._EXTRA_FIELDS.get(key)
+        if field_name is None:
+            return deepcopy(default)
+        return deepcopy(getattr(self._app_settings, field_name, default))
+
+    def save_extra(self, key: str, data) -> None:
+        field_name = self._EXTRA_FIELDS.get(key)
+        if field_name is None:
+            return
+        setattr(self._app_settings, field_name, deepcopy(data))
+        self._save_callback()
+
+
 LYRICS_LANGUAGE_OPTIONS = [
     ("原文", LYRICS_LANGUAGE_ORIGINAL),
     ("中文译文", LYRICS_LANGUAGE_TRANSLATION),
