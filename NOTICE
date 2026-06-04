@@ -1,0 +1,27 @@
+Karaoke Helper / 卡拉OK工作台
+==============================
+
+本项目由以下两个独立项目合并而成：
+
+  1. karaoke-helper
+     原仓库：https://github.com/Myosotis11037/karaoke-helper
+     Copyright (C) Myosotis11037
+
+  2. StrangeUtaGame
+     原仓库：https://github.com/Xuan-cc/StrangeUtaGame
+     Copyright (C) Xuan-cc (Hoshiro)
+
+合并发生于 2026 年 6 月，作为 git history 中
+`chore/merge-krok-helper` 合并到 `main` 的 merge commit
+（PR #57）记录在案。StrangeUtaGame 全部源码在该次合并中
+重定位到 `krok_helper/lyrics_timing/` 子目录，git rename
+检测保留 100% 相似度，blame 与 follow-rename 不丢。
+
+本合并作品整体采用 GNU General Public License v3.0
+（见 LICENSE 文件）。两个原项目在合并前均为 GPL-3.0。
+
+子目录 `krok_helper/lyrics_timing/` 下保留了 StrangeUtaGame
+原仓库的 CHANGELOG、README、LICENSE 等历史文件作为归档；
+仓库整体的协议以根目录 LICENSE 为准。
+
+作者列表与各模块的责任归属见 AUTHORS.md。

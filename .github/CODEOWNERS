@@ -1,0 +1,35 @@
+# CODEOWNERS — auto-request review on PRs
+#
+# 不强制 review 通过才能 merge（branch protection 里 Required approvals = 0）
+# 这里只是告诉 GitHub PR 开了以后自动给谁发"请你瞄一眼"的通知。
+#
+# 顺序：最后一条匹配的规则生效。
+# 文档：https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+
+# 默认 fallback：任一改动都通知双方
+*                                 @Myosotis11037 @Xuan-cc
+
+# 歌词打轴模块（原 StrangeUtaGame）—— Xuan-cc 主理
+/krok_helper/lyrics_timing/       @Xuan-cc
+
+# krok-helper 原有业务模块 —— Myosotis11037 主理
+/krok_helper/video_download/      @Myosotis11037
+/krok_helper/audio_alignment.py   @Myosotis11037
+/krok_helper/lyrics.py            @Myosotis11037
+/krok_helper/pipeline.py          @Myosotis11037
+/krok_helper/ffmpeg.py            @Myosotis11037
+/app.py                           @Myosotis11037
+/scripts/                         @Myosotis11037
+
+# 跨边界文件 —— 主窗口 / 设置 / 配置常量，改动通常涉及双方
+/krok_helper/gui_qt.py            @Myosotis11037 @Xuan-cc
+/krok_helper/settings.py          @Myosotis11037 @Xuan-cc
+/krok_helper/config.py            @Myosotis11037 @Xuan-cc
+
+# 仓库治理文件 —— 双方都要知道
+/.github/                         @Myosotis11037 @Xuan-cc
+/LICENSE                          @Myosotis11037 @Xuan-cc
+/NOTICE                           @Myosotis11037 @Xuan-cc
+/AUTHORS.md                       @Myosotis11037 @Xuan-cc
+/CHANGELOG.md                     @Myosotis11037 @Xuan-cc
+/README.md                        @Myosotis11037 @Xuan-cc
