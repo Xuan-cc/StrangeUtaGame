@@ -101,6 +101,8 @@ class AboutSubInterface(SubSettingInterface):
     def load_settings(self, s):
         self._settings_ref = s
         self._path_card.setContent(str(s._config_path))
+        embedded = getattr(s, "_provider", None) is not None
+        self.tools_group.setVisible(not embedded)
         ffmpeg_path = s.get("tools.ffmpeg_path", "")
         self._update_ffmpeg_label(ffmpeg_path)
 
@@ -175,6 +177,8 @@ class AboutSubInterface(SubSettingInterface):
             self._ffmpeg_path_label.setToolTip("")
 
     def _browse_ffmpeg(self):
+        if self._settings_ref is not None and getattr(self._settings_ref, "_provider", None) is not None:
+            return
         current = ""
         if self._settings_ref:
             current = self._settings_ref.get("tools.ffmpeg_path", "") or ""
@@ -188,10 +192,14 @@ class AboutSubInterface(SubSettingInterface):
         self._save_ffmpeg_path(path)
 
     def _clear_ffmpeg_path(self):
+        if self._settings_ref is not None and getattr(self._settings_ref, "_provider", None) is not None:
+            return
         self._save_ffmpeg_path("")
 
     def _save_ffmpeg_path(self, path: str):
         if self._settings_ref is None:
+            return
+        if getattr(self._settings_ref, "_provider", None) is not None:
             return
         self._settings_ref.set("tools.ffmpeg_path", path)
         self._settings_ref.save()

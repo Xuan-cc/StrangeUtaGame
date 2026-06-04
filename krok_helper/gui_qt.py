@@ -123,6 +123,7 @@ from krok_helper.pipeline import (
 )
 from krok_helper.settings import (
     AppSettings,
+    get_settings_path,
     load_app_settings,
     migrate_strange_uta_game_settings,
     save_app_settings,
@@ -2290,6 +2291,7 @@ class KrokHelperQtApp(QMainWindow):
         self.video_download_page = VideoDownloadPage(self.settings, self._save_all_settings, self)
         self.align_page = self._build_alignment_page()
         self.lyrics_page = self._build_lyrics_page()
+        self._sync_lyrics_timing_host_paths()
         import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
         from strange_uta_game.frontend.main_window import MainWindow as LyricsTimingMainWindow
 
@@ -2349,6 +2351,7 @@ class KrokHelperQtApp(QMainWindow):
         self.settings.align_video_name_template = self.align_video_name_template_value
         self.settings.align_audio_name_template = self.align_audio_name_template_value
         self.settings.ffmpeg_dir = self.ffmpeg_dir_text
+        self._sync_lyrics_timing_host_paths()
         if not self._loading_settings_into_ui:
             self._update_alignment_preferences_from_ui()
         return save_app_settings(self.settings)
@@ -4931,6 +4934,28 @@ class KrokHelperQtApp(QMainWindow):
     def set_ffmpeg_dir(self, path: Path) -> None:
         self.ffmpeg_dir_text = str(path) if str(path).strip() else ""
         self._sync_ffmpeg_labels()
+        self._sync_lyrics_timing_host_paths()
+
+    def _sync_lyrics_timing_host_paths(self) -> None:
+        """Inject host-managed runtime paths into the embedded timing module."""
+        cache_dir = get_settings_path().parent / "lyrics_timing_cache"
+        os.environ["SUG_CACHE_DIR"] = str(cache_dir)
+
+        ffmpeg_dir = Path(self.ffmpeg_dir_text).expanduser() if self.ffmpeg_dir_text.strip() else None
+        try:
+            ffmpeg_path = find_tool("ffmpeg", ffmpeg_dir)
+        except ProcessingError:
+            if os.name == "nt":
+                try:
+                    ffmpeg_path = find_tool("ffmpeg.exe", ffmpeg_dir)
+                except ProcessingError:
+                    ffmpeg_path = "ffmpeg"
+            else:
+                ffmpeg_path = "ffmpeg"
+
+        tools = self.settings.lyrics_timing.setdefault("tools", {})
+        if isinstance(tools, dict):
+            tools["ffmpeg_path"] = ffmpeg_path
 
     def set_output_name_mode(self, mode: str) -> None:
         if mode == OUTPUT_NAME_MODE_VIDEO_NAME:
@@ -5274,6 +5299,7 @@ class KrokHelperQtApp(QMainWindow):
         self.settings.align_video_name_template = self.align_video_name_template_value
         self.settings.align_audio_name_template = self.align_audio_name_template_value
         self.settings.ffmpeg_dir = self.ffmpeg_dir_text
+        self._sync_lyrics_timing_host_paths()
         self._update_alignment_preferences_from_ui()
         return save_app_settings(self.settings)
 
