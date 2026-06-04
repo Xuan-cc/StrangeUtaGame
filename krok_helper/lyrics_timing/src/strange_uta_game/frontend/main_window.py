@@ -29,9 +29,32 @@ from strange_uta_game.frontend.theme import theme
 
 
 class MainWindow(MSFluentWindow):
-    """主窗口 - MSFluentWindow 侧边栏导航架构"""
+    """主窗口 - MSFluentWindow 侧边栏导航架构。
 
-    def __init__(self):
+    支持两种模式：
+
+    - **standalone**（默认，``embedded=False``）：作为顶层窗口跑，
+      自管窗口几何 / Ctrl+S / 启动期 updater / 闪退恢复弹窗等。
+      ``python main.py`` 时使用这种模式。
+    - **embedded**（``embedded=True``）：作为宿主程序（如 krok-helper）
+      子组件嵌入。跳过所有跟"顶层窗口"绑定的行为，由宿主统一管理。
+      用 :meth:`for_embedding` 工厂方法创建即可。
+    """
+
+    # 类级别 fallback：万一 super().__init__() 通过事件触发
+    # （如 resizeEvent / changeEvent → _schedule_geometry_save）在
+    # self._embedded 实例属性写入前就访问它，会落到这个 False，保留
+    # standalone 行为。
+    _embedded: bool = False
+
+    def __init__(self, embedded: bool = False):
+        # ⚠ 必须在 super().__init__() 之前赋值！MSFluentWindow 初始化
+        # 过程中可能触发 resizeEvent / changeEvent，那些 handler 会调
+        # _schedule_geometry_save / _save_window_geometry / _restore_window_geometry
+        # 等等，里面都读 self._embedded —— 若此时还未赋值会
+        # AttributeError，而 Qt C++ 事件分发无法捕获 Python 异常，进程
+        # 直接以 0xC0000409 stack-buffer-overrun 崩掉（已实测）。
+        self._embedded = embedded
         super().__init__()
 
         # 引擎按"启用高质量音频变速"设置选择：
@@ -52,12 +75,17 @@ class MainWindow(MSFluentWindow):
 
         # 窗口大小/最大化记忆：使用独立的 AppSettings 实例，与设置页的编辑
         # 生命周期解耦；保存前会 reload，避免覆盖设置页刚写入的其它字段。
-        from strange_uta_game.frontend.settings.app_settings import AppSettings
-        self._win_settings = AppSettings()
-        self._geometry_save_timer = QTimer(self)
-        self._geometry_save_timer.setSingleShot(True)
-        self._geometry_save_timer.setInterval(400)
-        self._geometry_save_timer.timeout.connect(self._save_window_geometry)
+        # embedded 模式由宿主管理几何，跳过这一整套。
+        if not self._embedded:
+            from strange_uta_game.frontend.settings.app_settings import AppSettings
+            self._win_settings = AppSettings()
+            self._geometry_save_timer = QTimer(self)
+            self._geometry_save_timer.setSingleShot(True)
+            self._geometry_save_timer.setInterval(400)
+            self._geometry_save_timer.timeout.connect(self._save_window_geometry)
+        else:
+            self._win_settings = None
+            self._geometry_save_timer = None
 
         self._init_window()
         self._init_interfaces()
@@ -69,23 +97,30 @@ class MainWindow(MSFluentWindow):
         # 监听主题变化，更新 Win10 兜底背景色
         theme.changed.connect(self._on_theme_changed)
 
-        # 全局 Ctrl+S 保存快捷键
-        self._save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
-        self._save_shortcut.activated.connect(self._on_global_save)
+        # 全局 Ctrl+S 保存快捷键 —— standalone 专用；embedded 模式宿主可在
+        # 自己的顶层窗口注册并转发到 :meth:`trigger_save`。
+        if not self._embedded:
+            self._save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+            self._save_shortcut.activated.connect(self._on_global_save)
+        else:
+            self._save_shortcut = None
 
         # 初始化自动保存配置
         self._apply_auto_save_settings()
 
-
-        # 延迟检查闪退恢复（等 UI 显示完毕后再弹窗）
-        QTimer.singleShot(500, self._check_crash_recovery)
-
-        # 延迟检查应用自动更新（在闪退恢复之后，避免抢占用户注意力）。
-        # 失败/无网时静默跳过，绝不阻塞主流程。
-        QTimer.singleShot(2500, self._check_for_app_update)
-
-        # 启动期网络词典自动更新（独立于应用版本检查；HTTP 在后台线程跑，不阻塞 UI）
-        QTimer.singleShot(3000, self._schedule_network_dict_auto_update)
+        # 启动期定时器 —— standalone 专用：
+        # - 闪退恢复弹窗会抢宿主焦点，embedded 跳过；
+        # - 应用 updater 由宿主统一管理，embedded 跳过；
+        # - 网络词典更新理论上 embedded 也可保留，但本期先一并跳过，由
+        #   宿主显式调度（保持本模块"嵌入后零启动副作用"）。
+        if not self._embedded:
+            # 延迟检查闪退恢复（等 UI 显示完毕后再弹窗）
+            QTimer.singleShot(500, self._check_crash_recovery)
+            # 延迟检查应用自动更新（在闪退恢复之后，避免抢占用户注意力）。
+            # 失败/无网时静默跳过，绝不阻塞主流程。
+            QTimer.singleShot(2500, self._check_for_app_update)
+            # 启动期网络词典自动更新（独立于应用版本检查；HTTP 在后台线程跑，不阻塞 UI）
+            QTimer.singleShot(3000, self._schedule_network_dict_auto_update)
 
         # 由 updater 流程主动设置；closeEvent 检测到此标志即 bypass dirty 弹窗，
         # 走"兜底保存 + 直接退出"路径。
@@ -115,7 +150,18 @@ class MainWindow(MSFluentWindow):
         return None
 
     def _init_window(self):
-        """初始化窗口属性"""
+        """初始化窗口属性。
+
+        embedded 模式跳过所有"顶层窗口"操作（主题、标题、尺寸、图标、居中、
+        几何恢复）—— 这些全部由宿主统一管理；唯一保留的是 Win10 兜底背景
+        样式表，因为它只影响本 widget 内部渲染。
+        """
+        if self._embedded:
+            # 嵌入模式：宿主控制主题与几何。仅保留 widget 本地背景兜底，
+            # 防止 Mica 失败时透出宿主背景与子界面冲突。
+            self._apply_win10_fallback_bg()
+            return
+
         setThemeColor("#FF6B6B", lazy=True)
         # 使用主题管理器的设置，而不是硬编码
         if theme.is_dark:
@@ -154,8 +200,11 @@ class MainWindow(MSFluentWindow):
         """启动时从 config.json 恢复窗口大小与最大化状态（仅读取一次）。
 
         读取 ``ui.window_size`` / ``ui.window_maximized``；字段缺失时维持
-        :meth:`_init_window` 设定的默认尺寸（即不做任何改动）。
+        :meth:`_init_window` 设定的默认尺寸（即不做任何改动）。embedded 模式
+        由宿主控制窗口几何，直接返回。
         """
+        if self._embedded or self._win_settings is None:
+            return
         try:
             size = self._win_settings.get("ui.window_size", None)
             if isinstance(size, (list, tuple)) and len(size) == 2:
@@ -179,8 +228,11 @@ class MainWindow(MSFluentWindow):
 
         先 ``reload`` 取得磁盘上最新的完整配置（避免覆盖设置页刚保存的其它
         字段），再仅更新窗口两项后落盘。最大化/全屏时不覆盖 ``window_size``，
-        以便退出最大化后仍能恢复用户习惯的普通窗口尺寸。
+        以便退出最大化后仍能恢复用户习惯的普通窗口尺寸。embedded 模式下
+        几何由宿主管理，本方法直接返回。
         """
+        if self._embedded:
+            return
         win_settings = getattr(self, "_win_settings", None)
         if win_settings is None:
             return
@@ -196,7 +248,13 @@ class MainWindow(MSFluentWindow):
             logging.getLogger(__name__).warning("保存窗口几何状态失败", exc_info=True)
 
     def _schedule_geometry_save(self):
-        """触发防抖保存（拖拽缩放过程中合并多次事件，停止后才写盘）。"""
+        """触发防抖保存（拖拽缩放过程中合并多次事件，停止后才写盘）。
+
+        embedded 模式下 ``_geometry_save_timer`` 为 None，这里的 guard 也
+        保证 resizeEvent / changeEvent 触发本方法时不会 NPE。
+        """
+        if self._embedded:
+            return
         timer = getattr(self, "_geometry_save_timer", None)
         if timer is not None:
             timer.start()
@@ -927,7 +985,27 @@ class MainWindow(MSFluentWindow):
         ``self._force_quitting=True`` 时由 :meth:`request_force_quit` 设置，
         表示当前流程是 updater 触发的硬退出 —— 不弹"未保存"对话框，改为
         把脏数据兜底写到临时文件（next 启动会触发"闪退恢复"机制），然后立刻退出。
+
+        embedded 模式下，本 widget 的 closeEvent 通常意味着宿主在销毁它，
+        宿主自己会管整个应用的退出。这里只把脏数据兜底到临时文件、释放
+        音频引擎等资源，**绝不调 ``QApplication.quit()``**（会连带杀掉宿主）。
+        宿主应在自己的 closeEvent 里先调 :meth:`flush_unsaved` 做用户级
+        交互的脏检查；走到这里时认为脏数据兜底即可。
         """
+        if self._embedded:
+            try:
+                self.flush_unsaved()
+            except Exception:
+                pass
+            if hasattr(self, "editorInterface"):
+                try:
+                    self.editorInterface.release_resources()
+                except Exception:
+                    pass
+            self._clear_llm_logs()
+            e.accept()
+            return
+
         # 退出前确保窗口大小/最大化状态已落盘（防抖定时器可能来不及触发）
         self._save_window_geometry()
 
@@ -1015,3 +1093,61 @@ class MainWindow(MSFluentWindow):
             pass
         # 给 Qt 一点时间走完 close 流程；超时强制退出
         QTimer.singleShot(250, lambda: _os._exit(0))
+
+    # ==================== 嵌入式宿主接口 ====================
+    #
+    # 以下方法在 standalone 与 embedded 两种模式下都可用，
+    # 主要供宿主程序（krok-helper）在自己的快捷键/closeEvent/标题栏
+    # 等流程里调用，以接管打轴模块的"保存 / 未保存检查"等用户交互。
+
+    def trigger_save(self) -> None:
+        """请求保存当前项目（公开 API）。
+
+        宿主可把自己顶层的 Ctrl+S 快捷键转发到本方法；行为等同于
+        standalone 模式下用户按 Ctrl+S。
+        """
+        self._on_global_save()
+
+    def has_unsaved_changes(self) -> bool:
+        """报告当前是否有未保存的脏数据（公开 API）。
+
+        宿主可在自己的 closeEvent 里调用，决定是否弹"未保存"对话框。
+        """
+        return bool(self._store and self._store.dirty)
+
+    def flush_unsaved(self) -> None:
+        """把脏数据兜底写到闪退恢复临时文件（公开 API）。
+
+        宿主在销毁本 widget 前调用，等价于 standalone 的硬退出兜底路径。
+        失败静默，绝不抛异常。
+        """
+        try:
+            if self._store and self._store.dirty:
+                self._store._do_periodic_save()
+        except Exception:
+            pass
+
+    @staticmethod
+    def for_embedding(parent: "Optional[object]" = None) -> "MainWindow":
+        """创建一个可作为子 widget 嵌入宿主程序的 MainWindow 实例。
+
+        本方法走轻量嵌入路径：构造时传 ``embedded=True`` 跳过所有顶层
+        窗口行为；再把窗口标志改成 :class:`Qt.WindowType.Widget`，并
+        ``setParent(parent)`` 让它成为宿主子 widget 而不是独立窗口。
+
+        宿主接收后只需把返回的实例 ``addWidget`` 到自己的 layout / stacked
+        widget 即可。
+
+        参数:
+            parent: 宿主中将容纳本 widget 的父 widget。可以为 None
+                （后续宿主自己 ``setParent``）。
+
+        返回:
+            一个 :class:`MainWindow` 实例，``_embedded=True``，无顶层
+            窗口装饰，可以直接 ``addWidget`` 到任意 layout 中。
+        """
+        instance = MainWindow(embedded=True)
+        instance.setWindowFlags(Qt.WindowType.Widget)
+        if parent is not None:
+            instance.setParent(parent)  # type: ignore[arg-type]
+        return instance
