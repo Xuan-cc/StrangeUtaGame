@@ -81,6 +81,11 @@ def _quantize(speed: float) -> float:
 
 def _get_cache_dir() -> Path:
     """获取缓存目录（程序所在目录下的 .cache 文件夹）"""
+    env_dir = os.environ.get("SUG_CACHE_DIR")
+    if env_dir:
+        cache_dir = Path(env_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
     program_dir = Path(sys.argv[0]).resolve().parent
     cache_dir = program_dir / _CACHE_DIR_NAME
     cache_dir.mkdir(parents=True, exist_ok=True)

@@ -29,6 +29,12 @@ def _find_tool_in_dir(directory: Path, tool_name: str) -> str | None:
         directory / tool_name,
         directory / "bin" / tool_name,
     ]
+    if os.name == "nt" and not Path(tool_name).suffix:
+        exe_name = f"{tool_name}.exe"
+        candidates.extend([
+            directory / exe_name,
+            directory / "bin" / exe_name,
+        ])
     for candidate in candidates:
         if candidate.exists():
             return str(candidate)
@@ -36,14 +42,14 @@ def _find_tool_in_dir(directory: Path, tool_name: str) -> str | None:
 
 
 def find_tool(tool_name: str, ffmpeg_dir: Path | None = None) -> str:
-    resolved = shutil.which(tool_name)
-    if resolved:
-        return resolved
-
     if ffmpeg_dir is not None:
         candidate = _find_tool_in_dir(ffmpeg_dir, tool_name)
         if candidate:
             return candidate
+
+    resolved = shutil.which(tool_name)
+    if resolved:
+        return resolved
 
     raise ProcessingError(
         f"找不到 {tool_name}。请先确认系统环境变量 PATH 中可用，"

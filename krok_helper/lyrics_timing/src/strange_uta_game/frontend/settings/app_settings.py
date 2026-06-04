@@ -29,11 +29,10 @@ class SettingsProvider(Protocol):
     存储（如 krok-helper 的 ``%APPDATA%/Karaoke Helper/settings.json``
     里的 ``lyrics_timing`` namespace）。
 
-    协议只覆盖**主 config**（即 ``config.json`` 等价物）的整字典读写；
-    词典/演唱者/网络词典三个独立文件不在本协议范围内 —— embedded 模式
-    下，这三类数据由宿主自己的 namespace 字段（``lyrics_timing_dictionary``
-    等）独立持久化，AppSettings 中对应的 ``load_dictionary`` /
-    ``load_singer_presets`` 等方法在 provider 模式下会返回空列表/字典。
+    协议覆盖**主 config**（即 ``config.json`` 等价物）的整字典读写，
+    以及 dictionary / singers / network 这三类独立数据的通用 extra
+    读写。Embedded 模式下，宿主可把它们分别路由到自己的 namespace
+    字段（``lyrics_timing_dictionary`` 等）。
 
     实现示例（host bridge）::
 
@@ -56,6 +55,14 @@ class SettingsProvider(Protocol):
 
     def save(self, data: Dict[str, Any]) -> None:
         """把完整设置字典持久化到后端存储。"""
+        ...
+
+    def load_extra(self, key: str, default: Any) -> Any:
+        """读取独立数据 namespace；key 为 dictionary / singers / network。"""
+        ...
+
+    def save_extra(self, key: str, data: Any) -> None:
+        """保存独立数据 namespace；key 为 dictionary / singers / network。"""
         ...
 
 
@@ -696,22 +703,16 @@ class AppSettings:
             return default if default is not None else []
 
     def load_dictionary(self) -> list:
-        """从 dictionary.json 加载用户词典条目。
-
-        Provider 模式下文件路径为 None；本期 PR #6B 范围内 provider 不管
-        词典数据，直接返回空列表（宿主用自己的
-        ``lyrics_timing_dictionary`` namespace 独立持久化）。
-        """
+        """从 dictionary.json 加载用户词典条目。"""
         if self._provider is not None:
-            return []
+            entries = self._provider.load_extra("dictionary", [])
+            return deepcopy(entries) if isinstance(entries, list) else []
         return self._load_json(self._dict_path, [])
 
     def save_dictionary(self, entries: list) -> None:
-        """保存用户词典条目到 dictionary.json。
-
-        Provider 模式下 noop —— 宿主自己管 ``lyrics_timing_dictionary``。
-        """
+        """保存用户词典条目到 dictionary.json。"""
         if self._provider is not None:
+            self._provider.save_extra("dictionary", deepcopy(entries))
             return
         self._save_json(self._dict_path, entries)
 
@@ -784,18 +785,9 @@ class AppSettings:
         缺失任一文件用 :data:`DEFAULT_NETWORK_DICTIONARY_META` 兜底；自动补齐内置源。
         旧版（一体式 ``network_dictionary.json``）会被自动迁移：拆分后写回。
 
-        Provider 模式下不持久化网络词典；返回内嵌默认 meta + 空 cache，
-        实际数据由宿主的 ``lyrics_timing_network_dictionary`` namespace 管理。
+        Provider 模式下，meta 仍来自主 config，cache 来自宿主的
+        ``lyrics_timing_network_dictionary`` namespace。
         """
-        if self._provider is not None:
-            from strange_uta_game.backend.infrastructure.network_dictionary import (
-                DEFAULT_NETWORK_DICTIONARY_META,
-                ensure_builtin_sources,
-            )
-            meta = json.loads(json.dumps(DEFAULT_NETWORK_DICTIONARY_META))
-            ensure_builtin_sources(meta)
-            return {"meta": meta, "sources": {}}
-
         from strange_uta_game.backend.infrastructure.network_dictionary import (
             DEFAULT_NETWORK_DICTIONARY_META,
             ensure_builtin_sources,
@@ -807,7 +799,11 @@ class AppSettings:
             meta = json.loads(json.dumps(DEFAULT_NETWORK_DICTIONARY_META))
 
         cache: dict = {}
-        if self._network_dict_path.exists():
+        if self._provider is not None:
+            loaded_cache = self._provider.load_extra("network", {})
+            if isinstance(loaded_cache, dict):
+                cache = deepcopy(loaded_cache)
+        elif self._network_dict_path.exists():
             try:
                 with open(self._network_dict_path, "r", encoding="utf-8") as f:
                     raw = json.load(f)
@@ -837,7 +833,7 @@ class AppSettings:
         """保存统一文档：meta → ``config.json``，cache → ``network_dictionary.json``。
 
         Provider 模式下 meta 仍走 self.set / self.save（由 provider 接管），
-        但 cache（独立文件）不落盘 —— 宿主负责。
+        cache 写入宿主的 ``lyrics_timing_network_dictionary`` namespace。
         """
         from strange_uta_game.backend.infrastructure.network_dictionary import (
             split_meta_and_cache,
@@ -846,6 +842,7 @@ class AppSettings:
         self.set("network_dictionary", meta)
         self.save()  # 立即落盘 meta 到 config.json
         if self._provider is not None:
+            self._provider.save_extra("network", deepcopy(cache))
             return
         self._save_json(self._network_dict_path, cache)
 
@@ -963,17 +960,16 @@ class AppSettings:
         )
 
     def load_singer_presets(self) -> list:
-        """从 singers.json 加载演唱者预设。
-
-        Provider 模式下空返回；宿主用 ``lyrics_timing_singers`` namespace 自管。
-        """
+        """从 singers.json 加载演唱者预设。"""
         if self._provider is not None:
-            return []
+            presets = self._provider.load_extra("singers", [])
+            return deepcopy(presets) if isinstance(presets, list) else []
         return self._load_json(self._singers_path, [])
 
     def save_singer_presets(self, presets: list) -> None:
-        """保存演唱者预设到 singers.json。Provider 模式下 noop。"""
+        """保存演唱者预设到 singers.json。"""
         if self._provider is not None:
+            self._provider.save_extra("singers", deepcopy(presets))
             return
         self._save_json(self._singers_path, presets)
 

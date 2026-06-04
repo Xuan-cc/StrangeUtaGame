@@ -4,6 +4,7 @@ import ctypes
 import os
 import subprocess
 import time
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from string import Formatter
@@ -122,6 +123,7 @@ from krok_helper.pipeline import (
 )
 from krok_helper.settings import (
     AppSettings,
+    get_settings_path,
     load_app_settings,
     migrate_strange_uta_game_settings,
     save_app_settings,
@@ -163,16 +165,37 @@ LYRICS_PREVIEW_MODE_MAP = {label: mode for label, mode in LYRICS_PREVIEW_MODE_OP
 class KrokHelperSettingsBridge:
     """Bridge StrangeUtaGame config into krok-helper's settings namespace."""
 
+    _EXTRA_FIELDS = {
+        "dictionary": "lyrics_timing_dictionary",
+        "singers": "lyrics_timing_singers",
+        "network": "lyrics_timing_network_dictionary",
+    }
+
     def __init__(self, app_settings: AppSettings, save_callback: Callable[[], object]) -> None:
         self._app_settings = app_settings
         self._save_callback = save_callback
 
     def load(self) -> dict:
-        return dict(self._app_settings.lyrics_timing)
+        return deepcopy(self._app_settings.lyrics_timing)
 
     def save(self, data: dict) -> None:
-        self._app_settings.lyrics_timing = dict(data)
+        self._app_settings.lyrics_timing = deepcopy(data)
         self._save_callback()
+
+    def load_extra(self, key: str, default):
+        field_name = self._EXTRA_FIELDS.get(key)
+        if field_name is None:
+            return deepcopy(default)
+        return deepcopy(getattr(self._app_settings, field_name, default))
+
+    def save_extra(self, key: str, data) -> None:
+        field_name = self._EXTRA_FIELDS.get(key)
+        if field_name is None:
+            return
+        setattr(self._app_settings, field_name, deepcopy(data))
+        self._save_callback()
+
+
 LYRICS_LANGUAGE_OPTIONS = [
     ("原文", LYRICS_LANGUAGE_ORIGINAL),
     ("中文译文", LYRICS_LANGUAGE_TRANSLATION),
@@ -2268,6 +2291,7 @@ class KrokHelperQtApp(QMainWindow):
         self.video_download_page = VideoDownloadPage(self.settings, self._save_all_settings, self)
         self.align_page = self._build_alignment_page()
         self.lyrics_page = self._build_lyrics_page()
+        self._sync_lyrics_timing_host_paths()
         import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
         from strange_uta_game.frontend.main_window import MainWindow as LyricsTimingMainWindow
 
@@ -2327,6 +2351,7 @@ class KrokHelperQtApp(QMainWindow):
         self.settings.align_video_name_template = self.align_video_name_template_value
         self.settings.align_audio_name_template = self.align_audio_name_template_value
         self.settings.ffmpeg_dir = self.ffmpeg_dir_text
+        self._sync_lyrics_timing_host_paths()
         if not self._loading_settings_into_ui:
             self._update_alignment_preferences_from_ui()
         return save_app_settings(self.settings)
@@ -4909,6 +4934,28 @@ class KrokHelperQtApp(QMainWindow):
     def set_ffmpeg_dir(self, path: Path) -> None:
         self.ffmpeg_dir_text = str(path) if str(path).strip() else ""
         self._sync_ffmpeg_labels()
+        self._sync_lyrics_timing_host_paths()
+
+    def _sync_lyrics_timing_host_paths(self) -> None:
+        """Inject host-managed runtime paths into the embedded timing module."""
+        cache_dir = get_settings_path().parent / "lyrics_timing_cache"
+        os.environ["SUG_CACHE_DIR"] = str(cache_dir)
+
+        ffmpeg_dir = Path(self.ffmpeg_dir_text).expanduser() if self.ffmpeg_dir_text.strip() else None
+        try:
+            ffmpeg_path = find_tool("ffmpeg", ffmpeg_dir)
+        except ProcessingError:
+            if os.name == "nt":
+                try:
+                    ffmpeg_path = find_tool("ffmpeg.exe", ffmpeg_dir)
+                except ProcessingError:
+                    ffmpeg_path = "ffmpeg"
+            else:
+                ffmpeg_path = "ffmpeg"
+
+        tools = self.settings.lyrics_timing.setdefault("tools", {})
+        if isinstance(tools, dict):
+            tools["ffmpeg_path"] = ffmpeg_path
 
     def set_output_name_mode(self, mode: str) -> None:
         if mode == OUTPUT_NAME_MODE_VIDEO_NAME:
@@ -5252,6 +5299,7 @@ class KrokHelperQtApp(QMainWindow):
         self.settings.align_video_name_template = self.align_video_name_template_value
         self.settings.align_audio_name_template = self.align_audio_name_template_value
         self.settings.ffmpeg_dir = self.ffmpeg_dir_text
+        self._sync_lyrics_timing_host_paths()
         self._update_alignment_preferences_from_ui()
         return save_app_settings(self.settings)
 

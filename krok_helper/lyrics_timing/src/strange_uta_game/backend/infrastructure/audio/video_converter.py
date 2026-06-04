@@ -6,6 +6,7 @@ FFmpeg 路径优先使用用户在「设置-关于」中配置的路径，未配
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,11 @@ def _get_cache_dir() -> Path:
     "找不到 ffmpeg 提取的音频文件"。放到子目录可避开这次清理，使其在切换引擎/重载时
     仍然有效。
     """
+    env_dir = os.environ.get("SUG_CACHE_DIR")
+    if env_dir:
+        cache_dir = Path(env_dir) / "extracted"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
     program_dir = Path(sys.argv[0]).resolve().parent
     cache_dir = program_dir / _CACHE_DIR_NAME / "extracted"
     cache_dir.mkdir(parents=True, exist_ok=True)
