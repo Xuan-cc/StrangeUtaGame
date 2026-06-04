@@ -2390,6 +2390,7 @@ class KrokHelperQtApp(QMainWindow):
         self._sync_page_stack_margins(module_id)
         self.page_stack.setCurrentWidget(self.module_pages[module_id])
         self.workflow_stepper.setCurrentModule(module_id)
+        self._sync_workflow_shortcut_scope()
 
     def _sync_page_stack_margins(self, module_id: str) -> None:
         layout = getattr(self, "_page_stack_container_layout", None)
@@ -2421,11 +2422,22 @@ class KrokHelperQtApp(QMainWindow):
         self.shortcut_space = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
         self.shortcut_space.activated.connect(self._handle_align_space_shortcut)
         self.shortcut_export = QShortcut(QKeySequence("Ctrl+S"), self)
-        self.shortcut_export.activated.connect(self._handle_align_export_shortcut)
+        self.shortcut_export.activated.connect(self._handle_export_or_save_shortcut)
         self.shortcut_auto = QShortcut(QKeySequence("Ctrl+D"), self)
         self.shortcut_auto.activated.connect(self._handle_align_auto_shortcut)
         self.shortcut_drag_mode = QShortcut(QKeySequence("Alt+V"), self)
         self.shortcut_drag_mode.activated.connect(self._handle_align_drag_mode_shortcut)
+        self._sync_workflow_shortcut_scope()
+
+    def _sync_workflow_shortcut_scope(self) -> None:
+        if not hasattr(self, "shortcut_space"):
+            return
+        align_active = self.active_module == WORKFLOW_WAVEFORM_ALIGN
+        timing_active = self.active_module == WORKFLOW_LYRICS_TIMING
+        self.shortcut_space.setEnabled(align_active)
+        self.shortcut_auto.setEnabled(align_active)
+        self.shortcut_drag_mode.setEnabled(align_active)
+        self.shortcut_export.setEnabled(align_active or timing_active)
 
     def _focused_widget_is_text_input(self) -> bool:
         widget = QApplication.focusWidget()
@@ -2442,7 +2454,12 @@ class KrokHelperQtApp(QMainWindow):
         else:
             self._start_alignment_analysis()
 
-    def _handle_align_export_shortcut(self) -> None:
+    def _handle_export_or_save_shortcut(self) -> None:
+        if self.active_module == WORKFLOW_LYRICS_TIMING:
+            lyrics_timing_page = getattr(self, "lyrics_timing_page", None)
+            if lyrics_timing_page is not None and hasattr(lyrics_timing_page, "trigger_save"):
+                lyrics_timing_page.trigger_save()
+            return
         if self.active_module != WORKFLOW_WAVEFORM_ALIGN or self._focused_widget_is_text_input():
             return
         self._start_aligned_export()
