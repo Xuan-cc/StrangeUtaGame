@@ -346,12 +346,13 @@ class AppSettings:
         参数:
             config_path: 显式 config.json 路径（standalone 调试用）。
                 仅在 ``provider`` 为 None 时生效。
-            provider: 设置后端 Protocol 实现。给定时**完全跳过**所有文件
+        provider: 设置后端 Protocol 实现。给定时**完全跳过**所有文件
                 路径初始化 —— 不解析 ``get_config_dir()``、不读写
                 ``config.json``、不做 dictionary 升级、不做独立文件
                 迁移。``self._settings`` 直接从 ``provider.load()`` 获取，
                 后续 ``save()`` 写回 provider。
         """
+        self._dirty_paths: set[str] = set()
         if provider is not None:
             effective_provider = provider
         elif config_path is None:
@@ -601,9 +602,20 @@ class AppSettings:
         """
         if self._provider is not None:
             try:
+                save_partial = getattr(self._provider, "save_partial", None)
+                if self._dirty_paths and callable(save_partial):
+                    save_partial(
+                        {
+                            path: deepcopy(self.get(path))
+                            for path in sorted(self._dirty_paths)
+                        }
+                    )
+                    self._dirty_paths.clear()
+                    return
                 # deepcopy 出去：provider 应能持有完全独立的副本，避免
                 # 后续 AppSettings.set 改写到 provider 内部状态。
                 self._provider.save(deepcopy(self._settings))
+                self._dirty_paths.clear()
             except Exception as e:
                 print(f"保存设置失败 (provider): {e}")
             return
@@ -627,8 +639,10 @@ class AppSettings:
                 loaded = {}
             if isinstance(loaded, dict):
                 self._deep_merge(self._settings, deepcopy(loaded))
+            self._dirty_paths.clear()
             return
         self._settings = self._load_settings()
+        self._dirty_paths.clear()
 
     def get(self, path: str, default=None) -> Any:
         keys = path.split(".")
@@ -648,6 +662,8 @@ class AppSettings:
                 target[key] = {}
             target = target[key]
         target[keys[-1]] = value
+        if self._provider is not None:
+            self._dirty_paths.add(path)
 
     def get_all(self) -> Dict[str, Any]:
         return self._settings.copy()

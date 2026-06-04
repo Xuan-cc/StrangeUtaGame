@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from krok_helper.settings import (
     AppSettings as HostSettings,
     load_app_settings,
@@ -100,8 +102,85 @@ def test_strange_uta_game_provider_extra_namespaces_round_trip():
             ],
             "source_order": ["custom"],
         }
+        pytest.importorskip("numpy")
         settings.save_network_dictionary(network_doc)
         assert provider.extras["network"]["custom"]["entries"][0]["word"] == "青"
         assert any(source.get("id") == "custom" for source in AppSettings().load_network_dictionary()["sources"])
     finally:
         AppSettings.set_default_provider(None)
+
+
+def test_strange_uta_game_provider_partial_save_preserves_newer_shortcuts():
+    import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
+    from strange_uta_game.frontend.settings.app_settings import AppSettings
+
+    class Provider:
+        def __init__(self):
+            self.config = {}
+
+        def load(self):
+            return json.loads(json.dumps(self.config))
+
+        def save(self, data):
+            self.config = json.loads(json.dumps(data))
+
+        def save_partial(self, changes):
+            for path, value in changes.items():
+                self._set_nested(path, value)
+
+        def _set_nested(self, path, value):
+            cursor = self.config
+            keys = path.split(".")
+            for key in keys[:-1]:
+                child = cursor.get(key)
+                if not isinstance(child, dict):
+                    child = {}
+                    cursor[key] = child
+                cursor = child
+            cursor[keys[-1]] = value
+
+        def load_extra(self, key, default):
+            return default
+
+        def save_extra(self, key, data):
+            _ = key, data
+
+    provider = Provider()
+    AppSettings.set_default_provider(provider)
+    try:
+        stale_settings = AppSettings()
+
+        fresh_settings = AppSettings()
+        fresh_settings.set("shortcuts.timing_mode.tag_now", "SPACE:short")
+        fresh_settings.save()
+
+        stale_settings.set("export.last_export_dir", "D:/lyrics")
+        stale_settings.save()
+
+        reloaded = AppSettings()
+        assert reloaded.get("shortcuts.timing_mode.tag_now") == "SPACE:short"
+        assert reloaded.get("export.last_export_dir") == "D:/lyrics"
+    finally:
+        AppSettings.set_default_provider(None)
+
+
+def test_krok_helper_settings_bridge_partial_save_merges_lyrics_timing(monkeypatch, tmp_path):
+    from krok_helper.gui_qt import KrokHelperSettingsBridge
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    saved = HostSettings(
+        lyrics_timing={
+            "shortcuts": {"timing_mode": {"tag_now": "SPACE:short"}},
+        }
+    )
+    save_app_settings(saved)
+
+    in_memory = HostSettings(lyrics_timing={})
+    bridge = KrokHelperSettingsBridge(in_memory, lambda: save_app_settings(in_memory))
+
+    bridge.save_partial({"export.last_export_dir": "D:/lyrics"})
+
+    loaded = load_app_settings()
+    assert loaded.lyrics_timing["shortcuts"]["timing_mode"]["tag_now"] == "SPACE:short"
+    assert loaded.lyrics_timing["export"]["last_export_dir"] == "D:/lyrics"
+    assert in_memory.lyrics_timing == loaded.lyrics_timing
