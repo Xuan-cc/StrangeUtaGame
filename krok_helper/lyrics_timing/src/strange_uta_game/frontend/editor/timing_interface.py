@@ -407,6 +407,17 @@ class EditorInterface(QWidget):
         self._store = store
         store.data_changed.connect(self._on_data_changed)
 
+    def _get_setting_interface(self):
+        """Return SUG's settings interface even when embedded in a host window."""
+        widget = self
+        while widget is not None:
+            setting_iface = getattr(widget, "settingInterface", None)
+            if setting_iface is not None:
+                return setting_iface
+            widget = widget.parentWidget()
+        main_window = self.window()
+        return getattr(main_window, "settingInterface", None)
+
     def _on_data_changed(self, change_type: str):
         """响应 ProjectStore 的数据变更。"""
         if change_type == "project":
@@ -425,9 +436,9 @@ class EditorInterface(QWidget):
         """从 AppSettings 读取设定并应用到编辑器。"""
         if not self._store:
             return
-        # 通过 MainWindow 的 settingInterface 获取 AppSettings
-        main_window = self.window()
-        setting_iface = getattr(main_window, "settingInterface", None)
+        # In embedded mode, self.window() is the host window. Walk parents to
+        # find SUG's own MainWindow so runtime settings apply immediately.
+        setting_iface = self._get_setting_interface()
         if setting_iface is None:
             return
         settings = setting_iface.get_settings()
@@ -717,8 +728,7 @@ class EditorInterface(QWidget):
         # 否则 _store.notify("settings") 触发 _apply_settings() 时读到的还是旧值，
         # 会立刻把刚设的偏移回滚掉。
         try:
-            main_window = self.window()
-            setting_iface = getattr(main_window, "settingInterface", None)
+            setting_iface = self._get_setting_interface()
             if setting_iface:
                 app_settings = setting_iface.get_settings()
             else:
@@ -747,8 +757,7 @@ class EditorInterface(QWidget):
         # 获取AppSettings实例（与_apply_settings使用同一个）
         app_settings = None
         try:
-            main_window = self.window()
-            setting_iface = getattr(main_window, "settingInterface", None)
+            setting_iface = self._get_setting_interface()
             if setting_iface:
                 app_settings = setting_iface.get_settings()
         except Exception:
@@ -2641,8 +2650,7 @@ class EditorInterface(QWidget):
 
         # 应用设置中的默认音量和速度
         if self._timing_service:
-            main_window = self.window()
-            setting_iface = getattr(main_window, "settingInterface", None)
+            setting_iface = self._get_setting_interface()
             if setting_iface is not None:
                 settings = setting_iface.get_settings()
                 default_volume = int(settings.get("audio.default_volume", 80))
@@ -4865,8 +4873,7 @@ class EditorInterface(QWidget):
         self._scroll_mode = modes[(modes.index(self._scroll_mode) + 1) % len(modes)]
         self._sync_scroll_mode()
         # 持久化到 config
-        main_window = self.window()
-        setting_iface = getattr(main_window, "settingInterface", None)
+        setting_iface = self._get_setting_interface()
         if setting_iface is not None:
             s = setting_iface.get_settings()
             s.set("timing.scroll_mode", self._scroll_mode)
