@@ -325,6 +325,8 @@ class Theme(QObject):
         self._listeners: List[Callable] = []
         self._poll_timer: Optional[QTimer] = None
         self._is_win10: bool = self._detect_windows_version()
+        self._refreshing_widgets: bool = False
+        self._refresh_widgets_pending: bool = False
 
         # 检测初始系统主题
         self._detect_system_theme()
@@ -582,15 +584,28 @@ class Theme(QObject):
         中调用过一次；这里只负责 unpolish/polish 刷新，不重复调用 setTheme，
         避免多次调用引发控件中间状态渲染异常。
         """
+        if self._refreshing_widgets:
+            self._refresh_widgets_pending = True
+            return
         app = QApplication.instance()
-        if app:
-            # 先让 setTheme(lazy=True) 排队的事件跑完
-            app.processEvents()
-            # 遍历所有顶层窗口，强制重新 polish
-            for widget in app.topLevelWidgets():
-                self._update_widget_style(widget)
-            # 再刷新一次，确保 polish 触发的重绘已入队
-            app.processEvents()
+        if not app:
+            return
+
+        self._refreshing_widgets = True
+        try:
+            for _ in range(2):
+                self._refresh_widgets_pending = False
+                # 先让 setTheme(lazy=True) 排队的事件跑完
+                app.processEvents()
+                # 遍历所有顶层窗口，强制重新 polish
+                for widget in app.topLevelWidgets():
+                    self._update_widget_style(widget)
+                # 再刷新一次，确保 polish 触发的重绘已入队
+                app.processEvents()
+                if not self._refresh_widgets_pending:
+                    break
+        finally:
+            self._refreshing_widgets = False
 
     def _update_widget_style(self, widget) -> None:
         """递归更新控件及其子控件的样式"""

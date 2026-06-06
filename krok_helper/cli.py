@@ -18,7 +18,6 @@ from krok_helper.settings import load_app_settings
 from krok_helper.windows import enable_high_dpi_awareness, set_explicit_app_user_model_id
 
 from PyQt6.QtWidgets import QApplication
-from qfluentwidgets import Theme, setTheme
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,7 +80,12 @@ def run_gui(args: argparse.Namespace) -> int:
     enable_high_dpi_awareness()
     set_explicit_app_user_model_id("KaraokeHelper.Desktop")
     qt_app = QApplication.instance() or QApplication(sys.argv)
-    setTheme(Theme.LIGHT)
+    # 在 ``MainWindow()`` 构造**之前**就把主题 settle 到目标模式 ——
+    # 这样窗口首次绘制即正确颜色，避免"浅色闪一帧"。
+    # theme_workbench 必须在 QApplication 之后 import（SUG theme 单例
+    # 构造期会装平台监听器）。
+    from krok_helper.theme_workbench import apply_settings_theme
+    apply_settings_theme(load_app_settings())
     app_icon = load_taskbar_icon()
     if app_icon is not None:
         qt_app.setWindowIcon(app_icon)

@@ -22,6 +22,13 @@ SETTINGS_FILE_NAME = "settings.json"
 ALIGN_TARGET_VIDEO = "video"
 ALIGN_TARGET_AUDIO = "audio"
 
+# 工作台界面主题：跟随系统 / 强制浅色 / 强制深色。
+# 与 SUG ``frontend/theme.py::ThemeMode`` 对应。新值必须同步两边。
+UI_THEME_AUTO = "auto"
+UI_THEME_LIGHT = "light"
+UI_THEME_DARK = "dark"
+UI_THEMES = {UI_THEME_AUTO, UI_THEME_LIGHT, UI_THEME_DARK}
+
 # StrangeUtaGame 一次性迁移使用的 marker。
 # True 表示已经检测过老路径并完成（或确认无须）导入，不再重复。
 LYRICS_TIMING_MIGRATED_KEY = "lyrics_timing_migrated_v1"
@@ -55,6 +62,12 @@ class AppSettings:
     video_download_cookie_path: str = ""
     video_download_source: str = SOURCE_YOUTUBE
     updater: dict = field(default_factory=dict)
+
+    # ── 工作台界面主题 ──
+    # ``auto`` 跟随 OS；``light`` / ``dark`` 强制。SUG embedded 嵌入区与所有工作台
+    # 页面共享同一份主题状态（由 ``theme_workbench`` 单例驱动）。非法值在
+    # ``load_app_settings`` 中 fallback 到 ``auto`` 并 warn。
+    ui_theme: str = UI_THEME_AUTO
 
     # ── 歌词打轴模块（StrangeUtaGame）的设置 namespace ──
     # 由 frontend/settings/app_settings.py 中 AppSettings 的 dotted-key 树
@@ -100,6 +113,12 @@ def load_app_settings() -> AppSettings:
     align_encode_mode = str(payload.get("align_encode_mode", ENCODE_MODE_SOFTWARE))
     if align_encode_mode not in {ENCODE_MODE_SOFTWARE, ENCODE_MODE_HARDWARE}:
         align_encode_mode = ENCODE_MODE_SOFTWARE
+    ui_theme_raw = str(payload.get("ui_theme", UI_THEME_AUTO))
+    if ui_theme_raw not in UI_THEMES:
+        logging.getLogger(__name__).warning(
+            "settings.json ui_theme=%r 非法，回落到 %s", ui_theme_raw, UI_THEME_AUTO
+        )
+        ui_theme_raw = UI_THEME_AUTO
 
     return AppSettings(
         output_name_mode=str(payload.get("output_name_mode", OUTPUT_NAME_MODE_FIXED)),
@@ -141,6 +160,7 @@ def load_app_settings() -> AppSettings:
         video_download_cookie_path=str(payload.get("video_download_cookie_path", "")),
         video_download_source=str(payload.get("video_download_source", SOURCE_YOUTUBE)),
         updater=_safe_dict(payload.get("updater")),
+        ui_theme=ui_theme_raw,
         lyrics_timing=_safe_dict(payload.get("lyrics_timing")),
         lyrics_timing_dictionary=_safe_list(payload.get("lyrics_timing_dictionary")),
         lyrics_timing_singers=_safe_list(payload.get("lyrics_timing_singers")),

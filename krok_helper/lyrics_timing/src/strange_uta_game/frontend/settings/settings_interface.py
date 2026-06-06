@@ -340,6 +340,11 @@ class SettingsInterface(ScrollArea):
         self._apply_theme_setting()
 
     def _apply_theme_setting(self):
+        # embedded 模式下主题归宿主独占 —— 不在这里改 ``theme.mode``，否则
+        # 会顺带掀掉宿主 QApplication palette + qfluentwidgets 全局主题，导致
+        # 工作台出现"半亮半暗"崩坏画面（EMBEDDING.md §5 红线）。
+        if self._embedded:
+            return
         from strange_uta_game.frontend.theme import theme, ThemeMode
         theme_value = self._settings.get("ui.theme", "auto")
         theme.mode = {"light": ThemeMode.LIGHT, "dark": ThemeMode.DARK}.get(

@@ -171,3 +171,80 @@ class TestStandaloneNoRegression:
         s = AppSettings(config_path=str(tmp_path / "config.json"))
         assert s._provider is None
         assert s._config_path is not None
+
+
+class TestEmbeddedThemeContract:
+    """主题反向写入禁令：embedded 下 SUG 不能改全局 qfluentwidgets Theme，
+    也不能掀翻 QApplication palette —— 这两个都归宿主独占。
+
+    根因：``SettingsInterface._apply_theme_setting`` 在改 ``theme.mode`` 时
+    会触发 ``_sync_app_palette()`` + ``setTheme()``，是 embedded "半亮半暗"
+    崩坏画面的源头。修复后该方法在 embedded 下应 noop。
+    """
+
+    def _make_settings_interface(self, qapp, provider):
+        from strange_uta_game.frontend.settings.settings_interface import SettingsInterface
+        si = SettingsInterface(settings_provider=provider)
+        return si
+
+    def test_apply_theme_setting_noop_in_embedded(self, qapp):
+        """embedded + 任何 ui.theme 值，调 _apply_theme_setting 不应：
+        - 改变 qfluentwidgets ``qconfig`` 的 theme
+        - 改变 ``QApplication.palette().color(Window)``
+        """
+        from PyQt6.QtWidgets import QApplication
+        from qfluentwidgets import qconfig
+
+        p = MockProvider()
+        p.main = {"ui": {"theme": "dark"}}
+        si = self._make_settings_interface(qapp, p)
+
+        # 捕获改动前状态
+        before_theme = qconfig.theme
+        before_window = QApplication.instance().palette().color(
+            QApplication.instance().palette().ColorRole.Window
+        )
+
+        # 直接调本方法（不依赖 _do_auto_save 时序）
+        si._apply_theme_setting()
+
+        # 断言：embedded 路径下 noop
+        assert qconfig.theme == before_theme, (
+            "embedded SUG 不应修改 qfluentwidgets 全局 Theme（已写入 EMBEDDING.md §5）"
+        )
+        after_window = QApplication.instance().palette().color(
+            QApplication.instance().palette().ColorRole.Window
+        )
+        assert after_window == before_window, (
+            "embedded SUG 不应修改 QApplication palette（会污染宿主）"
+        )
+
+    def test_ui_settings_card_theme_hidden_in_embedded(self, qapp):
+        """ui_settings 子页面在 embedded 模式应隐藏 ``card_theme``。"""
+        from types import SimpleNamespace
+        from strange_uta_game.frontend.settings.sub_interfaces.ui_settings import (
+            UISubInterface,
+        )
+
+        page = UISubInterface()
+        embedded_settings = SimpleNamespace(
+            _provider=object(),
+            get=lambda k, d=None: d,
+        )
+        page.load_settings(embedded_settings)
+        assert page.card_theme.isHidden()
+
+    def test_ui_settings_card_theme_visible_in_standalone(self, qapp):
+        """standalone 应继续显示主题卡（红线：standalone 行为不变）。"""
+        from types import SimpleNamespace
+        from strange_uta_game.frontend.settings.sub_interfaces.ui_settings import (
+            UISubInterface,
+        )
+
+        page = UISubInterface()
+        standalone_settings = SimpleNamespace(
+            _provider=None,
+            get=lambda k, d=None: d,
+        )
+        page.load_settings(standalone_settings)
+        assert not page.card_theme.isHidden()
