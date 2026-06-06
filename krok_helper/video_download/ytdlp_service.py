@@ -11,6 +11,14 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from krok_helper.network import (
+    build_urllib_opener_for_app_settings,
+    load_current_app_settings,
+    proxy_cli_args_for_app_settings,
+    proxy_url_for_app_settings,
+    subprocess_env_for_app_settings,
+)
+
 from .download_task import (
     DownloadOptions,
     DownloadTask,
@@ -38,8 +46,12 @@ class DownloadCancelledError(VideoDownloadError):
 
 
 class YtDlpService:
-    def __init__(self, format_parser: FormatParser | None = None) -> None:
+    def __init__(self, format_parser: FormatParser | None = None, app_settings=None) -> None:
         self._format_parser = format_parser or FormatParser()
+        self._app_settings = app_settings
+
+    def _settings(self):
+        return self._app_settings or load_current_app_settings()
 
     def get_ytdlp_version(self) -> str:
         try:
@@ -54,6 +66,7 @@ class YtDlpService:
                 errors="ignore",
                 check=False,
                 timeout=15,
+                env=subprocess_env_for_app_settings(self._settings()),
                 creationflags=self._subprocess_creationflags(),
             )
             if completed.returncode != 0:
@@ -69,7 +82,7 @@ class YtDlpService:
             headers={"User-Agent": "krok-helper"},
         )
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with build_urllib_opener_for_app_settings(self._settings()).open(request, timeout=15) as response:
                 payload = json.load(response)
         except Exception as exc:  # noqa: BLE001
             raise VideoDownloadError(f"无法查询 yt-dlp 最新版本：{exc}") from exc
@@ -283,6 +296,9 @@ class YtDlpService:
             ydl_opts["cookiefile"] = cookie_file
         if extractor_args_hint:
             ydl_opts["extractor_args"] = self._build_python_extractor_args(extractor_args_hint)
+        proxy_url = proxy_url_for_app_settings(self._settings())
+        if proxy_url:
+            ydl_opts["proxy"] = proxy_url
 
         try:
             with youtube_dl(ydl_opts) as ydl:
@@ -333,6 +349,9 @@ class YtDlpService:
             command[1:1] = ["--extractor-args", extractor_args_hint]
         if cookie_file and Path(cookie_file).is_file():
             command[1:1] = ["--cookies", cookie_file]
+        proxy_args = proxy_cli_args_for_app_settings(self._settings())
+        if proxy_args:
+            command[1:1] = proxy_args
 
         try:
             completed = subprocess.run(
@@ -343,6 +362,7 @@ class YtDlpService:
                 errors="ignore",
                 check=False,
                 timeout=60,
+                env=subprocess_env_for_app_settings(self._settings()),
                 creationflags=self._subprocess_creationflags(),
             )
         except Exception as exc:  # noqa: BLE001
@@ -431,6 +451,9 @@ class YtDlpService:
             ydl_opts["merge_output_format"] = "mp4"
         if options.cookie_file and Path(options.cookie_file).is_file():
             ydl_opts["cookiefile"] = options.cookie_file
+        proxy_url = proxy_url_for_app_settings(self._settings())
+        if proxy_url:
+            ydl_opts["proxy"] = proxy_url
 
         before_pids = self._snapshot_child_pids()
         done_event = threading.Event()
@@ -534,6 +557,7 @@ class YtDlpService:
             command.extend(["--merge-output-format", "mp4"])
         if options.cookie_file and Path(options.cookie_file).is_file():
             command.extend(["--cookies", options.cookie_file])
+        command.extend(proxy_cli_args_for_app_settings(self._settings()))
         command.append(task.url)
 
         before_pids = self._snapshot_child_pids()
@@ -544,6 +568,7 @@ class YtDlpService:
             text=True,
             encoding="utf-8",
             errors="ignore",
+            env=subprocess_env_for_app_settings(self._settings()),
             creationflags=self._subprocess_creationflags(),
         )
         done_event = threading.Event()
@@ -632,7 +657,7 @@ class YtDlpService:
     def _update_ytdlp_cli(self) -> str:
         cli = self._find_ytdlp_cli()
         try:
-            return self._run_update_command([cli, "-U"])
+            return self._run_update_command([cli, *proxy_cli_args_for_app_settings(self._settings()), "-U"])
         except VideoDownloadError as exc:
             message = str(exc)
             if self._should_fallback_to_pip_update(message):
@@ -686,6 +711,7 @@ class YtDlpService:
                 errors="ignore",
                 check=False,
                 timeout=180,
+                env=subprocess_env_for_app_settings(self._settings()),
                 creationflags=self._subprocess_creationflags(),
             )
         except Exception as exc:  # noqa: BLE001
@@ -735,7 +761,7 @@ class YtDlpService:
         if not url:
             return b""
         try:
-            with urllib.request.urlopen(url, timeout=10) as response:
+            with build_urllib_opener_for_app_settings(self._settings()).open(url, timeout=10) as response:
                 return response.read()
         except Exception:
             return b""

@@ -1,8 +1,8 @@
-# Karaoke Helper（卡拉OK工作台）
+# Karaoke Studio（卡拉OK工作台）
 
 当前版本：`3.0.0`
 
-`Karaoke Helper` 是一个面向卡拉 OK / B 站投稿制作流程的 Windows 桌面工具。
+`Karaoke Studio` 是一个面向卡拉 OK / B 站投稿制作流程的 Windows 桌面工具。
 界面以一条「6 步工作流」串联整个制作链路，目前已经实现 4 个功能模块，另外 2 个为占位（规划中）。
 
 已实现模块：
@@ -309,7 +309,7 @@ python -m krok_helper `
 Windows 默认保存在：
 
 ```text
-%APPDATA%\Karaoke Helper\settings.json
+%APPDATA%\Karaoke Studio\settings.json
 ```
 
 当前会保存：
@@ -323,7 +323,7 @@ Windows 默认保存在：
 Bilibili 登录 Cookie 默认保存在：
 
 ```text
-%APPDATA%\Karaoke Helper\video_download\bilibili_cookies.txt
+%APPDATA%\Karaoke Studio\video_download\bilibili_cookies.txt
 ```
 
 ## 打包
@@ -339,13 +339,13 @@ Bilibili 登录 Cookie 默认保存在：
 输出目录：
 
 ```text
-dist\windows\Karaoke Helper\
+dist\windows\Karaoke Studio\
 ```
 
 主程序：
 
 ```text
-dist\windows\Karaoke Helper\Karaoke Helper.exe
+dist\windows\Karaoke Studio\Karaoke Studio.exe
 ```
 
 ### macOS
@@ -365,7 +365,7 @@ chmod +x ./scripts/build_macos.command
 输出目录：
 
 ```text
-dist/macos/Karaoke Helper.app
+dist/macos/Karaoke Studio.app
 ```
 
 > 注意：当前打包脚本安装并裁剪的是 `PySide6`，而源码实际依赖 `PyQt6` + `PyQt6-Fluent-Widgets`，两者并不一致，打包前请先核对（见下文「已知问题」）。

@@ -1,4 +1,4 @@
-APP_NAME = "Karaoke Helper"
+APP_NAME = "Karaoke Studio"
 APP_VERSION = "3.0.0"
 APP_TITLE = "卡拉OK工作台"
 MIN_HIRES_SAMPLE_RATE = 48_000

@@ -551,12 +551,13 @@ class ParseLinksWorker(QThread):
         self,
         urls: list[str],
         cookie_files_by_source: dict[str, str],
+        app_settings=None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._urls = urls
         self._cookie_files_by_source = cookie_files_by_source
-        self._service = YtDlpService()
+        self._service = YtDlpService(app_settings=app_settings)
 
     def run(self) -> None:  # noqa: D401
         infos: list[VideoInfo] = []
@@ -581,11 +582,11 @@ class DownloadWorker(QThread):
     taskFailed = Signal(str, str)
     taskCancelled = Signal(str)
 
-    def __init__(self, task: DownloadTask, options: DownloadOptions, parent: QWidget | None = None) -> None:
+    def __init__(self, task: DownloadTask, options: DownloadOptions, app_settings=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._task = task
         self._options = options
-        self._service = YtDlpService()
+        self._service = YtDlpService(app_settings=app_settings)
 
     def run(self) -> None:  # noqa: D401
         if self._task.cancel_requested:
@@ -629,8 +630,12 @@ class YtDlpUpdateWorker(QThread):
     updateSucceeded = Signal(str, str)
     updateFailed = Signal(str)
 
+    def __init__(self, app_settings=None, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._app_settings = app_settings
+
     def run(self) -> None:  # noqa: D401
-        service = YtDlpService()
+        service = YtDlpService(app_settings=self._app_settings)
         try:
             before_version = service.get_ytdlp_version()
             update_output = service.update_ytdlp()
@@ -698,7 +703,7 @@ class VideoDownloadPage(QWidget):
         super().__init__(parent)
         self.settings = settings
         self._save_settings = save_settings
-        self.cookie_manager = CookieManager(getattr(settings, "video_download_cookie_path", ""))
+        self.cookie_manager = CookieManager(getattr(settings, "video_download_cookie_path", ""), app_settings=settings)
         self._parse_worker: ParseLinksWorker | None = None
         self._cookie_import_worker: CookieImportWorker | None = None
         self._ytdlp_update_worker: YtDlpUpdateWorker | None = None
@@ -1714,7 +1719,7 @@ class VideoDownloadPage(QWidget):
 
     def _current_ytdlp_version_text(self) -> str:
         try:
-            return YtDlpService().get_ytdlp_version()
+            return YtDlpService(app_settings=self.settings).get_ytdlp_version()
         except Exception as exc:  # noqa: BLE001
             return f"未检测到：{exc}"
 
@@ -1738,7 +1743,7 @@ class VideoDownloadPage(QWidget):
         update_button.setEnabled(False)
         version_label.setText("正在更新 yt-dlp…")
         self.parse_status_label.setText("正在更新 yt-dlp，请稍候。")
-        worker = YtDlpUpdateWorker(self)
+        worker = YtDlpUpdateWorker(self.settings, self)
         self._ytdlp_update_worker = worker
         worker.updateSucceeded.connect(
             lambda version, output: self._handle_ytdlp_update_succeeded(version_label, version, output)
@@ -1894,7 +1899,7 @@ class VideoDownloadPage(QWidget):
         }
         self.parse_button.setEnabled(False)
         self.parse_status_label.setText(f"正在解析 {len(urls)} 个链接…")
-        self._parse_worker = ParseLinksWorker(urls, cookie_files_by_source, self)
+        self._parse_worker = ParseLinksWorker(urls, cookie_files_by_source, self.settings, self)
         self._parse_worker.batchFinished.connect(self._handle_parse_finished)
         self._parse_worker.finished.connect(self._handle_parse_worker_finished)
         self._parse_worker.start()
@@ -2747,7 +2752,7 @@ class VideoDownloadPage(QWidget):
             task.status = TASK_STATUS_DOWNLOADING
             self._reset_task_progress_tracking(task)
             options = self._build_download_options(task)
-            worker = DownloadWorker(task, options, self)
+            worker = DownloadWorker(task, options, self.settings, self)
             worker.progressChanged.connect(self._handle_download_progress)
             worker.taskSucceeded.connect(self._handle_download_success)
             worker.taskFailed.connect(self._handle_download_failed)

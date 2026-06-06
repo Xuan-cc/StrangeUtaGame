@@ -9,6 +9,7 @@ from typing import Any
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from krok_helper.config import APP_VERSION
+from krok_helper.network import requests_session_for_proxy
 from krok_helper.updater.settings import UpdaterSettings
 from krok_helper.updater.sources import SourceId, build_api_urls, build_release_urls
 
@@ -90,8 +91,8 @@ def is_newer_version(remote: str, local: str = APP_VERSION) -> bool:
 
 def current_asset_name() -> str:
     if sys.platform == "darwin":
-        return "KaraokeHelper-macos.zip"
-    return "KaraokeHelper-windows.zip"
+        return "KaraokeStudio-macos.zip"
+    return "KaraokeStudio-windows.zip"
 
 
 def _parse_release(payload: dict[str, Any]) -> LatestRelease:
@@ -123,35 +124,20 @@ def _parse_release(payload: dict[str, Any]) -> LatestRelease:
 
 
 def _proxies_for(settings: UpdaterSettings) -> dict[str, str] | None:
-    try:
-        import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
-        from strange_uta_game.updater.proxy import resolve_proxy
-
-        _info, proxies = resolve_proxy(settings.proxy_mode, settings.proxy_manual_url)
-        return proxies
-    except Exception:
-        if settings.proxy_mode == "off":
-            return {}
-        if settings.proxy_mode == "manual" and settings.proxy_manual_url.strip():
-            url = settings.proxy_manual_url.strip()
-            if "://" not in url:
-                url = f"http://{url}"
-            return {"http": url, "https": url}
-        return None
+    _session, proxies = requests_session_for_proxy(settings.proxy_mode, settings.proxy_manual_url)
+    return proxies
 
 
 def fetch_latest_release(
     settings: UpdaterSettings,
 ) -> tuple[LatestRelease | None, list[tuple[SourceId, str, str]]]:
     attempts: list[tuple[SourceId, str, str]] = []
-    proxies = _proxies_for(settings)
+    session, proxies = requests_session_for_proxy(settings.proxy_mode, settings.proxy_manual_url)
     for source, url in build_api_urls(settings.source_order):
         try:
-            import requests
-
-            response = requests.get(
+            response = session.get(
                 url,
-                headers={"User-Agent": "KaraokeHelper-Updater/1.0", "Accept": "application/json"},
+                headers={"User-Agent": "KaraokeStudio-Updater/1.0", "Accept": "application/json"},
                 proxies=proxies,
                 timeout=(5, 20),
                 allow_redirects=True,

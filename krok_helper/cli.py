@@ -78,7 +78,7 @@ def run_cli(args: argparse.Namespace) -> int:
 
 def run_gui(args: argparse.Namespace) -> int:
     enable_high_dpi_awareness()
-    set_explicit_app_user_model_id("KaraokeHelper.Desktop")
+    set_explicit_app_user_model_id("KaraokeStudio.Desktop")
     qt_app = QApplication.instance() or QApplication(sys.argv)
     # 在 ``MainWindow()`` 构造**之前**就把主题 settle 到目标模式 ——
     # 这样窗口首次绘制即正确颜色，避免"浅色闪一帧"。

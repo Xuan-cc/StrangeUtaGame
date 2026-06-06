@@ -5601,8 +5601,7 @@ class KrokHelperQtApp(QMainWindow):
 
         def resolve_proxy_status() -> tuple[str, dict[str, str] | None]:
             try:
-                import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
-                from strange_uta_game.updater.proxy import resolve_proxy
+                from krok_helper.network import resolve_proxy
 
                 info, proxies = resolve_proxy(current_proxy_mode(), proxy_manual_edit.text().strip())
                 if info is not None and info.is_valid:
@@ -5634,12 +5633,17 @@ class KrokHelperQtApp(QMainWindow):
             QApplication.processEvents()
             _text, proxies = resolve_proxy_status()
             try:
-                import requests
+                from krok_helper.network import requests_session_for_proxy
 
-                response = requests.get(
+                session, resolved_proxies = requests_session_for_proxy(
+                    current_proxy_mode(),
+                    proxy_manual_edit.text().strip(),
+                )
+
+                response = session.get(
                     "https://api.github.com/repos/karaoke-studio/karaoke-studio/releases/latest",
-                    headers={"User-Agent": "KaraokeHelper-Updater/1.0"},
-                    proxies=proxies,
+                    headers={"User-Agent": "KaraokeStudio-Updater/1.0"},
+                    proxies=resolved_proxies if resolved_proxies is not None else proxies,
                     timeout=(5, 15),
                 )
                 if response.status_code == 200:
@@ -6043,8 +6047,7 @@ class KrokHelperQtApp(QMainWindow):
             QMessageBox.critical(self, APP_TITLE, "缺少更新下载信息，请到 GitHub Release 手动下载。")
             return
         try:
-            import krok_helper.lyrics_timing  # noqa: F401 - installs bundled src path
-            from strange_uta_game.updater import installer
+            from krok_helper.updater import installer
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, APP_TITLE, f"无法加载更新器：\n{exc}")
             return
@@ -6052,11 +6055,10 @@ class KrokHelperQtApp(QMainWindow):
             QMessageBox.information(self, APP_TITLE, "缺少 Updater.exe。请到 GitHub Release 手动下载最新版本。")
             return
         proxy_settings = UpdaterSettings.load(self.settings)
-        proxy_url = ""
-        if proxy_settings.proxy_mode == "manual" and proxy_settings.proxy_manual_url.strip():
-            proxy_url = proxy_settings.proxy_manual_url.strip()
-            if "://" not in proxy_url:
-                proxy_url = f"http://{proxy_url}"
+        from krok_helper.network import resolve_proxy
+
+        info, _proxies = resolve_proxy(proxy_settings.proxy_mode, proxy_settings.proxy_manual_url)
+        proxy_url = info.url if info is not None and info.is_valid else ""
         plan = installer.LaunchPlan(
             app_dir=installer.find_app_dir(),
             app_exe_name=installer.find_app_exe_name(),
@@ -7142,7 +7144,7 @@ class KrokHelperQtApp(QMainWindow):
 
 
 def launch_qt_app() -> int:
-    set_explicit_app_user_model_id("KaraokeHelper.Desktop")
+    set_explicit_app_user_model_id("KaraokeStudio.Desktop")
     sync_fluent_ui_fonts()
     app = QApplication.instance() or QApplication([])
     app.setFont(build_app_ui_font())

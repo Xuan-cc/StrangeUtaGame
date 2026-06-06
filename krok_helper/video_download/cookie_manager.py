@@ -11,6 +11,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from krok_helper.config import APP_NAME
+from krok_helper.network import (
+    build_urllib_opener_for_app_settings,
+    load_current_app_settings,
+    proxy_cli_args_for_app_settings,
+    proxy_url_for_app_settings,
+    subprocess_env_for_app_settings,
+)
 from .download_task import SOURCE_BILIBILI, SOURCE_YOUTUBE
 
 
@@ -22,11 +29,15 @@ class BilibiliAccountProfile:
 
 
 class CookieManager:
-    def __init__(self, cookie_path: str = "") -> None:
+    def __init__(self, cookie_path: str = "", app_settings=None) -> None:
         self._configured_path = cookie_path.strip()
+        self._app_settings = app_settings
 
     def set_cookie_path(self, cookie_path: str) -> None:
         self._configured_path = cookie_path.strip()
+
+    def _settings(self):
+        return self._app_settings or load_current_app_settings()
 
     def default_cookie_path(self, platform: str = SOURCE_BILIBILI) -> Path:
         filename = "youtube_cookies.txt" if platform == SOURCE_YOUTUBE else "bilibili_cookies.txt"
@@ -38,7 +49,27 @@ class CookieManager:
     def resolved_cookie_path(self, platform: str = SOURCE_BILIBILI) -> Path:
         if platform == SOURCE_BILIBILI and self._configured_path:
             return Path(self._configured_path).expanduser()
-        return self.default_cookie_path(platform)
+        path = self.default_cookie_path(platform)
+        if path.exists():
+            return path
+        legacy = self._legacy_default_cookie_path(platform)
+        return legacy if legacy.exists() and self._is_builtin_default_cookie_path(path) else path
+
+    def _legacy_default_cookie_path(self, platform: str = SOURCE_BILIBILI) -> Path:
+        filename = "youtube_cookies.txt" if platform == SOURCE_YOUTUBE else "bilibili_cookies.txt"
+        appdata = os.getenv("APPDATA")
+        if os.name == "nt" and appdata:
+            return Path(appdata) / "Karaoke Helper" / "video_download" / filename
+        return Path.home() / ".config" / "karaoke-helper" / filename
+
+    def _is_builtin_default_cookie_path(self, path: Path) -> bool:
+        parts = path.parts
+        if os.name == "nt":
+            return len(parts) >= 3 and parts[-3] == APP_NAME and parts[-2] == "video_download"
+        return len(parts) >= 2 and parts[-2] == APP_NAME.lower().replace(" ", "-")
+
+    def build_opener(self, *handlers):
+        return build_urllib_opener_for_app_settings(self._settings(), *handlers)
 
     def has_cookie(self, platform: str = SOURCE_BILIBILI) -> bool:
         path = self.resolved_cookie_path(platform)
@@ -173,6 +204,9 @@ class CookieManager:
             "cookiesfrombrowser": (browser_name,),
             "cookiefile": str(path),
         }
+        proxy_url = proxy_url_for_app_settings(self._settings())
+        if proxy_url:
+            options["proxy"] = proxy_url
         try:
             with youtube_dl(options) as ydl:
                 ydl.cookiejar.save(str(path), ignore_discard=True, ignore_expires=True)
@@ -195,6 +229,9 @@ class CookieManager:
             "--no-update",
             "https://www.youtube.com/",
         ]
+        proxy_args = proxy_cli_args_for_app_settings(self._settings())
+        if proxy_args:
+            command[1:1] = proxy_args
         completed = subprocess.run(
             command,
             capture_output=True,
@@ -203,6 +240,7 @@ class CookieManager:
             errors="ignore",
             check=False,
             timeout=60,
+            env=subprocess_env_for_app_settings(self._settings()),
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if completed.returncode != 0 and not path.exists():
@@ -241,7 +279,7 @@ class CookieManager:
 
     def _fetch_nav_payload(self) -> dict:
         jar = self.load_cookie_jar()
-        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        opener = self.build_opener(urllib.request.HTTPCookieProcessor(jar))
         request = urllib.request.Request(
             "https://api.bilibili.com/x/web-interface/nav",
             headers={
@@ -263,7 +301,7 @@ class CookieManager:
                     "Referer": "https://www.bilibili.com/",
                 },
             )
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with self.build_opener().open(request, timeout=15) as response:
                 return response.read()
         except Exception:
             return b""

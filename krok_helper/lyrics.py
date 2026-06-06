@@ -1214,7 +1214,13 @@ def _page_count(limit: int, page_size: int) -> int:
 
 def _load_json_from_request(request: Request) -> dict | list:
     try:
-        with urlopen(request, timeout=20) as response:
+        try:
+            from krok_helper.network import build_urllib_opener_for_current_settings
+
+            open_request = build_urllib_opener_for_current_settings().open
+        except Exception:
+            open_request = urlopen
+        with open_request(request, timeout=20) as response:
             payload = response.read()
             content_encoding = response.headers.get("Content-Encoding", "")
     except HTTPError as exc:

@@ -21,6 +21,7 @@ from krok_helper.video_download.download_task import NAMING_RULE_TITLE, SOURCE_Y
 SETTINGS_FILE_NAME = "settings.json"
 ALIGN_TARGET_VIDEO = "video"
 ALIGN_TARGET_AUDIO = "audio"
+LEGACY_APP_NAMES = ("Karaoke Helper",)
 
 # 工作台界面主题：跟随系统 / 强制浅色 / 强制深色。
 # 与 SUG ``frontend/theme.py::ThemeMode`` 对应。新值必须同步两边。
@@ -82,20 +83,30 @@ class AppSettings:
     lyrics_timing_migrated_v1: bool = False
 
 
-def get_settings_path() -> Path:
+def _settings_path_for_app_name(app_name: str) -> Path:
     appdata = os.getenv("APPDATA")
     if os.name == "nt" and appdata:
-        return Path(appdata) / APP_NAME / SETTINGS_FILE_NAME
+        return Path(appdata) / app_name / SETTINGS_FILE_NAME
 
     config_home = os.getenv("XDG_CONFIG_HOME")
     if config_home:
-        return Path(config_home) / APP_NAME.lower().replace(" ", "-") / SETTINGS_FILE_NAME
+        return Path(config_home) / app_name.lower().replace(" ", "-") / SETTINGS_FILE_NAME
 
-    return Path.home() / ".config" / APP_NAME.lower().replace(" ", "-") / SETTINGS_FILE_NAME
+    return Path.home() / ".config" / app_name.lower().replace(" ", "-") / SETTINGS_FILE_NAME
+
+
+def get_settings_path() -> Path:
+    return _settings_path_for_app_name(APP_NAME)
+
+
+def get_legacy_settings_paths() -> list[Path]:
+    return [_settings_path_for_app_name(name) for name in LEGACY_APP_NAMES]
 
 
 def load_app_settings() -> AppSettings:
     path = get_settings_path()
+    if not path.is_file():
+        path = next((legacy for legacy in get_legacy_settings_paths() if legacy.is_file()), path)
     if not path.is_file():
         return AppSettings()
 

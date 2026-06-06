@@ -5,11 +5,15 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-APP_NAME="Karaoke Helper"
+APP_NAME="Karaoke Studio"
 DIST_PATH="$PROJECT_ROOT/dist/macos"
 WORK_PATH="$PROJECT_ROOT/build/pyinstaller-macos"
 SPEC_PATH="$PROJECT_ROOT/build/spec-macos"
 APP_DIST="$DIST_PATH/$APP_NAME.app"
+SUG_SRC="$PROJECT_ROOT/krok_helper/lyrics_timing/src"
+SUG_PACKAGE="$SUG_SRC/strange_uta_game"
+SUG_VERSION_FILE="$SUG_PACKAGE/__version__.py"
+SUG_VERSION_BACKUP=""
 
 EXCLUDED_MODULES=(
   PySide6
@@ -49,6 +53,16 @@ EXCLUDED_MODULES=(
   PyQt6.QtWebEngineWidgets
   PyQt6.QtWebSockets
   PyQt6.QtWebView
+  winrt
+  winrt.windows.globalization
+  winrt.windows.foundation
+  sudachidict_core
+  sudachidict_full
+  scipy
+  matplotlib
+  pandas
+  pytest
+  PIL
 )
 
 KEEP_TRANSLATIONS=(
@@ -121,6 +135,51 @@ ensure_pkg PyInstaller pyinstaller
 ensure_pkg PyQt6 PyQt6
 ensure_pkg qfluentwidgets "PyQt6-Fluent-Widgets"
 ensure_pkg yt_dlp yt-dlp
+ensure_pkg requests requests
+ensure_pkg psutil psutil
+ensure_pkg sounddevice sounddevice
+ensure_pkg soundfile soundfile
+ensure_pkg pedalboard pedalboard
+ensure_pkg numpy numpy
+ensure_pkg pykakasi pykakasi
+ensure_pkg jaconv jaconv
+ensure_pkg sudachipy sudachipy
+ensure_pkg sudachidict_small sudachidict_small
+
+echo "Checking bundled SUG source path..."
+"$PYTHON_BIN" - <<PY
+import sys
+from pathlib import Path
+src = Path(r"$SUG_SRC").resolve()
+sys.path.insert(0, str(src))
+import strange_uta_game
+actual = Path(strange_uta_game.__file__).resolve()
+expected = src / "strange_uta_game" / "__init__.py"
+print(f"  strange_uta_game: {actual}")
+raise SystemExit(0 if actual == expected else f"Expected {expected}, got {actual}")
+PY
+
+SUG_VERSION_BACKUP="$(mktemp)"
+cp "$SUG_VERSION_FILE" "$SUG_VERSION_BACKUP"
+restore_sug_version() {
+  if [ -n "$SUG_VERSION_BACKUP" ] && [ -f "$SUG_VERSION_BACKUP" ]; then
+    cp "$SUG_VERSION_BACKUP" "$SUG_VERSION_FILE"
+    rm -f "$SUG_VERSION_BACKUP"
+  fi
+}
+trap restore_sug_version EXIT
+
+echo "Setting SUG package variant to mac for this build..."
+"$PYTHON_BIN" - <<PY
+from pathlib import Path
+import re
+path = Path(r"$SUG_VERSION_FILE")
+text = path.read_text(encoding="utf-8")
+patched = re.sub(r'^(VARIANT\s*=\s*)"[^"]*"', r'\1"mac"', text, flags=re.MULTILINE)
+if patched == text:
+    raise SystemExit("Could not patch VARIANT in strange_uta_game/__version__.py")
+path.write_text(patched, encoding="utf-8")
+PY
 
 mkdir -p "$DIST_PATH" "$WORK_PATH" "$SPEC_PATH"
 
@@ -133,9 +192,37 @@ PYINSTALLER_ARGS=(
   --distpath "$DIST_PATH"
   --workpath "$WORK_PATH"
   --specpath "$SPEC_PATH"
+  --paths "$SUG_SRC"
   --add-data "$PROJECT_ROOT/krok_helper/assets:krok_helper/assets"
+  --add-data "$SUG_PACKAGE/config:strange_uta_game/config"
+  --add-data "$SUG_PACKAGE/resource:strange_uta_game/resource"
+  --add-data "$SUG_PACKAGE/bass:strange_uta_game/bass"
   --collect-all qfluentwidgets
   --collect-all yt_dlp
+  --collect-all sounddevice
+  --collect-all soundfile
+  --collect-all pedalboard
+  --collect-all pykakasi
+  --collect-all sudachipy
+  --collect-data sudachidict_small
+  --collect-binaries soundfile
+  --collect-submodules strange_uta_game
+  --hidden-import sounddevice
+  --hidden-import soundfile
+  --hidden-import pedalboard
+  --hidden-import pedalboard.io
+  --hidden-import pedalboard.io.AudioFile
+  --hidden-import pedalboard.io.StreamResampler
+  --hidden-import pedalboard.time_stretch
+  --hidden-import numpy
+  --hidden-import pykakasi
+  --hidden-import pykakasi.kakasi
+  --hidden-import jaconv
+  --hidden-import sudachipy
+  --hidden-import sudachidict_small
+  --hidden-import PyQt6.sip
+  --hidden-import encodings.idna
+  --hidden-import colorsys
 )
 
 for module in "${EXCLUDED_MODULES[@]}"; do
@@ -196,6 +283,42 @@ for rel in "${REMOVE_QT_LIBS[@]}"; do
     rm -rf "$target"
   done < <(find "$APP_DIST" -name "$rel" -print0)
 done
+
+echo "Validating macOS package contents..."
+APP_INTERNAL="$APP_DIST/Contents/Frameworks"
+if [ ! -d "$APP_INTERNAL" ]; then
+  APP_INTERNAL="$APP_DIST/Contents/Resources"
+fi
+if [ ! -d "$APP_INTERNAL" ]; then
+  echo "Could not locate PyInstaller internal directory in $APP_DIST"
+  exit 1
+fi
+
+REQUIRED_FILES=(
+  "krok_helper/assets/logo/logo.jpg"
+  "krok_helper/assets/platforms/youtube.svg"
+  "strange_uta_game/config/config.json"
+  "strange_uta_game/config/dictionary.json"
+  "strange_uta_game/config/cmudict-0.7b"
+  "strange_uta_game/config/kanji_readings.json"
+  "strange_uta_game/resource/icon.ico"
+  "strange_uta_game/resource/sounds/press.wav"
+)
+missing=0
+for rel in "${REQUIRED_FILES[@]}"; do
+  if [ ! -f "$APP_INTERNAL/$rel" ]; then
+    echo "Missing package file: $APP_INTERNAL/$rel"
+    missing=1
+  fi
+done
+if [ "$missing" -ne 0 ]; then
+  exit 1
+fi
+warn_file="$(find "$WORK_PATH" -name 'warn-*.txt' -type f -print -quit || true)"
+if [ -n "$warn_file" ]; then
+  echo "PyInstaller warnings were written to: $warn_file"
+fi
+echo "Package content validation passed."
 
 echo
 echo "Build complete:"

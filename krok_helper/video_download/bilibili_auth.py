@@ -34,7 +34,7 @@ class BilibiliQrLoginService:
     def __init__(self, cookie_manager: CookieManager) -> None:
         self._cookie_manager = cookie_manager
         self._cookie_jar = cookie_manager.load_cookie_jar()
-        self._opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self._cookie_jar))
+        self._opener = cookie_manager.build_opener(urllib.request.HTTPCookieProcessor(self._cookie_jar))
 
     def request_qr_ticket(self) -> QrLoginTicket:
         payload = self._request_json(BILIBILI_QR_GENERATE_URL)
@@ -88,7 +88,7 @@ class BilibiliQrLoginService:
     def _fetch_qr_image_bytes(self, login_url: str) -> bytes:
         qr_url = QR_IMAGE_API.format(data=urllib.parse.quote(login_url, safe=""))
         try:
-            with urllib.request.urlopen(self._make_request(qr_url), timeout=20) as response:
+            with self._cookie_manager.build_opener().open(self._make_request(qr_url), timeout=20) as response:
                 return response.read()
         except Exception:
             return b""

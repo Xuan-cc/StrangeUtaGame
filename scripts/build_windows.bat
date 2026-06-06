@@ -5,13 +5,15 @@ setlocal
 cd /d "%~dp0\.."
 
 set "PYTHON_BIN=python"
-set "BUILD_NAME=KaraokeHelper"
-set "APP_NAME=Karaoke Helper"
+set "BUILD_NAME=KaraokeStudio"
+set "APP_NAME=Karaoke Studio"
 set "DIST_PATH=dist\windows"
 set "WORK_PATH=build\pyinstaller-windows"
 set "SPEC_PATH=build\spec-windows"
 set "APP_DIST=%DIST_PATH%\%APP_NAME%"
 set "BUILD_DIST=%DIST_PATH%\%BUILD_NAME%"
+set "SUG_SRC=%CD%\krok_helper\lyrics_timing\src"
+set "SUG_PACKAGE=%SUG_SRC%\strange_uta_game"
 set "IS_CI="
 if defined CI set "IS_CI=1"
 
@@ -28,19 +30,29 @@ call :ensure_pkg PyQt6 PyQt6 || exit /b 1
 call :ensure_pkg qfluentwidgets "PyQt6-Fluent-Widgets" || exit /b 1
 call :ensure_pkg yt_dlp yt-dlp || exit /b 1
 call :ensure_pkg requests requests || exit /b 1
+call :ensure_pkg psutil psutil || exit /b 1
+call :ensure_pkg sounddevice sounddevice || exit /b 1
+call :ensure_pkg soundfile soundfile || exit /b 1
+call :ensure_pkg pedalboard pedalboard || exit /b 1
+call :ensure_pkg numpy numpy || exit /b 1
+call :ensure_pkg pykakasi pykakasi || exit /b 1
+call :ensure_pkg jaconv jaconv || exit /b 1
+call :ensure_pkg winrt.windows.globalization winrt-Windows.Globalization || exit /b 1
+call :ensure_pkg winrt.windows.foundation winrt-Windows.Foundation || exit /b 1
+call :ensure_pkg winrt.windows.foundation.collections winrt-Windows.Foundation.Collections || exit /b 1
 
-if not exist "krok_helper\lyrics_timing\updater_app\dist\Updater.exe" (
+echo Checking bundled SUG source path...
+%PYTHON_BIN% -c "import sys; from pathlib import Path; src=Path(r'%SUG_SRC%').resolve(); sys.path.insert(0, str(src)); import strange_uta_game; actual=Path(strange_uta_game.__file__).resolve(); expected=src/'strange_uta_game'/'__init__.py'; print('  strange_uta_game:', actual); raise SystemExit(0 if actual == expected else f'Expected {expected}, got {actual}')" || exit /b 1
+
+if not exist "krok_helper\updater_app\dist\Updater.exe" (
     echo Building Updater.exe...
-    pushd krok_helper\lyrics_timing
-    %PYTHON_BIN% updater_app\build_updater.py
+    %PYTHON_BIN% krok_helper\updater_app\build_updater.py
     if errorlevel 1 (
-        popd
         echo.
         echo Updater build failed.
         if not defined IS_CI pause
         exit /b 1
     )
-    popd
 )
 
 if not exist "%DIST_PATH%" mkdir "%DIST_PATH%"
@@ -59,9 +71,46 @@ echo Building Windows package...
     --distpath "%DIST_PATH%" ^
     --workpath "%WORK_PATH%" ^
     --specpath "%SPEC_PATH%" ^
+    --paths "%SUG_SRC%" ^
     --add-data "%CD%\krok_helper\assets;krok_helper\assets" ^
+    --add-data "%SUG_PACKAGE%\config;strange_uta_game\config" ^
+    --add-data "%SUG_PACKAGE%\resource;strange_uta_game\resource" ^
+    --add-data "%SUG_PACKAGE%\bass;strange_uta_game\bass" ^
     --collect-all qfluentwidgets ^
     --collect-all yt_dlp ^
+    --collect-all sounddevice ^
+    --collect-all soundfile ^
+    --collect-all pedalboard ^
+    --collect-all pykakasi ^
+    --collect-all winrt ^
+    --collect-binaries soundfile ^
+    --collect-submodules strange_uta_game ^
+    --hidden-import sounddevice ^
+    --hidden-import soundfile ^
+    --hidden-import pedalboard ^
+    --hidden-import pedalboard.io ^
+    --hidden-import pedalboard.io.AudioFile ^
+    --hidden-import pedalboard.io.StreamResampler ^
+    --hidden-import pedalboard.time_stretch ^
+    --hidden-import numpy ^
+    --hidden-import pykakasi ^
+    --hidden-import pykakasi.kakasi ^
+    --hidden-import jaconv ^
+    --hidden-import PyQt6.sip ^
+    --hidden-import encodings.idna ^
+    --hidden-import colorsys ^
+    --hidden-import winrt.windows.globalization ^
+    --hidden-import winrt.windows.foundation ^
+    --hidden-import winrt.windows.foundation.collections ^
+    --exclude-module sudachipy ^
+    --exclude-module sudachidict_small ^
+    --exclude-module sudachidict_core ^
+    --exclude-module sudachidict_full ^
+    --exclude-module scipy ^
+    --exclude-module matplotlib ^
+    --exclude-module pandas ^
+    --exclude-module pytest ^
+    --exclude-module PIL ^
     --exclude-module PySide6 ^
     --exclude-module PyQt5 ^
     --exclude-module PyQt6.Qt3DAnimation ^
@@ -153,11 +202,42 @@ if errorlevel 1 (
 echo Copying Updater.exe...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$targetDir = Resolve-Path '%APP_DIST%';" ^
-    "$updater = Resolve-Path 'krok_helper\lyrics_timing\updater_app\dist\Updater.exe';" ^
+    "$updater = Resolve-Path 'krok_helper\updater_app\dist\Updater.exe';" ^
     "Copy-Item -LiteralPath $updater -Destination (Join-Path $targetDir 'Updater.exe') -Force"
 if errorlevel 1 (
     echo.
     echo Failed to copy Updater.exe.
+    if not defined IS_CI pause
+    exit /b 1
+)
+
+echo Validating Windows package contents...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$targetDir = Resolve-Path '%APP_DIST%';" ^
+    "$internal = Join-Path $targetDir '_internal';" ^
+    "$required = @(" ^
+    "  'krok_helper\assets\logo\logo.jpg'," ^
+    "  'krok_helper\assets\platforms\youtube.svg'," ^
+    "  'strange_uta_game\config\config.json'," ^
+    "  'strange_uta_game\config\dictionary.json'," ^
+    "  'strange_uta_game\config\cmudict-0.7b'," ^
+    "  'strange_uta_game\config\kanji_readings.json'," ^
+    "  'strange_uta_game\resource\icon.ico'," ^
+    "  'strange_uta_game\resource\sounds\press.wav'," ^
+    "  'strange_uta_game\bass\x64\bass.dll'," ^
+    "  'strange_uta_game\bass\x64\bass_fx.dll'," ^
+    "  'Updater.exe'" ^
+    ");" ^
+    "$missing = @();" ^
+    "foreach ($rel in $required) { $base = if ($rel -eq 'Updater.exe') { $targetDir } else { $internal }; $path = Join-Path $base $rel; if (-not (Test-Path $path -PathType Leaf)) { $missing += $path } };" ^
+    "if ($missing.Count) { Write-Host 'Missing package files:'; $missing | ForEach-Object { Write-Host ('  ' + $_) }; exit 1 };" ^
+    "$warnRoot = Join-Path '%WORK_PATH%' '%BUILD_NAME%';" ^
+    "$warn = if (Test-Path $warnRoot) { Get-ChildItem -LiteralPath $warnRoot -Recurse -Filter 'warn-*.txt' -File -ErrorAction SilentlyContinue | Select-Object -First 1 } else { $null };" ^
+    "if ($warn) { Write-Host ('PyInstaller warnings were written to: ' + $warn.FullName) };" ^
+    "Write-Host 'Package content validation passed.'"
+if errorlevel 1 (
+    echo.
+    echo Package validation failed.
     if not defined IS_CI pause
     exit /b 1
 )

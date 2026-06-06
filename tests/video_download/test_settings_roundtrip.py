@@ -71,6 +71,17 @@ def test_load_with_unknown_keys_doesnt_crash(tmp_path, monkeypatch) -> None:
     assert load_app_settings().video_download_save_dir == "D:/Downloads"
 
 
+def test_load_falls_back_to_legacy_karaoke_helper_settings(tmp_path, monkeypatch) -> None:
+    settings_path = tmp_path / "Karaoke Studio" / "settings.json"
+    legacy_path = tmp_path / "Karaoke Helper" / "settings.json"
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_text(json.dumps({"video_download_save_dir": "D:/LegacyDownloads"}), encoding="utf-8")
+    monkeypatch.setattr("krok_helper.settings.get_settings_path", lambda: settings_path)
+    monkeypatch.setattr("krok_helper.settings.get_legacy_settings_paths", lambda: [legacy_path])
+
+    assert load_app_settings().video_download_save_dir == "D:/LegacyDownloads"
+
+
 def test_load_invalid_waveform_alignment_choices_falls_back(tmp_path, monkeypatch) -> None:
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(

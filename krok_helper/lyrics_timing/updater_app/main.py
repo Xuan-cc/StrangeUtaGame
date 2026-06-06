@@ -72,6 +72,7 @@ LOG_FORMAT = "[%(asctime)s] %(levelname)s %(message)s"
 DATE_FORMAT = "%H:%M:%S"
 
 TMP_DIR_NAME = "StrangeUtaGameUpdater"
+PRODUCT_NAME = "StrangeUtaGame"
 CHUNK_SIZE = 128 * 1024
 DEFAULT_USER_AGENT = "StrangeUtaGame-Updater/standalone"
 
@@ -116,8 +117,8 @@ class Args:
 
 def parse_args(argv: Optional[List[str]] = None) -> Args:
     p = argparse.ArgumentParser(
-        prog="StrangeUtaGame Updater",
-        description="替换 StrangeUtaGame.exe 与 _internal/ 下的文件，并重启应用。",
+        prog=f"{PRODUCT_NAME} Updater",
+        description=f"替换 {PRODUCT_NAME}.exe 与 _internal/ 下的文件，并重启应用。",
     )
     p.add_argument("--app-dir", required=True, type=Path)
     p.add_argument("--app-exe", required=True, type=str)
@@ -1141,7 +1142,7 @@ def run(args: Args) -> int:
 
     log = setup_logger(work_dir / "updater.log")
     log.info("=" * 60)
-    log.info("StrangeUtaGame Updater 启动")
+    log.info("%s Updater 启动", PRODUCT_NAME)
     log.info("目标版本: v%s  (tag: %s)", args.target_version, args.target_tag)
     log.info("主程序目录: %s", args.app_dir)
     log.info("主程序 EXE: %s", args.app_exe)
