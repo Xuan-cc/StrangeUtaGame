@@ -90,10 +90,16 @@ class SettingsProvider(Protocol):
 - 启动期定时器：崩溃恢复弹窗、应用 updater 自检、网络词典自动更新
 - `_init_window` 的全局主题 / 标题 / 尺寸 / 居中（只保留 widget 本地背景兜底）
 - `closeEvent` 的 `QApplication.quit()`（embedded 下会杀掉宿主进程）
+- **全局主题写入**：`SettingsInterface._apply_theme_setting` 在 embedded 下直接
+  return —— 不能 set `theme.mode`，否则会通过 `_sync_app_palette()` 掀翻
+  宿主 `QApplication.palette()` 并调 `qfluentwidgets.setTheme`，导致工作台
+  出现"半亮半暗"崩坏画面。主题归宿主独占（host 通过 `theme_workbench`
+  adapter 驱动同一个 SUG `theme` 单例）。
 
-**隐藏 UI**（`frontend/settings/sub_interfaces/about.py`，`provider is not None` 时）：
+**隐藏 UI**（`frontend/settings/sub_interfaces/about.py` / `ui_settings.py`，`provider is not None` 时）：
 - `tools_group`：ffmpeg 路径选择入口（宿主统一管理 ffmpeg）
 - `_path_card`：配置文件位置卡片（embedded 下配置走宿主，无文件目录概念）
+- `card_theme`：主题选择卡（embedded 下主题归宿主"界面"设置独占）
 
 **noop / 空返回**（provider 模式）：
 - `load/save_dictionary`、`load/save_singer_presets`、`load/save_network_dictionary` 的文件部分（走 `load_extra/save_extra`）

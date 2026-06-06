@@ -90,6 +90,10 @@ class UISubInterface(SubSettingInterface):
 
     def load_settings(self, s):
         self._settings_ref = s
+        # embedded 模式下宿主接管主题（见 EMBEDDING.md §5）；隐藏 SUG 自己的
+        # 主题选择卡，避免用户在子模块里改主题导致与宿主状态不一致。
+        embedded = getattr(s, "_provider", None) is not None
+        self.card_theme.setVisible(not embedded)
         theme_idx = {"auto": 0, "light": 1, "dark": 2}.get(s.get("ui.theme", "auto"), 0)
         self.card_theme.setCurrentIndex(theme_idx)
         self.card_main_font.setValue(s.get("ui.main_font", "Microsoft YaHei"))

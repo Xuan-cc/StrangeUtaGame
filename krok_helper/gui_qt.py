@@ -16,7 +16,7 @@ DWMWCP_DONOTROUND = 1
 os.environ["QFLUENT_WIDGETS_NO_PROMOTION"] = "1"
 
 from PyQt6.QtCore import QEvent, QSize, QThread, QTimer, Qt, QUrl, pyqtSignal as Signal
-from PyQt6.QtGui import QColor, QBrush, QDesktopServices, QFont, QFontMetrics, QIcon, QKeySequence, QPainter, QPen, QShortcut
+from PyQt6.QtGui import QColor, QBrush, QDesktopServices, QFont, QFontMetrics, QIcon, QKeySequence, QPainter, QPalette, QPen, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -40,6 +40,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QStyle,
     QStyleOptionViewItem,
+    QStyledItemDelegate,
     QTableWidgetItem,
     QToolTip,
     QVBoxLayout,
@@ -58,12 +59,10 @@ from qfluentwidgets import (
     ProgressBar as QProgressBar,
     PushButton as QPushButton,
     RadioButton as QRadioButton,
-    setTheme,
     setThemeColor,
     Slider as QSlider,
     StrongBodyLabel,
     TableWidget as QTableWidget,
-    Theme,
     ToolButton,
     qconfig,
 )
@@ -242,26 +241,41 @@ LYRICS_LANGUAGE_MAP = {label: value for label, value in LYRICS_LANGUAGE_OPTIONS}
 
 APP_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo" / "logo.jpg"
 TASKBAR_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo" / "logo2.png"
-COMBO_BOX_VIEW_QSS = """
-QAbstractItemView {
-    background-color: transparent;
-    border: none;
-    border-radius: 0px;
-    padding: 4px;
-    outline: none;
-}
+def combo_box_view_qss() -> str:
+    from krok_helper.theme_workbench import palette
 
-QAbstractItemView::item {
-    height: 32px;
-    padding: 0 12px;
-    border-radius: 6px;
-}
+    p = palette()
+    selected_bg = "#3A2A2C" if p.is_dark else "#FFF1F2"
+    selected_text = p.text_primary if p.is_dark else "#111827"
+    hover_bg = p.input_hover_bg if p.is_dark else "#F8FAFC"
+    return f"""
+    QAbstractItemView {{
+        background-color: transparent;
+        border: none;
+        border-radius: 0px;
+        padding: 4px;
+        outline: none;
+        color: {p.text_primary};
+        selection-background-color: {selected_bg};
+        selection-color: {selected_text};
+    }}
 
-QAbstractItemView::item:selected {
-    background-color: #FFF1F2;
-    color: black;
-}
-"""
+    QAbstractItemView::item {{
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 6px;
+        color: {p.text_primary};
+    }}
+
+    QAbstractItemView::item:hover {{
+        background-color: {hover_bg};
+    }}
+
+    QAbstractItemView::item:selected {{
+        background-color: {selected_bg};
+        color: {selected_text};
+    }}
+    """
 DEFAULT_UI_FONT_FAMILIES = [
     "Microsoft YaHei UI",
     "Microsoft YaHei",
@@ -348,7 +362,7 @@ class WhiteComboBoxMenu(ComboBoxMenu):
         super().__init__(parent)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.NoDropShadowWindowHint)
         # 保留 qfluentwidgets 默认的透明顶层窗口，不要关闭 WA_TranslucentBackground
-        self.view.setStyleSheet(COMBO_BOX_VIEW_QSS)
+        self.view.setStyleSheet(combo_box_view_qss())
         self.view.setFrameShape(QFrame.Shape.NoFrame)
         self.hBoxLayout.setContentsMargins(0, 0, 0, 0)
         self.hBoxLayout.setSpacing(0)
@@ -380,10 +394,13 @@ class WhiteComboBoxMenu(ComboBoxMenu):
         return super().exec(pos, ani, aniType)
 
     def paintEvent(self, event) -> None:  # noqa: N802
+        from krok_helper.theme_workbench import palette
+
+        p = palette()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(QColor("#EAEAEA"), 1))
-        painter.setBrush(QColor("white"))
+        painter.setPen(QPen(QColor(p.input_border), 1))
+        painter.setBrush(QColor(p.input_bg))
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 8, 8)
 
 
@@ -437,25 +454,43 @@ class LyricsResultsDelegate(TableItemDelegate):
         self.setCheckedColor("#D85C6C", "#D85C6C")
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # noqa: D401
+        from krok_helper.theme_workbench import palette
+
+        p = palette()
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
 
-        is_selected = index.row() in self.selectedRows
+        is_selected = index.row() in self.selectedRows or bool(option.state & QStyle.StateFlag.State_Selected)
         is_hovered = self.hoverRow == index.row() or bool(option.state & QStyle.StateFlag.State_MouseOver)
+        background = ""
         if is_selected:
-            painter.save()
-            painter.fillRect(option.rect, QColor("#FFF6F7"))
-            if index.column() == 0:
-                accent_rect = option.rect.adjusted(0, 6, -(option.rect.width() - 3), -6)
-                painter.fillRect(accent_rect, QColor("#D85C6C"))
-            painter.restore()
-            opt.state &= ~QStyle.StateFlag.State_Selected
+            background = p.preview_selection_bg
         elif is_hovered:
+            background = p.table_row_hover
+
+        text_brush = index.data(Qt.ItemDataRole.ForegroundRole)
+        if is_selected:
+            text_color = QColor(p.preview_selection_text)
+        elif text_brush is not None:
+            text_color = QBrush(text_brush).color()
+        else:
+            text_color = QColor(p.text_primary)
+        opt.palette.setColor(QPalette.ColorRole.Text, text_color)
+        opt.palette.setColor(QPalette.ColorRole.HighlightedText, text_color)
+        opt.state &= ~QStyle.StateFlag.State_Selected
+        opt.state &= ~QStyle.StateFlag.State_MouseOver
+
+        if background:
+            bg_rect = option.rect.adjusted(0, self.margin, 0, -self.margin)
             painter.save()
-            painter.fillRect(option.rect, QColor("#F8FAFC"))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.fillRect(bg_rect, QColor(background))
+            if index.column() == 0:
+                accent_height = max(4, bg_rect.height() - 10)
+                painter.fillRect(bg_rect.left(), bg_rect.top() + 5, 3, accent_height, QColor(p.accent_primary))
             painter.restore()
 
-        super().paint(painter, opt, index)
+        QStyledItemDelegate.paint(self, painter, opt, index)
 
 
 class ControlBar(CardWidget):
@@ -634,7 +669,8 @@ class AlignModeCard(QFrame):
             }}
             """
         )
-        self.title_label.setStyleSheet("color: #111827; font-size: 15pt; font-weight: 700; background: transparent;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(self.title_label, lambda: f"color: {_wb_pal().text_primary}; font-size: 15pt; font-weight: 700; background: transparent;")
         self.tag_label.setStyleSheet(
             f"""
             QLabel {{
@@ -648,7 +684,8 @@ class AlignModeCard(QFrame):
             }}
             """
         )
-        self.desc_label.setStyleSheet("color: #667085; font-size: 10.5pt; background: transparent; border: 0;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(self.desc_label, lambda: f"color: {_wb_pal().text_secondary}; font-size: 10.5pt; background: transparent; border: 0;")
 
 
 class ExportOptionRow(QFrame):
@@ -976,6 +1013,17 @@ class WorkflowStepButton(QWidget):
         outer_layout.addLayout(layout)
         outer_layout.addWidget(self.bottom_line)
         self._refresh_style()
+        # 跟随主题切换重刷颜色 —— 延迟到下个 event loop iter 避免与 SUG
+        # ``_refresh_all_widgets`` 同步链上的 polish 操作重入（Win11 上
+        # 与 Mica + qfluentwidgets lazy QSS 共同时序敏感）。
+        from krok_helper.theme_workbench import schedule_theme_refresh, theme as _wb_theme
+        _wb_theme.changed.connect(lambda: schedule_theme_refresh(self, self._refresh_style_safe))
+
+    def _refresh_style_safe(self) -> None:
+        try:
+            self._refresh_style()
+        except RuntimeError:
+            pass
 
     def setActive(self, active: bool) -> None:
         if self._active == active:
@@ -1001,27 +1049,53 @@ class WorkflowStepButton(QWidget):
         super().mouseReleaseEvent(event)
 
     def _refresh_style(self) -> None:
-        if self._active:
-            background = "#FFF6F7"
-            title_color = "#BC495A"
-            desc_color = "#8F5B64"
-            number_background = "#D85C6C"
-            number_color = "#FFFFFF"
-            number_border = "#D85C6C"
-        elif self._hovered:
-            background = "#F6F8FB"
-            title_color = "#1F2937"
-            desc_color = "#64748B"
-            number_background = "#FFFFFF"
-            number_color = "#64748B"
-            number_border = "#CBD5E1"
+        from krok_helper.theme_workbench import palette
+        p = palette()
+        # 工作流步骤色板 —— light/dark 各一套，状态分 active/hover/idle
+        if p.is_dark:
+            _active_bg     = "#3A2A2C"
+            _active_title  = "#FFB3BE"
+            _active_desc   = "#C58A92"
+            _hover_bg      = "#2A2A2A"
+            _idle_bg       = "transparent"
+            _idle_title    = p.text_primary
+            _idle_desc     = p.text_hint
+            _num_bg        = "#2D2D2D"
+            _num_border    = "#3E3E3E"
+            _num_text      = p.text_secondary
         else:
-            background = "transparent"
-            title_color = "#1F2937"
-            desc_color = "#64748B"
-            number_background = "#FFFFFF"
-            number_color = "#64748B"
-            number_border = "#CBD5E1"
+            _active_bg     = "#FFF6F7"
+            _active_title  = "#BC495A"
+            _active_desc   = "#8F5B64"
+            _hover_bg      = "#F6F8FB"
+            _idle_bg       = "transparent"
+            _idle_title    = "#1F2937"
+            _idle_desc     = "#64748B"
+            _num_bg        = "#FFFFFF"
+            _num_border    = "#CBD5E1"
+            _num_text      = "#64748B"
+
+        if self._active:
+            background = _active_bg
+            title_color = _active_title
+            desc_color = _active_desc
+            number_background = p.accent_search
+            number_color = "#FFFFFF"
+            number_border = p.accent_search
+        elif self._hovered:
+            background = _hover_bg
+            title_color = _idle_title
+            desc_color = _idle_desc
+            number_background = _num_bg
+            number_color = _num_text
+            number_border = _num_border
+        else:
+            background = _idle_bg
+            title_color = _idle_title
+            desc_color = _idle_desc
+            number_background = _num_bg
+            number_color = _num_text
+            number_border = _num_border
 
         self.setStyleSheet(
             f"""
@@ -1048,7 +1122,7 @@ class WorkflowStepButton(QWidget):
                 font-size: 11px;
             }}
             QFrame#WorkflowStepUnderline {{
-                background: #D85C6C;
+                background: {p.accent_search};
                 border: 0;
                 border-radius: 1px;
             }}
@@ -1079,7 +1153,8 @@ class WorkflowStepper(QWidget):
             if index < len(steps) - 1:
                 separator = QLabel("›")
                 separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                separator.setStyleSheet("color: #D1D5DB; font-size: 18px; font-weight: 500;")
+                from krok_helper.theme_workbench import palette as _wb_palette, themed as _wb_themed
+                _wb_themed(separator, lambda: f"color: {_wb_palette().text_disabled}; font-size: 18px; font-weight: 500;")
                 separator.setFixedWidth(24)
                 self._layout.addWidget(separator, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -1135,11 +1210,13 @@ class PlaceholderPage(QWidget):
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(6)
 
+        from krok_helper.theme_workbench import palette, themed
+
         title_label = QLabel(title)
-        title_label.setStyleSheet('font-size: 22pt; font-weight: 700; color: #1f2937;')
+        themed(title_label, lambda: f'font-size: 22pt; font-weight: 700; color: {palette().title_text};')
         subtitle_label = BodyLabel(description)
         subtitle_label.setWordWrap(True)
-        subtitle_label.setStyleSheet("color: #667085; font-size: 10.5pt;")
+        themed(subtitle_label, lambda: f'color: {palette().subtitle_text}; font-size: 10.5pt;')
         header.addWidget(title_label)
         header.addWidget(subtitle_label)
         shell.addLayout(header)
@@ -1148,16 +1225,21 @@ class PlaceholderPage(QWidget):
         card_layout = card.createVBoxLayout()
 
         card_title = StrongBodyLabel(title)
-        card_title.setStyleSheet("font-size: 18pt; font-weight: 700; color: #1f2937;")
+        themed(card_title, lambda: f'font-size: 18pt; font-weight: 700; color: {palette().title_text};')
         card_hint = QLabel("该模块尚未开发")
         card_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        card_hint.setStyleSheet(
-            "background: #fff1f3; color: #d61f45; border: 1px solid #ffd1d8; "
-            "border-radius: 14px; padding: 18px 20px; font-size: 14pt; font-weight: 700;"
-        )
+        # "尚未开发"红色提示徽章 —— light/dark 各一套（深色用更深的红底白字）
+        def _card_hint_qss():
+            p = palette()
+            if p.is_dark:
+                return ("background: #4A1A22; color: #FF9CAB; border: 1px solid #6A2530; "
+                        "border-radius: 14px; padding: 18px 20px; font-size: 14pt; font-weight: 700;")
+            return ("background: #fff1f3; color: #d61f45; border: 1px solid #ffd1d8; "
+                    "border-radius: 14px; padding: 18px 20px; font-size: 14pt; font-weight: 700;")
+        themed(card_hint, _card_hint_qss)
         card_desc = CaptionLabel("当前版本仅保留界面位置，用于统一工作流结构。")
         card_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        card_desc.setStyleSheet("color: #8a94a6; font-size: 10pt;")
+        themed(card_desc, lambda: f'color: {palette().text_hint}; font-size: 10pt;')
 
         card_layout.addWidget(card_title, 0, Qt.AlignmentFlag.AlignLeft)
         card_layout.addStretch(1)
@@ -1266,6 +1348,16 @@ class DropZoneCard(CardWidget):
         layout.addWidget(self.path_label)
         layout.addWidget(self.action_label)
         self._refresh_style()
+        # 跟随主题切换重刷颜色（延迟到下个 event loop iter，参见
+        # WorkflowStepButton 同名说明）。
+        from krok_helper.theme_workbench import schedule_theme_refresh, theme as _wb_theme
+        _wb_theme.changed.connect(lambda: schedule_theme_refresh(self, self._refresh_style_safe))
+
+    def _refresh_style_safe(self) -> None:
+        try:
+            self._refresh_style()
+        except RuntimeError:
+            pass
 
     def accepts(self, path: Path) -> bool:
         return path.is_file() and path.suffix.lower() in self.extensions
@@ -1347,40 +1439,64 @@ class DropZoneCard(CardWidget):
         self._status_badge.raise_()
 
     def _refresh_style(self) -> None:
+        from krok_helper.theme_workbench import palette
+        p = palette()
         selected = bool(getattr(self, "_path", None) or self.path)
         border_width = "1.5"
         border_style = "dashed"
+        # 拖拽/选中/idle 各态色板：light/dark 各一套
+        if p.is_dark:
+            _accept_bg, _accept_border, _accept_accent = "#1F2C40", "#5B9DFF", "#A6C8FF"
+            _reject_bg, _reject_border, _reject_accent = "#3A1A1A", "#EF5A5A", "#FF9C9C"
+            _hover_bg, _idle_bg = p.input_bg, p.card_bg
+            _hover_border, _hover_accent = "#5B9DFF", "#5B9DFF"
+            _selected_bg, _selected_border, _selected_accent = p.card_bg, "#3DB37D", "#6FE3A4"
+            _idle_border, _idle_accent = "#3E3E3E", "#5B9DFF"
+            _title_color, _hint_color, _placeholder_color, _path_color = (
+                p.text_primary, p.text_secondary, "#525252", p.text_primary,
+            )
+        else:
+            _accept_bg, _accept_border, _accept_accent = "#dbeafe", "#2f6fed", "#1d4ed8"
+            _reject_bg, _reject_border, _reject_accent = "#fef2f2", "#ef4444", "#b91c1c"
+            _hover_bg, _idle_bg = self.accent_bg, self.accent_bg
+            _hover_border, _hover_accent = "#2f6fed", "#2f6fed"
+            _selected_bg, _selected_border, _selected_accent = "#FFFFFF", "#10B981", "#177245"
+            _idle_border, _idle_accent = "#C2CAD8", "#2f6fed"
+            _title_color, _hint_color, _placeholder_color, _path_color = (
+                "#1f2937", "#5b6677", "#C2CAD8", "#111827",
+            )
+
         if self._drag_state == "accept":
-            background = "#dbeafe"
-            border = "#2f6fed"
-            accent = "#1d4ed8"
+            background = _accept_bg
+            border = _accept_border
+            accent = _accept_accent
             border_width = "2"
             border_style = "solid"
             action_text = "松开鼠标即可导入这个文件"
         elif self._drag_state == "reject":
-            background = "#fef2f2"
-            border = "#ef4444"
-            accent = "#b91c1c"
+            background = _reject_bg
+            border = _reject_border
+            accent = _reject_accent
             border_width = "2"
             border_style = "solid"
             action_text = "这个文件类型不支持，请换一个文件"
         elif self._hovered:
-            background = self.accent_bg
-            border = "#2f6fed"
-            accent = "#2f6fed"
+            background = _hover_bg
+            border = _hover_border
+            accent = _hover_accent
             border_width = "2"
             border_style = "solid"
             action_text = self._default_action_text
         elif selected:
-            background = "#FFFFFF"
-            border = "#10B981"
-            accent = "#177245"
+            background = _selected_bg
+            border = _selected_border
+            accent = _selected_accent
             border_style = "solid"
             action_text = self._default_action_text
         else:
-            background = self.accent_bg
-            border = "#C2CAD8"
-            accent = "#2f6fed"
+            background = _idle_bg
+            border = _idle_border
+            accent = _idle_accent
             action_text = self._default_action_text
 
         self.action_label.setText(action_text)
@@ -1402,7 +1518,7 @@ class DropZoneCard(CardWidget):
             QLabel#DropZoneTitle {{
                 background: transparent;
                 border: 0;
-                color: #1f2937;
+                color: {_title_color};
                 font-family: "Microsoft YaHei UI";
                 font-size: 12pt;
                 font-weight: 700;
@@ -1410,21 +1526,21 @@ class DropZoneCard(CardWidget):
             QLabel#DropZoneHint {{
                 background: transparent;
                 border: 0;
-                color: #5b6677;
+                color: {_hint_color};
                 font-family: "Microsoft YaHei UI";
                 font-size: 10pt;
             }}
             QLabel#DropZonePlaceholder {{
                 background: transparent;
                 border: 0;
-                color: #C2CAD8;
+                color: {_placeholder_color};
                 font-family: "Microsoft YaHei UI";
                 font-size: 48px;
             }}
             QLabel#DropZonePath {{
                 background: transparent;
                 border: 0;
-                color: #111827;
+                color: {_path_color};
                 font-family: "Consolas";
                 font-size: 10pt;
             }}
@@ -1628,9 +1744,12 @@ class WaveformView(QWidget):
             self._drag_kind = ""
 
     def paintEvent(self, event) -> None:  # noqa: N802
+        from krok_helper.theme_workbench import palette
+
+        p = palette()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        painter.fillRect(self.rect(), QColor("#ffffff"))
+        painter.fillRect(self.rect(), QColor(p.card_bg))
         if self._auto_fit_view and self.video_waveform and self.audio_waveform:
             _plot_left, plot_width = self._plot_bounds()
             fitted = max(0.5, min(1200.0, max(1.0, plot_width - 8.0) / 15.0))
@@ -1645,9 +1764,9 @@ class WaveformView(QWidget):
         label_width = self.track_label_width
 
         ruler_rect = outer_rect.adjusted(label_width, 0, 0, -(outer_rect.height() - 24))
-        painter.setPen(QColor("#ffffff"))
+        painter.setPen(QColor(p.card_bg))
         painter.drawLine(ruler_rect.left() + 1, ruler_rect.top(), ruler_rect.right() - 1, ruler_rect.top())
-        painter.setPen(QColor("#cfd7e2"))
+        painter.setPen(QColor(p.table_border))
         painter.drawLine(ruler_rect.left(), ruler_rect.top() + 1, ruler_rect.left(), ruler_rect.bottom())
         painter.drawLine(ruler_rect.right(), ruler_rect.top() + 1, ruler_rect.right(), ruler_rect.bottom())
         painter.drawLine(ruler_rect.left(), ruler_rect.bottom(), ruler_rect.right(), ruler_rect.bottom())
@@ -1710,12 +1829,15 @@ class WaveformView(QWidget):
         color: QColor,
         track_offset: float,
     ) -> None:
-        painter.fillRect(rect, QColor("#ffffff"))
-        painter.setPen(QColor("#d5dce6"))
+        from krok_helper.theme_workbench import palette
+
+        p = palette()
+        painter.fillRect(rect, QColor(p.input_bg))
+        painter.setPen(QColor(p.table_border))
         painter.drawRect(rect)
 
         center_y = rect.center().y()
-        painter.setPen(QPen(QColor("#e5e7eb"), 1))
+        painter.setPen(QPen(QColor(p.table_row_border), 1))
         painter.drawLine(rect.left() + 1, center_y, rect.right() - 1, center_y)
 
         painter.setPen(QPen(color, 1))
@@ -1737,15 +1859,23 @@ class WaveformView(QWidget):
         end_x = self._time_to_x(track_end_seconds, rect.left())
         if rect.left() < end_x < rect.right():
             end_x_int = int(end_x)
-            painter.fillRect(end_x_int + 1, rect.top() + 1, rect.right() - end_x_int - 1, rect.height() - 2, QColor("#f8fafc"))
-            painter.setPen(QPen(QColor("#94a3b8"), 1, Qt.PenStyle.DashLine))
+            painter.fillRect(
+                end_x_int + 1,
+                rect.top() + 1,
+                rect.right() - end_x_int - 1,
+                rect.height() - 2,
+                QColor(p.panel_bg),
+            )
+            painter.setPen(QPen(QColor(p.text_hint), 1, Qt.PenStyle.DashLine))
             painter.drawLine(end_x_int, rect.top() + 1, end_x_int, rect.bottom() - 1)
-            painter.setPen(QColor("#94a3b8"))
+            painter.setPen(QColor(p.text_hint))
             painter.setFont(QFont("Microsoft YaHei UI", 8))
             painter.drawText(end_x_int + 4, rect.top() + 12, "结束")
 
     def _draw_label_block(self, painter: QPainter, rect, title: str, offset_text: str, title_color: QColor) -> None:
-        painter.fillRect(rect, QColor("#ffffff"))
+        from krok_helper.theme_workbench import palette
+
+        painter.fillRect(rect, QColor(palette().card_bg))
         text_rect = rect.adjusted(10, 8, -10, -8)
         title_font = QFont("Microsoft YaHei UI", 11)
         title_font.setBold(True)
@@ -1902,8 +2032,14 @@ class KrokHelperQtApp(QMainWindow):
         self.align_jump_to_end_button: QPushButton | None = None
         self.align_reset_view_button: QPushButton | None = None
 
-        setTheme(Theme.LIGHT, lazy=True)
-        setThemeColor("#ff5a6f", lazy=True)
+        # 主题：``apply_settings_theme`` 已在 ``cli.run_gui`` 启动期把
+        # qfluentwidgets Theme + QApplication palette settle 到目标模式
+        # （依据 ``settings.ui_theme``）。这里只需按当前 ``palette`` 同步
+        # 品牌色 + QSS；运行时主题切换走 ``_on_theme_changed`` 回调。
+        from krok_helper.theme_workbench import palette, theme
+        setThemeColor(palette().accent_primary, lazy=True)
+        theme.changed.connect(self._on_theme_changed)
+
         self.setWindowTitle(APP_TITLE)
         app_icon = load_app_icon()
         if app_icon is not None:
@@ -2023,331 +2159,67 @@ class KrokHelperQtApp(QMainWindow):
         finally:
             self._restoring_from_maximized = False
 
+    def _on_theme_changed(self) -> None:
+        """SUG ``theme.changed`` 回调：重应用工作台外壳 QSS + 品牌色 + 重跑
+        状态驱动样式。
+
+        **关键时序**：``theme.changed`` 是从 SUG ``_apply_theme_change`` /
+        ``_reapply_win11_appearance`` 内同步发出的；那两个方法刚刚做完
+        ``_refresh_all_widgets`` 递归 unpolish/polish 所有 widget。在它们的
+        信号链上直接 setStyleSheet + 改子控件 QSS，等于在 Qt 还没把"polish
+        完成"事件 drain 干净时就发起新一轮 QSS 替换 —— 容易触发 native
+        access-violation（Win11 上配合 Mica + qfluentwidgets lazy stylesheet
+        管理器尤其敏感）。
+
+        修复：用 adapter 的 debounce 调度器把全部重活推到短暂 settle 之后，
+        并把连续 emit 合并成最后状态的一次刷新。这样 SUG 的
+        ``_apply_theme_change`` + double-singleShot 触发的
+        ``_reapply_win11_appearance`` 两轮 polish 都先 settle，且用户连续切换时
+        不会堆积多轮宿主 QSS 替换。
+        """
+        from krok_helper.theme_workbench import schedule_theme_refresh
+        schedule_theme_refresh(self, self._apply_theme_refresh)
+
+    def _apply_theme_refresh(self) -> None:
+        """实际执行主题切换后的样式重应用 —— 由 ``_on_theme_changed``
+        通过 debounce 延迟调度，避开 SUG 主题刷新链上的
+        重入窗口。"""
+        from krok_helper.theme_workbench import palette
+        try:
+            setThemeColor(palette().accent_primary, lazy=True)
+            self._apply_styles()
+            # 状态驱动的样式（依据 in-memory 计数/选中态生成 QSS）需要在
+            # 主题切换时重跑，因为 themed() 只覆盖"恒等 lambda"场景。
+            for fn_name in (
+                "_refresh_alignment_material_inputs",
+                "_apply_alignment_mode_styles",
+                "_refresh_alignment_export_panels",
+            ):
+                fn = getattr(self, fn_name, None)
+                if fn is None:
+                    continue
+                try:
+                    fn()
+                except Exception:
+                    pass
+            if hasattr(self, "_head_mode_current"):
+                try:
+                    self._update_head_mode_buttons(self._head_mode_current)
+                except Exception:
+                    pass
+            if hasattr(self, "lyrics_results_table") and self.lyrics_search_results:
+                try:
+                    selected_key = self.lyrics_selected_candidate.key if self.lyrics_selected_candidate is not None else ""
+                    self._render_lyrics_results_table(selected_key=selected_key)
+                except Exception:
+                    pass
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("主题切换刷新失败", exc_info=True)
+
     def _apply_styles(self) -> None:
-        self.setStyleSheet(
-            """
-            QMainWindow, QWidget {
-                background: #F4F7FB;
-                color: #1f2937;
-                font-family: "Microsoft YaHei UI";
-                font-size: 10.5pt;
-            }
-            QLabel, BodyLabel, CaptionLabel {
-                background: transparent;
-                font-family: "Microsoft YaHei UI";
-                font-weight: 400;
-            }
-            StrongBodyLabel {
-                background: transparent;
-                font-family: "Microsoft YaHei UI";
-                font-weight: 700;
-            }
-            QWidget#AppRoot {
-                background: #F4F7FB;
-            }
-            QFrame[cardWidget="true"] {
-                background: #FFFFFF;
-                border: 1px solid #E5EAF2;
-                border-radius: 8px;
-            }
-            QFrame#WorkflowBar {
-                background: #FBFCFE;
-                border: 1px solid #E3E8F0;
-                border-radius: 8px;
-            }
-            QFrame#WhitePanel {
-                background: #FFFFFF;
-                border: 1px solid #E1E7F0;
-                border-radius: 8px;
-            }
-            Pivot {
-                background: transparent;
-                border: 0;
-            }
-            QWidget#LyricsPage {
-                background: #F4F7FB;
-            }
-            QFrame#LyricsSearchPanel, QFrame#LyricsResultPanel, QFrame#LyricsPreviewPanel {
-                background: #FFFFFF;
-                border: 1px solid #E1E7F0;
-                border-radius: 10px;
-            }
-            QFrame#TrimRow {
-                background: transparent;
-                border: 0;
-            }
-            QLabel#AppTitle {
-                color: #1f2937;
-                font-size: 18pt;
-                font-weight: 700;
-            }
-            QLabel#AppSubtitle {
-                color: #6B7280;
-                font-size: 10.5pt;
-            }
-            ToolButton#AlignMaterialSettingsButton {
-                background: transparent;
-                border: 1px solid transparent;
-                border-radius: 8px;
-                padding: 2px;
-            }
-            ToolButton#AlignMaterialSettingsButton:hover {
-                background: #F3F4F6;
-                border-color: #E5E7EB;
-            }
-            ToolButton#GlobalSettingsButton {
-                background: #FFFFFF;
-                border: 1px solid #D7DEE9;
-                border-radius: 8px;
-                padding: 4px;
-            }
-            ToolButton#GlobalSettingsButton:hover {
-                background: #FFF6F7;
-                border-color: #F3A8B3;
-            }
-            QLabel#PageTitle {
-                color: #1f2937;
-                font-size: 20pt;
-                font-weight: 700;
-            }
-            QLabel#PanelTitle {
-                background: transparent;
-                color: #111827;
-                font-size: 12.5pt;
-                font-weight: 700;
-            }
-            QLabel#LyricsPageDescription {
-                color: #667085;
-                font-size: 10pt;
-            }
-            QLabel#LyricsSecondaryText, QLabel#LyricsStatusText, QLabel#LyricsResultsSummary, QLabel#LyricsPreviewHint, QLabel#LyricsMatchSummary {
-                color: #64748B;
-                font-size: 9pt;
-            }
-            QLabel#LyricsPreviewMeta {
-                color: #64748B;
-                font-size: 9.5pt;
-            }
-            QLabel#LyricsPreviewTitle {
-                color: #0F172A;
-                font-size: 14pt;
-                font-weight: 700;
-            }
-            QPlainTextEdit#LogText {
-                background: #ffffff;
-                border: 0;
-                color: #1f2937;
-                font-family: "Consolas";
-                font-size: 10pt;
-            }
-            QPlainTextEdit#LyricsPreviewText {
-                background: #F8FAFC;
-                border: 1px solid #DDE5EF;
-                border-radius: 8px;
-                color: #1E293B;
-                font-size: 11pt;
-                padding: 12px 14px;
-                selection-background-color: #FAD7DE;
-                selection-color: #111827;
-            }
-            QPlainTextEdit#LyricsPreviewText:focus {
-                border: 1px solid #D87886;
-                background: #FBFCFE;
-            }
-            QTableWidget#LyricsResultsTable {
-                background: #FFFFFF;
-                alternate-background-color: #ffffff;
-                border: 1px solid #DDE5EF;
-                gridline-color: transparent;
-                selection-background-color: transparent;
-                selection-color: #111827;
-                outline: 0;
-                border-radius: 8px;
-            }
-            QTableWidget#LyricsResultsTable::item {
-                padding: 12px 12px;
-                border: 0;
-                border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-            }
-            QTableWidget#LyricsResultsTable::item:hover {
-                background: #F8FAFC;
-            }
-            QTableWidget#LyricsResultsTable::item:selected {
-                background: transparent;
-                color: #111827;
-            }
-            QTableWidget#LyricsResultsTable::item:selected:hover {
-                background: transparent;
-            }
-            QTableWidget#LyricsResultsTable QHeaderView::section {
-                background: #F8FAFC;
-                color: #64748B;
-                border: 0;
-                border-bottom: 1px solid #DDE5EF;
-                padding: 9px 10px;
-                font-weight: 700;
-            }
-            QPushButton#LyricsSearchButton, PrimaryPushButton#LyricsSearchButton {
-                background: #D85C6C;
-                border: 1px solid #D85C6C;
-                border-radius: 8px;
-                color: #FFFFFF;
-                font-weight: 700;
-                padding: 8px 18px;
-            }
-            QPushButton#LyricsSearchButton:hover, PrimaryPushButton#LyricsSearchButton:hover {
-                background: #C94F60;
-                border-color: #C94F60;
-            }
-            QPushButton#LyricsSearchButton:pressed, PrimaryPushButton#LyricsSearchButton:pressed {
-                background: #B94455;
-                border-color: #B94455;
-            }
-            QPushButton#LyricsSearchButton:disabled, PrimaryPushButton#LyricsSearchButton:disabled {
-                background: #E8B5BD;
-                border-color: #E8B5BD;
-                color: #FFFFFF;
-            }
-            QPushButton#LyricsCopyButton {
-                background: #FFFFFF;
-                border: 1px solid #D7DEE9;
-                border-radius: 8px;
-                color: #334155;
-                padding: 7px 14px;
-                font-weight: 600;
-            }
-            QPushButton#LyricsCopyButton:hover {
-                background: #F8FAFC;
-                border-color: #C6D0DE;
-            }
-            QPushButton#LyricsCopyButton:pressed {
-                background: #EEF2F7;
-            }
-            QPushButton#LyricsImportButton {
-                background: #FF5A6F;
-                border: 1px solid #FF5A6F;
-                border-radius: 8px;
-                color: #FFFFFF;
-                padding: 7px 14px;
-                font-weight: 700;
-            }
-            QPushButton#LyricsImportButton:hover {
-                background: #C94F60;
-                border-color: #C94F60;
-            }
-            QPushButton#LyricsImportButton:pressed {
-                background: #B94455;
-                border-color: #B94455;
-            }
-            QPushButton#LyricsImportButton:disabled {
-                background: #E8B5BD;
-                border-color: #E8B5BD;
-                color: #FFFFFF;
-            }
-            QCheckBox#LyricsStripIntroCheck {
-                color: #475569;
-                spacing: 7px;
-            }
-            QHeaderView::section {
-                background: #eef2f7;
-                color: #111827;
-                border: 0;
-                border-right: 1px solid #d5dce6;
-                border-bottom: 1px solid #d5dce6;
-                padding: 6px 8px;
-                font-weight: 700;
-            }
-            QPushButton[compact="true"] {
-                padding: 3px 8px;
-                font-size: 10pt;
-            }
-            QProgressBar {
-                border: 0;
-                background: #eceff5;
-                min-height: 10px;
-                max-height: 10px;
-                border-radius: 5px;
-            }
-            QProgressBar::chunk {
-                background: #ff5a6f;
-                border-radius: 5px;
-            }
-            QRadioButton:disabled, QCheckBox:disabled, QLabel:disabled {
-                color: #94a3b8;
-            }
-            QCheckBox {
-                background: transparent;
-            }
-            QLineEdit, QComboBox, QDoubleSpinBox {
-                background: #ffffff;
-                border: 1px solid #d9dee8;
-                padding: 8px 10px;
-                border-radius: 12px;
-            }
-            QLineEdit#LyricsKeywordEdit, QComboBox#LyricsSourceCombo, QComboBox#LyricsPreviewModeCombo {
-                background: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 8px;
-                padding: 8px 12px;
-                min-height: 24px;
-                color: #111827;
-            }
-            QLineEdit#LyricsKeywordEdit:hover, QComboBox#LyricsSourceCombo:hover, QComboBox#LyricsPreviewModeCombo:hover {
-                border-color: #B6C2D2;
-                background: #FBFCFE;
-            }
-            QLineEdit#LyricsKeywordEdit:focus, QComboBox#LyricsSourceCombo:focus, QComboBox#LyricsPreviewModeCombo:focus {
-                border: 1px solid #D87886;
-                background: #FFFFFF;
-            }
-            QScrollBar:vertical {
-                background: transparent;
-                border: 0;
-                width: 12px;
-                margin: 4px 0 4px 0;
-            }
-            QScrollBar:horizontal {
-                background: transparent;
-                border: 0;
-                height: 12px;
-                margin: 0 4px 0 4px;
-            }
-            QScrollBar::handle:vertical {
-                background: #cbd3df;
-                border-radius: 6px;
-                min-height: 48px;
-                margin: 2px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #cbd3df;
-                border-radius: 6px;
-                min-width: 48px;
-                margin: 2px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #aeb8c8;
-            }
-            QScrollBar::handle:horizontal:hover {
-                background: #aeb8c8;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0;
-                background: transparent;
-                border: 0;
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                width: 0;
-                background: transparent;
-                border: 0;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: transparent;
-            }
-            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
-                background: transparent;
-            }
-            """
-        )
+        from krok_helper.theme_workbench import build_app_qss
+        self.setStyleSheet(build_app_qss())
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -2630,7 +2502,8 @@ class KrokHelperQtApp(QMainWindow):
         self.lyrics_results_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self.lyrics_results_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         self.lyrics_results_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        self.lyrics_results_table.setItemDelegate(LyricsResultsDelegate(self.lyrics_results_table))
+        self.lyrics_results_table.delegate = LyricsResultsDelegate(self.lyrics_results_table)
+        self.lyrics_results_table.setItemDelegate(self.lyrics_results_table.delegate)
         self.lyrics_results_table.installEventFilter(self)
         self.lyrics_results_table.currentCellChanged.connect(self._handle_lyrics_result_selected)
         self.lyrics_results_table.verticalScrollBar().valueChanged.connect(self._maybe_load_more_lyrics_results)
@@ -2908,6 +2781,12 @@ class KrokHelperQtApp(QMainWindow):
         self.lyrics_results_table.setColumnWidth(4, source_width)
 
     def _render_lyrics_results_table(self, *, selected_key: str = "") -> None:
+        from krok_helper.theme_workbench import palette
+
+        p = palette()
+        muted_text = p.text_secondary
+        duration_text_color = p.text_hint if p.is_dark else "#475569"
+        source_text = "#FF9AAA" if p.is_dark else "#B94D5D"
         row_count = len(self.lyrics_search_results) + (1 if self._lyrics_loading_more and self.lyrics_search_results else 0)
         self.lyrics_results_table.clearSpans()
         self.lyrics_results_table.setRowCount(row_count)
@@ -2926,14 +2805,14 @@ class KrokHelperQtApp(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, row)
                 item.setFont(build_lyrics_ui_font(point_size=10.5, bold=(column == 0)))
                 if column in (1, 2):
-                    item.setForeground(QBrush(QColor("#64748B")))
+                    item.setForeground(QBrush(QColor(muted_text)))
                 if column == 3:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                    item.setForeground(QBrush(QColor("#475569")))
+                    item.setForeground(QBrush(QColor(duration_text_color)))
                 elif column == 4:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     item.setFont(build_lyrics_ui_font(point_size=9.5, bold=True))
-                    item.setForeground(QBrush(QColor("#B94D5D")))
+                    item.setForeground(QBrush(QColor(source_text)))
                 else:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 self.lyrics_results_table.setItem(row, column, item)
@@ -2945,7 +2824,7 @@ class KrokHelperQtApp(QMainWindow):
             loading_item = QTableWidgetItem("加载中...")
             loading_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             loading_item.setFont(build_lyrics_ui_font(point_size=9.5))
-            loading_item.setForeground(QBrush(QColor("#64748B")))
+            loading_item.setForeground(QBrush(QColor(muted_text)))
             loading_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
             self.lyrics_results_table.setSpan(loading_row, 0, 1, self.lyrics_results_table.columnCount())
             self.lyrics_results_table.setItem(loading_row, 0, loading_item)
@@ -3217,7 +3096,8 @@ class KrokHelperQtApp(QMainWindow):
         title.setObjectName("PageTitle")
         desc = QLabel("把字幕视频拖进下方卡片，再按需放入原唱音频和 / 或伴奏音频。至少提供一条音频就可以开始生成。")
         desc.setWordWrap(True)
-        desc.setStyleSheet("color: #475467; font-size: 10.5pt;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(desc, lambda: f"color: {_wb_pal().text_secondary}; font-size: 10.5pt;")
         header.addWidget(title)
         header.addWidget(desc)
         shell.addLayout(header)
@@ -3228,31 +3108,33 @@ class KrokHelperQtApp(QMainWindow):
         settings_layout.setHorizontalSpacing(14)
         settings_layout.setVerticalSpacing(10)
         output_label = QLabel("输出目录")
-        output_label.setStyleSheet('font-size: 11pt; font-weight: 400; color: #475467;')
+        _wb_th(output_label, lambda: f'font-size: 11pt; font-weight: 400; color: {_wb_pal().text_secondary};')
         self.output_dir_label = QLabel("跟随字幕视频所在目录")
         self.output_dir_label.setWordWrap(True)
-        self.output_dir_label.setStyleSheet('font-size: 11pt; color: #1f2937; font-weight: 500;')
+        _wb_th(self.output_dir_label, lambda: f'font-size: 11pt; color: {_wb_pal().text_primary}; font-weight: 500;')
         ffmpeg_title = QLabel("FFmpeg 目录 ⓘ")
         ffmpeg_title.setToolTip('FFmpeg 目录、输出命名等偏好设置可在"设置"窗口中调整并保存到本地。')
-        ffmpeg_title.setStyleSheet('font-size: 11pt; font-weight: 400; color: #475467;')
+        _wb_th(ffmpeg_title, lambda: f'font-size: 11pt; font-weight: 400; color: {_wb_pal().text_secondary};')
         self.hires_ffmpeg_label = QLabel(FFMPEG_DIR_PLACEHOLDER)
         self.hires_ffmpeg_label.setWordWrap(True)
         settings_button = QPushButton("⚙ 设置")
-        settings_button.setStyleSheet(
-            """
-            QPushButton {
-                background: transparent;
-                border: 1px solid #D5DCE6;
-                border-radius: 6px;
-                padding: 6px 14px;
-                color: #475467;
-                font-size: 10.5pt;
-            }
-            QPushButton:hover {
-                background: #F2F4F8;
-            }
-            """
-        )
+        _wb_th(settings_button, lambda: (
+            "QPushButton {{"
+            " background: transparent;"
+            " border: 1px solid {border};"
+            " border-radius: 6px;"
+            " padding: 6px 14px;"
+            " color: {color};"
+            " font-size: 10.5pt;"
+            "}}"
+            "QPushButton:hover {{"
+            " background: {hover};"
+            "}}"
+        ).format(
+            border=_wb_pal().input_border,
+            color=_wb_pal().text_secondary,
+            hover=_wb_pal().secondary_button_hover_bg,
+        ))
         settings_button.clicked.connect(lambda: self._open_settings_window("hires"))
         settings_layout.addWidget(output_label, 0, 0)
         settings_layout.addWidget(self.output_dir_label, 0, 1)
@@ -3312,45 +3194,44 @@ class KrokHelperQtApp(QMainWindow):
         log_layout.setVerticalSpacing(12)
         log_title = QLabel("处理日志")
         log_title.setObjectName("PanelTitle")
-        log_button_style = """
-            QPushButton {
-                background: transparent;
-                border: 0;
-                border-radius: 6px;
-                color: #475467;
-                font-size: 12pt;
-            }
-            QPushButton:hover {
-                background: #F2F4F8;
-            }
-        """
+        def _log_button_qss():
+            p = _wb_pal()
+            return (
+                "QPushButton {{"
+                " background: transparent; border: 0; border-radius: 6px;"
+                " color: {color}; font-size: 12pt;"
+                "}}"
+                "QPushButton:hover {{ background: {hover}; }}"
+            ).format(color=p.text_secondary, hover=p.secondary_button_hover_bg)
         copy_log_btn = QPushButton("📋")
         copy_log_btn.setFixedSize(28, 28)
         copy_log_btn.setToolTip("复制全部日志")
-        copy_log_btn.setStyleSheet(log_button_style)
+        _wb_th(copy_log_btn, _log_button_qss)
         copy_log_btn.clicked.connect(self._copy_hires_log)
         clear_log_btn = QPushButton("🗑")
         clear_log_btn.setFixedSize(28, 28)
         clear_log_btn.setToolTip("清空日志")
-        clear_log_btn.setStyleSheet(log_button_style)
+        _wb_th(clear_log_btn, _log_button_qss)
         self.hires_log = QPlainTextEdit()
         self.hires_log.setObjectName("LogText")
         self.hires_log.setReadOnly(True)
         clear_log_btn.clicked.connect(self.hires_log.clear)
         self.hires_log.setPlaceholderText("运行后将在此显示 FFmpeg 输出与处理进度...")
-        self.hires_log.setStyleSheet(
-            """
-            QPlainTextEdit#LogText {
-                background: #FAFBFC;
-                border: 1px solid #E4E7EC;
-                border-radius: 8px;
-                color: #1f2937;
-                font-family: "Consolas", "JetBrains Mono", monospace;
-                font-size: 10pt;
-                padding: 10px;
-            }
-            """
-        )
+        _wb_th(self.hires_log, lambda: (
+            "QPlainTextEdit#LogText {{"
+            " background: {bg};"
+            " border: 1px solid {border};"
+            " border-radius: 8px;"
+            " color: {color};"
+            ' font-family: "Consolas", "JetBrains Mono", monospace;'
+            " font-size: 10pt;"
+            " padding: 10px;"
+            "}}"
+        ).format(
+            bg=_wb_pal().log_bg,
+            border=_wb_pal().input_border,
+            color=_wb_pal().log_text,
+        ))
         log_layout.addWidget(log_title, 0, 0)
         log_layout.addWidget(copy_log_btn, 0, 1)
         log_layout.addWidget(clear_log_btn, 0, 2)
@@ -3376,23 +3257,17 @@ class KrokHelperQtApp(QMainWindow):
         self.hires_progress.setFixedWidth(220)
         self.hires_progress.setFixedHeight(10)
         self.hires_progress.setTextVisible(True)
-        self.hires_progress.setStyleSheet(
-            """
-            QProgressBar {
-                border: 0;
-                border-radius: 5px;
-                background: #E5E7EB;
-                text-align: center;
-                color: transparent;
-            }
-            QProgressBar::chunk {
-                background: #2f6fed;
-                border-radius: 5px;
-            }
-            """
-        )
+        _wb_th(self.hires_progress, lambda: (
+            "QProgressBar {{"
+            " border: 0; border-radius: 5px;"
+            " background: {bg}; text-align: center; color: transparent;"
+            "}}"
+            "QProgressBar::chunk {{ background: #2f6fed; border-radius: 5px; }}"
+        ).format(bg=_wb_pal().progress_bg))
         self.hires_status_label = QLabel("准备就绪")
-        self._set_hires_status_color("#475467")
+        # 由 ``_set_hires_status_color`` 在状态变化时单独驱动 —— 不挂 themed()，
+        # 否则会把动态 success/error/processing 颜色覆盖回 idle 文字色。
+        self._set_hires_status_color(None)
         controls.addWidget(self.hires_start_button)
         controls.addWidget(self.hires_cancel_button)
         controls.addWidget(clear_button)
@@ -3488,7 +3363,8 @@ class KrokHelperQtApp(QMainWindow):
                 self.hint_label.setMinimumWidth(0)
                 self.hint_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
                 self.hint_label.setWordWrap(True)
-                self.hint_label.setStyleSheet("color: #667085;")
+                from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+                _wb_th(self.hint_label, lambda: f"color: {_wb_pal().text_secondary};")
                 self.hint_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
                 text_layout.addWidget(self.title_label)
@@ -3508,7 +3384,8 @@ class KrokHelperQtApp(QMainWindow):
                 self.file_name_label = BodyLabel("未选择文件")
                 self.file_name_label.setMinimumWidth(0)
                 self.file_name_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-                self.file_name_label.setStyleSheet("color: #111827; font-weight: 400;")
+                from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+                _wb_th(self.file_name_label, lambda: f"color: {_wb_pal().text_primary}; font-weight: 400;")
                 self.file_name_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
                 file_info_row.addWidget(self.file_name_label, 1)
                 self.file_state_badge = QLabel("已选择")
@@ -3519,14 +3396,16 @@ class KrokHelperQtApp(QMainWindow):
 
                 self.ready_duration_label = BodyLabel("")
                 self.ready_duration_label.setMinimumWidth(0)
-                self.ready_duration_label.setStyleSheet("color: #667085;")
+                from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+                _wb_th(self.ready_duration_label, lambda: f"color: {_wb_pal().text_secondary};")
                 self.ready_duration_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
                 self.ready_duration_label.hide()
                 file_info_row.addWidget(self.ready_duration_label, 0, Qt.AlignmentFlag.AlignRight)
 
                 self.detail_label = AlignmentInfoLabel(owner, self._empty_detail_text, self)
                 self.detail_label.setMinimumWidth(0)
-                self.detail_label.setStyleSheet("color: #667085;")
+                from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+                _wb_th(self.detail_label, lambda: f"color: {_wb_pal().text_secondary};")
                 self.detail_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.detail_label.setWordWrap(False)
                 self.detail_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -3570,28 +3449,44 @@ class KrokHelperQtApp(QMainWindow):
                 self.file_name_label.setText("未选择文件")
                 self.detail_label.setText(self._empty_detail_text)
                 self._refresh_style()
+                # 主题切换：重算 variant×is_dark palette + 重 apply QSS。
+                from krok_helper.theme_workbench import theme as _wb_theme
+                _wb_theme.changed.connect(self._on_theme_changed)
 
-            def _build_theme_palette(self, theme: str) -> dict[str, str]:
-                if theme == "blue":
-                    return {
-                        "accent": "#4C8DFF",
-                        "accent_border": "#CFE0FF",
-                        "icon_background": "#EEF5FF",
-                        "action_background": "#F5F9FF",
-                        "hover_background": "#FAFCFF",
-                        "selected_background": "#EEF5FF",
-                        "selected_icon_background": "#CFE3FF",
-                        "selected_action_background": "#E4EEFF",
-                    }
+            def _on_theme_changed(self) -> None:
+                # 延迟到下个 event loop iter，避开 SUG ``_refresh_all_widgets``
+                # 同步链上的重入窗口（参见 KrokHelperQtApp._on_theme_changed
+                # 的同名 docstring）。
+                from krok_helper.theme_workbench import schedule_theme_refresh
+                schedule_theme_refresh(self, self._apply_theme_refresh)
+
+            def _apply_theme_refresh(self) -> None:
+                try:
+                    self._theme_palette = self._build_theme_palette(self._theme)
+                    self._refresh_style()
+                except RuntimeError:
+                    pass
+
+            def _build_theme_palette(self, variant: str):
+                """获取功能配色（blue/red）× 当前主题 (light/dark) 的 palette。
+
+                返回 :class:`DropCardPalette` —— 原代码用 dict 访问
+                ``palette["accent"]``，下面 ``_refresh_style_modern`` 已有
+                兜底 ``__getitem__``-like 适配（仍用 ``palette["x"]`` 形式，
+                因为 dataclass 不支持下标，所以包一层 dict 视图）。
+                """
+                from krok_helper.theme_workbench import drop_card_palette
+                dcp = drop_card_palette(variant)
+                # 把 dataclass 转成 dict，原 ``palette["x"]`` 访问无需改写。
                 return {
-                    "accent": "#FF5D72",
-                    "accent_border": "#FFD7DE",
-                    "icon_background": "#FFF0F3",
-                    "action_background": "#FFF7F8",
-                    "hover_background": "#FFFBFB",
-                    "selected_background": "#FFF1F4",
-                    "selected_icon_background": "#FFD6DE",
-                    "selected_action_background": "#FFE8ED",
+                    "accent": dcp.accent,
+                    "accent_border": dcp.accent_border,
+                    "icon_background": dcp.icon_background,
+                    "action_background": dcp.action_background,
+                    "hover_background": dcp.hover_background,
+                    "selected_background": dcp.selected_background,
+                    "selected_icon_background": dcp.selected_icon_background,
+                    "selected_action_background": dcp.selected_action_background,
                 }
 
             def accepts(self, path: Path) -> bool:
@@ -3686,8 +3581,10 @@ class KrokHelperQtApp(QMainWindow):
                 is_ready = self._display_mode == "ready" and is_selected
                 if not is_selected:
                     self.file_name_label.setText("未选择文件")
+                from krok_helper.theme_workbench import palette as _wb_pal_state
+                _p_state = _wb_pal_state()
                 if self._drag_state == "accept":
-                    background = "#ffffff"
+                    background = _p_state.card_bg
                     border = palette["accent"]
                     accent = palette["accent"]
                     border_width = 2
@@ -3695,12 +3592,17 @@ class KrokHelperQtApp(QMainWindow):
                     action_border = palette["accent_border"]
                     action_text = "松开鼠标即可导入这个文件"
                 elif self._drag_state == "reject":
-                    background = "#fff1f2"
-                    border = "#ff4d5e"
-                    accent = "#ff4d5e"
+                    if _p_state.is_dark:
+                        background = "#3A1A1A"
+                        border = accent = "#FF7A8C"
+                        action_background = "#2D1518"
+                        action_border = "#5A3A40"
+                    else:
+                        background = "#fff1f2"
+                        border = accent = "#ff4d5e"
+                        action_background = "#fff5f6"
+                        action_border = "#ffc7d0"
                     border_width = 2
-                    action_background = "#fff5f6"
-                    action_border = "#ffc7d0"
                     action_text = "文件类型不支持，请重新选择"
                 elif is_selected:
                     background = palette["selected_background"]
@@ -3719,12 +3621,12 @@ class KrokHelperQtApp(QMainWindow):
                     action_border = palette["accent_border"]
                     action_text = self._default_action_text
                 else:
-                    background = "#ffffff"
-                    border = "#E9EDF3"
+                    background = _p_state.card_bg
+                    border = _p_state.card_border
                     accent = palette["accent"]
                     border_width = 1
                     action_background = palette["action_background"]
-                    action_border = "#E7EEF8" if self._theme == "blue" else "#F2E8EB"
+                    action_border = palette["accent_border"] if _p_state.is_dark else ("#E7EEF8" if self._theme == "blue" else "#F2E8EB")
                     action_text = self._default_action_text
 
                 if is_chip:
@@ -3781,15 +3683,29 @@ class KrokHelperQtApp(QMainWindow):
                     f"color: {palette['accent']}; font-size: {'11.5pt' if is_chip else '16pt'}; background: transparent; border: 0;"
                 )
                 self.title_label.setFont(build_app_ui_font(point_size=11.5 if is_chip else 16, bold=True))
-                self.hint_label.setStyleSheet("color: #667085; font-size: 11pt; background: transparent; border: 0;")
-                self.file_name_label.setStyleSheet(
-                    f"color: {'#182230' if is_selected else '#344054'}; font-size: {'10.5pt' if is_chip else '12pt'}; font-weight: 400; background: transparent; border: 0;"
+                # 直接 setStyleSheet（不再用 _wb_th —— 本方法每次拖拽/hover 都跑，
+                # 在循环里加 connect 会泄漏 listener）；颜色取当前主题 palette。
+                from krok_helper.theme_workbench import palette as _wb_pal_inner
+                _p2 = _wb_pal_inner()
+                self.hint_label.setStyleSheet(
+                    f"color: {_p2.text_secondary}; font-size: 11pt; background: transparent; border: 0;"
                 )
+                # 文件名 selected/idle —— 深色下用 text_primary，浅色保留原灰阶
+                if _p2.is_dark:
+                    _filename_color = _p2.text_primary
+                else:
+                    _filename_color = "#182230" if is_selected else "#344054"
+                self.file_name_label.setStyleSheet(
+                    f"color: {_filename_color}; font-size: {'10.5pt' if is_chip else '12pt'};"
+                    " font-weight: 400; background: transparent; border: 0;"
+                )
+                # "已就绪"绿色徽章 —— 深色下用更亮的绿
+                _ready_color = "#6FE3A4" if _p2.is_dark else "#16803D"
                 self.file_state_badge.setStyleSheet(
                     f"""
                     QLabel {{
                         background: transparent;
-                        color: #16803D;
+                        color: {_ready_color};
                         border: 0;
                         border-radius: 10px;
                         padding: 3px 10px;
@@ -3799,10 +3715,12 @@ class KrokHelperQtApp(QMainWindow):
                 )
                 self.file_state_badge.setFont(build_app_ui_font(point_size=9.5, bold=True))
                 self.ready_duration_label.setStyleSheet(
-                    'color: #667085; font-family: "Microsoft YaHei UI"; font-size: 11pt; font-weight: 400; background: transparent; border: 0;'
+                    f'color: {_p2.text_secondary}; font-family: "Microsoft YaHei UI"; font-size: 11pt;'
+                    ' font-weight: 400; background: transparent; border: 0;'
                 )
                 self.detail_label.setStyleSheet(
-                    'color: #98A2B3; font-family: "Microsoft YaHei UI"; font-size: 11pt; font-weight: 400; background: transparent; border: 0;'
+                    f'color: {_p2.text_hint}; font-family: "Microsoft YaHei UI"; font-size: 11pt;'
+                    ' font-weight: 400; background: transparent; border: 0;'
                 )
                 self.icon_button.setStyleSheet(
                     f"""
@@ -3830,9 +3748,9 @@ class KrokHelperQtApp(QMainWindow):
                     button.setStyleSheet(
                         f"""
                         QPushButton {{
-                            background: #ffffff;
-                            color: #1F2937;
-                            border: 1px solid #D0D5DD;
+                            background: {_p2.input_bg};
+                            color: {_p2.text_primary};
+                            border: 1px solid {_p2.input_border};
                             border-radius: 8px;
                             padding: 6px 14px;
                         }}
@@ -3989,10 +3907,9 @@ class KrokHelperQtApp(QMainWindow):
         material_title.setObjectName("PanelTitle")
         self.align_material_status_label = QLabel("① 先导入素材")
         self.align_material_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.align_material_status_label.setStyleSheet(
-            "background: #FFF1F2; color: #F04452; border: 1px solid #FFD1D8; "
-            "border-radius: 7px; padding: 4px 10px;"
-        )
+        # 初始 idle 样式由 ``_refresh_alignment_material_inputs`` 在构造完成后
+        # 第一次调用时自动应用；主题切换也走同一函数（见 __init__ 末尾的
+        # ``theme.changed.connect``）。这里只设字体。
         self.align_material_status_label.setFont(build_app_ui_font(point_size=10.5, bold=True))
         self.align_material_settings_button = ToolButton(FIF.SETTING)
         self.align_material_settings_button.setObjectName("AlignMaterialSettingsButton")
@@ -4062,7 +3979,8 @@ class KrokHelperQtApp(QMainWindow):
         self.align_waveform_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.align_waveform_placeholder.setWordWrap(True)
         self.align_waveform_placeholder.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.align_waveform_placeholder.setStyleSheet("color: #667085; font-size: 12pt;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(self.align_waveform_placeholder, lambda: f"color: {_wb_pal().text_secondary}; font-size: 12pt;")
         stage_grid.addWidget(self.align_waveform_placeholder, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.align_drag_mode_button = ToolButton(waveform_stage)
         self.align_drag_mode_button.setIcon(FIF.MOVE.icon())
@@ -4106,9 +4024,11 @@ class KrokHelperQtApp(QMainWindow):
         log_header.setSpacing(10)
         self.align_log_toggle_button = QPushButton("▸  对齐日志")
         self.align_log_toggle_button.setFlat(True)
-        self.align_log_toggle_button.setStyleSheet(
-            "text-align: left; font-weight: 700; color: #111827; border: 0; background: transparent;"
-        )
+        from krok_helper.theme_workbench import palette as _wb_pal2, themed as _wb_th2
+        _wb_th2(self.align_log_toggle_button, lambda: (
+            f"text-align: left; font-weight: 700; color: {_wb_pal2().panel_title};"
+            " border: 0; background: transparent;"
+        ))
         clear_log_button = QPushButton("清空日志")
         clear_log_button.setIcon(FIF.DELETE.icon())
         clear_log_button.hide()
@@ -4117,7 +4037,7 @@ class KrokHelperQtApp(QMainWindow):
         log_header.addWidget(clear_log_button)
         log_layout.addLayout(log_header)
         self.align_log_container = QWidget()
-        self.align_log_container.setStyleSheet("background: #FFFFFF; border: 0;")
+        _wb_th2(self.align_log_container, lambda: f"background: {_wb_pal2().card_bg}; border: 0;")
         log_body_layout = QVBoxLayout(self.align_log_container)
         log_body_layout.setContentsMargins(0, 0, 0, 0)
         log_body_layout.setSpacing(0)
@@ -4270,7 +4190,8 @@ class KrokHelperQtApp(QMainWindow):
         self.align_status_label = BodyLabel("准备生成波形")
         self.align_status_label.setMinimumWidth(210)
         self.align_status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.align_status_label.setStyleSheet("color: #475467; font-weight: 400;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(self.align_status_label, lambda: f"color: {_wb_pal().text_secondary}; font-weight: 400;")
         layout.addWidget(self.align_status_label, 1)
         return toolbar_card
 
@@ -4284,22 +4205,14 @@ class KrokHelperQtApp(QMainWindow):
 
         self.align_control_card = CardWidget(radius=10, padding=(16, 16, 16, 16), spacing=12)
         self.align_control_card.setObjectName("AlignControlCard")
-        self.align_control_card.setStyleSheet(
-            """
-            QFrame#AlignControlCard {
-                background: #FFFFFF;
-                border: 1px solid #E5E7EB;
-                border-radius: 10px;
-            }
-            QFrame#AlignControlCard QLabel {
-                background: transparent;
-                border: 0;
-            }
-            QFrame#AlignControlCard QCheckBox {
-                background: transparent;
-            }
-            """
-        )
+        from krok_helper.theme_workbench import palette as _wb_pal3, themed as _wb_th3
+        _wb_th3(self.align_control_card, lambda: (
+            "QFrame#AlignControlCard {{"
+            " background: {bg}; border: 1px solid {border}; border-radius: 10px;"
+            "}}"
+            "QFrame#AlignControlCard QLabel {{ background: transparent; border: 0; }}"
+            "QFrame#AlignControlCard QCheckBox {{ background: transparent; }}"
+        ).format(bg=_wb_pal3().card_bg, border=_wb_pal3().card_border))
         self.subtitle_adjust_card = self.align_control_card
         self.SubtitleAdjust = self.align_control_card
         self.original_adjust_card = self.align_control_card
@@ -4311,15 +4224,13 @@ class KrokHelperQtApp(QMainWindow):
         segment = QWidget()
         segment.setObjectName("AlignTargetSegment")
         segment.setMinimumHeight(36)
-        segment.setStyleSheet(
-            """
-            QWidget#AlignTargetSegment {
-                background: transparent;
-                border: 1px solid #D0D5DD;
-                border-radius: 8px;
-            }
-            """
-        )
+        _wb_th3(segment, lambda: (
+            "QWidget#AlignTargetSegment {{"
+            " background: transparent;"
+            " border: 1px solid {border};"
+            " border-radius: 8px;"
+            "}}"
+        ).format(border=_wb_pal3().card_border))
         segment_layout = QHBoxLayout(segment)
         segment_layout.setContentsMargins(0, 0, 0, 0)
         segment_layout.setSpacing(0)
@@ -4360,7 +4271,8 @@ class KrokHelperQtApp(QMainWindow):
         placeholder_icon.setEnabled(False)
         placeholder_layout.addWidget(placeholder_icon, 0, Qt.AlignmentFlag.AlignVCenter)
         placeholder_label = BodyLabel("请先导入素材并生成波形")
-        placeholder_label.setStyleSheet("color: #9CA3AF;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(placeholder_label, lambda: f"color: {_wb_pal().text_disabled};")
         placeholder_layout.addWidget(placeholder_label, 1, Qt.AlignmentFlag.AlignVCenter)
         control_layout.addWidget(self.align_control_placeholder)
 
@@ -4444,7 +4356,8 @@ class KrokHelperQtApp(QMainWindow):
         tail_row.addStretch(1)
         video_layout.addLayout(tail_row)
         self.align_trim_label = BodyLabel("未设置")
-        self.align_trim_label.setStyleSheet("color: #667085;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(self.align_trim_label, lambda: f"color: {_wb_pal().text_secondary};")
         self.align_trim_mark_button = QPushButton("设置尾裁点")
         self.align_trim_clear_button = QPushButton("清除尾裁点")
         self.align_trim_mark_button.setMinimumHeight(32)
@@ -4521,23 +4434,28 @@ class KrokHelperQtApp(QMainWindow):
 
         self.align_audio_offset_widget = QFrame()
         self.align_audio_offset_widget.setObjectName("AlignAudioOffsetPanel")
-        self.align_audio_offset_widget.setStyleSheet(
-            "QFrame#AlignAudioOffsetPanel { background: transparent; border: 1px solid #E5E7EB; border-radius: 8px; }"
-        )
+        _wb_th3(self.align_audio_offset_widget, lambda: (
+            "QFrame#AlignAudioOffsetPanel {{"
+            " background: transparent; border: 1px solid {border}; border-radius: 8px;"
+            "}}"
+        ).format(border=_wb_pal3().card_border))
         audio_offset_layout = QVBoxLayout(self.align_audio_offset_widget)
         audio_offset_layout.setContentsMargins(20, 26, 20, 26)
         audio_offset_layout.setSpacing(12)
         audio_offset_title = BodyLabel("原唱音源偏移")
         audio_offset_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        audio_offset_title.setStyleSheet("color: #1F2937; font-size: 13pt; background: transparent; border: 0;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(audio_offset_title, lambda: f"color: {_wb_pal().text_primary}; font-size: 13pt; background: transparent; border: 0;")
         self.align_offset_label = QLabel("+0.000s")
         self.label_offset = self.align_offset_label
         self.align_offset_label.setMinimumWidth(0)
         self.align_offset_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.align_offset_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.align_offset_label.setStyleSheet(
-            'color: #2F6BFF; font-family: "Microsoft YaHei UI"; font-size: 24pt; background: transparent; border: 0;'
-        )
+        # 数字偏移 —— 蓝色强调（深色下用稍亮变体）
+        _wb_th3(self.align_offset_label, lambda: (
+            'color: {color}; font-family: "Microsoft YaHei UI"; font-size: 24pt;'
+            ' background: transparent; border: 0;'
+        ).format(color="#6FA3FF" if _wb_pal3().is_dark else "#2F6BFF"))
         self.align_offset_label.setFont(build_app_ui_font(point_size=24, bold=True))
         audio_offset_layout.addStretch(1)
         audio_offset_layout.addWidget(audio_offset_title)
@@ -4563,30 +4481,25 @@ class KrokHelperQtApp(QMainWindow):
 
         self.align_export_card = CardWidget(radius=10, padding=(16, 16, 16, 16), spacing=12)
         self.align_export_card.setObjectName("AlignExportCard")
-        self.align_export_card.setStyleSheet(
-            """
-            QFrame#AlignExportCard {
-                background: #FFFFFF;
-                border: 1px solid #E5E7EB;
-                border-radius: 10px;
-            }
-            QFrame#AlignExportCard QLabel {
-                background: transparent;
-                border: 0;
-            }
-            """
-        )
+        _wb_th3(self.align_export_card, lambda: (
+            "QFrame#AlignExportCard {{"
+            " background: {bg}; border: 1px solid {border}; border-radius: 10px;"
+            "}}"
+            "QFrame#AlignExportCard QLabel {{ background: transparent; border: 0; }}"
+        ).format(bg=_wb_pal3().card_bg, border=_wb_pal3().card_border))
         export_layout = self.align_export_card.createVBoxLayout()
         export_layout.setSpacing(12)
         export_layout.addWidget(StrongBodyLabel("导出"))
         self.align_export_duration_label = QLabel("预计时长 —:—（时长未知）")
         self.align_export_duration_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.align_export_duration_label.setStyleSheet(
-            'color: #1F2937; font-family: "Microsoft YaHei UI"; font-size: 18pt; font-weight: 500; background: transparent; border: 0;'
-        )
+        _wb_th3(self.align_export_duration_label, lambda: (
+            'color: {color}; font-family: "Microsoft YaHei UI"; font-size: 18pt;'
+            ' font-weight: 500; background: transparent; border: 0;'
+        ).format(color=_wb_pal3().text_primary))
         self.align_export_origin_label = BodyLabel("(原始 时长未知)")
         self.align_export_origin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.align_export_origin_label.setStyleSheet("color: #667085; background: transparent; border: 0;")
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(self.align_export_origin_label, lambda: f"color: {_wb_pal().text_secondary}; background: transparent; border: 0;")
         export_layout.addWidget(self.align_export_duration_label)
         export_layout.addWidget(self.align_export_origin_label)
         self.align_mode_export_button = PrimaryPushButton("导出对齐视频  Ctrl+S")
@@ -4628,6 +4541,11 @@ class KrokHelperQtApp(QMainWindow):
         return wrapper
 
     def _update_head_mode_buttons(self, selected_key: str | None) -> None:
+        self._head_mode_current = selected_key  # 主题切换时由 _on_theme_changed 用到
+        from krok_helper.theme_workbench import palette as _wb_pal
+        p = _wb_pal()
+        # 选中：品牌色实心；未选中：壳色 + 边框；禁用：壳色 + 灰文字
+        # 浅深主题区别只在背景/边框/常规文字；强调红色一致。
         button_map = {
             "crop": getattr(self, "align_head_btn_crop", None),
             "black": getattr(self, "align_head_btn_black", None),
@@ -4636,7 +4554,7 @@ class KrokHelperQtApp(QMainWindow):
         }
         selected_style = (
             "QPushButton {"
-            " background: #ff4d5e;"
+            f" background: {p.accent_primary};"
             " color: white;"
             " border: none;"
             " border-radius: 6px;"
@@ -4645,23 +4563,23 @@ class KrokHelperQtApp(QMainWindow):
         )
         unselected_style = (
             "QPushButton {"
-            " background: #ffffff;"
-            " color: #374151;"
-            " border: 1px solid #e5e7eb;"
+            f" background: {p.input_bg};"
+            f" color: {p.text_primary};"
+            f" border: 1px solid {p.input_border};"
             " border-radius: 6px;"
             " padding: 6px 12px;"
             "}"
             "QPushButton:hover {"
-            " background: #fff1f2;"
-            " border: 1px solid #ffb3bc;"
-            " color: #ff4d5e;"
+            f" background: {'#3A2A2C' if p.is_dark else '#fff1f2'};"
+            f" border: 1px solid {p.accent_primary};"
+            f" color: {p.accent_primary};"
             "}"
         )
         disabled_style = (
             "QPushButton {"
-            " background: #ffffff;"
-            " color: #9ca3af;"
-            " border: 1px solid #e5e7eb;"
+            f" background: {p.input_bg};"
+            f" color: {p.text_disabled};"
+            f" border: 1px solid {p.input_border};"
             " border-radius: 6px;"
             " padding: 6px 12px;"
             "}"
@@ -4734,6 +4652,8 @@ class KrokHelperQtApp(QMainWindow):
         self._align_nudge_step = seconds
         if not hasattr(self, "align_step_small_button") or not hasattr(self, "align_step_large_button"):
             return
+        from krok_helper.theme_workbench import palette as _wb_pal
+        p = _wb_pal()
         button_map = {
             self.align_step_small_button: seconds == 0.01,
             self.align_step_large_button: seconds == 0.1,
@@ -4741,13 +4661,17 @@ class KrokHelperQtApp(QMainWindow):
         for button, checked in button_map.items():
             button.setChecked(checked)
             button.setFont(build_app_ui_font(point_size=10.5, bold=checked))
-            button.setStyleSheet(
-                (
-                    "background: #fff1f2; border: 1px solid #ff4d5e; color: #ff2947;"
-                    if checked
-                    else "background: #ffffff; border: 1px solid #e4e7ec; color: #1f2937;"
+            if checked:
+                if p.is_dark:
+                    qss = "background: #4A1A22; border: 1px solid #FF5A6F; color: #FF9CAB;"
+                else:
+                    qss = "background: #fff1f2; border: 1px solid #ff4d5e; color: #ff2947;"
+            else:
+                qss = (
+                    f"background: {p.input_bg}; border: 1px solid {p.input_border};"
+                    f" color: {p.text_primary};"
                 )
-            )
+            button.setStyleSheet(qss)
 
     def _trigger_alignment_export(self, target: str) -> None:
         if target == ALIGN_TARGET_VIDEO:
@@ -4825,12 +4749,23 @@ class KrokHelperQtApp(QMainWindow):
     def _apply_alignment_mode_styles(self) -> None:
         if not hasattr(self, "align_target_video_radio"):
             return
+        from krok_helper.theme_workbench import palette as _wb_pal
+        p = _wb_pal()
         accent = self._alignment_accent_color()
-        neutral_border = "#D0D5DD"
+        # 各组件的"非品牌部分"按主题分浅深
+        seg_text     = p.text_primary
+        seg_dis_text = p.text_disabled
+        btn_dis_bg   = "#2D2D2D" if p.is_dark else "#E5E7EB"
+        btn_dis_text = p.text_disabled
+        nudge_bg     = p.card_bg
+        nudge_border = p.card_border
+        nudge_border_rgba = (
+            "rgba(255, 255, 255, 0.08)" if p.is_dark else "rgba(229, 231, 235, 0.75)"
+        )
         segment_button_style = f"""
         QPushButton {{
             background: transparent;
-            color: #1F2937;
+            color: {seg_text};
             border: 0;
             border-radius: 7px;
             padding: 8px 12px;
@@ -4842,7 +4777,7 @@ class KrokHelperQtApp(QMainWindow):
         }}
         QPushButton:disabled {{
             background: transparent;
-            color: #9CA3AF;
+            color: {seg_dis_text};
             border: 0;
         }}
         """
@@ -4867,8 +4802,8 @@ class KrokHelperQtApp(QMainWindow):
             font-size: 11pt;
         }}
         QPushButton:disabled {{
-            background: #E5E7EB;
-            color: #9CA3AF;
+            background: {btn_dis_bg};
+            color: {btn_dis_text};
         }}
         """
         if hasattr(self, "align_mode_export_button"):
@@ -4884,13 +4819,13 @@ class KrokHelperQtApp(QMainWindow):
             self.align_nudge_panel.setStyleSheet(
                 f"""
                 QFrame#AlignNudgePanel {{
-                    background: #FFFFFF;
-                    border: 1px solid rgba(229, 231, 235, 0.75);
+                    background: {nudge_bg};
+                    border: 1px solid {nudge_border_rgba};
                     border-radius: 10px;
                 }}
                 QPushButton {{
-                    background: #FFFFFF;
-                    border: 1px solid #E5E7EB;
+                    background: {nudge_bg};
+                    border: 1px solid {nudge_border};
                     border-radius: 7px;
                     padding: 5px 12px;
                 }}
@@ -4936,16 +4871,20 @@ class KrokHelperQtApp(QMainWindow):
             is_video_target = self._is_align_video_target()
             duration_text = video_duration_text if is_video_target else audio_duration_text
             origin_text = video_origin_text if is_video_target else audio_origin_text
+            from krok_helper.theme_workbench import palette as _wb_pal
+            p = _wb_pal()
             if duration_text == "时长未知":
                 self.align_export_duration_label.setText("预计时长 —:—（时长未知）")
                 self.align_export_duration_label.setStyleSheet(
-                    'color: #667085; font-family: "Microsoft YaHei UI"; font-size: 16pt; font-weight: 500; background: transparent; border: 0;'
+                    f'color: {p.text_secondary}; font-family: "Microsoft YaHei UI"; font-size: 16pt;'
+                    ' font-weight: 500; background: transparent; border: 0;'
                 )
                 self.align_export_origin_label.setText("")
             else:
                 self.align_export_duration_label.setText(f"预计时长 {duration_text}")
                 self.align_export_duration_label.setStyleSheet(
-                    'color: #1F2937; font-family: "Microsoft YaHei UI"; font-size: 18pt; font-weight: 500; background: transparent; border: 0;'
+                    f'color: {p.text_primary}; font-family: "Microsoft YaHei UI"; font-size: 18pt;'
+                    ' font-weight: 500; background: transparent; border: 0;'
                 )
                 self.align_export_origin_label.setText(f"(原始 {origin_text})")
             self._sync_alignment_export_buttons()
@@ -5258,6 +5197,8 @@ class KrokHelperQtApp(QMainWindow):
     def _refresh_alignment_material_inputs(self) -> None:
         if not hasattr(self, "align_material_status_label"):
             return
+        from krok_helper.theme_workbench import palette as _wb_pal
+        p = _wb_pal()
         has_video = self.align_video_zone.path is not None
         has_audio = self.align_audio_zone.path is not None
         count = int(has_video) + int(has_audio)
@@ -5265,7 +5206,11 @@ class KrokHelperQtApp(QMainWindow):
         self.align_audio_zone.set_balanced_height(None)
         if count == 0:
             status_text = "① 先导入素材"
-            status_style = "background: #FFF1F2; color: #F04452; border: 1px solid #FFD1D8;"
+            # 警示徽章按主题切色板
+            if p.is_dark:
+                status_style = "background: #4A1A22; color: #FF9CAB; border: 1px solid #6A2530;"
+            else:
+                status_style = "background: #FFF1F2; color: #F04452; border: 1px solid #FFD1D8;"
             self.align_video_zone.set_display_mode("empty")
             self.align_audio_zone.set_display_mode("empty")
             self._align_empty_material_card_height = max(
@@ -5275,12 +5220,12 @@ class KrokHelperQtApp(QMainWindow):
         elif count == 1:
             missing = "原唱音频" if has_video else "字幕视频"
             status_text = f"● 已导入 1/2 · 还差{missing}"
-            status_style = "background: transparent; color: #1F2937; border: 0;"
+            status_style = f"background: transparent; color: {p.text_primary}; border: 0;"
             self.align_video_zone.set_display_mode("ready" if has_video else "empty", missing_text="还需导入字幕视频")
             self.align_audio_zone.set_display_mode("ready" if has_audio else "empty", missing_text="还需导入原唱音频")
         else:
             status_text = "已导入 2/2"
-            status_style = "background: transparent; color: #667085; border: 0;"
+            status_style = f"background: transparent; color: {p.text_secondary}; border: 0;"
             self.align_video_zone.set_display_mode("chip")
             self.align_audio_zone.set_display_mode("chip")
         if count == 1:
@@ -5333,7 +5278,8 @@ class KrokHelperQtApp(QMainWindow):
         shell.addWidget(heading)
 
         status_label = QLabel("")
-        status_label.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #177245;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(status_label, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
 
         if context == "align":
             naming_panel = QFrame()
@@ -5347,9 +5293,11 @@ class KrokHelperQtApp(QMainWindow):
             audio_template_edit = QLineEdit(dialog)
             audio_template_edit.setText(self.align_audio_name_template_value)
             naming_help_1 = QLabel("默认: 对齐后视频 {video_name}_aligned.mp4；对齐后音频 {audio_name}_aligned.wav。")
-            naming_help_1.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+            from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+            _wb_th(naming_help_1, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
             naming_help_2 = QLabel("视频模板支持 {video_name}；音频模板支持 {audio_name} 和 {video_name}。不用写扩展名。")
-            naming_help_2.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+            from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+            _wb_th(naming_help_2, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
             naming_layout.addWidget(naming_title, 0, 0)
             naming_layout.addWidget(QLabel("对齐后视频模板"), 1, 0)
             naming_layout.addWidget(video_template_edit, 1, 1)
@@ -5390,9 +5338,11 @@ class KrokHelperQtApp(QMainWindow):
             sync_template_enabled()
 
             naming_help_1 = QLabel("支持占位符 {video_name}。不用写 .mkv。示例: {video_name}_karaoke_on")
-            naming_help_1.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+            from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+            _wb_th(naming_help_1, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
             naming_help_2 = QLabel("默认: 原唱 on_vocal.mkv；伴奏 off_vocal.mkv。")
-            naming_help_2.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+            from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+            _wb_th(naming_help_2, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
             naming_layout.addWidget(naming_title, 0, 0)
             naming_layout.addWidget(fixed_radio, 1, 1)
             naming_layout.addWidget(template_radio, 2, 1)
@@ -5487,6 +5437,10 @@ class KrokHelperQtApp(QMainWindow):
         tools_layout = QVBoxLayout(tools_tab)
         tools_layout.setContentsMargins(0, 12, 0, 0)
         tools_layout.setSpacing(14)
+        ui_tab = QWidget(settings_stack)
+        ui_layout = QVBoxLayout(ui_tab)
+        ui_layout.setContentsMargins(0, 12, 0, 0)
+        ui_layout.setSpacing(14)
         network_tab = QWidget(settings_stack)
         network_layout = QVBoxLayout(network_tab)
         network_layout.setContentsMargins(0, 12, 0, 0)
@@ -5496,14 +5450,96 @@ class KrokHelperQtApp(QMainWindow):
         about_layout.setContentsMargins(0, 12, 0, 0)
         about_layout.setSpacing(14)
         settings_stack.addWidget(tools_tab)
+        settings_stack.addWidget(ui_tab)
         settings_stack.addWidget(network_tab)
         settings_stack.addWidget(about_tab)
         pivot.addItem(routeKey="tools", text="工具", onClick=lambda _checked: settings_stack.setCurrentIndex(0))
-        pivot.addItem(routeKey="network", text="网络与更新", onClick=lambda _checked: settings_stack.setCurrentIndex(1))
-        pivot.addItem(routeKey="about", text="关于", onClick=lambda _checked: settings_stack.setCurrentIndex(2))
+        pivot.addItem(routeKey="ui", text="界面", onClick=lambda _checked: settings_stack.setCurrentIndex(1))
+        pivot.addItem(routeKey="network", text="网络与更新", onClick=lambda _checked: settings_stack.setCurrentIndex(2))
+        pivot.addItem(routeKey="about", text="关于", onClick=lambda _checked: settings_stack.setCurrentIndex(3))
         pivot.setCurrentItem("tools")
         settings_stack.setCurrentIndex(0)
         shell.addWidget(settings_stack, 1)
+
+        # ── 界面 → 主题 ────────────────────────────────────────────────
+        # 实时预览：变更 ComboBox 后延迟推 ``theme.mode``。不能在
+        # currentIndexChanged 同步链里直接切主题，因为此时 qfluentwidgets 的
+        # 下拉 popup 可能还没收尾，主题切换会触发全树 polish，容易和 popup
+        # 销毁/重绘撞 native crash。
+        from krok_helper.theme_workbench import theme as wb_theme, ThemeMode as WBThemeMode
+        from krok_helper.settings import (
+            UI_THEME_AUTO as _T_AUTO,
+            UI_THEME_LIGHT as _T_LIGHT,
+            UI_THEME_DARK as _T_DARK,
+        )
+
+        theme_panel = QFrame()
+        theme_panel.setObjectName("WhitePanel")
+        theme_layout = QGridLayout(theme_panel)
+        theme_layout.setContentsMargins(14, 14, 14, 14)
+        theme_layout.setHorizontalSpacing(12)
+        theme_layout.setVerticalSpacing(10)
+        theme_title = QLabel("界面主题")
+        theme_title.setObjectName("PanelTitle")
+        theme_combo = StyledComboBox(dialog)
+        _theme_options = [("跟随系统", _T_AUTO), ("浅色", _T_LIGHT), ("深色", _T_DARK)]
+        theme_combo.addItems([label for label, _v in _theme_options])
+        _initial_theme = getattr(self.settings, "ui_theme", _T_AUTO)
+        for _i, (_lbl, _val) in enumerate(_theme_options):
+            if _val == _initial_theme:
+                theme_combo.setCurrentIndex(_i)
+                break
+        self._install_single_click_combo_behavior(theme_combo)
+        theme_hint = QLabel(
+            "自动跟随系统在 Win10/Win11 上均生效；强制浅色 / 深色会覆盖系统 Mica 材质。"
+        )
+        theme_hint.setWordWrap(True)
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(theme_hint, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
+        theme_layout.addWidget(theme_title, 0, 0)
+        theme_layout.addWidget(theme_combo, 0, 1)
+        theme_layout.addWidget(theme_hint, 1, 1)
+        theme_layout.setColumnStretch(1, 1)
+        ui_layout.addWidget(theme_panel)
+        ui_layout.addStretch(1)
+
+        def _selected_theme_value() -> str:
+            idx = theme_combo.currentIndex()
+            return _theme_options[idx][1] if 0 <= idx < len(_theme_options) else _T_AUTO
+
+        def _theme_mode_for_value(value: str) -> WBThemeMode:
+            return {
+                _T_AUTO: WBThemeMode.AUTO,
+                _T_LIGHT: WBThemeMode.LIGHT,
+                _T_DARK: WBThemeMode.DARK,
+            }.get(value, WBThemeMode.AUTO)
+
+        _pending_theme_value: list[str] = [_initial_theme]
+
+        def _apply_theme_combo_preview() -> None:
+            value = _pending_theme_value[0]
+            if self.settings.ui_theme != value:
+                self.settings.ui_theme = value
+                try:
+                    save_app_settings(self.settings)
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).warning("保存界面主题设置失败", exc_info=True)
+            target = _theme_mode_for_value(value)
+            if wb_theme.mode != target:
+                wb_theme.mode = target
+
+        def _on_theme_combo_changed(_idx: int) -> None:
+            _pending_theme_value[0] = _selected_theme_value()
+            from krok_helper.theme_workbench import schedule_theme_refresh
+            schedule_theme_refresh(
+                self,
+                _apply_theme_combo_preview,
+                timer_attr="_global_settings_theme_preview_timer",
+            )
+
+        theme_combo.currentIndexChanged.connect(_on_theme_combo_changed)
+        # 关闭时若未保存则回退。回退同样延迟到 dialog 关闭事件之后。
 
         ffmpeg_panel = QFrame()
         ffmpeg_panel.setObjectName("WhitePanel")
@@ -5519,9 +5555,11 @@ class KrokHelperQtApp(QMainWindow):
         system_button = QPushButton("使用系统 PATH")
         system_button.clicked.connect(lambda: ffmpeg_display.setText(""))
         ffmpeg_hint_1 = QLabel("推荐选择 ffmpeg 的 bin 目录，例如 D:\\tools\\ffmpeg\\bin。")
-        ffmpeg_hint_1.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(ffmpeg_hint_1, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
         ffmpeg_hint_2 = QLabel("波形对齐、Hi-Res 混流和嵌入式打轴模块都会使用这里的设置。")
-        ffmpeg_hint_2.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(ffmpeg_hint_2, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
         ffmpeg_layout.addWidget(ffmpeg_title, 0, 0)
         ffmpeg_layout.addWidget(ffmpeg_display, 0, 1)
         ffmpeg_layout.addWidget(choose_button, 0, 2)
@@ -5553,7 +5591,8 @@ class KrokHelperQtApp(QMainWindow):
         proxy_manual_edit.setPlaceholderText("http://127.0.0.1:7890")
         proxy_status_label = QLabel("")
         proxy_status_label.setWordWrap(True)
-        proxy_status_label.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(proxy_status_label, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
         auto_detect_button = QPushButton("自动检测")
         test_proxy_button = QPushButton("测试连通性")
 
@@ -5643,9 +5682,11 @@ class KrokHelperQtApp(QMainWindow):
         source_order = list(updater_settings.source_order)
         source_order_label = QLabel("")
         source_order_label.setWordWrap(True)
-        source_order_label.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(source_order_label, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
         update_status_label = QLabel(f"当前版本 v{APP_VERSION}")
-        update_status_label.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #6b7280;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(update_status_label, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
         edit_order_button = QPushButton("编辑顺序")
         check_now_button = QPushButton("检查更新")
 
@@ -5806,9 +5847,11 @@ class KrokHelperQtApp(QMainWindow):
         product_text_layout.setContentsMargins(0, 0, 0, 0)
         product_text_layout.setSpacing(2)
         product_name = QLabel("Karaoke-Studio 卡拉OK工作台")
-        product_name.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 11pt; color: #111827;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(product_name, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 11pt; color: {_wb_pal().text_primary};')
         product_meta = QLabel(f"版本 v{APP_VERSION}  |  B站 @凛夜delin")
-        product_meta.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #475467;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(product_meta, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
         product_text_layout.addWidget(product_name)
         product_text_layout.addWidget(product_meta)
         product_layout.addWidget(product_icon, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -5827,9 +5870,11 @@ class KrokHelperQtApp(QMainWindow):
         github_text_layout.setContentsMargins(0, 0, 0, 0)
         github_text_layout.setSpacing(2)
         github_name = QLabel("GitHub")
-        github_name.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 11pt; color: #111827;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(github_name, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 11pt; color: {_wb_pal().text_primary};')
         github_link = QLabel(github_url)
-        github_link.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 9pt; color: #475467;')
+        from krok_helper.theme_workbench import palette as _wb_pal, themed as _wb_th
+        _wb_th(github_link, lambda: f'font-family: "Microsoft YaHei UI"; font-size: 9pt; color: {_wb_pal().text_hint};')
         github_text_layout.addWidget(github_name)
         github_text_layout.addWidget(github_link)
         open_github_button = QPushButton("打开")
@@ -5865,6 +5910,12 @@ class KrokHelperQtApp(QMainWindow):
 
             self.set_ffmpeg_dir(ffmpeg_dir or Path())
             self.settings.ffmpeg_dir = self.ffmpeg_dir_text
+            # 写入新选择的界面主题。``UpdaterSettings.save`` 内部
+            # 会调 ``save_app_settings(self.settings)``，连同 ``ui_theme``
+            # 一起持久化。这里只需更新 in-memory 字段即可。
+            _selected_idx = theme_combo.currentIndex()
+            if 0 <= _selected_idx < len(_theme_options):
+                self.settings.ui_theme = _theme_options[_selected_idx][1]
             updated = UpdaterSettings.load(self.settings)
             updated.enabled = updater_enabled_check.isChecked()
             updated.check_on_startup = startup_check.isChecked()
@@ -6179,7 +6230,13 @@ class KrokHelperQtApp(QMainWindow):
             off_template,
         )
 
-    def _set_hires_status_color(self, color: str) -> None:
+    def _set_hires_status_color(self, color: str | None) -> None:
+        # ``None`` 表示 idle —— 用当前主题的 ``text_secondary``；其它显式色
+        # （success/error/processing）按原值传给 QSS，深色背景下这些状态色
+        # 都有足够对比度。
+        if color is None:
+            from krok_helper.theme_workbench import palette as _wb_pal
+            color = _wb_pal().text_secondary
         self.hires_status_label.setStyleSheet(
             f'font-family: "Microsoft YaHei UI"; font-size: 10pt; font-weight: 400; color: {color};'
         )
@@ -6218,7 +6275,7 @@ class KrokHelperQtApp(QMainWindow):
             self._hires_cancel_requested = True
             self.hires_cancel_button.setEnabled(False)
             self.hires_status_label.setText("正在取消…")
-            self._set_hires_status_color("#475467")
+            self._set_hires_status_color(None)
             self._append_hires_log("正在取消生成…")
         process = self._hires_process
         if process is not None:
@@ -6317,7 +6374,7 @@ class KrokHelperQtApp(QMainWindow):
         if was_cancelled:
             self._cleanup_incomplete_hires_outputs()
             self.hires_status_label.setText("生成已取消")
-            self._set_hires_status_color("#475467")
+            self._set_hires_status_color(None)
             self._append_hires_log("生成已取消，临时文件和未完成输出已清理。")
             self._reset_hires_cancel_state()
             return
@@ -6337,7 +6394,7 @@ class KrokHelperQtApp(QMainWindow):
         if was_cancelled:
             self._cleanup_incomplete_hires_outputs()
             self.hires_status_label.setText("生成已取消")
-            self._set_hires_status_color("#475467")
+            self._set_hires_status_color(None)
             self._append_hires_log("生成已取消，临时文件和未完成输出已清理。")
             self._reset_hires_cancel_state()
             return
@@ -6356,7 +6413,7 @@ class KrokHelperQtApp(QMainWindow):
         self.off_vocal_zone.clear_path()
         self.output_dir_label.setText("跟随字幕视频所在目录")
         self.hires_status_label.setText("已清空已选文件")
-        self._set_hires_status_color("#475467")
+        self._set_hires_status_color(None)
 
     def _open_hires_output_dir(self) -> None:
         video_path = self.video_zone.path
