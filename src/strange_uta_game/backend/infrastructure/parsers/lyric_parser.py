@@ -486,6 +486,77 @@ class KRAParser(LRCParser):
     pass
 
 
+UTATEN_RUBY_MARKER = "[tool:utaten-ruby]"
+
+
+class UtatenRubyParser(LyricParser):
+    """UtaTen ruby 标记歌词解析器。
+
+    主程序从 UtaTen 生成的无时间戳 LRC 形如：
+        [tool:utaten-ruby]
+        {国道||こくどう}{沿||ぞ}いのホテルを
+
+    `{原文||读音}` 代表 UtaTen 页面上的一个 ruby span。多字 ruby 作为
+    一个连词块导入：首字承载整段读音，块内字符 linked_to_next=True。
+    """
+
+    METADATA_PATTERN = re.compile(r"^\[[A-Za-z][A-Za-z0-9_-]*:.*\]$")
+
+    @staticmethod
+    def is_utaten_format(content: str) -> bool:
+        return any(line.strip() == UTATEN_RUBY_MARKER for line in content.splitlines())
+
+    def parse(self, content: str) -> List[ParsedLine]:
+        lines: List[ParsedLine] = []
+        for raw_line in content.lstrip("\ufeff").splitlines():
+            line_text = raw_line.strip()
+            if not line_text:
+                continue
+            if line_text == UTATEN_RUBY_MARKER or self.METADATA_PATTERN.match(line_text):
+                continue
+            parsed = self._parse_annotated_line(line_text)
+            if parsed.text:
+                lines.append(parsed)
+        return lines
+
+    def _parse_annotated_line(self, line_text: str) -> ParsedLine:
+        raw_chars: List[str] = []
+        ruby_map: Dict[int, Tuple[List[str], int]] = {}
+        i = 0
+        while i < len(line_text):
+            if line_text[i] != "{":
+                raw_chars.append(line_text[i])
+                i += 1
+                continue
+            close = line_text.find("}", i + 1)
+            if close < 0:
+                raw_chars.append(line_text[i])
+                i += 1
+                continue
+
+            content = line_text[i + 1 : close]
+            if "||" not in content:
+                raw_chars.extend(content)
+                i = close + 1
+                continue
+
+            text_part, reading_part = content.split("||", 1)
+            start_idx = len(raw_chars)
+            raw_chars.extend(text_part)
+            if text_part and reading_part:
+                if "," in reading_part:
+                    for offset, reading_group in enumerate(reading_part.split(",")):
+                        parts = [part for part in reading_group.split("|") if part]
+                        if parts and offset < len(text_part):
+                            ruby_map[start_idx + offset] = (parts, 1)
+                else:
+                    parts = [part for part in reading_part.split("|") if part]
+                    if parts:
+                        ruby_map[start_idx] = (parts, len(text_part))
+            i = close + 1
+        return ParsedLine(text="".join(raw_chars).strip(), timetags=[], ruby_map=ruby_map)
+
+
 class NicokaraParser:
     """Nicokara LRC 格式解析器
 
@@ -1472,6 +1543,8 @@ def parse_to_sentences(
     parsed_lines: List[ParsedLine],
     singer_id: str,
     singer_name_to_id: Optional[Dict[str, str]] = None,
+    *,
+    utaten_format: bool = False,
 ) -> List[Sentence]:
     """将解析结果转换为 Sentence 对象。
 
@@ -1578,19 +1651,49 @@ def parse_to_sentences(
                     ch.check_count = len(parts_list)
                 ch.push_to_ruby()
             elif len(parts_list) == 1:
-                # SUG 多字 span 单 reading：整段读音不可拆，挂在 ch0；
-                # 块内字符全部 linked_to_next=True（块尾保持 False）。
-                # 这对应导出器 anchor + compound_tail 的契约，roundtrip 时
-                # 二次导出会还原成 `<整段汉字>|<<整段假名>`。
-                ch0 = sentence.characters[char_idx]
-                ch0.set_ruby(Ruby(parts=[RubyPart(text=parts_list[0])]))
-                if ch0.check_count < 1:
-                    ch0.check_count = 1
-                ch0.push_to_ruby()
-                for i in range(span_len - 1):
-                    sentence.characters[char_idx + i].linked_to_next = True
-                # 块尾不外延
-                sentence.characters[char_idx + span_len - 1].linked_to_next = False
+                if utaten_format:
+                    # UtaTen 标记 LRC：整段读音按字拆分。
+                    # - 字典命中（"一字一音"干净对应，如 世界/せかい、国道/こくどう）
+                    #   → 每字独立词，linked_to_next 保持 False，编辑器按单字 ruby 显示。
+                    # - 字典失配（当て字，如 新時代/はじまり）→ 拆不开，整块按字数均分
+                    #   并设 linked_to_next=True，块尾 False。SUG 的 F3"拆词"也是同一思路。
+                    from strange_uta_game.backend.infrastructure.parsers.kanji_reading_split import (
+                        compute_per_kanji_readings,
+                    )
+
+                    block_text = "".join(
+                        sentence.characters[char_idx + i].char
+                        for i in range(span_len)
+                    )
+                    per_char_readings, is_ateji = compute_per_kanji_readings(
+                        block_text, parts_list[0]
+                    )
+                    for i in range(span_len):
+                        seg_reading = per_char_readings[i] if i < len(per_char_readings) else ""
+                        ch = sentence.characters[char_idx + i]
+                        if seg_reading:
+                            ch.set_ruby(Ruby(parts=[RubyPart(text=seg_reading)]))
+                            if ch.check_count < 1:
+                                ch.check_count = 1
+                            ch.push_to_ruby()
+                    if is_ateji:
+                        for i in range(span_len - 1):
+                            sentence.characters[char_idx + i].linked_to_next = True
+                        sentence.characters[char_idx + span_len - 1].linked_to_next = False
+                else:
+                    # SUG 多字 span 单 reading：整段读音不可拆，挂在 ch0；
+                    # 块内字符全部 linked_to_next=True（块尾保持 False）。
+                    # 这对应导出器 anchor + compound_tail 的契约，roundtrip 时
+                    # 二次导出会还原成 `<整段汉字>|<<整段假名>`。
+                    ch0 = sentence.characters[char_idx]
+                    ch0.set_ruby(Ruby(parts=[RubyPart(text=parts_list[0])]))
+                    if ch0.check_count < 1:
+                        ch0.check_count = 1
+                    ch0.push_to_ruby()
+                    for i in range(span_len - 1):
+                        sentence.characters[char_idx + i].linked_to_next = True
+                    # 块尾不外延
+                    sentence.characters[char_idx + span_len - 1].linked_to_next = False
             else:
                 # 多字 span + 多段 reading：保留旧路径（Aegisub 手写罕见用法）。
                 # 复用 Nicokara 同款均分实现。

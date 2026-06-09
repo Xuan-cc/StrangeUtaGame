@@ -606,6 +606,8 @@ class FileLoader:
             # Nicokara 格式弹窗；非 nicokara 格式自动跑一轮保持原有注音的注音分析
             if is_nicokara:
                 self._prompt_nicokara_ruby_choice()
+            elif parse_meta.get("format") == "utaten":
+                self._update_utaten_checkpoints_as_imported()
             else:
                 self._editor._auto_analyze_rubies(only_noruby=True, auto_detect_chinese=True)
 
@@ -718,6 +720,28 @@ class FileLoader:
         """
         if not self._project:
             return
+        self._editor.refresh_lyric_display()
+        if hasattr(self._editor, "_store") and self._editor._store:
+            self._editor._store.notify("checkpoints")
+
+    def _update_utaten_checkpoints_as_imported(self):
+        """UtaTen 导入：只根据文件自带 ruby 更新节奏点，不重新注音。"""
+        if not self._project:
+            return
+        try:
+            from strange_uta_game.backend.application import AutoCheckService
+            from strange_uta_game.frontend.settings.settings_interface import AppSettings
+
+            app_settings = AppSettings()
+            auto_check = AutoCheckService(
+                ruby_analyzer=object(),
+                auto_check_flags=app_settings.get_all().get("auto_check", {}),
+                user_dictionary=[],
+            )
+            auto_check.update_checkpoints_for_project(self._project)
+        except Exception:
+            # UtaTen ruby 本身已导入；节奏点更新失败不应阻断歌词加载。
+            pass
         self._editor.refresh_lyric_display()
         if hasattr(self._editor, "_store") and self._editor._store:
             self._editor._store.notify("checkpoints")

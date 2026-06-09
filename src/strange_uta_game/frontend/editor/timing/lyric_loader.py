@@ -14,6 +14,7 @@ from strange_uta_game.backend.domain import Sentence, Singer
 from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
     LRCParser,
     NicokaraParser,
+    UtatenRubyParser,
     nicokara_result_to_sentences,
     parse_to_sentences,
 )
@@ -129,11 +130,13 @@ def detect_lyric_format(content: str) -> str:
     """检测歌词内容的格式。
 
     Returns:
-        格式名称: "sug", "inline", "nicokara", "ass", "srt", "lrc", "text"
+        格式名称: "sug", "utaten", "inline", "nicokara", "ass", "srt", "lrc", "text"
     """
     # SUG/JSON 格式检测（最高优先级，避免误解析）
     if _is_json_content(content):
         return "sug"
+    if UtatenRubyParser.is_utaten_format(content):
+        return "utaten"
     # 内联格式检测（包括 inline 和纯 RLF 文本格式）
     if _INLINE_PATTERN.search(content):
         return "inline"
@@ -200,6 +203,12 @@ def parse_lyric_content(
     # SUG 项目文件格式：抛出异常，由调用方处理为项目加载
     if fmt == "sug":
         raise ValueError("__SUG_PROJECT__")
+
+    if fmt == "utaten":
+        parser = UtatenRubyParser()
+        parsed_lines = parser.parse(content)
+        sentences = parse_to_sentences(parsed_lines, default_singer_id, utaten_format=True)
+        return _apply_compensation(sentences), False, [], {"format": "utaten"}
 
     # 内联格式（包括 inline 和纯 RLF 文本格式）
     if fmt == "inline":

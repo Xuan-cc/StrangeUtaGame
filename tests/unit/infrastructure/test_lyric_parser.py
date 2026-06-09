@@ -143,6 +143,42 @@ class TestParseToSentences:
         assert len(sentences) == 1
         assert sentences[0].text == "测试"
 
+    def test_utaten_flag_distributes_dict_split_per_kanji(self):
+        # 字典命中（一字一音干净对应）：世界/せかい → 世=せ, 界=かい。
+        # 两字应独立成词（linked_to_next=False），编辑器按单字 ruby 显示，
+        # 等同于用户手动按 F3 拆词后的状态。
+        parsed = ParsedLine(text="世界", timetags=[], ruby_map={0: (["せかい"], 2)})
+        sentences = parse_to_sentences([parsed], "singer_1", utaten_format=True)
+        chars = sentences[0].characters
+        assert chars[0].ruby is not None and chars[0].ruby.text == "せ"
+        assert chars[1].ruby is not None and chars[1].ruby.text == "かい"
+        assert chars[0].linked_to_next is False
+        assert chars[1].linked_to_next is False
+
+    def test_utaten_flag_distributes_ateji_evenly(self):
+        # 当て字（字典拆不开）：新時代/はじまり → 均分 2+1+1，且必须连词
+        # 保持块完整性（每字单独读其分到的假名片段没有语义）。
+        parsed = ParsedLine(text="新時代", timetags=[], ruby_map={0: (["はじまり"], 3)})
+        sentences = parse_to_sentences([parsed], "singer_1", utaten_format=True)
+        chars = sentences[0].characters
+        assert chars[0].ruby is not None and chars[0].ruby.text == "はじ"
+        assert chars[1].ruby is not None and chars[1].ruby.text == "ま"
+        assert chars[2].ruby is not None and chars[2].ruby.text == "り"
+        assert chars[0].linked_to_next is True
+        assert chars[1].linked_to_next is True
+        assert chars[2].linked_to_next is False
+
+    def test_utaten_flag_off_preserves_legacy_block_ruby(self):
+        # 不带 utaten_format=True 时维持旧的"整段挂在 ch0、块内 linked"行为，
+        # ASS roundtrip 等路径依赖此契约，不能被新分支波及。
+        parsed = ParsedLine(text="国道", timetags=[], ruby_map={0: (["こくどう"], 2)})
+        sentences = parse_to_sentences([parsed], "singer_1")
+        chars = sentences[0].characters
+        assert chars[0].ruby is not None and chars[0].ruby.text == "こくどう"
+        assert chars[1].ruby is None
+        assert chars[0].linked_to_next is True
+        assert chars[1].linked_to_next is False
+
 
 class TestApplyRubyEntries:
     """测试 @Ruby 注音应用（含位置范围消歧）"""
