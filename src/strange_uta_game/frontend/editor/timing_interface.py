@@ -1518,7 +1518,14 @@ class EditorInterface(QWidget):
                     show_winrt_dialog=False,
                 )
 
-    def _on_save(self):
+    def _on_save(self) -> bool:
+        """保存当前项目。
+
+        Returns:
+            True  — 已发起保存（已有路径的异步保存，或用户选定了另存路径）；
+            False — 无项目，或用户取消了「另存为」对话框。调用方（未保存检测等）
+                    据此中止后续流程，避免"选了保存却取消另存为"仍继续操作。
+        """
         if not self._project:
             InfoBar.warning(
                 title=self.tr("无项目"),
@@ -1529,7 +1536,7 @@ class EditorInterface(QWidget):
                 duration=3000,
                 parent=self,
             )
-            return
+            return False
 
         store = getattr(self, "_store", None)
 
@@ -1541,7 +1548,7 @@ class EditorInterface(QWidget):
         ):
             self._connect_save_signals(store)
             store.save()
-            return
+            return True
 
         # 无正式保存路径 / 仍是临时项目 → 弹出另存为对话框
         suggested = store.suggested_save_path(".sug") if store else ""
@@ -1550,7 +1557,7 @@ class EditorInterface(QWidget):
             self.tr("StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)")
         )
         if not path:
-            return
+            return False
         if not path.endswith(".sug"):
             path += ".sug"
 
@@ -1560,6 +1567,7 @@ class EditorInterface(QWidget):
             store.save(path)
         else:
             self._fallback_sync_save(path)
+        return True
 
     def _connect_save_signals(self, store) -> None:
         """一次性连接 store 保存生命周期信号（含进度提示）。"""
@@ -1696,7 +1704,9 @@ class EditorInterface(QWidget):
                     default=0,
                 )
                 if choice == 0:  # 保存
-                    self._on_save()
+                    # 保存被取消（如「另存为」对话框点了取消）→ 中止新建
+                    if not self._on_save():
+                        return
                 elif choice == 2 or choice == -1:  # 取消 / 关闭
                     return
                 # choice == 1（放弃）：什么都不做，继续新建

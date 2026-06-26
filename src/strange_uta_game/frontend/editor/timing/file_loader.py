@@ -127,14 +127,13 @@ class FileLoader:
                 self._save_last_dir(path)
 
     def prompt_load_lyrics(self):
-        """弹出文件选择框加载歌词"""
-        if not self._project:
-            InfoBar.warning(
-                title=self._editor.tr("无法加载"), content=self._editor.tr("请先创建或打开一个项目"),
-                orient=Qt.Orientation.Horizontal, isClosable=True,
-                position=InfoBarPosition.TOP, duration=3000,
-                parent=self._editor,
-            )
+        """弹出文件选择框加载歌词（等同「新建项目 + 加载歌词」）。
+
+        与 prompt_load_project 一致：先做未保存检测再弹文件框，避免用户选完
+        文件后才被要求保存；选定文件后以全新项目装入歌词（check_unsaved=False
+        避免二次弹窗）。无项目时也可加载——会自动创建项目，与拖拽路径一致。
+        """
+        if not self.check_unsaved_changes():
             return
         init_dir = self._store.working_dir if self._store else ""
         path, _ = QFileDialog.getOpenFileName(
@@ -142,7 +141,7 @@ class FileLoader:
             self._editor.tr("歌词文件 (*.lrc *.txt *.kra);;所有文件 (*.*)"),
         )
         if path:
-            self.load_lyrics(path)
+            self.load_lyrics(path, check_unsaved=False)
             self._save_last_dir(path)
 
     def _load_video_as_audio(self, file_path: str):
@@ -330,8 +329,9 @@ class FileLoader:
                 default=0,
             )
             if choice == 0:  # 保存
-                self._editor._on_save()
-                return True
+                # 保存被取消（如「另存为」对话框点了取消）→ 整个流程中止，
+                # 不应继续加载/新建，避免丢失未保存内容。
+                return bool(self._editor._on_save())
             elif choice == 1:  # 放弃
                 return True
             else:  # 取消 / 关闭
@@ -695,24 +695,58 @@ class FileLoader:
             annotate_katakana_with_english=annotate_katakana_with_english,
         )
 
-    def load_lyrics(self, path: str):
-        """加载歌词文件（异步解析，避免大文件阻塞 UI）"""
-        # 若没有项目先创建（需要 default_singer_id，必须在启动 worker 前完成）
-        if not self._project:
-            if self._store:
-                from strange_uta_game.backend.application import ProjectService
-                project = ProjectService().create_project()
-                self._store._project = project
-                self._store.notify("project")
-                self._reset_nicokara_tags_to_defaults()
-            else:
+    def _prepare_fresh_project_for_lyrics(self, check_unsaved: bool = True) -> bool:
+        """为加载歌词准备一个全新空项目（等同「新建项目」）。
+
+        与 _on_new_project 语义一致：替换当前项目前先做未保存检测，随后以
+        ProjectService().create_project() 的全新项目替换，使后续歌词装入纯净
+        项目（重置演唱者/音频/metadata/nicokara_tags）。这样「拖入歌词」「按
+        快捷键/工具栏加载歌词」都不会再静默覆盖已有项目的未保存歌词。
+
+        Args:
+            check_unsaved: 是否在替换前做未保存检测。调用方若已在更早阶段
+                （如弹文件框前）检测过，可传 False 避免二次弹窗。
+
+        Returns:
+            True  — 已就绪，可继续加载歌词；
+            False — 用户取消，或无 store 无法创建项目（已提示）。
+        """
+        # 退化路径：无 store（测试等）无法走 load_project 全量替换流程。
+        # 仅在完全无项目时报错；已有项目则沿用旧行为（后续仅替换歌词行）。
+        if not self._store:
+            if not self._project:
                 InfoBar.warning(
-                    title=self._editor.tr("无法加载"), content=self._editor.tr("请先创建或打开一个项目"),
+                    title=self._editor.tr("无法加载"),
+                    content=self._editor.tr("请先创建或打开一个项目"),
                     orient=Qt.Orientation.Horizontal, isClosable=True,
                     position=InfoBarPosition.TOP, duration=3000,
                     parent=self._editor,
                 )
-                return
+                return False
+            return True
+
+        # 已有项目：先做未保存检测（用户取消则中止，旧项目原样保留）。
+        if check_unsaved and self._project and not self.check_unsaved_changes():
+            return False
+
+        from strange_uta_game.backend.application import ProjectService
+        project = ProjectService().create_project()
+        self._store.load_project(project)
+        self._reset_nicokara_tags_to_defaults()
+        return True
+
+    def load_lyrics(self, path: str, check_unsaved: bool = True):
+        """加载歌词文件到全新项目（等同「新建项目 + 加载歌词」，异步解析）。
+
+        无论当前是否已有项目，都会先（在有 store 时）以一个全新空项目替换当前
+        项目，再装入解析出的歌词，与「新建项目」语义一致；替换前若已有项目会
+        进行未保存检测，用户取消则中止。``check_unsaved=False`` 用于调用方
+        （如 prompt_load_lyrics）已在弹文件框前完成检测的场景，避免二次弹窗。
+        """
+        # 准备全新项目（含未保存检测）。需要 default_singer_id，必须在启动
+        # worker 前完成。
+        if not self._prepare_fresh_project_for_lyrics(check_unsaved=check_unsaved):
+            return
 
         # 在主线程预读 settings，worker 内不访问任何 Qt 对象
         from strange_uta_game.frontend.settings.app_settings import AppSettings
