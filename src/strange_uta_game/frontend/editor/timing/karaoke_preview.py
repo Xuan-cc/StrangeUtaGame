@@ -1822,23 +1822,14 @@ class KaraokePreview(QWidget):
                     char_wipe_times[ci] = (char_start_ts, char_end_ts)
                     cum_w += w
 
-                # 合并段锚点组：仅限连词场景——段内所有字符属于同一连词组、
-                # leader 有 >=2 个时间戳、后随组员全为 cc=0 时，把该段 ink 合并成
-                # 一条轴，用 [gts..., end_ts] 走完（替代上面按像素切窗口的模型；
-                # char_wipe_times 保留作兜底）。
-                # leader 可以是组首，也可以是组中段成员——如「今日特殊字符今日」
-                # 整体连词时组内有两个多cp leader，各自与后随 cc=0 组员成一段。
+                # 合并段锚点组：leader 有 >=2 个时间戳、后随组员全为 cc=0 时，
+                # 把该段 ink 合并成一条轴，用 [gts..., end_ts] 走完（替代上面按
+                # 像素切窗口的模型；char_wipe_times 保留作兜底）。
+                # 典型场景：{今||[ts1]い|[ts2]ま}、 ——今按い/ま checkpoint 走字，
+                # 顿号填补今与下一个 leader 之间的间隙。
                 _gts = [int(t) for t in characters[leader].global_timestamps]
-                if leader in linked_leader_groups:
-                    _seg_grp = linked_leader_groups[leader]
-                elif leader in non_leader_to_leader:
-                    _seg_grp = linked_leader_groups[non_leader_to_leader[leader]]
-                else:
-                    _seg_grp = None
                 if (
-                    _seg_grp is not None
-                    and seg_end <= _seg_grp[-1]
-                    and len(_gts) >= 2
+                    len(_gts) >= 2
                     and seg_end > leader
                     and all(
                         characters[ci].check_count == 0
