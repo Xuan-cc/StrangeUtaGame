@@ -5,7 +5,9 @@ ProjectStore 是整个前端的唯一数据来源，替代之前的信号链同�
 所有数据变更后调用 ``store.notify(change_type)``，由 store 统一广播并自动保存。
 """
 
+import re
 from copy import deepcopy
+from datetime import datetime
 from time import perf_counter
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, QTimer
@@ -26,6 +28,9 @@ def _get_cache_dir() -> Path:
 
     解析逻辑见 :mod:`strange_uta_game.app_dirs`：``SUG_CACHE_DIR`` 最高优先，
     macOS 用 ``~/Library/Caches``，其余平台用程序目录下的 ``.cache``。
+
+    注意：本目录仅用于媒体提取等真·缓存；项目临时文件（周期保存 / 闪退恢复）
+    已迁移到备份目录下的 :func:`_temp_dir`，旧位置仅做升级兼容扫描。
     """
     return app_dirs.cache_dir()
 
@@ -34,8 +39,28 @@ def _cache_dir() -> Path:
     return _get_cache_dir()
 
 
+def _backup_root_dir() -> Path:
+    """项目备份根目录。读取用户设置 ``auto_save.backup_dir``（留空用默认位置）。"""
+    custom = ""
+    try:
+        from strange_uta_game.frontend.settings.app_settings import AppSettings
+        custom = AppSettings().get("auto_save.backup_dir", "") or ""
+    except Exception:
+        custom = ""
+    return app_dirs.backup_dir(custom)
+
+
+def _temp_dir() -> Path:
+    """项目临时文件目录：备份根目录下的隐藏子目录 ``.temp``。
+
+    存放周期自动保存与闪退恢复用的 ``.sug.temp`` 文件，与用户可见的命名
+    备份文件分开，避免污染备份列表。
+    """
+    return _backup_root_dir() / ".temp"
+
+
 def _untitled_temp_path() -> Path:
-    return _cache_dir() / ".untitled.sug.temp"
+    return _temp_dir() / ".untitled.sug.temp"
 
 
 class ProjectStore(QObject):
@@ -175,13 +200,23 @@ class ProjectStore(QObject):
         except (ValueError, OSError):
             return False
 
+    @staticmethod
+    def _is_in_temp_dir(path: Optional[str]) -> bool:
+        """判断路径是否位于备份目录下的 .temp 临时目录中。"""
+        if not path:
+            return False
+        try:
+            return Path(path).resolve().is_relative_to(_temp_dir().resolve())
+        except (ValueError, OSError):
+            return False
+
     def is_temp_save_path(self, path: Optional[str] = None) -> bool:
-        """判断给定路径（或当前 _save_path）是否为 .cache 临时位置。
+        """判断给定路径（或当前 _save_path）是否为临时位置（.cache 或备份 .temp）。
 
         临时项目的 save_path 不应作为默认保存目录返回给用户。
         """
         target = path if path is not None else self._save_path
-        return self._is_in_cache_dir(target)
+        return self._is_in_cache_dir(target) or self._is_in_temp_dir(target)
 
     @property
     def working_dir(self) -> str:
@@ -295,8 +330,8 @@ class ProjectStore(QObject):
         """
         if not parent:
             return
-        # 过滤 .cache 目录（临时提取的音频、临时项目都在这里）
-        if ProjectStore._is_in_cache_dir(parent):
+        # 过滤临时目录（.cache 临时提取的音频、备份 .temp 下的临时项目都在这里）
+        if ProjectStore._is_in_cache_dir(parent) or ProjectStore._is_in_temp_dir(parent):
             return
         try:
             from strange_uta_game.frontend.settings.app_settings import AppSettings
@@ -574,9 +609,9 @@ class ProjectStore(QObject):
     def _do_periodic_save(self) -> None:
         """异步执行定时保存到 .sug.temp 文件。
 
-        所有临时文件统一存放在程序目录的 .cache 文件夹下：
-        - 已保存项目 → ``.cache/.项目名.sug.temp``
-        - 未保存项目 → ``.cache/.untitled.sug.temp``
+        所有临时文件统一存放在备份目录下的隐藏 .temp 子目录中：
+        - 已保存项目 → ``<备份目录>/.temp/.项目名.sug.temp``
+        - 未保存项目 → ``<备份目录>/.temp/.untitled.sug.temp``
         """
         if not self._project:
             return
@@ -584,7 +619,7 @@ class ProjectStore(QObject):
             log_perf_event("project.periodic_save.deferred", reason="predicate")
             return
 
-        _cache_dir().mkdir(exist_ok=True)
+        _temp_dir().mkdir(parents=True, exist_ok=True)
         temp_path = str(self.get_temp_path())
         _perf_start = perf_counter() if perf_enabled() else None
 
@@ -603,7 +638,7 @@ class ProjectStore(QObject):
         """同步保存到 .sug.temp，仅用于强制退出兜底。"""
         if not self._project:
             return
-        _cache_dir().mkdir(exist_ok=True)
+        _temp_dir().mkdir(parents=True, exist_ok=True)
         temp_path = str(self.get_temp_path())
         try:
             SugProjectParser.save(
@@ -616,24 +651,27 @@ class ProjectStore(QObject):
             pass
 
     def get_temp_path(self) -> Path:
-        """返回当前项目的临时保存路径（存放在 .cache 目录下）。"""
+        """返回当前项目的临时保存路径（存放在备份目录下的 .temp 子目录）。"""
         if self._save_path:
             p = Path(self._save_path)
-            # 使用项目文件名作为临时文件名，存放在 .cache 目录
+            # 使用项目文件名作为临时文件名，存放在 .temp 目录
             temp_filename = "." + p.name + ".temp"
-            return _cache_dir() / temp_filename
+            return _temp_dir() / temp_filename
         return _untitled_temp_path()
 
     def _cleanup_temp_for_path(self, save_path: str) -> None:
-        """删除指定保存路径关联的临时文件（.cache/.xxx.sug.temp 与 autosave）。"""
+        """删除指定保存路径关联的临时文件（.temp/.xxx.sug.temp 与 autosave）。
+
+        兼容旧版位置：同名 .sug.temp 也可能残留在程序目录 .cache 下。
+        """
         sp = Path(save_path)
         temp_name = "." + sp.name + ".temp"
-        temp_path = _cache_dir() / temp_name
-        try:
-            if temp_path.exists():
-                temp_path.unlink()
-        except Exception:
-            pass
+        for temp_path in (_temp_dir() / temp_name, _cache_dir() / temp_name):
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except Exception:
+                pass
 
         for name in (
             str(sp.parent / ("." + sp.name + ".autosave")),
@@ -672,48 +710,157 @@ class ProjectStore(QObject):
                     pass
 
     @staticmethod
+    def _crash_recovery_dirs() -> list[Path]:
+        """闪退恢复文件可能所在的目录：当前 .temp 目录 + 旧版 .cache（升级兼容）。"""
+        dirs: list[Path] = []
+        for d in (_temp_dir(), _cache_dir()):
+            if d not in dirs:
+                dirs.append(d)
+        return dirs
+
+    @staticmethod
     def has_crash_recovery() -> bool:
-        """检查是否有闪退恢复文件（检查 .cache 目录下的所有 .sug.temp 文件）。"""
-        cache_dir = _cache_dir()
-        return _untitled_temp_path().exists() or any(cache_dir.glob(".*.sug.temp"))
+        """检查是否有闪退恢复文件（.temp 目录及旧版 .cache 下的 .sug.temp 文件）。"""
+        for d in ProjectStore._crash_recovery_dirs():
+            try:
+                if any(d.glob(".*.sug.temp")):
+                    return True
+            except OSError:
+                continue
+        return False
 
     @staticmethod
     def load_crash_recovery() -> Optional[tuple[Project, str]]:
         """加载闪退恢复文件（优先加载未命名项目的恢复文件）。
+
+        扫描当前 .temp 目录及旧版 .cache（升级兼容）。
 
         Returns:
             (project, temp_file_path) — temp_file_path 是 .sug.temp 实际文件路径，
             调用方可借此读取 nicokara_tags / media_path 等 extras。失败时返回 None。
         """
         # 优先检查未命名项目的恢复文件
-        untitled_temp = _untitled_temp_path()
-        if untitled_temp.exists():
-            try:
-                return SugProjectParser.load(str(untitled_temp)), str(untitled_temp)
-            except Exception:
-                pass
+        untitled_name = _untitled_temp_path().name
+        for d in ProjectStore._crash_recovery_dirs():
+            untitled_temp = d / untitled_name
+            if untitled_temp.exists():
+                try:
+                    return SugProjectParser.load(str(untitled_temp)), str(untitled_temp)
+                except Exception:
+                    pass
 
         # 检查其他项目的恢复文件
-        for temp_file in _cache_dir().glob(".*.sug.temp"):
-            try:
-                return SugProjectParser.load(str(temp_file)), str(temp_file)
-            except Exception:
-                continue
+        for d in ProjectStore._crash_recovery_dirs():
+            for temp_file in d.glob(".*.sug.temp"):
+                try:
+                    return SugProjectParser.load(str(temp_file)), str(temp_file)
+                except Exception:
+                    continue
         return None
 
     @staticmethod
     def delete_crash_recovery() -> None:
-        """删除闪退恢复文件（删除 .cache 目录下的所有 .sug.temp 文件）。"""
+        """删除闪退恢复文件（.temp 目录及旧版 .cache 下的所有 .sug.temp 文件）。"""
+        for d in ProjectStore._crash_recovery_dirs():
+            for temp_file in d.glob(".*.sug.temp"):
+                try:
+                    temp_file.unlink()
+                except Exception:
+                    pass
+
+    # ── 项目备份（ProjectBackup） ─────────────────
+
+    @staticmethod
+    def _backup_count() -> int:
+        """读取「自动备份项目个数」设置，clamp 到 0~99999。0 表示不备份。"""
         try:
-            untitled_temp = _untitled_temp_path()
-            if untitled_temp.exists():
-                untitled_temp.unlink()
+            from strange_uta_game.frontend.settings.app_settings import AppSettings
+            raw = AppSettings().get("auto_save.backup_count", 10)
+            n = int(raw)
         except Exception:
-            pass
-        
-        # 删除其他项目的恢复文件
-        for temp_file in _cache_dir().glob(".*.sug.temp"):
+            n = 10
+        return max(0, min(99999, n))
+
+    @staticmethod
+    def _sanitize_filename(name: str) -> str:
+        """把任意文本规整成安全的文件名片段（去非法字符、折叠空白、限长）。"""
+        # Windows 非法字符 <>:"/\|?* 与控制字符一律替换为下划线
+        cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
+        cleaned = cleaned.strip().strip(".")  # 结尾的点/空白在 Windows 上不合法
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        if len(cleaned) > 80:
+            cleaned = cleaned[:80].rstrip()
+        return cleaned
+
+    def _backup_base_name(self) -> str:
+        """备份文件名前缀：项目标题 > 音频文件名 > untitled。"""
+        base = ""
+        if self._project and getattr(self._project, "metadata", None):
+            title = getattr(self._project.metadata, "title", "") or ""
+            base = self._sanitize_filename(title)
+        if not base and self._audio_path:
+            base = self._sanitize_filename(Path(self._audio_path).stem)
+        return base or "untitled"
+
+    def create_backup(self) -> Optional[str]:
+        """在 ProjectBackup 目录写入一份命名备份，并按全局上限轮换删除最旧。
+
+        命名规则：``项目名-YYYYMMDD-HHMMSS.sug``（无项目名时退用音频文件名，
+        再退用 untitled）。备份个数为 0 时直接跳过。同步写盘（.sug 为纯 JSON，
+        不内嵌媒体，开销很小），失败时静默返回 None，不影响主保存流程。
+
+        Returns:
+            实际写入的备份文件路径；未备份（无项目 / 个数为 0 / 写入失败）时为 None。
+        """
+        if not self._project:
+            return None
+        count = self._backup_count()
+        if count <= 0:
+            return None
+
+        root = _backup_root_dir()
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return None
+
+        base = self._backup_base_name()
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target = root / f"{base}-{stamp}.sug"
+        # 同一秒内多次备份的去重保护
+        dedup = 1
+        while target.exists():
+            target = root / f"{base}-{stamp}_{dedup}.sug"
+            dedup += 1
+
+        try:
+            SugProjectParser.save(
+                self._project,
+                str(target),
+                nicokara_tags=self._get_nicokara_tags_for_save(),
+                media_path=self.get_saveable_media_path(),
+            )
+        except Exception:
+            return None
+
+        self._prune_backups(root, count)
+        return str(target)
+
+    @staticmethod
+    def _prune_backups(root: Path, count: int) -> None:
+        """保留 root 下最新的 count 个 .sug 备份，按修改时间删除多余的最旧文件。
+
+        仅扫描 root 顶层（不递归），因此隐藏的 .temp 子目录不受影响。
+        """
+        try:
+            backups = [p for p in root.glob("*.sug") if p.is_file()]
+        except OSError:
+            return
+        if len(backups) <= count:
+            return
+        backups.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0)
+        for stale in backups[: len(backups) - count]:
             try:
-                temp_file.unlink()
+                stale.unlink()
             except Exception:
                 pass

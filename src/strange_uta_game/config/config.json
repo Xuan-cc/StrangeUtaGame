@@ -128,7 +128,9 @@
   },
   "auto_save": {
     "enabled": true,
-    "interval_minutes": 5
+    "interval_minutes": 5,
+    "backup_count": 10,
+    "backup_dir": ""
   },
   "complete_timestamp": {
     "scope_types": [

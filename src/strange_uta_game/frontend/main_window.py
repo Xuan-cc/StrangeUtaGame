@@ -1176,6 +1176,8 @@ class MainWindow(MSFluentWindow):
             tooltip.setContent(self.tr("保存完成"))
             tooltip.close()
             self._save_tooltip = None
+        # 保存成功后写一份命名备份到 ProjectBackup（受"自动备份项目个数"控制）
+        self._store.create_backup()
         self._store.cleanup_temp_files()
         InfoBar.success(
             title=self.tr("保存成功"),
@@ -1269,10 +1271,14 @@ class MainWindow(MSFluentWindow):
             )
             if choice == 0:  # 保存
                 self._on_save_project()
+                # 异步保存可能赶不及在退出前完成 _on_save_success，这里同步补一份
+                # 命名备份到 ProjectBackup，确保关闭即有备份兜底。
+                self._store.create_backup()
                 # 保存后清理临时文件
                 self._store.cleanup_temp_files()
             elif choice == 1:  # 放弃
-                # 用户主动放弃保存 → 删除临时文件
+                # 用户主动放弃保存 → 仍写一份备份兜底，再删除临时文件
+                self._store.create_backup()
                 self._store.cleanup_temp_files()
             else:
                 # 取消或关闭对话框

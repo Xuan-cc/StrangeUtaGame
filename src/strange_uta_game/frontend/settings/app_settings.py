@@ -196,6 +196,12 @@ class AppSettings:
         "auto_save": {
             "enabled": True,
             "interval_minutes": 5,
+            # 触发保存 / 关闭未保存对话框（保存或放弃）时，向 ProjectBackup 目录
+            # 写入一份命名备份；按全局上限轮换，超出删最旧。0 表示关闭备份。
+            "backup_count": 10,
+            # 备份与临时文件（周期保存 / 闪退恢复）的存放目录；留空使用默认
+            # 位置（<config_dir>/ProjectBackup）。
+            "backup_dir": "",
         },
         "tools": {
             "ffmpeg_path": "",

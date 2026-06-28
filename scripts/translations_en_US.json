@@ -1294,5 +1294,10 @@
   "已删除": "Deleted",
   "已删除 {n} 条匹配条目": "Deleted {n} matching entries",
   "未删除": "Nothing deleted",
-  "没有可删除的本地 / 网络缓存条目": "No local / network cache entries to delete"
+  "没有可删除的本地 / 网络缓存条目": "No local / network cache entries to delete",
+  "自动备份项目个数": "Number of project backups",
+  "保存或退出时在备份目录保留的项目备份份数（0 表示不备份）": "Number of project backups to keep in the backup folder when saving or exiting (0 = disabled)",
+  " 个": " items",
+  "备份位置": "Backup location",
+  "项目备份与临时文件的存放目录（留空使用默认位置）": "Folder for project backups and temporary files (leave empty to use the default location)"
 }

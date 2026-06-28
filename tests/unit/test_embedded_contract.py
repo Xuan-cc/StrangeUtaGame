@@ -114,10 +114,13 @@ class TestCacheRedirectContract:
         assert video_converter._get_cache_dir() == tmp_path / "extracted"
 
     def test_untitled_temp_is_lazy(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("SUG_CACHE_DIR", str(tmp_path))
+        # 项目临时文件已迁移到备份目录下的隐藏 .temp 子目录（SUG_BACKUP_DIR 可重定向）。
+        monkeypatch.setenv("SUG_BACKUP_DIR", str(tmp_path))
         from strange_uta_game.frontend import project_store as ps
 
-        assert ps._untitled_temp_path().parent == tmp_path
+        temp_parent = ps._untitled_temp_path().parent
+        assert temp_parent == ps._temp_dir()
+        assert temp_parent == tmp_path / ".temp"
 
     def test_no_env_is_standalone(self, monkeypatch):
         import sys

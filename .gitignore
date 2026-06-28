@@ -216,6 +216,9 @@ example/
 cache/
 .cache/
 
+# 项目备份（命名备份 + 临时/闪退恢复文件）
+ProjectBackup/
+
 # claude
 settings.local.json
 

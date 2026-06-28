@@ -118,3 +118,30 @@ def logs_dir() -> Path:
             _FALLBACK_ROOT / "logs",
         )
     return _first_writable(program_dir() / "logs", _FALLBACK_ROOT / "logs")
+
+
+def default_backup_dir() -> Path:
+    """默认的项目备份根目录（``<config_dir>/ProjectBackup``）。
+
+    备份与项目/配置同源：Windows/Linux 便携模式下在程序目录，macOS 在
+    ``~/Library/Application Support``，最终兜底 ``~/.strange_uta_game``。
+    """
+    return config_dir() / "ProjectBackup"
+
+
+def backup_dir(custom: Optional[str] = None) -> Path:
+    """项目备份根目录（已确保存在且可写）。
+
+    优先级：``SUG_BACKUP_DIR`` 环境变量 > ``custom``（用户设置）> 默认位置。
+
+    Args:
+        custom: 用户在设置中显式指定的备份位置；为空 / 不可写时回退到
+            :func:`default_backup_dir`，再兜底到 ``~/.strange_uta_game/ProjectBackup``。
+    """
+    fallback = _FALLBACK_ROOT / "ProjectBackup"
+    env_dir = os.environ.get("SUG_BACKUP_DIR")
+    if env_dir:
+        return _first_writable(Path(env_dir), default_backup_dir(), fallback)
+    if custom and custom.strip():
+        return _first_writable(Path(custom.strip()), default_backup_dir(), fallback)
+    return _first_writable(default_backup_dir(), fallback)

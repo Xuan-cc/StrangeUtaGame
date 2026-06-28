@@ -551,14 +551,29 @@
 <context>
     <name>AutoSaveSubInterface</name>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="34" />
+        <source> 个</source>
+        <translation> 件</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="27" />
         <source> 分钟</source>
         <translation> 分</translation>
     </message>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="33" />
+        <source>保存或退出时在备份目录保留的项目备份份数（0 表示不备份）</source>
+        <translation>保存または終了時にバックアップフォルダーに保持するプロジェクトのバックアップ数（0 で無効）</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="20" />
         <source>启用定时自动保存</source>
         <translation>定期自動保存を有効化</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="39" />
+        <source>备份位置</source>
+        <translation>バックアップの保存先</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="21" />
@@ -579,6 +594,16 @@
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="25" />
         <source>自动保存间隔</source>
         <translation>自動保存間隔</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="32" />
+        <source>自动备份项目个数</source>
+        <translation>自動バックアップの保持数</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="40" />
+        <source>项目备份与临时文件的存放目录（留空使用默认位置）</source>
+        <translation>プロジェクトのバックアップと一時ファイルの保存先フォルダー（空欄で既定の場所を使用）</translation>
     </message>
 </context>
 <context>
@@ -4205,12 +4230,12 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>前回関連付けたメディアファイルが存在しません：{name}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1267" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1269" />
         <source>保存</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1198" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1200" />
         <source>保存失败</source>
         <translation>保存に失敗しました</translation>
     </message>
@@ -4220,7 +4245,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>保存完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1181" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1183" />
         <source>保存成功</source>
         <translation>保存しました</translation>
     </message>
@@ -4247,7 +4272,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>アプリを終了し、Updater が置換と自動再起動を行います…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1267" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1269" />
         <source>取消</source>
         <translation>キャンセル</translation>
     </message>
@@ -4319,12 +4344,12 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>タグ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1367" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1373" />
         <source>打轴编辑器尚未准备好</source>
         <translation>タグエディタの準備ができていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1267" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1269" />
         <source>放弃</source>
         <translation>破棄</translation>
     </message>
@@ -4334,7 +4359,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>ファイルが存在しません: {path}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1366" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1372" />
         <source>无法导入</source>
         <translation>インポートできません</translation>
     </message>
@@ -4374,7 +4399,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>更新を開始しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1265" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1267" />
         <source>未保存的更改</source>
         <translation>未保存の変更</translation>
     </message>
@@ -4401,7 +4426,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
 復元しますか？</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1353" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1359" />
         <source>歌词为空</source>
         <translation>歌詞が空です</translation>
     </message>
@@ -4491,7 +4516,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>ナビゲーションバーを設定中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1354" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1360" />
         <source>没有可导入的歌词内容</source>
         <translation>インポート可能な歌詞内容がありません</translation>
     </message>
@@ -4529,7 +4554,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>プロジェクトを開きました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1266" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1268" />
         <source>项目有未保存的更改，是否在退出前保存？</source>
         <translation>プロジェクトに未保存の変更があります。終了前に保存しますか？</translation>
     </message>

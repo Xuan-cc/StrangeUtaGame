@@ -551,14 +551,29 @@
 <context>
     <name>AutoSaveSubInterface</name>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="34" />
+        <source> 个</source>
+        <translation> items</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="27" />
         <source> 分钟</source>
         <translation> min</translation>
     </message>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="33" />
+        <source>保存或退出时在备份目录保留的项目备份份数（0 表示不备份）</source>
+        <translation>Number of project backups to keep in the backup folder when saving or exiting (0 = disabled)</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="20" />
         <source>启用定时自动保存</source>
         <translation>Enable scheduled auto-save</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="39" />
+        <source>备份位置</source>
+        <translation>Backup location</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="21" />
@@ -579,6 +594,16 @@
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="25" />
         <source>自动保存间隔</source>
         <translation>Auto-save interval</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="32" />
+        <source>自动备份项目个数</source>
+        <translation>Number of project backups</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="40" />
+        <source>项目备份与临时文件的存放目录（留空使用默认位置）</source>
+        <translation>Folder for project backups and temporary files (leave empty to use the default location)</translation>
     </message>
 </context>
 <context>
@@ -4205,12 +4230,12 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Previously linked media file not found: {name}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1267" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1269" />
         <source>保存</source>
         <translation>Save</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1198" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1200" />
         <source>保存失败</source>
         <translation>Save failed</translation>
     </message>
@@ -4220,7 +4245,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Save complete</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1181" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1183" />
         <source>保存成功</source>
         <translation>Saved</translation>
     </message>
@@ -4247,7 +4272,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Exiting app. Updater will perform replacement and auto-restart…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1267" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1269" />
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
@@ -4319,12 +4344,12 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Tag</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1367" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1373" />
         <source>打轴编辑器尚未准备好</source>
         <translation>Timing editor not ready</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1267" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1269" />
         <source>放弃</source>
         <translation>Discard</translation>
     </message>
@@ -4334,7 +4359,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>File not found: {path}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1366" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1372" />
         <source>无法导入</source>
         <translation>Cannot import</translation>
     </message>
@@ -4374,7 +4399,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Update started</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1265" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1267" />
         <source>未保存的更改</source>
         <translation>Unsaved changes</translation>
     </message>
@@ -4401,7 +4426,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
 Load to restore?</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1353" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1359" />
         <source>歌词为空</source>
         <translation>Lyrics are empty</translation>
     </message>
@@ -4491,7 +4516,7 @@ Load to restore?</translation>
         <translation>Configuring navigation bar...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1354" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1360" />
         <source>没有可导入的歌词内容</source>
         <translation>No importable lyrics content</translation>
     </message>
@@ -4529,7 +4554,7 @@ Load to restore?</translation>
         <translation>Project opened</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1266" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1268" />
         <source>项目有未保存的更改，是否在退出前保存？</source>
         <translation>Project has unsaved changes. Save before exit?</translation>
     </message>

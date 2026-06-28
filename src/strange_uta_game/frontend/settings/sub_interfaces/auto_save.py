@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from qfluentwidgets import FluentIcon as FIF, SettingCardGroup
 
-from ..cards import SpinSettingCard, SwitchSettingCard
+from ..cards import BrowseSettingCard, SpinSettingCard, SwitchSettingCard
 from .base import SubSettingInterface
 
 
@@ -29,18 +29,39 @@ class AutoSaveSubInterface(SubSettingInterface):
             title_source="自动保存间隔",
             content_source="每隔多少分钟自动保存一次（1~60分钟）",
             suffix_source=" 分钟")
+        self.card_backup_count = SpinSettingCard(FIF.HISTORY, tr("自动备份项目个数"),
+            tr("保存或退出时在备份目录保留的项目备份份数（0 表示不备份）"),
+            min_val=0, max_val=99999, step=1, suffix=tr(" 个"), parent=g)
+        self._tr_register(self.card_backup_count,
+            title_source="自动备份项目个数",
+            content_source="保存或退出时在备份目录保留的项目备份份数（0 表示不备份）",
+            suffix_source=" 个")
+        self.card_backup_dir = BrowseSettingCard(FIF.FOLDER, tr("备份位置"),
+            tr("项目备份与临时文件的存放目录（留空使用默认位置）"),
+            clearable=True, parent=g)
+        self._tr_register(self.card_backup_dir,
+            title_source="备份位置",
+            content_source="项目备份与临时文件的存放目录（留空使用默认位置）")
         g.addSettingCard(self.card_auto_save_enabled)
         g.addSettingCard(self.card_auto_save_interval)
+        g.addSettingCard(self.card_backup_count)
+        g.addSettingCard(self.card_backup_dir)
         self.expandLayout.addWidget(g)
 
     def connect_signals(self):
         self.card_auto_save_enabled.checked_changed.connect(self._notify_changed)
         self.card_auto_save_interval.value_changed.connect(self._notify_changed)
+        self.card_backup_count.value_changed.connect(self._notify_changed)
+        self.card_backup_dir.path_changed.connect(self._notify_changed)
 
     def load_settings(self, s):
         self.card_auto_save_enabled.setChecked(s.get("auto_save.enabled", True))
         self.card_auto_save_interval.setValue(s.get("auto_save.interval_minutes", 5))
+        self.card_backup_count.setValue(s.get("auto_save.backup_count", 10))
+        self.card_backup_dir.setText(s.get("auto_save.backup_dir", "") or "")
 
     def collect_settings(self, s):
         s.set("auto_save.enabled", self.card_auto_save_enabled.isChecked())
         s.set("auto_save.interval_minutes", self.card_auto_save_interval.value())
+        s.set("auto_save.backup_count", self.card_backup_count.value())
+        s.set("auto_save.backup_dir", self.card_backup_dir.text().strip())
