@@ -164,6 +164,76 @@ def split_by_kanji_dict(word: str, reading: str) -> Optional[List[str]]:
     return _match(0, 0)
 
 
+def _peel_by_candidates(word: str, reading: str) -> Optional[List[str]]:
+    """从 reading 头尾剥离能匹配字典候选的读音，中间字符承担剩余。
+
+    与 ``split_by_kanji_dict`` 的区别：组合匹配要求所有字的候选精确拼合
+    整段 reading，而剥离策略容忍中间字符的读音偏离字典（连浊、促音便等）。
+
+    例：物語/ものがたり — 字典 語 只有 ご/かた，组合匹配失败；
+    但头部剥 物=もの 后，語 承担剩余 がたり，结果正确。
+    """
+    if not word or not reading or len(word) < 2:
+        return None
+    kanji_dict = _load_kanji_dict()
+    if not kanji_dict:
+        return None
+
+    target = _kata_to_hira(reading)
+    n = len(word)
+    result: List[str] = [""] * n
+
+    char_options: List[Optional[List[str]]] = []
+    for i, ch in enumerate(word):
+        prev = char_options[-1] if char_options else None
+        char_options.append(_char_reading_options(ch, kanji_dict, prev))
+
+    remaining = target
+    left = 0
+    right = n - 1
+
+    # 尾部剥离：防过吃（剥后剩余长度 >= 未填字符数）
+    while right > left:
+        opts = char_options[right]
+        if not opts:
+            break
+        matched = None
+        for opt in opts:
+            if opt and remaining.endswith(opt) and len(remaining) - len(opt) >= (right - left):
+                matched = opt
+                break
+        if matched is None:
+            break
+        result[right] = matched
+        remaining = remaining[: len(remaining) - len(matched)]
+        right -= 1
+
+    # 头部剥离
+    while left < right:
+        opts = char_options[left]
+        if not opts:
+            break
+        matched = None
+        for opt in opts:
+            if opt and remaining.startswith(opt) and len(remaining) - len(opt) >= (right - left):
+                matched = opt
+                break
+        if matched is None:
+            break
+        result[left] = matched
+        remaining = remaining[len(matched):]
+        left += 1
+
+    # left == right：唯一剩余字符承担全部剩余读音
+    if left == right:
+        result[left] = remaining
+        return result
+
+    # 还有多个字符未填：首字吃剩余，其余留空（调用方按 ateji 连词处理）
+    result[left] = remaining
+    return result
+
+
 def even_distribute_kana(reading: str, n_chars: int) -> List[str]:
     """把 ``reading`` 按字数均分成 ``n_chars`` 段，多出的假名贴到首字。
 
@@ -207,5 +277,9 @@ def compute_per_kanji_readings(word: str, reading: str) -> Tuple[List[str], bool
     dict_split = split_by_kanji_dict(word, reading)
     if dict_split is not None and len(dict_split) == len(word):
         return (dict_split, False)
+
+    peel_split = _peel_by_candidates(word, reading)
+    if peel_split is not None and len(peel_split) == len(word) and all(peel_split):
+        return (peel_split, False)
 
     return (even_distribute_kana(reading, len(word)), True)
