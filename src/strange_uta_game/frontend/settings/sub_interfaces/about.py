@@ -55,8 +55,15 @@ class AboutSubInterface(SubSettingInterface):
             self.about_group)
         self.about_group.addSettingCard(self._about_card)
 
+        self._github_url = "https://github.com/karaoke-studio/StrangeUtaGame"
         self._link_card = SettingCard(FIF.GITHUB, "GitHub",
-            "https://github.com/karaoke-studio/StrangeUtaGame", self.about_group)
+            self._github_url, self.about_group)
+        self._btn_open_github = PushButton(self.tr("打开"), self._link_card)
+        self._btn_open_github.setFont(ui_font(10))
+        self._btn_open_github.setIcon(FIF.LINK)
+        self._btn_open_github.clicked.connect(self._open_github)
+        self._link_card.hBoxLayout.addWidget(self._btn_open_github, 0, Qt.AlignmentFlag.AlignRight)
+        self._link_card.hBoxLayout.addSpacing(16)
         self.about_group.addSettingCard(self._link_card)
 
         self._path_card = SettingCard(FIF.FOLDER, self.tr("配置文件位置"),
@@ -234,6 +241,8 @@ class AboutSubInterface(SubSettingInterface):
             )
 
         # 按钮
+        if hasattr(self, "_btn_open_github"):
+            self._btn_open_github.setText(self.tr("打开"))
         if hasattr(self, "_btn_open_dir"):
             self._btn_open_dir.setText(self.tr("打开目录"))
         if hasattr(self, "_btn_change_dir"):
@@ -271,6 +280,9 @@ class AboutSubInterface(SubSettingInterface):
             self._language_card.combo.blockSignals(True)
             self._language_card.setCurrentIndex(idx)
             self._language_card.combo.blockSignals(False)
+
+    def _open_github(self):
+        QDesktopServices.openUrl(QUrl(self._github_url))
 
     def _open_config_dir(self):
         if self._settings_ref is None or self._settings_ref._config_path is None:

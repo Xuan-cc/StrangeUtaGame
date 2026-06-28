@@ -3,52 +3,52 @@
 <context>
     <name>AboutSubInterface</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="78" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="231" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="85" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="238" />
         <source>FFmpeg 路径</source>
         <translation>FFmpeg path</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="374" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="386" />
         <source>FFmpeg 路径已保存</source>
         <translation>FFmpeg path saved</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="378" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="390" />
         <source>FFmpeg 路径已清除</source>
         <translation>FFmpeg path cleared</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="401" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="413" />
         <source>ShellExecute 返回 {ret}，请检查是否拒绝了 UAC 提权。</source>
         <translation>ShellExecute returned {ret}. Did you decline the UAC elevation prompt?</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="53" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="223" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="230" />
         <source>StrangeUtaGame - 歌词打轴软件</source>
         <translation>StrangeUtaGame - Lyrics Timing Software</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="96" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="246" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="103" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="255" />
         <source>一键安装</source>
         <translation>One-click install</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="114" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="252" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="121" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="261" />
         <source>从KS配置导入</source>
         <translation>Import from KS Config</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="110" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="248" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="117" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="257" />
         <source>保存设置</source>
         <translation>Save settings</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="212" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="219" />
         <source>关于</source>
         <translation>About</translation>
     </message>
@@ -59,160 +59,166 @@
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="44" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="220" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="227" />
         <source>切换 UI 显示语言，更改后需重启软件生效</source>
         <translation>Switch the UI language. Restart required to take effect.</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="354" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="366" />
         <source>可执行文件 (ffmpeg.exe ffmpeg);;所有文件 (*.*)</source>
         <translation>Executables (ffmpeg.exe ffmpeg);;All Files (*.*)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="408" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="420" />
         <source>安装完成后，重启软件即可通过环境变量自动使用，或点击「浏览」手动指定路径。</source>
         <translation>After install, restart the app to auto-use via environment variables, or click 'Browse' to set a path manually.</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="379" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="391" />
         <source>将使用系统环境变量中的 ffmpeg</source>
         <translation>Will use ffmpeg from system PATH</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="76" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="214" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="83" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="221" />
         <source>工具配置</source>
         <translation>Tool configuration</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="407" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="419" />
         <source>已请求管理员权限启动 FFmpeg 安装</source>
         <translation>Requested admin rights to launch FFmpeg install</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="190" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="197" />
         <source>当前页已应用新语言；部分页面（编辑器/导出/演唱者管理）会在重新打开后刷新</source>
         <translation>Current page applied the new language; some pages (Editor/Export/Singer manager) refresh on reopen</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="64" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="238" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="61" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="245" />
+        <source>打开</source>
+        <translation>Open</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="71" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="247" />
         <source>打开目录</source>
         <translation>Open directory</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="303" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="315" />
         <source>无法写入重定向文件: {err}</source>
         <translation>Cannot write redirect file: {err}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="400" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="412" />
         <source>无法启动安装</source>
         <translation>Cannot start installation</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="67" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="240" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="74" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="249" />
         <source>更改位置</source>
         <translation>Change location</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="302" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="314" />
         <source>更改失败</source>
         <translation>Change failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="86" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="242" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="93" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="251" />
         <source>浏览</source>
         <translation>Browse</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="89" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="244" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="96" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="253" />
         <source>清除</source>
         <translation>Clear</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="54" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="225" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="232" />
         <source>版本 v{ver}  |  由 RhythmicaLyrics 启发</source>
         <translation>Version v{ver}  |  Inspired by RhythmicaLyrics</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="79" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="233" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="86" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="240" />
         <source>用于加载视频文件时提取音频（留空则使用系统环境变量）</source>
         <translation>Used to extract audio when loading a video file (empty = use system PATH)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="43" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="218" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="225" />
         <source>界面语言</source>
         <translation>Interface language</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="39" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="210" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="217" />
         <source>语言</source>
         <translation>Language</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="189" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="196" />
         <source>语言已切换</source>
         <translation>Language switched</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="322" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="334" />
         <source>请手动复制配置文件: {err}</source>
         <translation>Please copy the config file manually: {err}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="353" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="365" />
         <source>选择 FFmpeg 可执行文件</source>
         <translation>Choose FFmpeg executable</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="284" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="296" />
         <source>选择配置文件存储目录</source>
         <translation>Choose config-file storage directory</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="331" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="343" />
         <source>配置位置已更改</source>
         <translation>Config location changed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="321" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="333" />
         <source>配置复制失败</source>
         <translation>Config copy failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="62" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="228" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="69" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="235" />
         <source>配置文件位置</source>
         <translation>Config file location</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="332" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="344" />
         <source>配置文件将保存到: {path}</source>
         <translation>Config file will be saved to: {path}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="117" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="250" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="124" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="259" />
         <source>重置为默认设置</source>
         <translation>Reset to defaults</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="82" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="261" />
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="342" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="89" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="270" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="354" />
         <source>（使用环境变量）</source>
         <translation>(use environment variable)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="63" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/about.py" line="70" />
         <source>（未加载）</source>
         <translation>(not loaded)</translation>
     </message>
