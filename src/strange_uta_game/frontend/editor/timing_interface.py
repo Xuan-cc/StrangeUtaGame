@@ -881,6 +881,9 @@ class EditorInterface(QWidget):
         # 应用禁用单击跳转设置
         disable_click_jump = settings.get("timing.disable_click_jump", False)
         self.preview.set_disable_click_jump(disable_click_jump)
+        # 应用禁用点击时居中设置
+        disable_click_recenter = settings.get("timing.disable_click_recenter", False)
+        self.preview.set_disable_click_recenter(disable_click_recenter)
         # 应用隐藏 hitbox 高亮设置
         hide_hitbox = settings.get("timing.hide_hitbox_highlights", False)
         self.preview.set_hide_hitbox_highlights(hide_hitbox)

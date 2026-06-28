@@ -281,6 +281,8 @@ class KaraokePreview(QWidget):
         self._focus_dragging: bool = False
 
         self._disable_click_jump: bool = False  # 禁用单击跳转
+        self._disable_click_recenter: bool = False  # 禁用点击/双击时居中到目标行
+        self._suppress_click_recenter: bool = False  # 瞬态：点击/双击处理窗口内抑制居中
         self._hide_hitbox_highlights: bool = False  # 隐藏 current/focus 域 hitbox 高亮
 
         # 单击/双击处理：快照机制
@@ -464,6 +466,10 @@ class KaraokePreview(QWidget):
         """设置是否禁用单击跳转功能。"""
         self._disable_click_jump = bool(disable)
 
+    def set_disable_click_recenter(self, disable: bool):
+        """设置是否禁用点击/双击时居中到目标行（不影响播放自动滚动与键盘导航）。"""
+        self._disable_click_recenter = bool(disable)
+
     def set_hide_hitbox_highlights(self, hide: bool):
         """设置是否隐藏 current 域和 focus 域 hitbox 高亮。
         启用时仅在拖拽多选过程中绘制 focus 域高亮。
@@ -588,7 +594,12 @@ class KaraokePreview(QWidget):
 
         幂等保护：若目标 line_idx 已是当前 scroll_center_line，
         避免短暂跳变导致空白行。
+
+        点击/双击处理窗口内（_suppress_click_recenter）按用户设置跳过居中：
+        编辑光标仍移动，仅视口不滚动。键盘导航/打轴推进/播放自动滚动不经此抑制。
         """
+        if self._suppress_click_recenter:
+            return
         new_line = float(self._current_line_idx)
         if new_line == self._scroll_center_line:
             return
@@ -1255,13 +1266,17 @@ class KaraokePreview(QWidget):
             self._press_pos = None
 
             if not self._disable_click_jump:
-                if click["type"] == "cp":
-                    self.checkpoint_clicked.emit(
-                        click["line_idx"], click["char_idx"], click["cp_idx"]
-                    )
-                elif click["type"] == "char":
-                    self.char_selected.emit(click["line_idx"], click["char_idx"])
-                    self.line_clicked.emit(click["line_idx"])
+                self._suppress_click_recenter = self._disable_click_recenter
+                try:
+                    if click["type"] == "cp":
+                        self.checkpoint_clicked.emit(
+                            click["line_idx"], click["char_idx"], click["cp_idx"]
+                        )
+                    elif click["type"] == "char":
+                        self.char_selected.emit(click["line_idx"], click["char_idx"])
+                        self.line_clicked.emit(click["line_idx"])
+                finally:
+                    self._suppress_click_recenter = False
 
                 # 保存快照用于双击判断，300ms 后清除
                 self._click_snapshot = click
@@ -1274,8 +1289,12 @@ class KaraokePreview(QWidget):
                 and self._focus_line_idx >= 0
                 and self._focus_char_idx >= 0
             ):
-                self.char_selected.emit(self._focus_line_idx, self._focus_char_idx)
-                self.line_clicked.emit(self._focus_line_idx)
+                self._suppress_click_recenter = self._disable_click_recenter
+                try:
+                    self.char_selected.emit(self._focus_line_idx, self._focus_char_idx)
+                    self.line_clicked.emit(self._focus_line_idx)
+                finally:
+                    self._suppress_click_recenter = False
             self._pending_click = None
             self._press_pos = None
 
@@ -2121,42 +2140,48 @@ class KaraokePreview(QWidget):
         # Press→Release→DblClick→Release，Release #2 需要跳过）
         self._double_click_handled = True
 
-        # 优先使用快照判断双击目标（快照在单击时锁定，避免居中导致 hitbox 变化）
-        # 禁用单击跳转时不使用快照，直接走当前 hitbox 判断
-        if not self._disable_click_jump and self._click_snapshot is not None:
-            snapshot = self._click_snapshot
-            self._click_snapshot = None
-            if snapshot["type"] == "cp":
-                self.seek_to_checkpoint_requested.emit(
-                    snapshot["line_idx"], snapshot["char_idx"], snapshot["cp_idx"]
-                )
-                return
-            elif snapshot["type"] == "char":
-                self.seek_to_char_requested.emit(
-                    snapshot["line_idx"], snapshot["char_idx"]
-                )
-                return
+        # 双击同样受"禁用点击时居中"控制：seek 信号链路同步执行，
+        # 在窗口内置位即可抑制随后的 scroll_current_line_to_center。
+        self._suppress_click_recenter = self._disable_click_recenter
+        try:
+            # 优先使用快照判断双击目标（快照在单击时锁定，避免居中导致 hitbox 变化）
+            # 禁用单击跳转时不使用快照，直接走当前 hitbox 判断
+            if not self._disable_click_jump and self._click_snapshot is not None:
+                snapshot = self._click_snapshot
+                self._click_snapshot = None
+                if snapshot["type"] == "cp":
+                    self.seek_to_checkpoint_requested.emit(
+                        snapshot["line_idx"], snapshot["char_idx"], snapshot["cp_idx"]
+                    )
+                    return
+                elif snapshot["type"] == "char":
+                    self.seek_to_char_requested.emit(
+                        snapshot["line_idx"], snapshot["char_idx"]
+                    )
+                    return
 
-        # 快照不存在时（如禁用单击跳转），回退到当前 hitbox 判断
-        for marker_rect, line_idx, char_idx, cp_idx in self._checkpoint_hitboxes:
-            if marker_rect.contains(click_x, click_y):
-                self.seek_to_checkpoint_requested.emit(line_idx, char_idx, cp_idx)
-                return
+            # 快照不存在时（如禁用单击跳转），回退到当前 hitbox 判断
+            for marker_rect, line_idx, char_idx, cp_idx in self._checkpoint_hitboxes:
+                if marker_rect.contains(click_x, click_y):
+                    self.seek_to_checkpoint_requested.emit(line_idx, char_idx, cp_idx)
+                    return
 
-        for char_rect, line_idx, char_idx in self._char_hitboxes:
-            if char_rect.contains(click_x, click_y):
-                self.seek_to_char_requested.emit(line_idx, char_idx)
-                return
+            for char_rect, line_idx, char_idx in self._char_hitboxes:
+                if char_rect.contains(click_x, click_y):
+                    self.seek_to_char_requested.emit(line_idx, char_idx)
+                    return
 
-        # 双击在行内空白区域：按水平距离找最近的 hitbox
-        nearest = self._find_nearest_hitbox(click_x, click_y)
-        if nearest:
-            hit_type, line_idx, char_idx, cp_idx = nearest
-            if hit_type == "cp":
-                self.seek_to_checkpoint_requested.emit(line_idx, char_idx, cp_idx)
-            else:
-                self.seek_to_char_requested.emit(line_idx, char_idx)
-            return
+            # 双击在行内空白区域：按水平距离找最近的 hitbox
+            nearest = self._find_nearest_hitbox(click_x, click_y)
+            if nearest:
+                hit_type, line_idx, char_idx, cp_idx = nearest
+                if hit_type == "cp":
+                    self.seek_to_checkpoint_requested.emit(line_idx, char_idx, cp_idx)
+                else:
+                    self.seek_to_char_requested.emit(line_idx, char_idx)
+                return
+        finally:
+            self._suppress_click_recenter = False
 
     def _compute_guide_alpha(self, characters, cursor_idx: int) -> dict:
         """走字预览指引：返回 ``char_pos -> 透明度(alphaF)`` 映射。
