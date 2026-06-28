@@ -3,12 +3,13 @@
 变体（--variant）：
   main      Windows + WinRT 日语注音（默认，已分发版本）
   noWinIME  Windows，无 WinRT，内置 sudachi-mini 注音
-  mac       macOS，无 WinRT，内置 sudachi-mini 注音
+  mac-arm64 macOS(Apple Silicon)，无 WinRT，内置 sudachi-mini 注音
+  mac-intel macOS(Intel x86_64)，无 WinRT，内置 sudachi-mini 注音
 
 注意事项：
 1. sounddevice 和 soundfile 依赖 PortAudio / libsndfile，需要确保 DLL 被打包
 2. PyQt6 有平台插件需要处理
-3. main 变体：日语注音用 WinRT IME；noWinIME/mac 变体：使用 sudachi-mini
+3. main 变体：日语注音用 WinRT IME；noWinIME/mac-arm64/mac-intel 变体：使用 sudachi-mini
 4. numpy 是音频引擎核心依赖，不可排除
 5. 使用 --onedir 模式避免单文件解压问题
 """
@@ -40,9 +41,9 @@ parser = argparse.ArgumentParser(description="PyInstaller 打包脚本")
 parser.add_argument("--clean", action="store_true", help="传给 PyInstaller --clean，完整重建")
 parser.add_argument(
     "--variant",
-    choices=["main", "noWinIME", "mac"],
+    choices=["main", "noWinIME", "mac-arm64", "mac-intel"],
     default="main",
-    help="构建变体：main（默认）/ noWinIME / mac",
+    help="构建变体：main（默认）/ noWinIME / mac-arm64（Apple Silicon）/ mac-intel（Intel x86_64）",
 )
 _cli_args = parser.parse_args()
 
@@ -128,7 +129,7 @@ _VARIANT_CONFIGS = {
         "hooks_dir": str(PROJECT_ROOT / "pyinstaller_hooks"),
         "required_deps": [],
     },
-    "mac": {
+    "mac-arm64": {
         "hidden_imports": [
             "--hidden-import=sudachipy",
             "--hidden-import=sudachidict_small",
@@ -150,6 +151,11 @@ _VARIANT_CONFIGS = {
         "required_deps": [],
     },
 }
+
+# mac-intel 与 mac-arm64 代码配置完全相同（无 WinRT、sudachi-mini 注音），仅构建机器架构
+# 不同：mac-arm64 → Apple Silicon(arm64) runner；mac-intel → Intel(x86_64) runner。
+# PyInstaller 不交叉编译，产物架构 = 构建机原生架构，故无需 --target-arch，靠 runner 区分。
+_VARIANT_CONFIGS["mac-intel"] = _VARIANT_CONFIGS["mac-arm64"]
 
 _cfg = _VARIANT_CONFIGS[VARIANT]
 
@@ -188,7 +194,7 @@ for _mod in _cfg["required_deps"]:
         print(f"✗ 缺少变体依赖: {_mod}")
         _failed = True
 
-if VARIANT in ("noWinIME", "mac"):
+if VARIANT in ("noWinIME", "mac-arm64", "mac-intel"):
     for _sudachi_pkg in ("sudachipy", "sudachidict_small"):
         try:
             __import__(_sudachi_pkg)

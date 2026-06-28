@@ -41,7 +41,10 @@ jobs:
           - { variant: noWinIME, os: windows-latest, cache: '.runtime-hash-cache-noWinIME.json' }
           # mac 变体：已补齐（BASS→SoundDeviceEngine 回落、sudachi 注音、更新器降级为手动下载）。
           # 首次启用设为 best-effort，待 CI 实跑绿后把本行的 continue-on-error 去掉（恢复硬性 gate）。
-          - { variant: mac,      os: macos-latest,   cache: '.runtime-hash-cache-mac.json', continue-on-error: true }
+          - { variant: mac-arm64, os: macos-latest,   cache: '.runtime-hash-cache-mac-arm64.json', continue-on-error: true }
+          # mac-intel 变体：Intel(x86_64) 包，跑在 macos-13(Intel runner)上。代码配置同 mac，
+          # 仅构建机架构不同 → 产物 x86_64，供 Intel Mac 用户使用（arm64 包在 Intel 上 "Bad CPU type"）。
+          - { variant: mac-intel, os: macos-13,       cache: '.runtime-hash-cache-mac-intel.json', continue-on-error: true }
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.continue-on-error || false }}
     defaults:
@@ -163,8 +166,8 @@ jobs:
               echo "::warning::缺少产物 dist/$f"
             fi
           done
-          # mac 专属：可拖拽安装的 DMG（仅 mac 变体产出）
-          if [ "$VARIANT" = "mac" ]; then
+          # mac 专属：可拖拽安装的 DMG（mac / mac-intel 变体产出）
+          if [ "$VARIANT" = "mac-arm64" ] || [ "$VARIANT" = "mac-intel" ]; then
             for f in "$APP-v$VER.dmg" "$APP-v$VER.dmg.sha256"; do
               if [ -f "dist/$f" ]; then
                 cp "dist/$f" "$OUT/"
@@ -172,6 +175,22 @@ jobs:
                 echo "::warning::缺少产物 dist/$f"
               fi
             done
+          fi
+          # ── 一次性兼容垫片（仅 mac-arm64）─────────────────────────────────
+          # v1.3.0 的 arm64 包内部 VARIANT="mac"，检查更新时精确找
+          # StrangeUtaGame-mac-v{ver}.zip（pick_primary_asset 不回退，找不到即判"无更新"）。
+          # 改名为 mac-arm64 后该名消失，老用户会永远收不到更新提示。这里额外放一份
+          # "旧名"副本（内容=arm64 全量包），让老包能 pick 到 → 弹窗 → 在浏览器打开
+          # Releases 页下载新命名包。只需 zip（mac 手动下载，不校验 sha256、不走增量）。
+          # 待 v1.3.0 用户基本迁移后可删除本段。新版 mac-arm64 包找 -mac-arm64- 名，
+          # 不会 pick 到此垫片，无混淆。
+          if [ "$VARIANT" = "mac-arm64" ]; then
+            if [ -f "dist/$APP-v$VER.zip" ]; then
+              cp "dist/$APP-v$VER.zip" "$OUT/StrangeUtaGame-mac-v$VER.zip"
+              echo "已放置兼容垫片: StrangeUtaGame-mac-v$VER.zip（供 v1.3.0 arm64 老包检测更新）"
+            else
+              echo "::warning::兼容垫片源缺失 dist/$APP-v$VER.zip"
+            fi
           fi
           ls -la "$OUT"
 

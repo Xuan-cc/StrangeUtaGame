@@ -158,7 +158,7 @@ class VariantConfig:
                 "runtime-latest.zip" if not norm
                 else f"runtime-latest-{norm}.zip"
             ),
-            has_updater_exe=(norm != "mac"),
+            has_updater_exe=(norm not in ("mac-arm64", "mac-intel")),
         )
 
     # ── 资产命名 ──
@@ -1220,7 +1220,7 @@ def cmd_all(
 
 # ───────────────────────── entry ─────────────────────────
 
-_VARIANT_CHOICES = ["main", "noWinIME", "mac"]
+_VARIANT_CHOICES = ["main", "noWinIME", "mac-arm64", "mac-intel"]
 
 
 def main(argv: Optional[list] = None) -> int:

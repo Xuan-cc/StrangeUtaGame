@@ -6,13 +6,15 @@
 
 变体（VARIANT）说明：
 - ``""``        主版本（Windows + WinRT 日语注音）
-- ``"noWinIME"`` Windows 版，不含 WinRT IME 依赖，使用 sudachi-mini 注音
-- ``"mac"``     macOS 版，不含 WinRT IME 依赖，使用 sudachi-mini 注音
+- ``"noWinIME"``  Windows 版，不含 WinRT IME 依赖，使用 sudachi-mini 注音
+- ``"mac-arm64"`` macOS Apple Silicon 版，不含 WinRT IME 依赖，使用 sudachi-mini 注音
+- ``"mac-intel"`` macOS Intel(x86_64) 版，不含 WinRT IME 依赖，使用 sudachi-mini 注音
 
 各变体对应的资产名：
 - main:      ``StrangeUtaGame-v{version}.zip``
 - noWinIME:  ``StrangeUtaGame-noWinIME-v{version}.zip``
-- mac:       ``StrangeUtaGame-mac-v{version}.zip``
+- mac-arm64: ``StrangeUtaGame-mac-arm64-v{version}.zip``
+- mac-intel: ``StrangeUtaGame-mac-intel-v{version}.zip``
 
 更新器（``strange_uta_game.updater``）与设置-关于/语言卡片均从此处读取版本号。
 请始终使用 :class:`Version`（``packaging.version`` 兼容的语义版本字符串）。
@@ -23,7 +25,7 @@ from __future__ import annotations
 __version__ = "1.3.0" 
 # 构建变体标识。build.py 在打包前将此行替换为对应变体值，打包后还原。
 # 运行时只读，请勿在应用逻辑中修改。
-VARIANT = ""  # "" | "noWinIME" | "mac"
+VARIANT = ""  # "" | "noWinIME" | "mac-arm64" | "mac-intel"
 
 # Git tag 前缀。GitHub Release 的 tag 命名规则为 ``{TAG_PREFIX}{__version__}``。
 TAG_PREFIX = "SUGv"

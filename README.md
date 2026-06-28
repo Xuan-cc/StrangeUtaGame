@@ -292,10 +292,11 @@ Download the latest archive from the [Releases](https://github.com/karaoke-studi
 
 macOS 版为实验性构建，使用前请留意：
 
+- **按芯片选择安装包 / Pick the build for your chip.** Apple Silicon（M1/M2/M3…）下载 `StrangeUtaGame-mac-arm64-vX.Y.Z.dmg`；Intel 芯片下载 `StrangeUtaGame-mac-intel-vX.Y.Z.dmg`。不确定芯片类型可在「终端」执行 `uname -m`（`arm64` = Apple Silicon，`x86_64` = Intel）。**装错架构会在启动时报 `Bad CPU type in executable`。**（另有一个名为 `StrangeUtaGame-mac-vX.Y.Z.zip` 的旧命名包仅为老版本的更新检测保留，请勿下载。）
 - **首次打开被拦截（未签名）/ Unsigned app blocked on first launch.** 应用未做 Apple 签名与公证，双击会提示「无法打开，因为无法验证开发者」。绕过方式：在 `StrangeUtaGame.app` 上**右键 → 打开**，在弹窗里再次点「打开」；或在终端执行 `xattr -dr com.apple.quarantine /path/to/StrangeUtaGame.app` 后再启动。
 - **无自动更新 / No auto-update.** macOS 不支持应用内自动更新；检测到新版本时只会在浏览器打开 [Releases](https://github.com/karaoke-studio/StrangeUtaGame/releases) 页面，需手动下载并替换旧的 `.app`。
 
-> macOS builds are experimental: the app is **not signed/notarized** — on first launch use **right-click → Open** (or `xattr -dr com.apple.quarantine <app>`) to bypass Gatekeeper. There is **no in-app auto-update**; new versions open the Releases page in your browser for a manual download.
+> macOS builds are experimental. **Pick by chip:** Apple Silicon → `…-mac-arm64-*.dmg`, Intel → `…-mac-intel-*.dmg` (run `uname -m` if unsure — `arm64` = Apple Silicon, `x86_64` = Intel; the wrong arch fails with `Bad CPU type in executable`). The app is **not signed/notarized** — on first launch use **right-click → Open** (or `xattr -dr com.apple.quarantine <app>`) to bypass Gatekeeper. **No in-app auto-update**; new versions open the Releases page in your browser for a manual download.
 
 ---
 
