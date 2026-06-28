@@ -42,9 +42,9 @@ jobs:
           # mac 变体：已补齐（BASS→SoundDeviceEngine 回落、sudachi 注音、更新器降级为手动下载）。
           # 首次启用设为 best-effort，待 CI 实跑绿后把本行的 continue-on-error 去掉（恢复硬性 gate）。
           - { variant: mac-arm64, os: macos-latest,   cache: '.runtime-hash-cache-mac-arm64.json', continue-on-error: true }
-          # mac-intel 变体：Intel(x86_64) 包，跑在 macos-13(Intel runner)上。代码配置同 mac，
+          # mac-intel 变体：Intel(x86_64) 包，跑在 macos-15-intel(Intel runner)上。代码配置同 mac，
           # 仅构建机架构不同 → 产物 x86_64，供 Intel Mac 用户使用（arm64 包在 Intel 上 "Bad CPU type"）。
-          - { variant: mac-intel, os: macos-13,       cache: '.runtime-hash-cache-mac-intel.json', continue-on-error: true }
+          - { variant: mac-intel, os: macos-15-intel,       cache: '.runtime-hash-cache-mac-intel.json', continue-on-error: true }
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.continue-on-error || false }}
     defaults:
