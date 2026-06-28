@@ -36,8 +36,8 @@ def get_char_type(char: str) -> CharType:
     if len(char) != 1:
         raise ValueError(f"必须是单个字符: {char}")
 
-    # 长音
-    if char in ("ー", "－", "～", "〜"):
+    # 长音（含半角片假名长音 ｰ U+FF70）
+    if char in ("ー", "ｰ", "－", "～", "〜"):
         return CharType.LONG_VOWEL
 
     # 促音
@@ -81,7 +81,7 @@ def get_char_type(char: str) -> CharType:
         return CharType.SPACE
 
     # 符号
-    if char in '.,!?。、！？…―・「」『』（）［］｛｝"":;：；/／＼()[]{}\\\'"，':
+    if char in '.,!?。、！？…―・「」『』【】（）［］｛｝"":;：；/／＼()[]{}\\\'"，':
         return CharType.SYMBOL
 
     return CharType.OTHER

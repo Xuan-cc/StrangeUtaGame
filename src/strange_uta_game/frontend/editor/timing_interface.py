@@ -3251,6 +3251,24 @@ class EditorInterface(QWidget):
             for line_idx, sentence in enumerate(self._project.sentences):
                 chars = sentence.characters
                 total_chars = len(chars)
+
+                # 预处理：句尾特殊符号（cc=0 + is_sentence_end + sentence_end_ts）。
+                # 无论行中还是行尾，都先把句尾释放点降级为普通 cp 并把句尾后推
+                # tail_offset，使其成为后续插值的锚点。否则行中的句尾符号会落入
+                # 通用插值分支，丢弃真实句尾释放点、也拿不到符号特殊补偿。
+                for ci in range(total_chars):
+                    ch = chars[ci]
+                    if (ch.check_count == 0
+                            and _is_target_char(ch, ci, chars)
+                            and get_char_type(ch.char) == CharType.SYMBOL
+                            and ch.is_sentence_end
+                            and ch.sentence_end_ts is not None):
+                        original_end_ts = ch.sentence_end_ts
+                        ch.timestamps = [original_end_ts]
+                        ch.sentence_end_ts = original_end_ts + tail_offset_ms
+                        ch.set_check_count(1, force=True)
+                        total_count += 1
+
                 i = 0
                 while i < total_chars:
                     # 跳过不符合适用条件的字符
@@ -3268,18 +3286,24 @@ class EditorInterface(QWidget):
 
                     # 判断段的位置
                     is_at_start = (segment_start == 0)  # 行首
+
+                    # 查找前后时间戳（先于行尾判断：行尾需参考 next_ts）
+                    prev_ts = _find_prev_timestamp(line_idx, segment_start)
+                    next_ts = _find_next_timestamp(line_idx, segment_end - 1)
+
                     # 行尾：段之后若仅剩“多余空格占位符”（句尾 token 贴轴后被解析
                     # 出来的裸空格），也视为行尾。必须校验 check_count==0，避免误吞
                     # 真正带轴的空格字符。
-                    is_at_end = all(
+                    # 句尾以 is_sentence_end 为准，而非单纯行尾位置：句尾停顿标记可能
+                    # 落在段后的尾随空格上，此时 _find_next_timestamp 会命中其
+                    # sentence_end_ts（next_ts 非空）。这种情况应按句尾锚点插值，
+                    # 不能当作“无后方锚点的行尾”走 prev_ts+tail 兜底，否则会丢弃
+                    # 真实的句尾时间戳。
+                    is_at_end = next_ts is None and all(
                         chars[ci].check_count == 0
                         and get_char_type(chars[ci].char) == CharType.SPACE
                         for ci in range(segment_end, total_chars)
                     )
-
-                    # 查找前后时间戳
-                    prev_ts = _find_prev_timestamp(line_idx, segment_start)
-                    next_ts = _find_next_timestamp(line_idx, segment_end - 1)
 
                     # 根据位置和时间戳决定处理方式
                     if is_at_start and is_at_end:
@@ -3299,41 +3323,23 @@ class EditorInterface(QWidget):
                             chars[ci].set_check_count(1, force=True)
                             total_count += 1
                     elif is_at_end:
-                        # 行尾：只有前方时间戳
+                        # 行尾：只有前方时间戳。
+                        # 句尾特殊符号已在预处理 pass 中降级为锚点，这里 last_char
+                        # 不会再是带 sentence_end_ts 的句尾符号，故统一走均分。
                         if prev_ts is None:
                             continue
-                        last_ci = segment_end - 1
-                        last_char = chars[last_ci]
-                        # 判断最后一个字符是否为符号且有句尾时间戳
-                        if (last_char.is_punctuation
-                                and last_char.is_sentence_end
-                                and last_char.sentence_end_ts is not None):
-                            # 符号特殊处理：原句尾转普通，新句尾 = 原句尾 + tail_offset
-                            original_end_ts = last_char.sentence_end_ts
-                            last_char.timestamps = [original_end_ts]
-                            last_char.sentence_end_ts = original_end_ts + tail_offset_ms
-                            last_char.set_check_count(1, force=True)
+                        last_char = chars[segment_end - 1]
+                        # 均分(prev_ts, 句尾时间戳)；无句尾时以 prev_ts + tail_offset 兜底
+                        end_ts = (last_char.sentence_end_ts
+                                  if last_char.is_sentence_end
+                                     and last_char.sentence_end_ts is not None
+                                  else prev_ts + tail_offset_ms)
+                        time_diff = end_ts - prev_ts
+                        for idx, ci in enumerate(range(segment_start, segment_end)):
+                            ts = prev_ts + time_diff * (idx + 1) // (segment_len + 1)
+                            chars[ci].timestamps = [ts]
+                            chars[ci].set_check_count(1, force=True)
                             total_count += 1
-                            # 前面的字符均分(prev_ts, original_end_ts)
-                            if segment_len > 1:
-                                time_diff = original_end_ts - prev_ts
-                                for idx, ci in enumerate(range(segment_start, last_ci)):
-                                    ts = prev_ts + time_diff * (idx + 1) // segment_len
-                                    chars[ci].timestamps = [ts]
-                                    chars[ci].set_check_count(1, force=True)
-                                    total_count += 1
-                        else:
-                            # 非符号：均分(prev_ts, 句尾时间戳)
-                            end_ts = (last_char.sentence_end_ts
-                                      if last_char.is_sentence_end
-                                         and last_char.sentence_end_ts is not None
-                                      else prev_ts + tail_offset_ms)
-                            time_diff = end_ts - prev_ts
-                            for idx, ci in enumerate(range(segment_start, segment_end)):
-                                ts = prev_ts + time_diff * (idx + 1) // (segment_len + 1)
-                                chars[ci].timestamps = [ts]
-                                chars[ci].set_check_count(1, force=True)
-                                total_count += 1
                     else:
                         # 行中：前后都应该有时间戳
                         if prev_ts is None or next_ts is None:
