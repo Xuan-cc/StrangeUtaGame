@@ -243,10 +243,10 @@ class TestPunctuationCheckpointFlag:
                 assert c.check_count == 0, "默认情况下标点 check_count 必须为 0"
 
     def test_punctuation_enabled(self):
-        """开关开启：标点 check_count >= 1"""
+        """「記号（符号）」开启：标点（符号）check_count >= 1"""
         service = AutoCheckService(
             DummyAnalyzer(),
-            auto_check_flags={"checkpoint_on_punctuation": True},
+            auto_check_flags={"symbol": True},
         )
         sentence = Sentence.from_text("ねえ、君", "s1")
         service.apply_to_sentence(sentence)

@@ -4,6 +4,7 @@
 """
 
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 from enum import Enum, auto
@@ -80,8 +81,11 @@ def get_char_type(char: str) -> CharType:
     if char.isspace():
         return CharType.SPACE
 
-    # 符号
-    if char in '.,!?。、！？…―・「」『』【】（）［］｛｝"":;：；/／＼()[]{}\\\'"，':
+    # 符号：用 Unicode 分类兜底——标点（P*）与各类符号（数学 Sm、货币 Sc、
+    # 修饰 Sk、其他 So）统一归为符号，含常见标点、+ - * & ^ = ~ | 等运算符，
+    # 以及 ♪ ♥ ★ 等装饰符号与絵文字。注音是否删除与是否生成节奏点无关，故
+    # 装饰符号也算符号。假名/汉字/字母/数字/长音/促音/空格已在上方优先返回。
+    if unicodedata.category(char)[0] in ("P", "S"):
         return CharType.SYMBOL
 
     return CharType.OTHER

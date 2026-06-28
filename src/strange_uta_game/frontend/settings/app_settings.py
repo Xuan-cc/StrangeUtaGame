@@ -131,7 +131,6 @@ class AppSettings:
             "space_after_symbol": True,
             "small_kana": False,
             "check_space_as_line_end": True,
-            "checkpoint_on_punctuation": False,
             "check_english_word_end": True,
             "chinese_lyrics_detection": True,
             "romanize_ruby": False,

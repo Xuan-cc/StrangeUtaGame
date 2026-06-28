@@ -53,6 +53,12 @@ class TestGetCharType:
     def test_number(self):
         assert get_char_type("1") == CharType.NUMBER
 
+    def test_decorative_and_operator_symbols(self):
+        # 装饰符号（♪♥★）与运算符（+ - * & ^ = ~ |）均归为符号；
+        # 注音删除分类与节奏点生成无关，装饰符号一并算符号。
+        for c in "♪♫♩♬♡♥★☆+-*&^=~|<>《》〈〉—·•":
+            assert get_char_type(c) == CharType.SYMBOL, c
+
 
 class TestJapaneseSplitter:
     """测试日文拆分器"""

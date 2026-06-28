@@ -12,7 +12,6 @@ from strange_uta_game.backend.domain import (
     Character,
     Ruby,
     RubyPart,
-    PUNCTUATION_SET,
 )
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
     split_text,
@@ -1103,16 +1102,17 @@ class AutoCheckService:
         1. check_line_start —— 首先为行首字符设定"至少 1 cp"基线
         2. 字符类型/特殊字符过滤 —— 可将 check_line_start 的基线覆盖回 0
         3. 括号内字符过滤
-        4. 标点符号最终覆盖 —— 始终最后执行，优先级最高
 
-        将 check_line_start 置于类型过滤**之前**，是修复"行首标点被强制打 CP"
-        bug 的关键：类型过滤（如 symbol=False）对标点的清零可覆盖基线，
-        而标点最终覆盖（PUNCTUATION_SET）在最后兜底。
+        所有符号（含原"标点"）统一由「記号（符号）」类型开关（symbol flag）经
+        Step 2 控制，不再有独立的标点最终覆盖；行首符号在 symbol 关闭时由
+        Step 2 的类型过滤清零，故 check_line_start 仍须置于类型过滤之前。
         """
         if not self._flags:
-            # 无标志时：仅执行标点最终覆盖（默认不打 CP）
+            # 无标志时：符号默认不打 CP（等价于 symbol 关闭）
             for i, ch in enumerate(chars):
-                if i < len(check_counts) and ch in PUNCTUATION_SET:
+                if (i < len(check_counts)
+                        and len(ch) == 1
+                        and get_char_type(ch) == CharType.SYMBOL):
                     check_counts[i] = 0
             return
 
@@ -1160,15 +1160,17 @@ class AutoCheckService:
                 check_counts[i] = 0
                 continue
 
-            if char in ("ん", "ン") and not self._flags.get("check_n", False):
+            # fallback 默认值以 UI 显示为基准（check_n / check_sokuon 默认开，
+            # check_long_vowel 默认关），避免 _flags 缺键时与界面默认相反。
+            if char in ("ん", "ン") and not self._flags.get("check_n", True):
                 check_counts[i] = 0
                 continue
 
-            if ct == CharType.SOKUON and not self._flags.get("check_sokuon", False):
+            if ct == CharType.SOKUON and not self._flags.get("check_sokuon", True):
                 check_counts[i] = 0
                 continue
 
-            if ct == CharType.LONG_VOWEL and not self._flags.get("check_long_vowel", True):
+            if ct == CharType.LONG_VOWEL and not self._flags.get("check_long_vowel", False):
                 check_counts[i] = 0
                 continue
 
@@ -1177,23 +1179,21 @@ class AutoCheckService:
                 continue
 
         # Step 3: 括号内字符过滤
+        # 支持半/全角圆括号、方括号、花括号、日文引号「」『』、尖括号《》〈〉、
+        # 龟甲括号〔〕 等；用深度计数处理嵌套。括号本身不在此清零（由 Step 2
+        # 的符号类型过滤决定），只清零括号内的字符。
         if not self._flags.get("check_parentheses", True):
-            in_paren = False
+            _OPENERS = "([{（［｛【「『《〈〔"
+            _CLOSERS = ")]}）］｝】」』》〉〕"
+            depth = 0
             for i, char in enumerate(chars):
-                if char in ("(", "（"):
-                    in_paren = True
-                elif char in (")", "）"):
-                    in_paren = False
-                elif in_paren and i < len(check_counts):
+                if char in _OPENERS:
+                    depth += 1
+                elif char in _CLOSERS:
+                    if depth > 0:
+                        depth -= 1
+                elif depth > 0 and i < len(check_counts):
                     check_counts[i] = 0
-
-        # Step 4: 标点符号最终覆盖（优先级最高，始终最后执行）
-        # PUNCTUATION_SET 中的字符：禁用时强制 0，启用时至少 1
-        # 空格（含 PUNCTUATION_SET 中的 ' '）已在 Step 2 处理，跳过
-        _enable_punct_cp = self._flags.get("checkpoint_on_punctuation", False)
-        for i, ch in enumerate(chars):
-            if i < len(check_counts) and ch in PUNCTUATION_SET and not ch.isspace():
-                check_counts[i] = max(check_counts[i], 1) if _enable_punct_cp else 0
 
     def _apply_english_and_endpoints(
         self,

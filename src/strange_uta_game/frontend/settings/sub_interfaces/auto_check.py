@@ -25,32 +25,32 @@ class AutoCheckSubInterface(SubSettingInterface):
         g = SettingCardGroup("Auto Check", self.scrollWidget)
         self.card_checkpoint_chars = self._tr_register(
             MultiBoolSettingCard(
-                FIF.MUSIC, tr("节奏点字符类型"), tr("选择哪些字符类型自动生成节奏点"),
+                FIF.MUSIC, tr("生成节奏点的字符类型"), tr("选择哪些字符类型自动生成节奏点"),
                 items=[
                     ("hiragana", tr("ひらがな（平假名）")), ("katakana", tr("カタカナ（片假名）")),
                     ("kanji", tr("漢字（汉字）")), ("alphabet", tr("アルファベット（英文字母）")),
-                    ("digit", tr("数字")), ("symbol", tr("記号（符号）")),
+                    ("digit", tr("数字")), ("symbol", tr("記号（符号 + - * 等）")),
                     ("space", tr("空格")),
                     ("space_after_japanese", tr("  ↳日语后空格check")),
                     ("space_after_alphabet", tr("  ↳字母后空格check")),
                     ("space_after_symbol", tr("  ↳符号/数字后空格check")),
                 ], parent=g),
-            title_source="节奏点字符类型",
+            title_source="生成节奏点的字符类型",
             content_source="选择哪些字符类型自动生成节奏点")
         self.card_check_rules = self._tr_register(
             MultiBoolSettingCard(
-                FIF.SETTING, tr("check 规则"), tr("选择启用哪些自动节奏点规则"),
+                FIF.SETTING, tr("额外check规则"), tr("选择启用哪些自动节奏点规则"),
                 items=[
                     ("check_n", tr("「ん/ン」check")), ("check_sokuon", tr("促音check")),
                     ("check_long_vowel", tr("长音符号check")), ("small_kana", tr("小写假名check")),
-                    ("check_parentheses", tr("括号内文字check")), ("checkpoint_on_punctuation", tr("标点参与节奏点")),
+                    ("check_parentheses", tr("括号内文字check")),
                     ("check_empty_lines", tr("空行check")), ("check_line_start", tr("行首check")),
                     ("check_line_end", tr("行尾check")),
                     ("check_space_as_line_end", tr("空格视为句尾")),
                     ("check_english_word_end", tr("英文单词结尾句尾")),
                     ("english_syllable_check", tr("按音节Check英文单词")),
                 ], parent=g),
-            title_source="check 规则",
+            title_source="额外check规则",
             content_source="选择启用哪些自动节奏点规则")
         self.card_auto_on_load = self._tr_register(
             SwitchSettingCard(FIF.ACCEPT, tr("读取时自动check"),
@@ -77,9 +77,9 @@ class AutoCheckSubInterface(SubSettingInterface):
                     ("katakana_hiragana_ruby", tr("カタカナ（片假名・注音为平假名）")),
                     ("katakana_english_ruby", tr("カタカナ（片假名・注音含有英文）")),
                     ("kanji", tr("漢字（汉字）")), ("alphabet", tr("アルファベット（英文字母）")),
-                    ("number", tr("数字")), ("symbol", tr("記号（符号）")),
+                    ("number", tr("数字")), ("symbol", tr("記号（符号 + - * 等）")),
                     ("long_vowel", tr("長音符号（ー、～等）")), ("sokuon", tr("促音（っ/ッ）")),
-                    ("other", tr("その他（♪等特殊符号）")), ("space", tr("空格")),
+                    ("other", tr("その他")), ("space", tr("空格")),
                 ], parent=g),
             title_source="自动删除注音",
             content_source="自动注音完成后，自动删除指定类型的注音")
@@ -158,7 +158,6 @@ class AutoCheckSubInterface(SubSettingInterface):
                 "check_long_vowel": s.get("auto_check.check_long_vowel", False),
                 "small_kana": s.get("auto_check.small_kana", False),
                 "check_parentheses": s.get("auto_check.check_parentheses", True),
-                "checkpoint_on_punctuation": s.get("auto_check.checkpoint_on_punctuation", False),
                 "check_empty_lines": s.get("auto_check.check_empty_lines", False),
                 "check_line_start": s.get("auto_check.check_line_start", False),
                 "check_line_end": s.get("auto_check.check_line_end", True),
