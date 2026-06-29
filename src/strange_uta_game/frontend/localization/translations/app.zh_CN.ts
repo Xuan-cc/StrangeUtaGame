@@ -7486,6 +7486,16 @@ KS 来源的配置将优先覆盖同名设置。</translation>
 <context>
     <name>TimingSubInterface</name>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="57" />
+        <source>波形标签显示字符/注音</source>
+        <translation>波形标签显示字符/注音</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="58" />
+        <source>在波形时间标签上显示对应字符与注音文本；关闭后只画时间竖线，波形更清爽</source>
+        <translation>在波形时间标签上显示对应字符与注音文本；关闭后只画时间竖线，波形更清爽</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="52" />
         <source>波形时间标签拖拽</source>
         <translation>波形时间标签拖拽</translation>

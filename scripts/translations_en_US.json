@@ -1314,5 +1314,7 @@
   "没有导唱待办": "No guide-symbol TODOs",
   "{n} 个导唱待办均无时间戳锚点或间隔无效，已全部跳过。": "All {n} TODOs lack a timestamp anchor or have an invalid gap, and were skipped.",
   "波形时间标签拖拽": "Waveform time-tag dragging",
-  "在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式": "Treat time tags on the waveform as draggable objects: click a handle to select and seek, drag a handle to change its time, Ctrl-click to multi-select and shift together; turn off to restore the old display-only mode"
+  "在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式": "Treat time tags on the waveform as draggable objects: click a handle to select and seek, drag a handle to change its time, Ctrl-click to multi-select and shift together; turn off to restore the old display-only mode",
+  "波形标签显示字符/注音": "Show characters/furigana on waveform tags",
+  "在波形时间标签上显示对应字符与注音文本；关闭后只画时间竖线，波形更清爽": "Show the corresponding character and furigana text on waveform time tags; turn off to draw only the time lines for a cleaner waveform"
 }

@@ -95,6 +95,7 @@ class AppSettings:
             "jump_before_ms": 3000,
             "timing_adjust_step_ms": 10,
             "waveform_tag_edit_enabled": True,
+            "waveform_tag_labels_enabled": True,
             "disable_click_jump": False,
             "disable_click_recenter": False,
             "preview_guide_enabled": False,

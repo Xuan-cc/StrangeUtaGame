@@ -7486,6 +7486,16 @@ This cannot be undone.</translation>
 <context>
     <name>TimingSubInterface</name>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="57" />
+        <source>波形标签显示字符/注音</source>
+        <translation>Show characters/furigana on waveform tags</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="58" />
+        <source>在波形时间标签上显示对应字符与注音文本；关闭后只画时间竖线，波形更清爽</source>
+        <translation>Show the corresponding character and furigana text on waveform time tags; turn off to draw only the time lines for a cleaner waveform</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="52" />
         <source>波形时间标签拖拽</source>
         <translation>Waveform time-tag dragging</translation>

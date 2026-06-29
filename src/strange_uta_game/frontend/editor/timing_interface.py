@@ -618,6 +618,10 @@ class EditorInterface(QWidget):
             self.timeline.set_tag_edit_enabled(
                 settings.get("timing.waveform_tag_edit_enabled", True)
             )
+            # 波形时间标签上是否显示字符/注音文本（独立开关，默认开启）
+            self.timeline.set_tag_labels_enabled(
+                settings.get("timing.waveform_tag_labels_enabled", True)
+            )
         # #8/#11/#13：读取双模式快捷键映射（打轴模式=播放中、编辑模式=未播放）
         # 动作集合（所有动作在两种模式下都存在，读设置时各自取值，互不干扰）
         action_names = [
