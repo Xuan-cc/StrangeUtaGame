@@ -48,7 +48,7 @@
 | D5 | 越界 | **允许**越过相邻点，提交后自动重判为既有紫色非单调警告线 |
 | D6 | 句尾呼吸点 | **可拖**（走 `set_sentence_end_ts` 分支） |
 | D7 | 吸附 | **不做** |
-| D8 | 撤销 | 拖拽**不接入撤销命令**；精调由对偶的 Alt+↑/↓ 完成；不改 Alt+↑/↓ 现有逻辑 |
+| D8 | 撤销 | ~~拖拽不接入撤销命令~~ → **修订：拖拽接入撤销**（实测发现拖拽是大幅手势、无简单反向，缺撤销痛点明显）。复用 `_register_timestamp_undo` + `SentenceSnapshotCommand`，Ctrl+Z/Ctrl+Y 经既有 `_on_undo`/`_on_redo` 还原。不改 Alt+↑/↓ 现有逻辑 |
 | D9 | 拖拽反馈 | 跟随光标的**偏差值徽标**（主），锚点绝对时间（辅） |
 | D10 | preview 同步 | 单击 tag 与拖拽提交（锚点字符）都把 preview 选中同步到该字符 |
 | D11 | 总开关 | 打轴设定加 `timing.waveform_tag_edit_enabled`（默认 True），关闭逐像素回退旧模式 |
@@ -205,7 +205,9 @@ self._update_line_info()
 
 ## 7. 残留风险（已决策，备案）
 
-- **无撤销**：拖拽是比 Alt+↑/↓ 更大的手势，误拖只能手动拖回（D8 已定）。
+- ~~无撤销~~ → 已修订为支持撤销（见 D8）：提交槽先 `deepcopy` 快照，写入后
+  `_register_timestamp_undo` 注册 `SentenceSnapshotCommand`；Ctrl+Z 经 `_on_undo`
+  还原（preview wipe 缓存是时间戳无关的版本化布局，repaint 即反映还原值）。
 - preview 同步已纳入（D10），不再是风险。
 
 ---
@@ -226,6 +228,7 @@ test_timeline_tag_drag 提交槽 6 项不变式），全量 `tests/unit` 相对 
 - [x] preview / 行字信息 / 状态栏 / 脏标记 + auto-save：提交槽四件套 + `notify('timetags')`。
 - [x] 关闭开关：`set_tag_edit_enabled(False)` 不画把手 / 不命中 / 清选中，回退 seek/pan。
 - [x] 新 tr 串：en/ja/zh `.ts` 已译且 finished，`.qm` 编译 0 unfinished。
+- [x] 撤销/重做：拖拽后 Ctrl+Z 还原、Ctrl+Y 重做（端到端 CommandManager 往返测试）。
 
 **i18n 实现说明（偏离原流水线）**：`extract_ts.py` 输出为字母序排序，与当前 committed `.ts`
 的 lupdate 源位置序不一致，整体重生成会churn ~1800 行。为保持本特性 diff 干净，改为

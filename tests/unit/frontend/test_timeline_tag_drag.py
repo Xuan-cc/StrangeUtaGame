@@ -7,18 +7,25 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from strange_uta_game.backend.application.command_manager import CommandManager
 from strange_uta_game.backend.domain import Character, Project, Ruby, RubyPart, Sentence
 from strange_uta_game.frontend.editor.timing_interface import EditorInterface
 
 
 def _make_editor(project):
     calls = SimpleNamespace(
-        tags_display=0, lyric=0, line_info=0, notified=[], synced=[]
+        tags_display=0, lyric=0, line_info=0, notified=[], synced=[], undo_registered=[]
     )
     store = SimpleNamespace(notify=lambda ct: calls.notified.append(ct))
+
+    def _register_undo(before, line, char, desc):
+        calls.undo_registered.append((line, char, desc, len(before)))
+
     editor = SimpleNamespace(
         _project=project,
         _store=store,
+        tr=lambda s: s,
+        _register_timestamp_undo=_register_undo,
         _update_time_tags_display=lambda: setattr(calls, "tags_display", calls.tags_display + 1),
         refresh_lyric_display=lambda: setattr(calls, "lyric", calls.lyric + 1),
         _update_line_info=lambda: setattr(calls, "line_info", calls.line_info + 1),
@@ -61,6 +68,15 @@ def test_drag_normal_cp_updates_timestamps_and_ruby():
     assert calls.tags_display == 1 and calls.lyric == 1 and calls.line_info == 1
     assert calls.notified == ["timetags"]
     assert calls.synced == [(0, 0, 1)]
+    # 已注册撤销命令（支持 Ctrl+Z），锚点字符 = handles 首项
+    assert calls.undo_registered == [(0, 0, "拖动时间标签", 1)]
+
+
+def test_zero_delta_registers_no_undo():
+    project, ch = _project_with_ruby_char()
+    editor, calls = _make_editor(project)
+    EditorInterface._on_timeline_tags_drag_committed(editor, [(0, 0, 1, False)], 0)
+    assert calls.undo_registered == []
 
 
 def test_drag_cp0_rebases_ruby_offsets():
@@ -120,6 +136,40 @@ def test_zero_delta_is_noop():
     EditorInterface._on_timeline_tags_drag_committed(editor, [(0, 0, 1, False)], 0)
     assert ch.timestamps == [1000, 1500]
     assert calls.notified == []
+
+
+def test_drag_then_undo_restores_timestamps():
+    """端到端：真实 CommandManager + _register_timestamp_undo，拖拽后 undo 还原。"""
+    project, _ = _project_with_ruby_char()
+    cm = CommandManager()
+    calls = SimpleNamespace(tags_display=0, lyric=0, line_info=0, notified=[], synced=[])
+    editor = SimpleNamespace(
+        _project=project,
+        _store=None,
+        tr=lambda s: s,
+        _timing_service=SimpleNamespace(command_manager=cm),
+        _current_line_idx=0,
+        preview=SimpleNamespace(_current_char_idx=0),
+        _update_time_tags_display=lambda: None,
+        refresh_lyric_display=lambda: None,
+        _update_line_info=lambda: None,
+        _sync_preview_to_handle=lambda l, c, cp: None,
+    )
+    # 绑定真实的 _register_timestamp_undo
+    editor._register_timestamp_undo = (
+        lambda before, l, c, d: EditorInterface._register_timestamp_undo(editor, before, l, c, d)
+    )
+
+    EditorInterface._on_timeline_tags_drag_committed(editor, [(0, 0, 1, False)], 300)
+    assert editor._project.sentences[0].characters[0].timestamps == [1000, 1800]
+    assert cm.can_undo()
+
+    cm.undo()
+    # undo 后 sentences 被 deepcopy 替换，需重新从 project 取
+    assert editor._project.sentences[0].characters[0].timestamps == [1000, 1500]
+
+    cm.redo()
+    assert editor._project.sentences[0].characters[0].timestamps == [1000, 1800]
 
 
 def test_clamp_floor_at_zero():

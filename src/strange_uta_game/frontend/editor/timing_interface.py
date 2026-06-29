@@ -4075,6 +4075,9 @@ class EditorInterface(QWidget):
         for line_idx, char_idx, cp_idx, is_end in handles:
             groups[(line_idx, char_idx)].append((cp_idx, is_end))
 
+        # 拖拽可撤销：先快照，再直接写入，最后注册 SentenceSnapshotCommand（与删除时间戳同范式）
+        before_sentences = deepcopy(self._project.sentences)
+
         for (line_idx, char_idx), items in groups.items():
             if not (0 <= line_idx < len(self._project.sentences)):
                 continue
@@ -4096,6 +4099,10 @@ class EditorInterface(QWidget):
                 ch._update_offset_timestamps()
                 ch.push_to_ruby()
 
+        # 注册撤销命令（after = 当前已改写的 sentences；execute 内部深拷贝接管）
+        a_line, a_char, a_cp, _a_end = handles[0]
+        self._register_timestamp_undo(before_sentences, a_line, a_char, self.tr("拖动时间标签"))
+
         # 副作用四件套（notify 不会刷新 preview / line_info，需显式调）
         self._update_time_tags_display()
         self.refresh_lyric_display()
@@ -4103,7 +4110,6 @@ class EditorInterface(QWidget):
         if hasattr(self, "_store") and self._store:
             self._store.notify("timetags")
         # preview 选中同步到锚点字符（handles 首项）
-        a_line, a_char, a_cp, _a_end = handles[0]
         self._sync_preview_to_handle(a_line, a_char, a_cp)
 
     def _on_char_selected(self, line_idx: int, char_idx: int):
