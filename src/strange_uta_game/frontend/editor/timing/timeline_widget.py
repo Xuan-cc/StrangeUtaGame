@@ -10,9 +10,10 @@ import math
 from typing import List, NamedTuple, Optional, Tuple
 
 import numpy as np
-from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
+    QColor,
     QMouseEvent,
     QWheelEvent,
     QPainter,
@@ -62,6 +63,17 @@ class WaveformDisplay(QWidget):
     seek_requested = pyqtSignal(int)
     scroll_position_changed = pyqtSignal(float)
     zoom_changed = pyqtSignal(float)
+    # 单击时间标签把手：(line_idx, char_idx, cp_idx, is_sentence_end)
+    tag_clicked = pyqtSignal(int, int, int, bool)
+    # 拖拽提交：(handles: List[TagHandle], delta_ms: int)
+    tags_drag_committed = pyqtSignal(object, int)
+
+    # ── 把手几何与命中常量 ──
+    _HANDLE_HALF_W = 5          # 未选中把手命中/绘制半宽（px）
+    _HANDLE_SEL_HALF_W = 7      # 选中把手放大后半宽（px）
+    _HANDLE_HEIGHT = 9          # 把手块高度（px）
+    _MIN_HANDLE_SPACING = 8     # 相邻把手最小间距，低于此值密度门控不绘制把手/不可命中
+    _HANDLE_HIT_Y_RATIO = 0.4   # 命中仅在控件顶部该比例高度内有效
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -89,6 +101,21 @@ class WaveformDisplay(QWidget):
         self._pan_start_x: Optional[float] = None
         self._pan_start_scroll: float = 0.0
         self._is_panning: bool = False
+
+        # 时间标签拖拽编辑（总开关 + 选中态 + 拖拽状态）
+        self._tag_edit_enabled: bool = True
+        self._selected_handles: set = set()           # set[TagHandle]
+        self._handle_index: dict = {}                 # TagHandle -> TimeTag，set_time_tags 时重建
+        self._hit_boxes: List[Tuple[int, TagHandle, int]] = []  # (x_px, handle, ts)，每次绘制重建
+        # 把手按下/拖拽运行态
+        self._press_handle: Optional[TagHandle] = None
+        self._press_handle_ts: int = 0
+        self._press_x: float = 0.0
+        self._drag_armed: bool = False                # 按下的是已选中把手 → 允许拖拽
+        self._is_dragging_tags: bool = False
+        self._drag_anchor_handle: Optional[TagHandle] = None
+        self._drag_anchor_ts: int = 0
+        self._drag_delta_ms: int = 0
 
         # 自动滚动挂起（用户手动操作后 6s 内不跟随播放头）
         self._auto_scroll_suspended: bool = False
@@ -172,6 +199,12 @@ class WaveformDisplay(QWidget):
                 running_max = ts
         self._time_tags = sorted(normal, key=lambda x: x.ts)
         self._warning_time_tags = sorted(warning, key=lambda x: x.ts)
+        # 重建句柄索引（命中/选中/拖拽以句柄为身份）；丢弃已不存在的选中项
+        self._handle_index = {
+            t.handle: t for t in (self._time_tags + self._warning_time_tags)
+        }
+        if self._selected_handles:
+            self._selected_handles &= set(self._handle_index)
         self.update()
 
     def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
@@ -203,6 +236,85 @@ class WaveformDisplay(QWidget):
     def set_scroll_position(self, position: float):
         self._scroll_position = self._clamp_scroll(position)
         self.update()
+
+    # ── 时间标签拖拽编辑：总开关 + 选中态 ──
+
+    def set_tag_edit_enabled(self, enabled: bool) -> None:
+        """总开关：关闭时回退为旧的纯显示模式（不画把手/不可命中/无选中）。"""
+        enabled = bool(enabled)
+        if enabled == self._tag_edit_enabled:
+            return
+        self._tag_edit_enabled = enabled
+        if not enabled:
+            self._reset_drag()
+            self._selected_handles.clear()
+            self._press_handle = None
+            self._drag_armed = False
+            self.unsetCursor()
+        self.update()
+
+    def clear_tag_selection(self) -> None:
+        """清空选中集（外部数据变更后调用，避免悬空句柄）。"""
+        if self._is_dragging_tags:
+            self._reset_drag()
+        if self._selected_handles:
+            self._selected_handles.clear()
+            self.update()
+
+    def _reset_drag(self) -> None:
+        self._is_dragging_tags = False
+        self._drag_anchor_handle = None
+        self._drag_anchor_ts = 0
+        self._drag_delta_ms = 0
+        self._press_handle = None
+        self._drag_armed = False
+
+    # ── 视窗 / 坐标换算 ──
+
+    def _visible_start_ms(self) -> float:
+        return self._scroll_position * self._duration_ms
+
+    def _visible_duration_ms(self) -> float:
+        return self._duration_ms / self._zoom_factor
+
+    def _ts_to_x(self, ts: float, visible_start_ms: float, visible_duration_ms: float, w: int) -> int:
+        if visible_duration_ms <= 0:
+            return 0
+        return int((ts - visible_start_ms) / visible_duration_ms * w)
+
+    def _draw_ts(self, tag: "TimeTag") -> int:
+        """拖拽预览：被选中且正在拖拽的标签按 delta 平移其显示时间戳。"""
+        if self._is_dragging_tags and tag.handle in self._selected_handles:
+            return tag.ts + self._drag_delta_ms
+        return tag.ts
+
+    def _hit_test_handle(self, x: float, y: float):
+        """命中顶部把手块：返回 (handle, ts, x_px) 或 None。仅在编辑开启且 y 在顶部带内。"""
+        if not self._tag_edit_enabled:
+            return None
+        if y > self.height() * self._HANDLE_HIT_Y_RATIO:
+            return None
+        best = None
+        best_dx = self._HANDLE_HALF_W + 1
+        for hx, handle, ts in self._hit_boxes:
+            dx = abs(x - hx)
+            if dx <= self._HANDLE_HALF_W and dx < best_dx:
+                best = (handle, ts, hx)
+                best_dx = dx
+        return best
+
+    def _clamp_drag_delta(self, delta: int) -> int:
+        """组级 0 夹紧：保证所有选中标签的显示时间戳平移后不小于 0（保持刚性）。"""
+        if not self._selected_handles:
+            return delta
+        sel_ts = [
+            self._handle_index[h].ts
+            for h in self._selected_handles
+            if h in self._handle_index
+        ]
+        if not sel_ts:
+            return delta
+        return max(delta, -min(sel_ts))
 
     @log_slow_method(
         "timeline.compute_waveform_peaks",
@@ -289,6 +401,7 @@ class WaveformDisplay(QWidget):
         self._draw_waveform(painter, w, h)
         self._draw_time_tags(painter, w, h, visible_start_ms, visible_end_ms)
         self._draw_playhead(painter, w, h, visible_start_ms, visible_duration_ms)
+        self._draw_drag_badge(painter, w, h, visible_start_ms, visible_duration_ms)
 
     def _draw_time_grid(self, painter: QPainter, w: int, h: int,
                         visible_start_ms: float, visible_end_ms: float):
@@ -349,6 +462,7 @@ class WaveformDisplay(QWidget):
 
     def _draw_time_tags(self, painter: QPainter, w: int, h: int,
                         visible_start_ms: float, visible_end_ms: float):
+        self._hit_boxes = []
         visible_duration = visible_end_ms - visible_start_ms
         if visible_duration <= 0:
             return
@@ -359,40 +473,59 @@ class WaveformDisplay(QWidget):
         fm = painter.fontMetrics()
         label_y = fm.ascent() + 1  # 所有标签统一贴顶显示，竖线在其下方展开
 
-        # 正常时间标签
         normal_color = theme.accent_warning
-        for tag in self._time_tags:
-            if visible_start_ms <= tag.ts <= visible_end_ms:
-                ratio = (tag.ts - visible_start_ms) / visible_duration
-                x = int(ratio * w)
-                painter.setPen(QPen(normal_color, 2))
-                painter.drawLine(x, int(h * 0.2), x, int(h * 0.8))
-                painter.setPen(normal_color)
-                if tag.label:
-                    display_text = tag.label
-                    if tag.ruby:
-                        display_text += self._format_ruby_label(tag.ruby)
-                    painter.drawText(x + 2, label_y, display_text)
-                elif tag.ruby:
-                    painter.drawText(x + 2, label_y, self._format_ruby_label(tag.ruby))
+        warn_color = theme.timetag_nonmonotonic
 
-        # 非单调时间标签：更高更粗、警告色
-        if self._warning_time_tags:
-            warn_color = theme.timetag_nonmonotonic
-            for tag in self._warning_time_tags:
-                if visible_start_ms <= tag.ts <= visible_end_ms:
-                    ratio = (tag.ts - visible_start_ms) / visible_duration
-                    x = int(ratio * w)
-                    painter.setPen(QPen(warn_color, 3))
-                    painter.drawLine(x, int(h * 0.1), x, int(h * 0.9))
-                    painter.setPen(warn_color)
-                    if tag.label:
-                        display_text = tag.label
-                        if tag.ruby:
-                            display_text += self._format_ruby_label(tag.ruby)
-                        painter.drawText(x + 2, label_y, display_text)
-                    elif tag.ruby:
-                        painter.drawText(x + 2, label_y, self._format_ruby_label(tag.ruby))
+        # ── pass 1：竖线 + 标签（语义色不变，拖拽中的选中标签按 delta 平移）──
+        # collected：(x, tag, is_warning)，供 pass 2 统一画把手 + 密度门控
+        collected: List[Tuple[int, TimeTag, bool]] = []
+
+        def _draw_line(tag: TimeTag, color, width_px: int, y_top_ratio: float, y_bot_ratio: float, is_warning: bool):
+            ts = self._draw_ts(tag)
+            if not (visible_start_ms <= ts <= visible_end_ms):
+                return
+            x = self._ts_to_x(ts, visible_start_ms, visible_duration, w)
+            painter.setPen(QPen(color, width_px))
+            painter.drawLine(x, int(h * y_top_ratio), x, int(h * y_bot_ratio))
+            painter.setPen(color)
+            if tag.label:
+                display_text = tag.label
+                if tag.ruby:
+                    display_text += self._format_ruby_label(tag.ruby)
+                painter.drawText(x + 2, label_y, display_text)
+            elif tag.ruby:
+                painter.drawText(x + 2, label_y, self._format_ruby_label(tag.ruby))
+            collected.append((x, tag, is_warning))
+
+        for tag in self._time_tags:
+            _draw_line(tag, normal_color, 2, 0.2, 0.8, False)
+        for tag in self._warning_time_tags:
+            _draw_line(tag, warn_color, 3, 0.1, 0.9, True)
+
+        # ── pass 2：顶部把手 + 选中态（仅编辑开启）。密度门控：相邻把手过近则跳过 ──
+        if not self._tag_edit_enabled:
+            return
+        collected.sort(key=lambda c: c[0])
+        last_x = None
+        sel_color = theme.accent_secondary
+        for x, tag, is_warning in collected:
+            if last_x is not None and (x - last_x) < self._MIN_HANDLE_SPACING:
+                continue
+            last_x = x
+            selected = tag.handle in self._selected_handles
+            top = int(h * (0.1 if is_warning else 0.2))
+            line_color = warn_color if is_warning else normal_color
+            half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
+            rect = QRect(x - half, top - self._HANDLE_HEIGHT, half * 2, self._HANDLE_HEIGHT)
+            if selected:
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(sel_color))
+                painter.drawRect(rect)
+            else:
+                painter.setPen(QPen(line_color, 1))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(rect)
+            self._hit_boxes.append((x, tag.handle, tag.ts))
 
     def _draw_playhead(self, painter: QPainter, w: int, h: int,
                        visible_start_ms: float, visible_duration_ms: float):
@@ -415,26 +548,112 @@ class WaveformDisplay(QWidget):
             ])
             painter.drawPolygon(triangle)
 
+    @staticmethod
+    def _format_ms(ms: int) -> str:
+        ms = max(0, int(ms))
+        m, s = divmod(ms // 1000, 60)
+        return f"{m}:{s:02d}.{ms % 1000:03d}"
+
+    def _draw_drag_badge(self, painter: QPainter, w: int, h: int,
+                         visible_start_ms: float, visible_duration_ms: float):
+        """拖拽时显示偏差值徽标（主：有符号 delta；辅：锚点绝对时间）。"""
+        if not self._is_dragging_tags:
+            return
+        delta = self._drag_delta_ms
+        sign = "+" if delta >= 0 else "−"  # 减号 U+2212
+        line1 = f"Δ {sign}{abs(delta)} ms"
+        anchor_ts = self._drag_anchor_ts + delta
+        line2 = f"→ {self._format_ms(anchor_ts)}" if self._drag_anchor_handle is not None else None
+
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+        text_w = max(fm.horizontalAdvance(line1), fm.horizontalAdvance(line2 or ""))
+        line_h = fm.height()
+        pad = 4
+        box_w = text_w + pad * 2
+        box_h = line_h * (2 if line2 else 1) + pad * 2
+
+        # 徽标定位在锚点当前 x 的右上方，夹到控件内
+        anchor_x = self._ts_to_x(anchor_ts, visible_start_ms, visible_duration_ms, w)
+        bx = anchor_x + 8
+        by = max(2, int(h * 0.15))
+        bx = max(2, min(bx, w - box_w - 2))
+        by = max(2, min(by, h - box_h - 2))
+
+        bg = QColor(0, 0, 0, 170)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(bg))
+        painter.drawRoundedRect(QRect(bx, by, box_w, box_h), 3, 3)
+        painter.setPen(theme.accent_primary)
+        ty = by + pad + fm.ascent()
+        painter.drawText(bx + pad, ty, line1)
+        if line2:
+            painter.drawText(bx + pad, ty + line_h, line2)
+
     def mousePressEvent(self, a0: Optional[QMouseEvent]):
         if a0 is None or self._duration_ms <= 0:
             return
-        if a0.button() == Qt.MouseButton.LeftButton:
-            self._pan_start_x = a0.position().x()
-            self._pan_start_scroll = self._scroll_position
-            self._is_panning = False
-            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        if a0.button() != Qt.MouseButton.LeftButton:
+            return
+        x = a0.position().x()
+        y = a0.position().y()
+        # 优先命中顶部把手（编辑模式）：命中则进入把手交互，不启动 pan
+        if self._tag_edit_enabled:
+            hit = self._hit_test_handle(x, y)
+            if hit is not None:
+                handle, ts, _hx = hit
+                ctrl = bool(a0.modifiers() & Qt.KeyboardModifier.ControlModifier)
+                self._press_handle = handle
+                self._press_handle_ts = ts
+                self._press_x = x
+                # 已选中且非 Ctrl → 允许拖动；否则按下仅用于点击选中
+                self._drag_armed = (handle in self._selected_handles) and not ctrl
+                return
+        # 回退：原 pan/seek 预备态
+        self._pan_start_x = x
+        self._pan_start_scroll = self._scroll_position
+        self._is_panning = False
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
 
     def mouseMoveEvent(self, a0: Optional[QMouseEvent]):
-        if a0 is None or self._duration_ms <= 0 or self._pan_start_x is None:
+        if a0 is None or self._duration_ms <= 0:
             return
+        x = a0.position().x()
+        y = a0.position().y()
         if not (a0.buttons() & Qt.MouseButton.LeftButton):
+            # 悬停光标反馈：把手上显示可点光标
+            if self._tag_edit_enabled and self._hit_test_handle(x, y) is not None:
+                self.setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                self.unsetCursor()
             return
-        delta_x = a0.position().x() - self._pan_start_x
+        # 把手按下中：拖拽分支
+        if self._press_handle is not None:
+            if not self._is_dragging_tags:
+                if self._drag_armed and abs(x - self._press_x) > 4:
+                    self._is_dragging_tags = True
+                    self._drag_anchor_handle = self._press_handle
+                    self._drag_anchor_ts = self._press_handle_ts
+                    self._suspend_auto_scroll()
+                    self.setCursor(Qt.CursorShape.SizeHorCursor)
+                else:
+                    return
+            visible_duration_ms = self._visible_duration_ms()
+            raw_delta = (x - self._press_x) / self.width() * visible_duration_ms
+            self._drag_delta_ms = self._clamp_drag_delta(int(round(raw_delta)))
+            self.update()
+            return
+        # 回退：原 pan 平移
+        if self._pan_start_x is None:
+            return
+        delta_x = x - self._pan_start_x
         if not self._is_panning and abs(delta_x) > 4:
             self._is_panning = True
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
         if self._is_panning:
-            visible_duration_ms = self._duration_ms / self._zoom_factor
+            visible_duration_ms = self._visible_duration_ms()
             delta_ms = delta_x / self.width() * visible_duration_ms
             new_scroll = self._clamp_scroll(
                 self._pan_start_scroll - delta_ms / self._duration_ms)
@@ -447,17 +666,44 @@ class WaveformDisplay(QWidget):
     def mouseReleaseEvent(self, a0: Optional[QMouseEvent]):
         if a0 is None or self._duration_ms <= 0:
             return
-        if a0.button() == Qt.MouseButton.LeftButton:
-            if not self._is_panning and self._pan_start_x is not None:
-                # 未发生平移，视为点击 → seek
-                visible_duration_ms = self._duration_ms / self._zoom_factor
-                visible_start_ms = self._scroll_position * self._duration_ms
-                ratio = max(0.0, min(1.0, a0.position().x() / self.width()))
-                target_ms = int(visible_start_ms + ratio * visible_duration_ms)
-                self.seek_requested.emit(target_ms)
-            self._pan_start_x = None
-            self._is_panning = False
+        if a0.button() != Qt.MouseButton.LeftButton:
+            return
+        # 把手拖拽提交
+        if self._is_dragging_tags:
+            if self._drag_delta_ms != 0 and self._selected_handles:
+                self.tags_drag_committed.emit(list(self._selected_handles), self._drag_delta_ms)
+            self._reset_drag()
             self.unsetCursor()
+            self.update()
+            return
+        # 把手单击（未拖动）：选中 / 多选切换
+        if self._press_handle is not None:
+            handle = self._press_handle
+            ts = self._press_handle_ts
+            ctrl = bool(a0.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            if ctrl:
+                if handle in self._selected_handles:
+                    self._selected_handles.discard(handle)
+                else:
+                    self._selected_handles.add(handle)
+            else:
+                self._selected_handles = {handle}
+                self.seek_requested.emit(ts)
+                self.tag_clicked.emit(handle[0], handle[1], handle[2], handle[3])
+            self._press_handle = None
+            self._drag_armed = False
+            self.update()
+            return
+        # 回退：原 seek
+        if not self._is_panning and self._pan_start_x is not None:
+            visible_duration_ms = self._visible_duration_ms()
+            visible_start_ms = self._visible_start_ms()
+            ratio = max(0.0, min(1.0, a0.position().x() / self.width()))
+            target_ms = int(visible_start_ms + ratio * visible_duration_ms)
+            self.seek_requested.emit(target_ms)
+        self._pan_start_x = None
+        self._is_panning = False
+        self.unsetCursor()
 
     def wheelEvent(self, a0: Optional[QWheelEvent]):
         if a0 is None:
@@ -495,6 +741,8 @@ class TimelineWidget(QWidget):
 
     seek_requested = pyqtSignal(int)
     waveform_visibility_changed = pyqtSignal(bool)
+    tag_clicked = pyqtSignal(int, int, int, bool)
+    tags_drag_committed = pyqtSignal(object, int)
 
     # 横向滚动条整数分辨率：把"整段时长"映射为 [0, _SCROLL_SCALE] 个单位，
     # pageStep = 可见时间窗占比（_SCROLL_SCALE / zoom），使滑块长度随缩放自动伸缩。
@@ -537,6 +785,8 @@ class TimelineWidget(QWidget):
         self.waveform_display.seek_requested.connect(self.seek_requested.emit)
         self.waveform_display.zoom_changed.connect(self._on_zoom_changed)
         self.waveform_display.scroll_position_changed.connect(self._on_scroll_changed)
+        self.waveform_display.tag_clicked.connect(self.tag_clicked.emit)
+        self.waveform_display.tags_drag_committed.connect(self.tags_drag_committed.emit)
         layout.addWidget(self.waveform_display, stretch=1)
 
         # 底部控制栏
@@ -601,6 +851,12 @@ class TimelineWidget(QWidget):
 
     def set_time_tags(self, tags: List[Tuple[int, str, int, int, int, bool, Optional[str]]]):
         self.waveform_display.set_time_tags(tags)
+
+    def set_tag_edit_enabled(self, enabled: bool) -> None:
+        self.waveform_display.set_tag_edit_enabled(enabled)
+
+    def clear_tag_selection(self) -> None:
+        self.waveform_display.clear_tag_selection()
 
     def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
         self.waveform_display.set_audio_data(samples, sample_rate, channels)
