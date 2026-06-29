@@ -5,6 +5,8 @@
 
 from .base import BaseExporter, ExportError, IExporter
 from .inline_exporter import InlineExporter
+from .kasugamuki_exporter import KasugamukiExporter
+from .kasugamuki_romaji_exporter import KasugamukiRomajiExporter
 from .lrc_exporter import KRAExporter, LRCExporter, LRCLineExporter, LRCWordExporter
 from .nicokara_exporter import NicokaraExporter, NicokaraWithRubyExporter
 from .srt_exporter import SRTExporter
@@ -24,6 +26,8 @@ ALL_EXPORTERS = [
     NicokaraExporter,
     NicokaraWithRubyExporter,
     InlineExporter,
+    KasugamukiExporter,
+    KasugamukiRomajiExporter,
 ]
 
 
@@ -95,6 +99,8 @@ __all__ = [
     "NicokaraExporter",
     "NicokaraWithRubyExporter",
     "InlineExporter",
+    "KasugamukiExporter",
+    "KasugamukiRomajiExporter",
     "ALL_EXPORTERS",
     "get_exporter_by_name",
     "get_exporter_by_extension",
