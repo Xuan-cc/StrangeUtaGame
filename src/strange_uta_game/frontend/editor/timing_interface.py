@@ -3940,6 +3940,10 @@ class EditorInterface(QWidget):
         self.timeline.updateGeometry()
         self.preview.updateGeometry()
         self.updateGeometry()
+        # 隐藏期间累积的 timetag 变更在重新显示时补刷一次
+        if visible and getattr(self, "_timetags_dirty_while_hidden", False):
+            self._timetags_dirty_while_hidden = False
+            self._update_time_tags_display()
 
     # ==================== 打轴 ====================
 
@@ -6557,6 +6561,12 @@ class EditorInterface(QWidget):
 
     def _update_time_tags_display(self):
         if not self._project:
+            return
+        # 波形隐藏时跳过 collect + set_time_tags 全量重建（隐藏控件 Qt 也不会绘制），
+        # 只标脏；重新显示时在 _on_waveform_visibility_changed 里补一次。既省 CPU，
+        # 也减少打轴主线程占用 → 间接降低时间戳抖动。
+        if hasattr(self, "timeline") and not self.timeline.is_waveform_visible():
+            self._timetags_dirty_while_hidden = True
             return
         _perf_start = perf_counter() if perf_enabled() else None
         if self._time_tags_update_timer.isActive():

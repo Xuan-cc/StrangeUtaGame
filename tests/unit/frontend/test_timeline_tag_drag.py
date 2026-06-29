@@ -76,6 +76,57 @@ def test_non_append_falls_back_to_full():
     assert _summary(inc) == _summary(_full_rebuild(T_edit))
 
 
+def test_update_time_tags_skipped_when_waveform_hidden():
+    """波形隐藏时跳过 collect + set_time_tags，只标脏（省 CPU、降主线程占用）。"""
+    collected, set_calls = [], []
+    proj = SimpleNamespace(
+        collect_all_global_timestamp_ms_with_chars=lambda: (collected.append(1) or []),
+        sentences=[],
+    )
+    timeline = SimpleNamespace(
+        is_waveform_visible=lambda: False,
+        set_time_tags=lambda t: set_calls.append(t),
+    )
+    ed = SimpleNamespace(
+        _project=proj, timeline=timeline,
+        _time_tags_update_timer=SimpleNamespace(isActive=lambda: False, stop=lambda: None),
+    )
+    EditorInterface._update_time_tags_display(ed)
+    assert collected == [] and set_calls == []
+    assert ed._timetags_dirty_while_hidden is True
+
+
+def test_update_time_tags_runs_when_visible():
+    collected, set_calls = [], []
+    proj = SimpleNamespace(
+        collect_all_global_timestamp_ms_with_chars=lambda: (collected.append(1) or []),
+        sentences=[],
+    )
+    timeline = SimpleNamespace(
+        is_waveform_visible=lambda: True,
+        set_time_tags=lambda t: set_calls.append(t),
+    )
+    ed = SimpleNamespace(
+        _project=proj, timeline=timeline,
+        _time_tags_update_timer=SimpleNamespace(isActive=lambda: False, stop=lambda: None),
+    )
+    EditorInterface._update_time_tags_display(ed)
+    assert collected == [1] and len(set_calls) == 1
+
+
+def test_reshow_waveform_flushes_dirty():
+    refreshed = []
+    ed = SimpleNamespace(
+        timeline=SimpleNamespace(updateGeometry=lambda: None),
+        preview=SimpleNamespace(updateGeometry=lambda: None),
+        updateGeometry=lambda: None,
+        _timetags_dirty_while_hidden=True,
+        _update_time_tags_display=lambda: refreshed.append(1),
+    )
+    EditorInterface._on_waveform_visibility_changed(ed, True)
+    assert refreshed == [1] and ed._timetags_dirty_while_hidden is False
+
+
 def test_visible_slice():
     wd = _fake_wd()
     wd.set_time_tags([(t, "x", 0, i, 0, False, None)

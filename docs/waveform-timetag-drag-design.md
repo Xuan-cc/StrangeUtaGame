@@ -236,6 +236,26 @@ qfluentwidgets `Slider` 的抓手位置由 `valueChanged → _adjustHandlePos` �
 > 增量结果与全量重建逐字段一致（ts/handle/label/警告归类），有单测 `test_incremental_*`
 > 守护；`collect`（前端 O(N)，~1.3ms@7200）仍保留，是较小的一半，未来若需可再做 delta 管线。
 
+### 5.2 波形隐藏时不空转
+
+波形开关 OFF → `WaveformDisplay.setVisible(False)`，**Qt 不会绘制隐藏控件**，paint 开销归零。
+但 `_update_time_tags_display`（collect + set_time_tags）此前**仍会按每次打轴运行**=隐藏时纯浪费。
+现 `_update_time_tags_display` 在波形隐藏时**只标脏 `_timetags_dirty_while_hidden` 直接返回**，
+重新显示时（`_on_waveform_visibility_changed(visible=True)`）补刷一次。省 CPU，也减少打轴主线程占用。
+
+### 5.3 打轴时间戳精度与波形绘制的关系（调查结论）
+
+时间戳取自 `audio_engine.get_position_ms()`（按键 handler 内读取）− `queue_delay_ms` + 校准偏移。
+**关键：`queue_delay_ms` 只补偿 handler 入口→读位置的同步耗时，不补偿事件在 Qt 队列里的排队等待**
+（见 `timing_interface.py:5876-5880` 注释，旧版 `a0.timestamp()` 因跨时钟固定偏移被弃用）。
+
+含义：paint 与按键同在 UI 主线程；播放时波形经 16ms(~60fps) 轮询 `set_position → update()` **逐帧重绘**，
+若按键恰逢一次 paint 进行中，事件需排队到 paint 结束才被处理，`get_position_ms()` 因此偏晚，
+**此延迟不被补偿** → 波形绘制越重，打轴抖动风险越高。这是已知且被开发者文档化的取舍。
+
+缓解（不改时钟语义）：① §5.1 A 已把每帧 paint 降下来；② 隐藏波形(§5.2)直接消除波形 paint，
+**打轴最稳**。彻底解法（用事件硬件时间戳补偿排队）开发者已评估并因跨时钟问题主动放弃，不在本次范围。
+
 ---
 
 ## 6. 影响文件清单
