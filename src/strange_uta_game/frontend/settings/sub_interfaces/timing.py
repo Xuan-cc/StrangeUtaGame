@@ -48,8 +48,20 @@ class TimingSubInterface(SubSettingInterface):
                 min_val=1, max_val=500, step=1, suffix=" ms", parent=g_correct),
             title_source="微调时间戳步长",
             content_source="Alt+↑/Alt+↓ 微调选中节奏点时间戳的步长")
+        # 节拍器校准并入「时间补正」组（与「按键补偿」呼应：用下方 offset 校正来矫正）
+        cal_card = self._tr_register(
+            SettingCard(FIF.SPEED_HIGH, tr("节拍器校准"),
+                tr("打开校准弹窗，跟随节拍器按空格键测量 Offset"), g_correct),
+            title_source="节拍器校准",
+            content_source="打开校准弹窗，跟随节拍器按空格键测量 Offset")
+        self.btn_cal_open = PushButton(tr("开始校准"), cal_card)
+        self._tr_register_text(self.btn_cal_open, "setText", "开始校准")
+        self.btn_cal_open.setFont(ui_font(10))
+        self.btn_cal_open.clicked.connect(self._open_calibration_dialog)
+        cal_card.hBoxLayout.addWidget(self.btn_cal_open, 0, Qt.AlignmentFlag.AlignRight)
+        cal_card.hBoxLayout.addSpacing(16)
         for c in [self.card_offset, self.card_speed_correction,
-                  self.card_export_offset, self.card_timing_step]:
+                  self.card_export_offset, self.card_timing_step, cal_card]:
             g_correct.addSettingCard(c)
         self.expandLayout.addWidget(g_correct)
 
@@ -142,23 +154,6 @@ class TimingSubInterface(SubSettingInterface):
         for c in [self.card_keysound, self.card_keysound_volume, self.card_keysound_style]:
             g_sound.addSettingCard(c)
         self.expandLayout.addWidget(g_sound)
-
-        # Offset 校准
-        cg = SettingCardGroup(tr("Offset 校准"), self.scrollWidget)
-        self._tr_register(cg, title_source="Offset 校准")
-        cal_card = self._tr_register(
-            SettingCard(FIF.SPEED_HIGH, tr("节拍器校准"),
-                tr("打开校准弹窗，跟随节拍器按空格键测量 Offset"), cg),
-            title_source="节拍器校准",
-            content_source="打开校准弹窗，跟随节拍器按空格键测量 Offset")
-        self.btn_cal_open = PushButton(tr("开始校准"), cal_card)
-        self._tr_register_text(self.btn_cal_open, "setText", "开始校准")
-        self.btn_cal_open.setFont(ui_font(10))
-        self.btn_cal_open.clicked.connect(self._open_calibration_dialog)
-        cal_card.hBoxLayout.addWidget(self.btn_cal_open, 0, Qt.AlignmentFlag.AlignRight)
-        cal_card.hBoxLayout.addSpacing(16)
-        cg.addSettingCard(cal_card)
-        self.expandLayout.addWidget(cg)
 
     def _open_preview_guide_dialog(self):
         if self._settings_ref is None:
