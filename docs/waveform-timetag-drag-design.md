@@ -173,9 +173,11 @@ self._update_line_info()
 **标签防遮挡**：顶部把手块（半宽至多 `_HANDLE_SEL_HALF_W`）会压住贴顶绘制的字符/注音标签。
 编辑开启时标签整体右移 `_HANDLE_SEL_HALF_W + 3` px 让开把手；关闭时维持原 `x+2`（旧模式逐像素一致）。
 
-**标签显示开关**：独立设置 `timing.waveform_tag_labels_enabled`（默认 true）控制是否在时间标签上
-绘制字符/注音文本，关闭后只画时间竖线。与拖拽总开关 `waveform_tag_edit_enabled` 互相独立
-（可只拖不显字、或只显字不拖）。下发同样经 `_apply_settings_inner` → `set_tag_labels_enabled`。
+**标签显示开关（字符 / 注音分离）**：两个独立设置——
+`timing.waveform_tag_char_enabled` 控制本体字符、`timing.waveform_tag_ruby_enabled` 控制注音
+(ruby)，默认均 true，四种组合任意搭配。与拖拽总开关 `waveform_tag_edit_enabled` 也互相独立
+（可只拖不显字、只显字不拖、只显注音等）。下发经 `_apply_settings_inner` →
+`set_tag_char_enabled` / `set_tag_ruby_enabled`；绘制时按两个 flag 拼接 `display_text`。
 
 **拖拽反馈徽标（D9）**：拖拽态下 `paintEvent` 末尾（播放头之后）画跟随光标的浮动徽标：
 - 第一行（核心）：有符号偏差 `Δ +120 ms` / `Δ −85 ms`（`+`=延后/右移）。多选共享此值。

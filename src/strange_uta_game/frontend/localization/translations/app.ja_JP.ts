@@ -7488,13 +7488,23 @@ KS側の設定が優先されます。</translation>
     <name>TimingSubInterface</name>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="57" />
-        <source>波形标签显示字符/注音</source>
-        <translation>波形タグに文字/ふりがなを表示</translation>
+        <source>波形标签显示字符</source>
+        <translation>波形タグに文字を表示</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="58" />
-        <source>在波形时间标签上显示对应字符与注音文本；关闭后只画时间竖线，波形更清爽</source>
-        <translation>波形のタイムタグに対応する文字とふりがなを表示する；オフにすると時間の縦線のみを描画して波形をすっきりさせる</translation>
+        <source>在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注</source>
+        <translation>波形のタイムタグに対応する本体の文字を表示する；オフにすると文字を表示しない</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="61" />
+        <source>波形标签显示注音</source>
+        <translation>波形タグにふりがなを表示</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="62" />
+        <source>在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注</source>
+        <translation>波形のタイムタグに対応するふりがな(ルビ)を表示する；オフにするとふりがなを表示しない</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="52" />

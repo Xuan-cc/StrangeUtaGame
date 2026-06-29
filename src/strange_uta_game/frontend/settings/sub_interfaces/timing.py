@@ -53,11 +53,16 @@ class TimingSubInterface(SubSettingInterface):
                 tr("在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式"), parent=g),
             title_source="波形时间标签拖拽",
             content_source="在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式")
-        self.card_waveform_tag_labels = self._tr_register(
-            SwitchSettingCard(FIF.FONT, tr("波形标签显示字符/注音"),
-                tr("在波形时间标签上显示对应字符与注音文本；关闭后只画时间竖线，波形更清爽"), parent=g),
-            title_source="波形标签显示字符/注音",
-            content_source="在波形时间标签上显示对应字符与注音文本；关闭后只画时间竖线，波形更清爽")
+        self.card_waveform_tag_char = self._tr_register(
+            SwitchSettingCard(FIF.FONT, tr("波形标签显示字符"),
+                tr("在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注"), parent=g),
+            title_source="波形标签显示字符",
+            content_source="在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注")
+        self.card_waveform_tag_ruby = self._tr_register(
+            SwitchSettingCard(FIF.FONT, tr("波形标签显示注音"),
+                tr("在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注"), parent=g),
+            title_source="波形标签显示注音",
+            content_source="在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注")
         self.card_disable_click_jump = self._tr_register(
             SwitchSettingCard(FIF.CLOSE, tr("禁用单击跳转"),
                 tr("关闭单击字符/节奏点延迟后跳转到目标行的功能（双击跳转不受影响）"), parent=g),
@@ -105,7 +110,7 @@ class TimingSubInterface(SubSettingInterface):
         self.card_keysound_style.set_item_sources(["默认", "osu", "街机风", "金属感"])
         for c in [self.card_offset, self.card_speed_correction, self.card_export_offset,
                   self.card_timing_step, self.card_waveform_tag_edit,
-                  self.card_waveform_tag_labels,
+                  self.card_waveform_tag_char, self.card_waveform_tag_ruby,
                   self.card_disable_click_jump,
                   self.card_disable_click_recenter,
                   self.card_hide_hitbox_highlights, self.card_preview_guide,
@@ -172,7 +177,8 @@ class TimingSubInterface(SubSettingInterface):
         self.card_export_offset.value_changed.connect(self._notify_changed)
         self.card_timing_step.value_changed.connect(self._notify_changed)
         self.card_waveform_tag_edit.checked_changed.connect(self._notify_changed)
-        self.card_waveform_tag_labels.checked_changed.connect(self._notify_changed)
+        self.card_waveform_tag_char.checked_changed.connect(self._notify_changed)
+        self.card_waveform_tag_ruby.checked_changed.connect(self._notify_changed)
         self.card_disable_click_jump.checked_changed.connect(self._notify_changed)
         self.card_disable_click_recenter.checked_changed.connect(self._notify_changed)
         self.card_hide_hitbox_highlights.checked_changed.connect(self._notify_changed)
@@ -190,7 +196,8 @@ class TimingSubInterface(SubSettingInterface):
         self.card_export_offset.setValue(s.get("export.offset_ms", 0))
         self.card_timing_step.setValue(s.get("timing.timing_adjust_step_ms", 10))
         self.card_waveform_tag_edit.setChecked(s.get("timing.waveform_tag_edit_enabled", True))
-        self.card_waveform_tag_labels.setChecked(s.get("timing.waveform_tag_labels_enabled", True))
+        self.card_waveform_tag_char.setChecked(s.get("timing.waveform_tag_char_enabled", True))
+        self.card_waveform_tag_ruby.setChecked(s.get("timing.waveform_tag_ruby_enabled", True))
         self.card_disable_click_jump.setChecked(s.get("timing.disable_click_jump", False))
         self.card_disable_click_recenter.setChecked(s.get("timing.disable_click_recenter", False))
         self.card_hide_hitbox_highlights.setChecked(s.get("timing.hide_hitbox_highlights", False))
@@ -207,7 +214,8 @@ class TimingSubInterface(SubSettingInterface):
         s.set("export.offset_ms", self.card_export_offset.value())
         s.set("timing.timing_adjust_step_ms", self.card_timing_step.value())
         s.set("timing.waveform_tag_edit_enabled", self.card_waveform_tag_edit.isChecked())
-        s.set("timing.waveform_tag_labels_enabled", self.card_waveform_tag_labels.isChecked())
+        s.set("timing.waveform_tag_char_enabled", self.card_waveform_tag_char.isChecked())
+        s.set("timing.waveform_tag_ruby_enabled", self.card_waveform_tag_ruby.isChecked())
         s.set("timing.disable_click_jump", self.card_disable_click_jump.isChecked())
         s.set("timing.disable_click_recenter", self.card_disable_click_recenter.isChecked())
         s.set("timing.hide_hitbox_highlights", self.card_hide_hitbox_highlights.isChecked())

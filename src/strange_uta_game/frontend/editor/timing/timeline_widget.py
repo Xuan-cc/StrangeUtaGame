@@ -104,8 +104,9 @@ class WaveformDisplay(QWidget):
 
         # 时间标签拖拽编辑（总开关 + 选中态 + 拖拽状态）
         self._tag_edit_enabled: bool = True
-        # 是否在时间标签上显示字符/注音文本（独立开关）
-        self._tag_labels_enabled: bool = True
+        # 是否在时间标签上显示本体字符 / 注音文本（两个独立开关）
+        self._tag_char_enabled: bool = True
+        self._tag_ruby_enabled: bool = True
         self._selected_handles: set = set()           # set[TagHandle]
         self._handle_index: dict = {}                 # TagHandle -> TimeTag，set_time_tags 时重建
         self._hit_boxes: List[Tuple[int, TagHandle, int]] = []  # (x_px, handle, ts)，每次绘制重建
@@ -255,13 +256,19 @@ class WaveformDisplay(QWidget):
             self.unsetCursor()
         self.update()
 
-    def set_tag_labels_enabled(self, enabled: bool) -> None:
-        """是否在时间标签上显示字符/注音文本（独立于拖拽编辑总开关）。"""
+    def set_tag_char_enabled(self, enabled: bool) -> None:
+        """是否在时间标签上显示本体字符文本（独立于拖拽编辑总开关）。"""
         enabled = bool(enabled)
-        if enabled == self._tag_labels_enabled:
-            return
-        self._tag_labels_enabled = enabled
-        self.update()
+        if enabled != self._tag_char_enabled:
+            self._tag_char_enabled = enabled
+            self.update()
+
+    def set_tag_ruby_enabled(self, enabled: bool) -> None:
+        """是否在时间标签上显示注音(ruby)文本（独立于拖拽编辑总开关）。"""
+        enabled = bool(enabled)
+        if enabled != self._tag_ruby_enabled:
+            self._tag_ruby_enabled = enabled
+            self.update()
 
     def clear_tag_selection(self) -> None:
         """清空选中集（外部数据变更后调用，避免悬空句柄）。"""
@@ -485,7 +492,8 @@ class WaveformDisplay(QWidget):
         # 编辑开启时顶部有把手块（半宽至多 _HANDLE_SEL_HALF_W），标签右移让开避免遮挡；
         # 关闭时维持原 x+2 偏移（旧模式逐像素一致）
         label_dx = (self._HANDLE_SEL_HALF_W + 3) if self._tag_edit_enabled else 2
-        show_labels = self._tag_labels_enabled
+        show_char = self._tag_char_enabled
+        show_ruby = self._tag_ruby_enabled
 
         normal_color = theme.accent_warning
         warn_color = theme.timetag_nonmonotonic
@@ -501,15 +509,14 @@ class WaveformDisplay(QWidget):
             x = self._ts_to_x(ts, visible_start_ms, visible_duration, w)
             painter.setPen(QPen(color, width_px))
             painter.drawLine(x, int(h * y_top_ratio), x, int(h * y_bot_ratio))
-            if show_labels:
+            display_text = ""
+            if show_char and tag.label:
+                display_text += tag.label
+            if show_ruby and tag.ruby:
+                display_text += self._format_ruby_label(tag.ruby)
+            if display_text:
                 painter.setPen(color)
-                if tag.label:
-                    display_text = tag.label
-                    if tag.ruby:
-                        display_text += self._format_ruby_label(tag.ruby)
-                    painter.drawText(x + label_dx, label_y, display_text)
-                elif tag.ruby:
-                    painter.drawText(x + label_dx, label_y, self._format_ruby_label(tag.ruby))
+                painter.drawText(x + label_dx, label_y, display_text)
             collected.append((x, tag, is_warning))
 
         for tag in self._time_tags:
@@ -876,8 +883,11 @@ class TimelineWidget(QWidget):
     def set_tag_edit_enabled(self, enabled: bool) -> None:
         self.waveform_display.set_tag_edit_enabled(enabled)
 
-    def set_tag_labels_enabled(self, enabled: bool) -> None:
-        self.waveform_display.set_tag_labels_enabled(enabled)
+    def set_tag_char_enabled(self, enabled: bool) -> None:
+        self.waveform_display.set_tag_char_enabled(enabled)
+
+    def set_tag_ruby_enabled(self, enabled: bool) -> None:
+        self.waveform_display.set_tag_ruby_enabled(enabled)
 
     def clear_tag_selection(self) -> None:
         self.waveform_display.clear_tag_selection()

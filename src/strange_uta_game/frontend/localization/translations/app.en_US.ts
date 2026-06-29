@@ -7487,13 +7487,23 @@ This cannot be undone.</translation>
     <name>TimingSubInterface</name>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="57" />
-        <source>波形标签显示字符/注音</source>
-        <translation>Show characters/furigana on waveform tags</translation>
+        <source>波形标签显示字符</source>
+        <translation>Show character on waveform tags</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="58" />
-        <source>在波形时间标签上显示对应字符与注音文本；关闭后只画时间竖线，波形更清爽</source>
-        <translation>Show the corresponding character and furigana text on waveform time tags; turn off to draw only the time lines for a cleaner waveform</translation>
+        <source>在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注</source>
+        <translation>Show the corresponding character text on waveform time tags; turn off to omit the character</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="61" />
+        <source>波形标签显示注音</source>
+        <translation>Show furigana on waveform tags</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="62" />
+        <source>在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注</source>
+        <translation>Show the corresponding furigana (ruby) text on waveform time tags; turn off to omit the furigana</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="52" />
