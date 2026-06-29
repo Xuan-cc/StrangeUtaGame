@@ -10,6 +10,34 @@ from types import SimpleNamespace
 from strange_uta_game.backend.application.command_manager import CommandManager
 from strange_uta_game.backend.domain import Character, Project, Ruby, RubyPart, Sentence
 from strange_uta_game.frontend.editor.timing_interface import EditorInterface
+from strange_uta_game.frontend.editor.timing.timeline_widget import WaveformDisplay
+
+
+def _lbl(a, b, handle):
+    # (a, b, tag, color, text)；tag 只需 .handle
+    return (a, b, SimpleNamespace(handle=handle), None, "x")
+
+
+def test_label_layout_leftmost_priority():
+    """无选中时，重叠标签从左到右贪心，左侧优先。"""
+    self = SimpleNamespace(_selected_handles=set())
+    labels = [_lbl(0, 30, (0, 0, 0, False)),
+              _lbl(20, 50, (0, 1, 0, False)),   # 与 0-30 重叠 → 丢弃
+              _lbl(60, 90, (0, 2, 0, False))]
+    drawn = [it[2].handle for it in WaveformDisplay._resolve_label_layout(self, labels)]
+    assert drawn == [(0, 0, 0, False), (0, 2, 0, False)]
+
+
+def test_label_layout_selected_priority():
+    """选中标签无条件显示，与之重叠的左侧未选中标签反被丢弃。"""
+    self = SimpleNamespace(_selected_handles={(0, 1, 0, False)})
+    labels = [_lbl(0, 30, (0, 0, 0, False)),
+              _lbl(20, 50, (0, 1, 0, False)),   # 选中
+              _lbl(60, 90, (0, 2, 0, False))]
+    drawn = {it[2].handle for it in WaveformDisplay._resolve_label_layout(self, labels)}
+    assert (0, 1, 0, False) in drawn          # 选中必显示
+    assert (0, 0, 0, False) not in drawn       # 与选中重叠 → 让位
+    assert (0, 2, 0, False) in drawn
 
 
 def _make_editor(project):

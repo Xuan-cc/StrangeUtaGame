@@ -72,7 +72,6 @@ class WaveformDisplay(QWidget):
     _HANDLE_HALF_W = 5          # 未选中把手命中/绘制半宽（px）
     _HANDLE_SEL_HALF_W = 7      # 选中把手放大后半宽（px）
     _HANDLE_HEIGHT = 9          # 把手块高度（px）
-    _MIN_HANDLE_SPACING = 8     # 相邻把手最小间距，低于此值密度门控不绘制把手/不可命中
     _HANDLE_HIT_Y_RATIO = 0.4   # 命中仅在控件顶部该比例高度内有效
 
     def __init__(self, parent=None):
@@ -477,18 +476,19 @@ class WaveformDisplay(QWidget):
             return f"「{ruby_text[:4]}...」"
         return f"「{ruby_text}」"
 
-    # 文字光晕（halo）8 邻域偏移：先以背景色描一圈再画正文，
-    # 让标签从蓝色波形上"抠"出来，提升可读性（制图学常用做法）。
-    _HALO_OFFSETS = ((-1, -1), (0, -1), (1, -1), (-1, 0),
-                     (1, 0), (-1, 1), (0, 1), (1, 1))
-
-    def _draw_label_with_halo(self, painter: QPainter, x: int, y: int, text: str, color):
-        halo = theme.waveform_bg
-        painter.setPen(halo)
-        for dx, dy in self._HALO_OFFSETS:
-            painter.drawText(x + dx, y + dy, text)
+    def _draw_label_plate(self, painter: QPainter, x: int, label_y: int,
+                          fm, text: str, color, text_w: int) -> None:
+        """带半透明背景底片绘制标签文字：在文字后铺一层接近不透明的背景色底，
+        把文字从蓝色波形上分离出来，可读性显著优于细光晕，且仍透出少量波形。
+        """
+        top = label_y - fm.ascent()
+        plate = QColor(theme.waveform_bg)
+        plate.setAlpha(225)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(plate))
+        painter.drawRoundedRect(QRect(x - 2, top - 1, text_w + 4, fm.height() + 1), 2, 2)
         painter.setPen(color)
-        painter.drawText(x, y, text)
+        painter.drawText(x, label_y, text)
 
     def _draw_time_tags(self, painter: QPainter, w: int, h: int,
                         visible_start_ms: float, visible_end_ms: float):
@@ -512,9 +512,9 @@ class WaveformDisplay(QWidget):
         normal_color = theme.accent_warning
         warn_color = theme.timetag_nonmonotonic
 
-        # ── pass 1：竖线 + 标签（语义色不变，拖拽中的选中标签按 delta 平移）──
-        # collected：(x, tag, is_warning)，供 pass 2 统一画把手 + 密度门控
-        collected: List[Tuple[int, TimeTag, bool]] = []
+        # ── pass 1：竖线（语义色不变，拖拽中的选中标签按 delta 平移）；收集可见标签 ──
+        # entries：(x, tag, is_warning, color)
+        entries: List[Tuple[int, TimeTag, bool, object]] = []
 
         def _draw_line(tag: TimeTag, color, width_px: int, y_top_ratio: float, y_bot_ratio: float, is_warning: bool):
             ts = self._draw_ts(tag)
@@ -523,44 +523,77 @@ class WaveformDisplay(QWidget):
             x = self._ts_to_x(ts, visible_start_ms, visible_duration, w)
             painter.setPen(QPen(color, width_px))
             painter.drawLine(x, int(h * y_top_ratio), x, int(h * y_bot_ratio))
-            display_text = ""
-            if show_char and tag.label:
-                display_text += tag.label
-            if show_ruby and tag.ruby:
-                display_text += self._format_ruby_label(tag.ruby)
-            if display_text:
-                self._draw_label_with_halo(painter, x + label_dx, label_y, display_text, color)
-            collected.append((x, tag, is_warning))
+            entries.append((x, tag, is_warning, color))
 
         for tag in self._time_tags:
             _draw_line(tag, normal_color, 2, 0.2, 0.8, False)
         for tag in self._warning_time_tags:
             _draw_line(tag, warn_color, 3, 0.1, 0.9, True)
 
-        # ── pass 2：顶部把手 + 选中态（仅编辑开启）。密度门控：相邻把手过近则跳过 ──
-        if not self._tag_edit_enabled:
-            return
-        collected.sort(key=lambda c: c[0])
-        last_x = None
-        sel_color = theme.accent_secondary
-        for x, tag, is_warning in collected:
-            if last_x is not None and (x - last_x) < self._MIN_HANDLE_SPACING:
+        # ── pass 2：顶部把手 + 选中态（仅编辑开启）。把手全部显示，不做密度门控 ──
+        if self._tag_edit_enabled:
+            sel_color = theme.accent_secondary
+            for x, tag, is_warning, color in entries:
+                selected = tag.handle in self._selected_handles
+                top = int(h * (0.1 if is_warning else 0.2))
+                half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
+                rect = QRect(x - half, top - self._HANDLE_HEIGHT, half * 2, self._HANDLE_HEIGHT)
+                if selected:
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QBrush(sel_color))
+                    painter.drawRect(rect)
+                else:
+                    painter.setPen(QPen(color, 1))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawRect(rect)
+                self._hit_boxes.append((x, tag.handle, tag.ts))
+
+        # ── pass 3：标签文字按优先级放置，避免重叠 ──
+        # 优先级：选中的标签无条件显示；其余按 x 从左到右贪心，左侧优先占位。
+        labels = []  # (a, b, tag, color, text)
+        for x, tag, is_warning, color in entries:
+            text = ""
+            if show_char and tag.label:
+                text += tag.label
+            if show_ruby and tag.ruby:
+                text += self._format_ruby_label(tag.ruby)
+            if not text:
                 continue
-            last_x = x
-            selected = tag.handle in self._selected_handles
-            top = int(h * (0.1 if is_warning else 0.2))
-            line_color = warn_color if is_warning else normal_color
-            half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
-            rect = QRect(x - half, top - self._HANDLE_HEIGHT, half * 2, self._HANDLE_HEIGHT)
-            if selected:
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QBrush(sel_color))
-                painter.drawRect(rect)
-            else:
-                painter.setPen(QPen(line_color, 1))
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawRect(rect)
-            self._hit_boxes.append((x, tag.handle, tag.ts))
+            a = x + label_dx
+            b = a + fm.horizontalAdvance(text)
+            labels.append((a, b, tag, color, text))
+
+        for a, b, tag, color, text in self._resolve_label_layout(labels):
+            self._draw_label_plate(painter, a, label_y, fm, text, color, b - a)
+
+    def _resolve_label_layout(self, labels):
+        """标签防重叠优先级布局。
+
+        labels: ``(a, b, tag, color, text)`` 列表（a/b 为标签左右像素边界）。
+        规则：选中的标签无条件保留；其余按左边界从左到右贪心占位，与已占用区间
+        重叠则丢弃（左侧优先）。返回需要绘制的标签子集。
+        """
+        occupied: List[Tuple[int, int]] = []
+
+        def _fits(a: int, b: int) -> bool:
+            return all(b < oa or a > ob for oa, ob in occupied)
+
+        out = []
+        # 选中优先：无条件保留并占位
+        for item in labels:
+            a, b, tag = item[0], item[1], item[2]
+            if tag.handle in self._selected_handles:
+                out.append(item)
+                occupied.append((a, b))
+        # 其余：从左到右贪心，重叠则跳过（左侧优先）
+        for item in sorted(labels, key=lambda L: L[0]):
+            a, b, tag = item[0], item[1], item[2]
+            if tag.handle in self._selected_handles:
+                continue
+            if _fits(a, b):
+                out.append(item)
+                occupied.append((a, b))
+        return out
 
     def _draw_playhead(self, painter: QPainter, w: int, h: int,
                        visible_start_ms: float, visible_duration_ms: float):
