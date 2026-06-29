@@ -173,11 +173,17 @@ self._update_line_info()
 **标签防遮挡**：顶部把手块（半宽至多 `_HANDLE_SEL_HALF_W`）会压住贴顶绘制的字符/注音标签。
 编辑开启时标签整体右移 `_HANDLE_SEL_HALF_W + 3` px 让开把手；关闭时维持原 `x+2`（旧模式逐像素一致）。
 
-**标签显示开关（字符 / 注音分离）**：两个独立设置——
+**标签显示开关（字符 / 注音分离）**：两个设置——
 `timing.waveform_tag_char_enabled` 控制本体字符、`timing.waveform_tag_ruby_enabled` 控制注音
-(ruby)，默认均 true，四种组合任意搭配。与拖拽总开关 `waveform_tag_edit_enabled` 也互相独立
-（可只拖不显字、只显字不拖、只显注音等）。下发经 `_apply_settings_inner` →
-`set_tag_char_enabled` / `set_tag_ruby_enabled`；绘制时按两个 flag 拼接 `display_text`。
+(ruby)，默认均 true。下发经 `_apply_settings_inner` → `set_tag_char_enabled` /
+`set_tag_ruby_enabled`；绘制时按两 flag 拼接 `display_text`。
+**注音以字符为前提**：`show_ruby = ruby_enabled and char_enabled`（字符关则注音必不显示）；
+设置页用 `_sync_ruby_card_enabled` 让注音卡的可用性跟随字符卡（字符关→注音卡灰显）。
+
+**标签可读性（halo）**：字符/注音文本会压在蓝色波形上导致看不清。采用制图学常用的
+**背景色光晕**：`_draw_label_with_halo` 先以 `theme.waveform_bg` 在 8 邻域偏移各画一遍文本、
+再画正文，相当于在文字周围"抠"出一圈背景色把它从波形上分离出来；随主题自动适配，
+不遮挡波形（优于加底色块 / 背景模糊）。
 
 **拖拽反馈徽标（D9）**：拖拽态下 `paintEvent` 末尾（播放头之后）画跟随光标的浮动徽标：
 - 第一行（核心）：有符号偏差 `Δ +120 ms` / `Δ −85 ms`（`+`=延后/右移）。多选共享此值。

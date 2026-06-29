@@ -477,6 +477,19 @@ class WaveformDisplay(QWidget):
             return f"「{ruby_text[:4]}...」"
         return f"「{ruby_text}」"
 
+    # 文字光晕（halo）8 邻域偏移：先以背景色描一圈再画正文，
+    # 让标签从蓝色波形上"抠"出来，提升可读性（制图学常用做法）。
+    _HALO_OFFSETS = ((-1, -1), (0, -1), (1, -1), (-1, 0),
+                     (1, 0), (-1, 1), (0, 1), (1, 1))
+
+    def _draw_label_with_halo(self, painter: QPainter, x: int, y: int, text: str, color):
+        halo = theme.waveform_bg
+        painter.setPen(halo)
+        for dx, dy in self._HALO_OFFSETS:
+            painter.drawText(x + dx, y + dy, text)
+        painter.setPen(color)
+        painter.drawText(x, y, text)
+
     def _draw_time_tags(self, painter: QPainter, w: int, h: int,
                         visible_start_ms: float, visible_end_ms: float):
         self._hit_boxes = []
@@ -493,7 +506,8 @@ class WaveformDisplay(QWidget):
         # 关闭时维持原 x+2 偏移（旧模式逐像素一致）
         label_dx = (self._HANDLE_SEL_HALF_W + 3) if self._tag_edit_enabled else 2
         show_char = self._tag_char_enabled
-        show_ruby = self._tag_ruby_enabled
+        # 注音显示以字符显示为前提：字符关则注音也不显示
+        show_ruby = self._tag_ruby_enabled and self._tag_char_enabled
 
         normal_color = theme.accent_warning
         warn_color = theme.timetag_nonmonotonic
@@ -515,8 +529,7 @@ class WaveformDisplay(QWidget):
             if show_ruby and tag.ruby:
                 display_text += self._format_ruby_label(tag.ruby)
             if display_text:
-                painter.setPen(color)
-                painter.drawText(x + label_dx, label_y, display_text)
+                self._draw_label_with_halo(painter, x + label_dx, label_y, display_text, color)
             collected.append((x, tag, is_warning))
 
         for tag in self._time_tags:

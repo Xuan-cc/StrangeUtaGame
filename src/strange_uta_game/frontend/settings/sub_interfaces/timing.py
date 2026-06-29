@@ -178,6 +178,10 @@ class TimingSubInterface(SubSettingInterface):
             self._settings_ref.save()
             self._notify_changed()
 
+    def _sync_ruby_card_enabled(self, *_):
+        """注音显示卡的可用性跟随字符显示卡：字符关 → 注音卡禁用（灰显）。"""
+        self.card_waveform_tag_ruby.setEnabled(self.card_waveform_tag_char.isChecked())
+
     def _open_calibration_dialog(self):
         self._calibration_dialog = CalibrationDialog(self)
         self._calibration_dialog.exec()
@@ -197,6 +201,8 @@ class TimingSubInterface(SubSettingInterface):
         self.card_timing_step.value_changed.connect(self._notify_changed)
         self.card_waveform_tag_edit.checked_changed.connect(self._notify_changed)
         self.card_waveform_tag_char.checked_changed.connect(self._notify_changed)
+        # 注音显示以字符显示为前提：字符关则注音卡禁用（联动）
+        self.card_waveform_tag_char.checked_changed.connect(self._sync_ruby_card_enabled)
         self.card_waveform_tag_ruby.checked_changed.connect(self._notify_changed)
         self.card_disable_click_jump.checked_changed.connect(self._notify_changed)
         self.card_disable_click_recenter.checked_changed.connect(self._notify_changed)
@@ -217,6 +223,7 @@ class TimingSubInterface(SubSettingInterface):
         self.card_waveform_tag_edit.setChecked(s.get("timing.waveform_tag_edit_enabled", True))
         self.card_waveform_tag_char.setChecked(s.get("timing.waveform_tag_char_enabled", True))
         self.card_waveform_tag_ruby.setChecked(s.get("timing.waveform_tag_ruby_enabled", True))
+        self._sync_ruby_card_enabled()
         self.card_disable_click_jump.setChecked(s.get("timing.disable_click_jump", False))
         self.card_disable_click_recenter.setChecked(s.get("timing.disable_click_recenter", False))
         self.card_hide_hitbox_highlights.setChecked(s.get("timing.hide_hitbox_highlights", False))
