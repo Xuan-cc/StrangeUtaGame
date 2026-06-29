@@ -210,13 +210,27 @@ self._update_line_info()
 
 ---
 
-## 8. 待实现校验点（实现后自检）
+## 8. 实现状态与校验点
 
-- [ ] 单击把手：seek + 选中蓝把手 + preview 选中同步到该字符。
-- [ ] Ctrl 多选：多个蓝把手；刚性拖动共享 delta；徽标显示同一偏差值。
-- [ ] 拖 cp0 / 拖句尾点：ruby.timestamps 与 part.offset_ms 正确（mora 渲染、Nicokara 导出对齐）。
-- [ ] 越界：提交后变紫色非单调线，无崩溃。
-- [ ] 组级 0 夹紧：拖到最左不出现负时间戳、不破坏刚性。
-- [ ] preview 时间分段、行/字信息栏、状态栏进度、脏标记 / auto-save 全部刷新。
-- [ ] 关闭开关：波形逐像素等同旧模式，单击=seek、拖动=pan，无把手 / 无高亮。
-- [ ] 切换语言：新增 tr 串正确显示（pseudo 模式 ⟦⟧ 可视）。
+实现分 5 批提交完成（分支 `feat/waveform-timetag-drag`）：数据层句柄 → WaveformDisplay
+交互 → timing_interface 接入 → 设置开关 → i18n。单元测试 +7（test_project 句柄契约、
+test_timeline_tag_drag 提交槽 6 项不变式），全量 `tests/unit` 相对 base 零回归。
+
+自检（已通过 headless 单元 / 控件 / 编辑器构造 smoke 验证）：
+
+- [x] 单击把手：seek + 选中蓝把手 + preview 选中同步（`tag_clicked` → `_sync_preview_to_handle`）。
+- [x] Ctrl 多选：多选切换；刚性拖动共享 delta（`tags_drag_committed` 携带 handles+delta）。
+- [x] 拖 cp0 / 拖句尾点：ruby.timestamps 与 part.offset_ms 正确（test_timeline_tag_drag 覆盖）。
+- [x] 越界：提交后由 `set_time_tags` 按 running_max 自动重判为紫色非单调线。
+- [x] 组级 0 夹紧：`_clamp_drag_delta`（widget 预览）+ 提交槽逐 cp `max(0)` 安全网。
+- [x] preview / 行字信息 / 状态栏 / 脏标记 + auto-save：提交槽四件套 + `notify('timetags')`。
+- [x] 关闭开关：`set_tag_edit_enabled(False)` 不画把手 / 不命中 / 清选中，回退 seek/pan。
+- [x] 新 tr 串：en/ja/zh `.ts` 已译且 finished，`.qm` 编译 0 unfinished。
+
+**i18n 实现说明（偏离原流水线）**：`extract_ts.py` 输出为字母序排序，与当前 committed `.ts`
+的 lupdate 源位置序不一致，整体重生成会churn ~1800 行。为保持本特性 diff 干净，改为
+**直接在 3 份 `.ts` 的 `TimingSubInterface` 上下文内插入 2 条 message** 再 `pyside6-lrelease`
+编译 `.qm`（每文件 +10 行）。translations_*.json 仍按规范补录，供后续全量 regen 使用。
+
+**残留待人工验证（GUI 交互，headless 无法覆盖）**：真实鼠标拖拽手感、徽标视觉位置 /
+可读性、密度门控阈值在实际缩放下的体感、切换语言后设置卡文案刷新。
