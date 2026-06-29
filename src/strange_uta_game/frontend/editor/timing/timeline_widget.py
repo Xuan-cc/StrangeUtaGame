@@ -72,6 +72,7 @@ class WaveformDisplay(QWidget):
     _HANDLE_HALF_W = 5          # 未选中把手命中/绘制半宽（px）
     _HANDLE_SEL_HALF_W = 7      # 选中把手放大后半宽（px）
     _HANDLE_HEIGHT = 9          # 把手块高度（px）
+    _MIN_HANDLE_SPACING = 8     # 相邻把手最小间距，低于此值密度门控不绘制把手/不可命中
     _HANDLE_HIT_Y_RATIO = 0.4   # 命中仅在控件顶部该比例高度内有效
 
     def __init__(self, parent=None):
@@ -530,25 +531,7 @@ class WaveformDisplay(QWidget):
         for tag in self._warning_time_tags:
             _draw_line(tag, warn_color, 3, 0.1, 0.9, True)
 
-        # ── pass 2：顶部把手 + 选中态（仅编辑开启）。把手全部显示，不做密度门控 ──
-        if self._tag_edit_enabled:
-            sel_color = theme.accent_secondary
-            for x, tag, is_warning, color in entries:
-                selected = tag.handle in self._selected_handles
-                top = int(h * (0.1 if is_warning else 0.2))
-                half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
-                rect = QRect(x - half, top - self._HANDLE_HEIGHT, half * 2, self._HANDLE_HEIGHT)
-                if selected:
-                    painter.setPen(Qt.PenStyle.NoPen)
-                    painter.setBrush(QBrush(sel_color))
-                    painter.drawRect(rect)
-                else:
-                    painter.setPen(QPen(color, 1))
-                    painter.setBrush(Qt.BrushStyle.NoBrush)
-                    painter.drawRect(rect)
-                self._hit_boxes.append((x, tag.handle, tag.ts))
-
-        # ── pass 3：标签文字按优先级放置，避免重叠 ──
+        # ── pass 2：标签文字按优先级放置，避免重叠（先画，把手随后覆盖其上）──
         # 优先级：选中的标签无条件显示；其余按 x 从左到右贪心，左侧优先占位。
         labels = []  # (a, b, tag, color, text)
         for x, tag, is_warning, color in entries:
@@ -565,6 +548,29 @@ class WaveformDisplay(QWidget):
 
         for a, b, tag, color, text in self._resolve_label_layout(labels):
             self._draw_label_plate(painter, a, label_y, fm, text, color, b - a)
+
+        # ── pass 3：顶部把手 + 选中态（仅编辑开启）。最后绘制，确保把手不被相邻
+        # 标签覆盖；密度门控：相邻把手过近则跳过（不绘制 / 不可命中）──
+        if self._tag_edit_enabled:
+            sel_color = theme.accent_secondary
+            last_x = None
+            for x, tag, is_warning, color in sorted(entries, key=lambda e: e[0]):
+                if last_x is not None and (x - last_x) < self._MIN_HANDLE_SPACING:
+                    continue
+                last_x = x
+                selected = tag.handle in self._selected_handles
+                top = int(h * (0.1 if is_warning else 0.2))
+                half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
+                rect = QRect(x - half, top - self._HANDLE_HEIGHT, half * 2, self._HANDLE_HEIGHT)
+                if selected:
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QBrush(sel_color))
+                    painter.drawRect(rect)
+                else:
+                    painter.setPen(QPen(color, 1))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawRect(rect)
+                self._hit_boxes.append((x, tag.handle, tag.ts))
 
     def _resolve_label_layout(self, labels):
         """标签防重叠优先级布局。
