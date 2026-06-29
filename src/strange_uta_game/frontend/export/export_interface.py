@@ -361,11 +361,13 @@ class ExportInterface(QWidget):
     def _tr_format_name(self, name: str) -> str:
         """显式枚举各 format key → 让 .ts 抽取器把源串纳入 ExportInterface
         上下文（变量参数的 self.tr(var) 抓不到）。"""
-        if name == "LRC (增强型)":      return self.tr("LRC (增强型)")
-        if name == "LRC (逐行)":        return self.tr("LRC (逐行)")
-        if name == "LRC (逐字)":        return self.tr("LRC (逐字)")
-        if name == "Nicokara (带注音)": return self.tr("Nicokara (带注音)")
-        if name == "RL 编辑模式":        return self.tr("RL 编辑模式")
+        if name == "LRC (增强型)":         return self.tr("LRC (增强型)")
+        if name == "LRC (逐行)":           return self.tr("LRC (逐行)")
+        if name == "LRC (逐字)":           return self.tr("LRC (逐字)")
+        if name == "Nicokara (带注音)":    return self.tr("Nicokara (带注音)")
+        if name == "RL 编辑模式":           return self.tr("RL 编辑模式")
+        if name == "春日向注音":            return self.tr("春日向注音")
+        if name == "春日向注音（带罗马音）": return self.tr("春日向注音（带罗马音）")
         # KRA / TXT / SRT / txt2ass / ASS / Nicokara 都是英文，无需翻译
         return name
 

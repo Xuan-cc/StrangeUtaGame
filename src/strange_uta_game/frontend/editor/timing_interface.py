@@ -5786,7 +5786,7 @@ class EditorInterface(QWidget):
             base_name = "untitled"
         suggested_dir = ""
         if store:
-            suggested_dir = store.working_dir
+            suggested_dir = store.export_dir
         if not suggested_dir:
             suggested_dir = settings.get("export.last_export_dir", "")
         suggested_path = str(Path(suggested_dir) / (base_name + ext)) if suggested_dir else base_name + ext
