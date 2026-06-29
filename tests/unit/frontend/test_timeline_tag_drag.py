@@ -13,6 +13,76 @@ from strange_uta_game.frontend.editor.timing_interface import EditorInterface
 from strange_uta_game.frontend.editor.timing.timeline_widget import WaveformDisplay
 
 
+def _fake_wd():
+    """WaveformDisplay 的轻量替身：只持有 set_time_tags / _append_time_tag /
+    _visible_slice 所需状态，避免实例化 QWidget（绕开 theme 的 Qt 生命周期）。"""
+    f = SimpleNamespace(
+        _time_tags=[], _warning_time_tags=[], _handle_index={},
+        _selected_handles=set(), _last_tags_input=None,
+        _running_max_ts=-1, _seen_char_keys=set(), _is_dragging_tags=False,
+        update=lambda: None,
+    )
+    f._append_time_tag = lambda entry: WaveformDisplay._append_time_tag(f, entry)
+    f.set_time_tags = lambda tags: WaveformDisplay.set_time_tags(f, tags)
+    f._visible_slice = lambda lst, vs, ve: WaveformDisplay._visible_slice(f, lst, vs, ve)
+    return f
+
+
+def _summary(wd):
+    return (
+        [(t.ts, t.handle, t.label) for t in wd._time_tags],
+        [(t.ts, t.handle, t.label) for t in wd._warning_time_tags],
+        set(wd._handle_index),
+    )
+
+
+def _full_rebuild(tags):
+    f = _fake_wd()
+    f.set_time_tags(tags)
+    return f
+
+
+def test_incremental_append_equals_full_rebuild():
+    """顺序打轴（末尾追加单调标签）增量结果必须与全量重建一致。"""
+    T0 = [(100, "a", 0, 0, 0, False, "a"), (200, "a", 0, 0, 1, False, "b"),
+          (300, "b", 0, 1, 0, False, None)]
+    new = (400, "c", 0, 2, 0, False, "c")
+    inc = _fake_wd()
+    inc.set_time_tags(T0)
+    inc.set_time_tags(T0 + [new])          # 走快路径
+    assert _summary(inc) == _summary(_full_rebuild(T0 + [new]))
+
+
+def test_incremental_append_nonmonotonic():
+    """末尾追加但 ts 回退（非单调）→ 进警告表，仍与全量一致。"""
+    T0 = [(100, "a", 0, 0, 0, False, None), (300, "b", 0, 1, 0, False, None)]
+    new = (250, "c", 0, 2, 0, False, None)   # ts < running_max=300
+    inc = _fake_wd()
+    inc.set_time_tags(T0)
+    inc.set_time_tags(T0 + [new])
+    assert _summary(inc) == _summary(_full_rebuild(T0 + [new]))
+    assert any(t.handle == (0, 2, 0, False) for t in inc._warning_time_tags)
+
+
+def test_non_append_falls_back_to_full():
+    """改动已有时间戳（同长度，非末尾追加）必须回退全量重建并正确。"""
+    T0 = [(100, "a", 0, 0, 0, False, "a"), (200, "a", 0, 0, 1, False, "b"),
+          (300, "b", 0, 1, 0, False, None)]
+    T_edit = [(100, "a", 0, 0, 0, False, "a"), (999, "a", 0, 0, 1, False, "b"),
+              (300, "b", 0, 1, 0, False, None)]
+    inc = _fake_wd()
+    inc.set_time_tags(T0)
+    inc.set_time_tags(T_edit)
+    assert _summary(inc) == _summary(_full_rebuild(T_edit))
+
+
+def test_visible_slice():
+    wd = _fake_wd()
+    wd.set_time_tags([(t, "x", 0, i, 0, False, None)
+                      for i, t in enumerate([10, 100, 200, 300, 400, 500])])
+    assert [t.ts for t in wd._visible_slice(wd._time_tags, 150, 350)] == [200, 300]
+
+
 def _lbl(a, b, handle):
     # (a, b, tag, color, text)；tag 只需 .handle
     return (a, b, SimpleNamespace(handle=handle), None, "x")

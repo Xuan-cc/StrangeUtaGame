@@ -213,11 +213,28 @@ qfluentwidgets `Slider` 的抓手位置由 `valueChanged → _adjustHandlePos` �
 
 ## 5. 性能
 
-- 绘制：本就是 O(N) 全量 + 可见窗过滤；加把手 / 高亮是常数倍，非数量级变化。
 - 命中测试：**限定可见窗内 + 二分**（业界 canvas 时间轴通行做法：area virtualization）。
 - 拖拽：过程**纯屏幕预览**（只移动选中把手几何 + 重绘），**松手才提交一次**；避免每帧
   O(N log N) 重排 + notify 全链路。
 - 波形峰值缓存不受影响（缓存键 = `(width, zoom, scroll, samples_id)`，拖 tag 不动这些）。
+
+### 5.1 大项目优化（A：可见窗二分；B：顺序打轴增量）
+
+实测(开发机)单次刷新合计:N=2000≈2.7ms、N=7200≈9.6ms。两处全量是主因，分别优化:
+
+**A — paint 可见窗二分。** `_time_tags`/`_warning_time_tags` 已按 ts 升序，`_visible_slice`
+用 `bisect` 截取 `[visible_start, visible_end]` 子列表，把每帧标签遍历从 O(N) 降到 O(可见数)。
+拖拽态(选中标签按 delta 偏移，二分会漏)回退全量遍历。实测 paint：N=7200 3.98→2.33ms。
+
+**B — 顺序打轴增量插入。** 见 §3.x「顺序打轴」定义：`set_time_tags` 缓存上次输入
+`_last_tags_input`，若本次 == 上次 + 末尾恰好追加一个（`len+1 且 tags[:-1]==prev`），则该标签
+位于文件序末尾、不改变任何已有标签归类，走 `_append_time_tag`：`bisect.insort` 入对应列表
++ 增量更新 `_handle_index`/`_running_max_ts`/`_seen_char_keys`，O(log N)。其余所有情况
+（改时间/删除/乱序补打/结构变更）前缀比对失败 → 回退全量重建。实测 set_time_tags：
+全量 4.34ms → 增量 0.03ms（**~140×**，N=7200）。
+
+> 增量结果与全量重建逐字段一致（ts/handle/label/警告归类），有单测 `test_incremental_*`
+> 守护；`collect`（前端 O(N)，~1.3ms@7200）仍保留，是较小的一半，未来若需可再做 delta 管线。
 
 ---
 

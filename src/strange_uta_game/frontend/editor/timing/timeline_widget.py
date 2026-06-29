@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import bisect
 import math
 from typing import List, NamedTuple, Optional, Tuple
 
@@ -82,6 +83,11 @@ class WaveformDisplay(QWidget):
         # 时间标签列表（含模型句柄）；label 仅在该字符第一个 checkpoint 时非空
         self._time_tags: List[TimeTag] = []
         self._warning_time_tags: List[TimeTag] = []
+        # 增量更新状态（B：顺序打轴快路径）。_last_tags_input 缓存上次 collect 原始
+        # 列表，用于前缀比对识别"末尾追加一个"；其余为增量分类所需的累积量。
+        self._last_tags_input: Optional[List[tuple]] = None
+        self._running_max_ts: int = -1
+        self._seen_char_keys: set = set()
 
         # 音频数据
         self._samples: Optional[np.ndarray] = None
@@ -185,6 +191,15 @@ class WaveformDisplay(QWidget):
     def set_time_tags(self, tags: List[Tuple[int, str, int, int, int, bool, Optional[str]]]):
         # tags: (timestamp_ms, char_text, line_idx, char_idx, cp_idx, is_sentence_end, ruby_text)
         # 同一字符 (line_idx, char_idx) 的第一个 checkpoint 携带 char 标签，后续不重复；ruby 始终携带
+
+        # ── B 快路径：顺序打轴 = 上次列表 + 末尾恰好追加一个 → O(log N) 增量插入 ──
+        prev = self._last_tags_input
+        if prev is not None and len(tags) == len(prev) + 1 and tags[:-1] == prev:
+            self._append_time_tag(tags[-1])
+            self._last_tags_input = tags
+            return
+
+        # ── 全量重建（其余所有情况：改时间 / 删除 / 乱序补打 / 结构变更）──
         seen_chars: set = set()
         normal: List[TimeTag] = []
         warning: List[TimeTag] = []
@@ -208,6 +223,26 @@ class WaveformDisplay(QWidget):
         }
         if self._selected_handles:
             self._selected_handles &= set(self._handle_index)
+        # 刷新增量状态
+        self._seen_char_keys = seen_chars
+        self._running_max_ts = running_max
+        self._last_tags_input = tags
+        self.update()
+
+    def _append_time_tag(self, entry: Tuple[int, str, int, int, int, bool, Optional[str]]) -> None:
+        """顺序打轴增量插入单个新标签（位于文件序末尾，不影响已有标签归类）。"""
+        ts, char, line_idx, char_idx, cp_idx, is_end, ruby_text = entry
+        char_key = (line_idx, char_idx)
+        label: Optional[str] = char if char_key not in self._seen_char_keys else None
+        self._seen_char_keys.add(char_key)
+        handle: TagHandle = (line_idx, char_idx, cp_idx, is_end)
+        item = TimeTag(ts, label, ruby_text, handle)
+        if ts < self._running_max_ts:
+            bisect.insort(self._warning_time_tags, item, key=lambda x: x.ts)
+        else:
+            bisect.insort(self._time_tags, item, key=lambda x: x.ts)
+            self._running_max_ts = ts
+        self._handle_index[handle] = item
         self.update()
 
     def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
@@ -304,6 +339,18 @@ class WaveformDisplay(QWidget):
         if self._is_dragging_tags and tag.handle in self._selected_handles:
             return tag.ts + self._drag_delta_ms
         return tag.ts
+
+    def _visible_slice(self, tag_list: List["TimeTag"], vs: float, ve: float) -> List["TimeTag"]:
+        """A：返回 [vs, ve] 可见窗内的标签子列表（列表按 ts 升序，二分截取）。
+
+        拖拽态下选中标签会按 delta 偏移，可能移入/移出视窗，二分会漏，故回退全量
+        （由 _draw_line 的 ts 范围判断兜底）；拖拽是短暂交互态，全量遍历可接受。
+        """
+        if self._is_dragging_tags:
+            return tag_list
+        lo = bisect.bisect_left(tag_list, vs, key=lambda t: t.ts)
+        hi = bisect.bisect_right(tag_list, ve, key=lambda t: t.ts)
+        return tag_list[lo:hi]
 
     def _hit_test_handle(self, x: float, y: float):
         """命中顶部把手块：返回 (handle, ts, x_px) 或 None。仅在编辑开启且 y 在顶部带内。"""
@@ -525,9 +572,10 @@ class WaveformDisplay(QWidget):
             painter.drawLine(x, int(h * y_top_ratio), x, int(h * y_bot_ratio))
             entries.append((x, tag, is_warning, color))
 
-        for tag in self._time_tags:
+        # A：只遍历可见窗内的标签（列表已按 ts 排序，二分定位），把每帧 O(N) 降到 O(可见数)
+        for tag in self._visible_slice(self._time_tags, visible_start_ms, visible_end_ms):
             _draw_line(tag, normal_color, 2, 0.2, 0.8, False)
-        for tag in self._warning_time_tags:
+        for tag in self._visible_slice(self._warning_time_tags, visible_start_ms, visible_end_ms):
             _draw_line(tag, warn_color, 3, 0.1, 0.9, True)
 
         # ── pass 2：标签文字按优先级放置，避免重叠（先画，把手随后覆盖其上）──
