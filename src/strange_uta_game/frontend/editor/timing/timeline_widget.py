@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Tuple
+from typing import List, NamedTuple, Optional, Tuple
 
 import numpy as np
 from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
@@ -34,6 +34,24 @@ from strange_uta_game.frontend.perf_log import log_slow_method
 from strange_uta_game.frontend.theme import theme
 
 
+# (line_idx, char_idx, cp_idx, is_sentence_end) —— 可反查模型到具体 checkpoint 的句柄。
+# 选中态、命中测试、拖拽提交都以此为身份，跨 set_time_tags 重排存活。
+TagHandle = Tuple[int, int, int, bool]
+
+
+class TimeTag(NamedTuple):
+    """波形上一个时间标签的渲染 + 命中数据。
+
+    ``label`` 仅在该字符第一个 checkpoint 时非空（跨 checkpoint 去重）；``ruby`` 为该
+    checkpoint 对应注音文本。``handle`` 用于命中后定位模型 checkpoint。
+    """
+
+    ts: int
+    label: Optional[str]
+    ruby: Optional[str]
+    handle: TagHandle
+
+
 # ──────────────────────────────────────────────
 # 波形显示区域
 # ──────────────────────────────────────────────
@@ -49,9 +67,9 @@ class WaveformDisplay(QWidget):
         super().__init__(parent)
         self._duration_ms = 0
         self._current_ms = 0
-        # (timestamp_ms, label_or_None, ruby_text_or_None)，label 仅在该字符第一个 checkpoint 时非空
-        self._time_tags: List[Tuple[int, Optional[str], Optional[str]]] = []
-        self._warning_time_tags: List[Tuple[int, Optional[str], Optional[str]]] = []
+        # 时间标签列表（含模型句柄）；label 仅在该字符第一个 checkpoint 时非空
+        self._time_tags: List[TimeTag] = []
+        self._warning_time_tags: List[TimeTag] = []
 
         # 音频数据
         self._samples: Optional[np.ndarray] = None
@@ -134,23 +152,26 @@ class WaveformDisplay(QWidget):
         12,
         lambda self, args, kwargs: {"tags": len(args[0]) if args else 0},
     )
-    def set_time_tags(self, tags: List[Tuple[int, str, int, Optional[str]]]):
-        # tags: (timestamp_ms, char_text, char_id, ruby_text)，按项目文件顺序
-        # 同一 char_id 的第一个 checkpoint 携带 char 标签，后续不重复显示；ruby 始终携带
-        seen_char_ids: set = set()
-        normal: List[Tuple[int, Optional[str], Optional[str]]] = []
-        warning: List[Tuple[int, Optional[str], Optional[str]]] = []
+    def set_time_tags(self, tags: List[Tuple[int, str, int, int, int, bool, Optional[str]]]):
+        # tags: (timestamp_ms, char_text, line_idx, char_idx, cp_idx, is_sentence_end, ruby_text)
+        # 同一字符 (line_idx, char_idx) 的第一个 checkpoint 携带 char 标签，后续不重复；ruby 始终携带
+        seen_chars: set = set()
+        normal: List[TimeTag] = []
+        warning: List[TimeTag] = []
         running_max = -1
-        for ts, char, char_id, ruby_text in tags:
-            label: Optional[str] = char if char_id not in seen_char_ids else None
-            seen_char_ids.add(char_id)
+        for ts, char, line_idx, char_idx, cp_idx, is_end, ruby_text in tags:
+            char_key = (line_idx, char_idx)
+            label: Optional[str] = char if char_key not in seen_chars else None
+            seen_chars.add(char_key)
+            handle: TagHandle = (line_idx, char_idx, cp_idx, is_end)
+            item = TimeTag(ts, label, ruby_text, handle)
             if ts < running_max:
-                warning.append((ts, label, ruby_text))
+                warning.append(item)
             else:
-                normal.append((ts, label, ruby_text))
+                normal.append(item)
                 running_max = ts
-        self._time_tags = sorted(normal, key=lambda x: x[0])
-        self._warning_time_tags = sorted(warning, key=lambda x: x[0])
+        self._time_tags = sorted(normal, key=lambda x: x.ts)
+        self._warning_time_tags = sorted(warning, key=lambda x: x.ts)
         self.update()
 
     def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
@@ -340,38 +361,38 @@ class WaveformDisplay(QWidget):
 
         # 正常时间标签
         normal_color = theme.accent_warning
-        for ts, label, ruby_text in self._time_tags:
-            if visible_start_ms <= ts <= visible_end_ms:
-                ratio = (ts - visible_start_ms) / visible_duration
+        for tag in self._time_tags:
+            if visible_start_ms <= tag.ts <= visible_end_ms:
+                ratio = (tag.ts - visible_start_ms) / visible_duration
                 x = int(ratio * w)
                 painter.setPen(QPen(normal_color, 2))
                 painter.drawLine(x, int(h * 0.2), x, int(h * 0.8))
                 painter.setPen(normal_color)
-                if label:
-                    display_text = label
-                    if ruby_text:
-                        display_text += self._format_ruby_label(ruby_text)
+                if tag.label:
+                    display_text = tag.label
+                    if tag.ruby:
+                        display_text += self._format_ruby_label(tag.ruby)
                     painter.drawText(x + 2, label_y, display_text)
-                elif ruby_text:
-                    painter.drawText(x + 2, label_y, self._format_ruby_label(ruby_text))
+                elif tag.ruby:
+                    painter.drawText(x + 2, label_y, self._format_ruby_label(tag.ruby))
 
         # 非单调时间标签：更高更粗、警告色
         if self._warning_time_tags:
             warn_color = theme.timetag_nonmonotonic
-            for ts, label, ruby_text in self._warning_time_tags:
-                if visible_start_ms <= ts <= visible_end_ms:
-                    ratio = (ts - visible_start_ms) / visible_duration
+            for tag in self._warning_time_tags:
+                if visible_start_ms <= tag.ts <= visible_end_ms:
+                    ratio = (tag.ts - visible_start_ms) / visible_duration
                     x = int(ratio * w)
                     painter.setPen(QPen(warn_color, 3))
                     painter.drawLine(x, int(h * 0.1), x, int(h * 0.9))
                     painter.setPen(warn_color)
-                    if label:
-                        display_text = label
-                        if ruby_text:
-                            display_text += self._format_ruby_label(ruby_text)
+                    if tag.label:
+                        display_text = tag.label
+                        if tag.ruby:
+                            display_text += self._format_ruby_label(tag.ruby)
                         painter.drawText(x + 2, label_y, display_text)
-                    elif ruby_text:
-                        painter.drawText(x + 2, label_y, self._format_ruby_label(ruby_text))
+                    elif tag.ruby:
+                        painter.drawText(x + 2, label_y, self._format_ruby_label(tag.ruby))
 
     def _draw_playhead(self, painter: QPainter, w: int, h: int,
                        visible_start_ms: float, visible_duration_ms: float):
@@ -578,7 +599,7 @@ class TimelineWidget(QWidget):
     def set_position(self, ms: int):
         self.waveform_display.set_position(ms)
 
-    def set_time_tags(self, tags: List[Tuple[int, str, int, Optional[str]]]):
+    def set_time_tags(self, tags: List[Tuple[int, str, int, int, int, bool, Optional[str]]]):
         self.waveform_display.set_time_tags(tags)
 
     def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):

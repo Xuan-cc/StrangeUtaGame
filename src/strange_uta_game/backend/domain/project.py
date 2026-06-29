@@ -438,16 +438,26 @@ class Project:
                 tags_ms.extend(ch.all_global_timestamps)
         return tags_ms
 
-    def collect_all_global_timestamp_ms_with_chars(self) -> List[Tuple[int, str, int, Optional[str]]]:
+    def collect_all_global_timestamp_ms_with_chars(
+        self,
+    ) -> List[Tuple[int, str, int, int, int, bool, Optional[str]]]:
         """收集所有字符 checkpoint 的全局时间戳（毫秒）及对应字符，按项目文件顺序。
 
-        返回 (timestamp_ms, char_text, char_id, ruby_part_text)，其中 char_id = id(ch) 用于跨 checkpoint
-        去重显示：同一 Character 对象的多个 checkpoint 只标注第一个。
-        ruby_part_text 为该 checkpoint 对应的 RubyPart 文本；sentence_end_ts 及无注音时为 None。
+        返回 ``(timestamp_ms, char_text, line_idx, char_idx, cp_idx, is_sentence_end,
+        ruby_part_text)``：
+
+        - ``(line_idx, char_idx, cp_idx, is_sentence_end)`` 构成可反查模型的句柄，
+          供波形时间标签拖拽编辑命中后定位到具体 checkpoint。
+        - 句柄中的 ``(line_idx, char_idx)`` 同时用作跨 checkpoint 去重键：同一字符的多个
+          checkpoint 只在第一个标注 ``char_text`` 标签（前端 ``set_time_tags`` 据此判断）。
+        - 普通 checkpoint 的 ``cp_idx`` = 其在 ``global_timestamps`` 中的索引，
+          ``is_sentence_end`` = False；句尾呼吸点 ``cp_idx`` = ``check_count``，
+          ``is_sentence_end`` = True。
+        - ``ruby_part_text`` 为该 checkpoint 对应的 RubyPart 文本；句尾点及无注音时为 None。
         """
-        result: List[Tuple[int, str, int, Optional[str]]] = []
-        for sentence in self.sentences:
-            for ch in sentence.characters:
+        result: List[Tuple[int, str, int, int, int, bool, Optional[str]]] = []
+        for line_idx, sentence in enumerate(self.sentences):
+            for char_idx, ch in enumerate(sentence.characters):
                 # 普通 checkpoint：按索引取对应 RubyPart（mora 模式下一一对应）
                 for idx, ts in enumerate(ch.global_timestamps):
                     ruby_part_text: Optional[str] = (
@@ -455,10 +465,12 @@ class Project:
                         if ch.ruby and idx < len(ch.ruby.parts)
                         else None
                     )
-                    result.append((ts, ch.char, id(ch), ruby_part_text))
-                # sentence_end_ts 是呼吸/停顿点，无对应 RubyPart
+                    result.append((ts, ch.char, line_idx, char_idx, idx, False, ruby_part_text))
+                # sentence_end_ts 是呼吸/停顿点，无对应 RubyPart；cp_idx = check_count
                 if ch.is_sentence_end and ch.global_sentence_end_ts is not None:
-                    result.append((ch.global_sentence_end_ts, ch.char, id(ch), None))
+                    result.append(
+                        (ch.global_sentence_end_ts, ch.char, line_idx, char_idx, ch.check_count, True, None)
+                    )
         return result
 
     def find_prev_line_with_checkpoints(self, current_idx: int) -> int:

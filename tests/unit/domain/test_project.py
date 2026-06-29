@@ -92,6 +92,41 @@ class TestProject:
         assert all_ts[0][4] == 1000
         assert all_ts[1][4] == 2000
 
+    def test_collect_global_timestamps_with_handles(self):
+        """collect_all_global_timestamp_ms_with_chars 返回带模型句柄的 7 元组，
+        供波形时间标签拖拽编辑命中后定位到具体 checkpoint。"""
+        project = Project()
+        singer = project.get_default_singer()
+        s = Sentence.from_text("ab", singer.id)
+        # a: 两个 checkpoint
+        s.characters[0].check_count = 2
+        s.characters[0].timestamps = [1000, 1500]
+        s.characters[0]._update_offset_timestamps()
+        # b: 一个 checkpoint + 句尾呼吸点
+        s.characters[1].check_count = 1
+        s.characters[1].timestamps = [2000]
+        s.characters[1].is_sentence_end = True
+        s.characters[1].set_sentence_end_ts(2500)
+        project.add_sentence(s)
+        # 项目级统一偏移 +100
+        for ch in s.characters:
+            ch.set_offset(100)
+
+        out = project.collect_all_global_timestamp_ms_with_chars()
+        assert len(out) == 4
+        # 每行均为 (ts, char, line_idx, char_idx, cp_idx, is_sentence_end, ruby_text)
+        assert all(len(row) == 7 for row in out)
+        # 偏移已施加在显示时间戳上
+        assert out[0][0] == 1100 and out[1][0] == 1600
+        # 句柄正确
+        assert out[0][2:6] == (0, 0, 0, False)
+        assert out[1][2:6] == (0, 0, 1, False)
+        assert out[2][2:6] == (0, 1, 0, False)
+        # 句尾呼吸点：cp_idx == check_count，is_sentence_end True
+        assert out[3][2:6] == (0, 1, 1, True) and out[3][0] == 2600
+        # 同一字符仅首个 checkpoint 在前端去重逻辑里携带标签（此处验证字符文本一致）
+        assert out[0][1] == "a" and out[1][1] == "a"
+
     def test_get_timing_statistics(self):
         project = Project()
         singer = project.get_default_singer()
