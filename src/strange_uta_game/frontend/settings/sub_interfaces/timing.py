@@ -22,70 +22,94 @@ class TimingSubInterface(SubSettingInterface):
 
     def _init_ui(self):
         tr = self.tr
-        # 打轴设定
-        g = SettingCardGroup(tr("打轴设定"), self.scrollWidget)
-        self._tr_register(g, title_source="打轴设定")
+        # ── 分组 1：时间补正 ──
+        g_correct = SettingCardGroup(tr("时间补正"), self.scrollWidget)
+        self._tr_register(g_correct, title_source="时间补正")
         self.card_offset = self._tr_register(
             SpinSettingCard(FIF.DATE_TIME, tr("按键补偿"),
                 tr("建议用下方的offset校正来矫正，用于设备引起的反应延迟（负值=提前，正值=延后）"),
-                min_val=-5000, max_val=5000, step=10, suffix=" ms", parent=g),
+                min_val=-5000, max_val=5000, step=10, suffix=" ms", parent=g_correct),
             title_source="按键补偿",
             content_source="建议用下方的offset校正来矫正，用于设备引起的反应延迟（负值=提前，正值=延后）")
         self.card_speed_correction = self._tr_register(
             SpinSettingCard(FIF.SPEED_MEDIUM, tr("速度补正"),
                 tr("打轴时间戳的速度修正系数"),
-                min_val=50, max_val=200, step=5, suffix=" %", parent=g),
+                min_val=50, max_val=200, step=5, suffix=" %", parent=g_correct),
             title_source="速度补正", content_source="打轴时间戳的速度修正系数")
         self.card_export_offset = self._tr_register(
             SpinSettingCard(FIF.HISTORY, tr("全局偏移"),
                 tr("全局偏移，用于控制本软件内整体轴时间偏移（毫秒），（负值=提前，正值=延后）"),
-                min_val=-5000, max_val=5000, step=10, suffix=" ms", parent=g),
+                min_val=-5000, max_val=5000, step=10, suffix=" ms", parent=g_correct),
             title_source="全局偏移",
             content_source="全局偏移，用于控制本软件内整体轴时间偏移（毫秒），（负值=提前，正值=延后）")
         self.card_timing_step = self._tr_register(
             SpinSettingCard(FIF.UP, tr("微调时间戳步长"),
                 tr("Alt+↑/Alt+↓ 微调选中节奏点时间戳的步长"),
-                min_val=1, max_val=500, step=1, suffix=" ms", parent=g),
+                min_val=1, max_val=500, step=1, suffix=" ms", parent=g_correct),
             title_source="微调时间戳步长",
             content_source="Alt+↑/Alt+↓ 微调选中节奏点时间戳的步长")
+        for c in [self.card_offset, self.card_speed_correction,
+                  self.card_export_offset, self.card_timing_step]:
+            g_correct.addSettingCard(c)
+        self.expandLayout.addWidget(g_correct)
+
+        # ── 分组 2：波形时间标签 ──
+        g_wave = SettingCardGroup(tr("波形时间标签"), self.scrollWidget)
+        self._tr_register(g_wave, title_source="波形时间标签")
         self.card_waveform_tag_edit = self._tr_register(
             SwitchSettingCard(FIF.EDIT, tr("波形时间标签拖拽"),
-                tr("在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式"), parent=g),
+                tr("在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式"), parent=g_wave),
             title_source="波形时间标签拖拽",
             content_source="在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式")
         self.card_waveform_tag_char = self._tr_register(
             SwitchSettingCard(FIF.FONT, tr("波形标签显示字符"),
-                tr("在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注"), parent=g),
+                tr("在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注"), parent=g_wave),
             title_source="波形标签显示字符",
             content_source="在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注")
         self.card_waveform_tag_ruby = self._tr_register(
             SwitchSettingCard(FIF.FONT, tr("波形标签显示注音"),
-                tr("在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注"), parent=g),
+                tr("在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注"), parent=g_wave),
             title_source="波形标签显示注音",
             content_source="在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注")
+        for c in [self.card_waveform_tag_edit, self.card_waveform_tag_char,
+                  self.card_waveform_tag_ruby]:
+            g_wave.addSettingCard(c)
+        self.expandLayout.addWidget(g_wave)
+
+        # ── 分组 3：鼠标与焦点 ──
+        g_mouse = SettingCardGroup(tr("鼠标与焦点"), self.scrollWidget)
+        self._tr_register(g_mouse, title_source="鼠标与焦点")
         self.card_disable_click_jump = self._tr_register(
             SwitchSettingCard(FIF.CLOSE, tr("禁用单击跳转"),
-                tr("关闭单击字符/节奏点延迟后跳转到目标行的功能（双击跳转不受影响）"), parent=g),
+                tr("关闭单击字符/节奏点延迟后跳转到目标行的功能（双击跳转不受影响）"), parent=g_mouse),
             title_source="禁用单击跳转",
             content_source="关闭单击字符/节奏点延迟后跳转到目标行的功能（双击跳转不受影响）")
         self.card_disable_click_recenter = self._tr_register(
             SwitchSettingCard(FIF.PIN, tr("禁用点击时居中"),
-                tr("单击或双击字符/节奏点时不再把目标行滚动到视口中央（光标仍会移动；播放自动滚动与键盘导航不受影响）"), parent=g),
+                tr("单击或双击字符/节奏点时不再把目标行滚动到视口中央（光标仍会移动；播放自动滚动与键盘导航不受影响）"), parent=g_mouse),
             title_source="禁用点击时居中",
             content_source="单击或双击字符/节奏点时不再把目标行滚动到视口中央（光标仍会移动；播放自动滚动与键盘导航不受影响）")
         self.card_hide_hitbox_highlights = self._tr_register(
             SwitchSettingCard(FIF.TRANSPARENT, tr("隐藏焦点高亮"),
-                tr("隐藏 current 域和 focus 域的 hitbox 高亮背景；启用后仅在拖拽多选时显示 focus 域高亮"), parent=g),
+                tr("隐藏 current 域和 focus 域的 hitbox 高亮背景；启用后仅在拖拽多选时显示 focus 域高亮"), parent=g_mouse),
             title_source="隐藏焦点高亮",
             content_source="隐藏 current 域和 focus 域的 hitbox 高亮背景；启用后仅在拖拽多选时显示 focus 域高亮")
+        for c in [self.card_disable_click_jump, self.card_disable_click_recenter,
+                  self.card_hide_hitbox_highlights]:
+            g_mouse.addSettingCard(c)
+        self.expandLayout.addWidget(g_mouse)
+
+        # ── 分组 4：预览指引 ──
+        g_guide = SettingCardGroup(tr("预览指引"), self.scrollWidget)
+        self._tr_register(g_guide, title_source="预览指引")
         self.card_preview_guide = self._tr_register(
             SwitchSettingCard(FIF.VIEW, tr("打轴预览指引"),
-                tr("打轴播放时在当前行以光标为锚用过渡色提示上一个/正在/下一个打的字；具体透明度与开关可在下方「预览指引方式」中自定义"), parent=g),
+                tr("打轴播放时在当前行以光标为锚用过渡色提示上一个/正在/下一个打的字；具体透明度与开关可在下方「预览指引方式」中自定义"), parent=g_guide),
             title_source="打轴预览指引",
             content_source="打轴播放时在当前行以光标为锚用过渡色提示上一个/正在/下一个打的字；具体透明度与开关可在下方「预览指引方式」中自定义")
         self.card_preview_guide_style = self._tr_register(
             SettingCard(FIF.PALETTE, tr("预览指引方式"),
-                tr("设置预览指引中上一个/正在/下一个字群的透明度和开关"), g),
+                tr("设置预览指引中上一个/正在/下一个字群的透明度和开关"), g_guide),
             title_source="预览指引方式",
             content_source="设置预览指引中上一个/正在/下一个字群的透明度和开关")
         self.btn_guide_style = PushButton(tr("设置指引"), self.card_preview_guide_style)
@@ -93,31 +117,31 @@ class TimingSubInterface(SubSettingInterface):
         self.btn_guide_style.clicked.connect(self._open_preview_guide_dialog)
         self.card_preview_guide_style.hBoxLayout.addWidget(self.btn_guide_style, 0, Qt.AlignmentFlag.AlignRight)
         self.card_preview_guide_style.hBoxLayout.addSpacing(16)
+        for c in [self.card_preview_guide, self.card_preview_guide_style]:
+            g_guide.addSettingCard(c)
+        self.expandLayout.addWidget(g_guide)
+
+        # ── 分组 5：按键音效 ──
+        g_sound = SettingCardGroup(tr("按键音效"), self.scrollWidget)
+        self._tr_register(g_sound, title_source="按键音效")
         self.card_keysound = self._tr_register(
             SwitchSettingCard(FIF.MUSIC, tr("按键音"),
-                tr("打轴时按下按键播放按下音、抬起句尾按键播放抬起音"), parent=g),
+                tr("打轴时按下按键播放按下音、抬起句尾按键播放抬起音"), parent=g_sound),
             title_source="按键音", content_source="打轴时按下按键播放按下音、抬起句尾按键播放抬起音")
         self.card_keysound_volume = self._tr_register(
             SpinSettingCard(FIF.VOLUME, tr("按键音音量"),
                 tr("按键音的播放音量（100 = 原始音量）"),
-                min_val=0, max_val=200, step=5, suffix=" %", parent=g),
+                min_val=0, max_val=200, step=5, suffix=" %", parent=g_sound),
             title_source="按键音音量", content_source="按键音的播放音量（100 = 原始音量）")
         self.card_keysound_style = self._tr_register(
             ComboSettingCard(FIF.PALETTE, tr("按键音风格"),
                 tr("选择按键音音效风格"),
-                items=[tr("默认"), "osu", tr("街机风"), tr("金属感")], parent=g),
+                items=[tr("默认"), "osu", tr("街机风"), tr("金属感")], parent=g_sound),
             title_source="按键音风格", content_source="选择按键音音效风格")
         self.card_keysound_style.set_item_sources(["默认", "osu", "街机风", "金属感"])
-        for c in [self.card_offset, self.card_speed_correction, self.card_export_offset,
-                  self.card_timing_step, self.card_waveform_tag_edit,
-                  self.card_waveform_tag_char, self.card_waveform_tag_ruby,
-                  self.card_disable_click_jump,
-                  self.card_disable_click_recenter,
-                  self.card_hide_hitbox_highlights, self.card_preview_guide,
-                  self.card_preview_guide_style,
-                  self.card_keysound, self.card_keysound_volume, self.card_keysound_style]:
-            g.addSettingCard(c)
-        self.expandLayout.addWidget(g)
+        for c in [self.card_keysound, self.card_keysound_volume, self.card_keysound_style]:
+            g_sound.addSettingCard(c)
+        self.expandLayout.addWidget(g_sound)
 
         # Offset 校准
         cg = SettingCardGroup(tr("Offset 校准"), self.scrollWidget)

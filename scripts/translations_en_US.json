@@ -1318,5 +1318,10 @@
   "波形标签显示字符": "Show character on waveform tags",
   "在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注": "Show the corresponding character text on waveform time tags; turn off to omit the character",
   "波形标签显示注音": "Show furigana on waveform tags",
-  "在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注": "Show the corresponding furigana (ruby) text on waveform time tags; turn off to omit the furigana"
+  "在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注": "Show the corresponding furigana (ruby) text on waveform time tags; turn off to omit the furigana",
+  "时间补正": "Timing correction",
+  "波形时间标签": "Waveform time tags",
+  "鼠标与焦点": "Mouse & focus",
+  "预览指引": "Preview guide",
+  "按键音效": "Key sound"
 }

@@ -7487,6 +7487,31 @@ KS側の設定が優先されます。</translation>
 <context>
     <name>TimingSubInterface</name>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="26" />
+        <source>时间补正</source>
+        <translation>タイミング補正</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="53" />
+        <source>波形时间标签</source>
+        <translation>波形タイムタグ</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="80" />
+        <source>鼠标与焦点</source>
+        <translation>マウスとフォーカス</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="103" />
+        <source>预览指引</source>
+        <translation>プレビューガイド</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="125" />
+        <source>按键音效</source>
+        <translation>キー効果音</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="57" />
         <source>波形标签显示字符</source>
         <translation>波形タグに文字を表示</translation>
