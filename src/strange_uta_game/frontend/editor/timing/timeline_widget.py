@@ -73,7 +73,7 @@ class WaveformDisplay(QWidget):
     _HANDLE_SEL_HALF_W = 7      # 选中把手放大后半宽（px）
     _HANDLE_HEIGHT = 9          # 把手块高度（px）
     _MIN_HANDLE_SPACING = 8     # 相邻把手最小间距，低于此值密度门控不绘制把手/不可命中
-    _HANDLE_HIT_Y_RATIO = 0.4   # 命中仅在控件顶部该比例高度内有效
+    _HANDLE_HIT_Y_BAND = 12     # 命中仅在波形竖直中线 ±该像素范围内有效（把手居中，与顶部标签分离）
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -309,7 +309,7 @@ class WaveformDisplay(QWidget):
         """命中顶部把手块：返回 (handle, ts, x_px) 或 None。仅在编辑开启且 y 在顶部带内。"""
         if not self._tag_edit_enabled:
             return None
-        if y > self.height() * self._HANDLE_HIT_Y_RATIO:
+        if abs(y - self.height() / 2) > self._HANDLE_HIT_Y_BAND:
             return None
         best = None
         best_dx = self._HANDLE_HALF_W + 1
@@ -503,9 +503,8 @@ class WaveformDisplay(QWidget):
         painter.setFont(font)
         fm = painter.fontMetrics()
         label_y = fm.ascent() + 1  # 所有标签统一贴顶显示，竖线在其下方展开
-        # 编辑开启时顶部有把手块（半宽至多 _HANDLE_SEL_HALF_W），标签右移让开避免遮挡；
-        # 关闭时维持原 x+2 偏移（旧模式逐像素一致）
-        label_dx = (self._HANDLE_SEL_HALF_W + 3) if self._tag_edit_enabled else 2
+        # 把手已移至波形竖直中央，与顶部标签天然分离，标签无需再右移让位
+        label_dx = 2
         show_char = self._tag_char_enabled
         # 注音显示以字符显示为前提：字符关则注音也不显示
         show_ruby = self._tag_ruby_enabled and self._tag_char_enabled
@@ -549,27 +548,23 @@ class WaveformDisplay(QWidget):
         for a, b, tag, color, text in self._resolve_label_layout(labels):
             self._draw_label_plate(painter, a, label_y, fm, text, color, b - a)
 
-        # ── pass 3：顶部把手 + 选中态（仅编辑开启）。最后绘制，确保把手不被相邻
-        # 标签覆盖；密度门控：相邻把手过近则跳过（不绘制 / 不可命中）──
+        # ── pass 3：把手居于波形竖直中央（仅编辑开启）。与顶部标签天然分离。
+        # 密度门控：相邻把手过近则跳过（不绘制 / 不可命中）──
         if self._tag_edit_enabled:
             sel_color = theme.accent_secondary
+            cy = h // 2
             last_x = None
             for x, tag, is_warning, color in sorted(entries, key=lambda e: e[0]):
                 if last_x is not None and (x - last_x) < self._MIN_HANDLE_SPACING:
                     continue
                 last_x = x
                 selected = tag.handle in self._selected_handles
-                top = int(h * (0.1 if is_warning else 0.2))
                 half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
-                rect = QRect(x - half, top - self._HANDLE_HEIGHT, half * 2, self._HANDLE_HEIGHT)
-                if selected:
-                    painter.setPen(Qt.PenStyle.NoPen)
-                    painter.setBrush(QBrush(sel_color))
-                    painter.drawRect(rect)
-                else:
-                    painter.setPen(QPen(color, 1))
-                    painter.setBrush(Qt.BrushStyle.NoBrush)
-                    painter.drawRect(rect)
+                rect = QRect(x - half, cy - self._HANDLE_HEIGHT // 2, half * 2, self._HANDLE_HEIGHT)
+                # 实心色块（选中=蓝，未选中=标签语义色）+ 背景色描边，使其在波形上清晰可辨
+                painter.setPen(QPen(theme.waveform_bg, 1))
+                painter.setBrush(QBrush(sel_color if selected else color))
+                painter.drawRect(rect)
                 self._hit_boxes.append((x, tag.handle, tag.ts))
 
     def _resolve_label_layout(self, labels):
@@ -833,6 +828,9 @@ class TimelineWidget(QWidget):
         self._duration_ms = 0
         self._waveform_visible = True
         self._zoom_enabled = True
+        # 程序化 setValue 时抑制缩放滑条回调，避免反馈环（但不能 blockSignals，
+        # 否则 qfluentwidgets Slider 的 valueChanged→_adjustHandlePos 抓手不跟动）
+        self._suppress_zoom_slider = False
         self._init_ui()
 
     def changeEvent(self, event):
@@ -982,9 +980,11 @@ class TimelineWidget(QWidget):
     # ---- 回调 ----
 
     def _on_zoom_changed(self, zoom: float):
-        self.zoom_slider.blockSignals(True)
+        # 用标志位而非 blockSignals：要让 Slider 的 valueChanged→_adjustHandlePos
+        # 正常触发（抓手跟随），仅抑制我们自己的 _on_zoom_slider_changed 回环。
+        self._suppress_zoom_slider = True
         self.zoom_slider.setValue(self._zoom_to_slider(zoom))
-        self.zoom_slider.blockSignals(False)
+        self._suppress_zoom_slider = False
         self.zoom_label.setText(f"{zoom:.1f}x")
         # 缩放变化 → 可见窗占比变化 → 刷新滑块长度
         self._update_scroll_bar_metrics()
@@ -1013,7 +1013,7 @@ class TimelineWidget(QWidget):
         self.scroll_bar.blockSignals(False)
 
     def _on_zoom_slider_changed(self, value: int):
-        if not self._zoom_enabled:
+        if self._suppress_zoom_slider or not self._zoom_enabled:
             return
         self.waveform_display._suspend_auto_scroll()
         zoom = self._slider_to_zoom(value)

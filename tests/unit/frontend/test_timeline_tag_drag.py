@@ -18,6 +18,21 @@ def _lbl(a, b, handle):
     return (a, b, SimpleNamespace(handle=handle), None, "x")
 
 
+def test_lyrics_change_refreshes_waveform():
+    """导入歌词/节奏点/注音变更时，波形 timetag 也必须刷新（此前只刷 preview）。"""
+    calls = SimpleNamespace(tags=0, lyric=0, status=0)
+    editor = SimpleNamespace(
+        timeline=SimpleNamespace(clear_tag_selection=lambda: None),
+        refresh_lyric_display=lambda: setattr(calls, "lyric", calls.lyric + 1),
+        _update_time_tags_display=lambda: setattr(calls, "tags", calls.tags + 1),
+        _update_status=lambda: setattr(calls, "status", calls.status + 1),
+    )
+    for ct in ("lyrics", "checkpoints", "rubies"):
+        EditorInterface._on_data_changed(editor, ct)
+    assert calls.tags == 3      # 波形每次都刷新
+    assert calls.lyric == 3 and calls.status == 3
+
+
 def test_label_layout_leftmost_priority():
     """无选中时，重叠标签从左到右贪心，左侧优先。"""
     self = SimpleNamespace(_selected_handles=set())

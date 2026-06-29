@@ -580,6 +580,9 @@ class EditorInterface(QWidget):
             if hasattr(self, "timeline"):
                 self.timeline.clear_tag_selection()
             self.refresh_lyric_display()
+            # 导入歌词/项目时可能自带时间戳，波形 timetag 也需刷新（此前只刷了 preview）
+            self._update_time_tags_display()
+            self._update_status()
         elif change_type == "timetags":
             self._schedule_time_tags_update()
             self._update_status()
