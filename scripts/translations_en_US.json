@@ -1328,5 +1328,9 @@
   "春日向注音（带罗马音）": "Kasugamuki Ruby (with Romaji)",
   "SUG默认保存目录": "SUG Default Save Directory",
   "设置后，保存未命名项目时将始终优先使用此目录。\n留空则不启用，自动使用已保存项目 / 最近加载的文件所在目录。": "When set, saving untitled projects will always prefer this directory.\nLeave empty to disable, and automatically use the saved project / last loaded file directory.",
-  "设置后，导出时将始终优先使用此目录。\n留空则不启用，导出时自动使用已保存项目 / 最近加载的文件所在目录。": "When set, exports will always prefer this directory.\nLeave empty to disable, and automatically use the saved project / last loaded file directory."
+  "设置后，导出时将始终优先使用此目录。\n留空则不启用，导出时自动使用已保存项目 / 最近加载的文件所在目录。": "When set, exports will always prefer this directory.\nLeave empty to disable, and automatically use the saved project / last loaded file directory.",
+  "SUG自动备份目录": "SUG auto-backup directory",
+  "拖动时间标签": "Drag time tag",
+  "设置后，保存未保存项目时将始终使用此目录。\n留空不设置，自动使用已保存项目 / 最近加载的文件所在目录。": "When set, saving unsaved projects will always use this directory.\nLeave empty to auto-use the saved project / recently loaded file directory.",
+  "设置后，导出时将始终使用此目录。\n留空不设置，导出时自动使用已保存项目 / 最近加载的文件所在目录。": "When set, exporting will always use this directory.\nLeave empty to auto-use the saved project / recently loaded file directory."
 }

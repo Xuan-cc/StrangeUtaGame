@@ -2308,7 +2308,7 @@ Never — disable auto-scroll</translation>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4118" />
         <source>拖动时间标签</source>
-        <translation type="unfinished" />
+        <translation>Drag time tag</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="955" />
