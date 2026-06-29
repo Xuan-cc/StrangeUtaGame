@@ -20,11 +20,12 @@ def _fake_wd():
         _time_tags=[], _warning_time_tags=[], _handle_index={},
         _selected_handles=set(), _last_tags_input=None,
         _running_max_ts=-1, _seen_char_keys=set(), _is_dragging_tags=False,
-        update=lambda: None,
+        _max_file_order_key=None, update=lambda: None,
     )
     f._append_time_tag = lambda entry: WaveformDisplay._append_time_tag(f, entry)
     f.set_time_tags = lambda tags: WaveformDisplay.set_time_tags(f, tags)
     f._visible_slice = lambda lst, vs, ve: WaveformDisplay._visible_slice(f, lst, vs, ve)
+    f.try_append_tag = lambda *a: WaveformDisplay.try_append_tag(f, *a)
     return f
 
 
@@ -125,6 +126,35 @@ def test_reshow_waveform_flushes_dirty():
     )
     EditorInterface._on_waveform_visibility_changed(ed, True)
     assert refreshed == [1] and ed._timetags_dirty_while_hidden is False
+
+
+def test_try_append_tag_end_append_succeeds():
+    """文件序末尾的新标签 → 增量追加成功，且与全量重建一致。"""
+    T0 = [(100, "a", 0, 0, 0, False, "a"), (300, "b", 0, 1, 0, False, None)]
+    wd = _fake_wd()
+    wd.set_time_tags(T0)
+    ok = wd.try_append_tag(400, "c", 0, 2, 0, False, "c")  # file_key (0,2,0) > (0,1,0)
+    assert ok is True
+    assert _summary(wd) == _summary(_full_rebuild(T0 + [(400, "c", 0, 2, 0, False, "c")]))
+    assert wd._last_tags_input is None  # 直接增量后置空，下次走全量
+
+
+def test_try_append_tag_existing_handle_fails():
+    """已存在的 checkpoint（改时间）→ 不增量，返回 False。"""
+    T0 = [(100, "a", 0, 0, 0, False, "a"), (300, "b", 0, 1, 0, False, None)]
+    wd = _fake_wd()
+    wd.set_time_tags(T0)
+    assert wd.try_append_tag(999, "a", 0, 0, 0, False, "a") is False
+    assert _summary(wd) == _summary(_full_rebuild(T0))  # 状态未变
+
+
+def test_try_append_tag_not_at_end_fails():
+    """文件序非末尾（在已有标签之前补打）→ 返回 False 回退全量。"""
+    T0 = [(100, "a", 0, 0, 0, False, "a"), (300, "c", 0, 2, 0, False, None)]
+    wd = _fake_wd()
+    wd.set_time_tags(T0)  # _max_file_order_key=(0,2,0)
+    # 补打 (0,1,0)：file_key < max → 必须回退（它会改变 (0,2,0) 的归类语义）
+    assert wd.try_append_tag(200, "b", 0, 1, 0, False, None) is False
 
 
 def test_visible_slice():

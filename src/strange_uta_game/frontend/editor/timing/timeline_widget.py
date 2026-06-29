@@ -88,6 +88,8 @@ class WaveformDisplay(QWidget):
         self._last_tags_input: Optional[List[tuple]] = None
         self._running_max_ts: int = -1
         self._seen_char_keys: set = set()
+        # 文件序最大键 (line, char, cp)，用于 try_append_tag 判定"末尾追加"
+        self._max_file_order_key: Optional[Tuple[int, int, int]] = None
 
         # 音频数据
         self._samples: Optional[np.ndarray] = None
@@ -223,10 +225,11 @@ class WaveformDisplay(QWidget):
         }
         if self._selected_handles:
             self._selected_handles &= set(self._handle_index)
-        # 刷新增量状态
+        # 刷新增量状态（collect 为文件序，末项即文件序最大键）
         self._seen_char_keys = seen_chars
         self._running_max_ts = running_max
         self._last_tags_input = tags
+        self._max_file_order_key = (tags[-1][2], tags[-1][3], tags[-1][4]) if tags else None
         self.update()
 
     def _append_time_tag(self, entry: Tuple[int, str, int, int, int, bool, Optional[str]]) -> None:
@@ -243,7 +246,27 @@ class WaveformDisplay(QWidget):
             bisect.insort(self._time_tags, item, key=lambda x: x.ts)
             self._running_max_ts = ts
         self._handle_index[handle] = item
+        self._max_file_order_key = (line_idx, char_idx, cp_idx)
         self.update()
+
+    def try_append_tag(self, ts: int, char: str, line_idx: int, char_idx: int,
+                       cp_idx: int, is_end: bool, ruby: Optional[str]) -> bool:
+        """顺序打轴增量追加单个标签（绕过前端 collect + 全量重建）。
+
+        仅当该标签是**新增**且在**文件序上位于所有现有标签之后**时成功：此时它不会改变
+        任何已有标签的单调/非单调归类，O(log N) 直接插入并重绘，返回 True。否则不改任何
+        状态、返回 False，调用方回退到全量 set_time_tags。
+        """
+        handle: TagHandle = (line_idx, char_idx, cp_idx, is_end)
+        if handle in self._handle_index:
+            return False  # 已存在 = 改时间，非新增
+        file_key = (line_idx, char_idx, cp_idx)
+        if self._max_file_order_key is not None and file_key <= self._max_file_order_key:
+            return False  # 非文件序末尾 → 可能改变他者归类，回退
+        self._append_time_tag((ts, char, line_idx, char_idx, cp_idx, is_end, ruby))
+        # 直接增量后让下次 set_time_tags 走全量重建（避免前缀比对基准失配）
+        self._last_tags_input = None
+        return True
 
     def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
         self._samples = samples
@@ -980,6 +1003,11 @@ class TimelineWidget(QWidget):
 
     def set_tag_edit_enabled(self, enabled: bool) -> None:
         self.waveform_display.set_tag_edit_enabled(enabled)
+
+    def try_append_tag(self, ts: int, char: str, line_idx: int, char_idx: int,
+                       cp_idx: int, is_end: bool, ruby: Optional[str]) -> bool:
+        return self.waveform_display.try_append_tag(
+            ts, char, line_idx, char_idx, cp_idx, is_end, ruby)
 
     def set_tag_char_enabled(self, enabled: bool) -> None:
         self.waveform_display.set_tag_char_enabled(enabled)

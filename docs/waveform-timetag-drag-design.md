@@ -233,8 +233,15 @@ qfluentwidgets `Slider` 的抓手位置由 `valueChanged → _adjustHandlePos` �
 （改时间/删除/乱序补打/结构变更）前缀比对失败 → 回退全量重建。实测 set_time_tags：
 全量 4.34ms → 增量 0.03ms（**~140×**，N=7200）。
 
-> 增量结果与全量重建逐字段一致（ts/handle/label/警告归类），有单测 `test_incremental_*`
-> 守护；`collect`（前端 O(N)，~1.3ms@7200）仍保留，是较小的一半，未来若需可再做 delta 管线。
+> 增量结果与全量重建逐字段一致（ts/handle/label/警告归类），有单测 `test_incremental_*` 守护。
+
+**B+ — 连 collect 也省掉（顺序打轴直达增量）。** 服务回调 `on_timetag_added` 本就带
+`(line, char, cp, ts)`，前端此前只取 `line` 丢弃其余。现 `_timetag_added_signal` 拓宽为
+`(line, char, cp)`，`_handle_timetag_added` → `_try_incremental_append`：从模型回读全局
+时间戳/字符/注音（与 collect 同源），调 `WaveformDisplay.try_append_tag`。后者校验该 handle
+是**新增**且**文件序在所有现有标签之后**（`_max_file_order_key`）→ O(log N) 插入、返回 True；
+否则（改时间/乱序补打/信息不全）返回 False，回退 `_schedule_time_tags_update` 全量。
+实测 N=7200 热路径 **collect+全量 8.66ms → 增量 0.003ms**。`collect` 仅在回退路径才跑。
 
 ### 5.2 波形隐藏时不空转
 

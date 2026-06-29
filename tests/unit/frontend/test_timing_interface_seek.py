@@ -83,6 +83,8 @@ def test_timetag_added_delegates_dependent_invalidation_to_preview():
 
     editor._schedule_time_tags_update = schedule_time_tags_update
     editor._update_status = update_status
+    # 无 char/cp 信息（默认 -1）→ 增量追加返回 False → 回退全量调度
+    editor._try_incremental_append = lambda *a: False
 
     EditorInterface._handle_timetag_added(editor, 2)
 

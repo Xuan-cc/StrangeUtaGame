@@ -118,7 +118,7 @@ class EditorInterface(QWidget):
     project_saved = pyqtSignal()
     _position_changed_signal = pyqtSignal(int, int, object)
     _checkpoint_moved_signal = pyqtSignal(object)
-    _timetag_added_signal = pyqtSignal(int)
+    _timetag_added_signal = pyqtSignal(int, int, int)  # (line_idx, char_idx, checkpoint_idx)
     _timing_error_signal = pyqtSignal(str, str)
     # 渲染进度：(speed, progress)。内部从音频 worker 线程触发，经此信号
     # 自动 marshal 到 UI 线程（Qt 跨线程默认 queued connection）。
@@ -6202,7 +6202,7 @@ class EditorInterface(QWidget):
         checkpoint_idx: int,
         timestamp_ms: int,
     ) -> None:
-        _ = singer_id, char_idx, checkpoint_idx, timestamp_ms
+        _ = singer_id, timestamp_ms
         log_perf_event(
             "editor.timetag_added",
             line=line_idx,
@@ -6210,7 +6210,8 @@ class EditorInterface(QWidget):
             cp=checkpoint_idx,
             ts=timestamp_ms,
         )
-        self._timetag_added_signal.emit(line_idx)
+        # 透传 (line, char, cp) 给增量追加路径（用全局时间戳从模型回读，避免偏移换算）
+        self._timetag_added_signal.emit(line_idx, char_idx, checkpoint_idx)
 
     def on_position_changed(
         self, position_ms: int, duration_ms: int, singer_positions
@@ -6445,11 +6446,42 @@ class EditorInterface(QWidget):
         12,
         lambda self, args, kwargs: {"line": args[0] if args else kwargs.get("line_idx")},
     )
-    def _handle_timetag_added(self, line_idx: int):
+    def _handle_timetag_added(self, line_idx: int, char_idx: int = -1, cp_idx: int = -1):
         if self._project:
             self.preview._invalidate_line_and_dependents(line_idx)
-        self._schedule_time_tags_update()
+        # 波形隐藏时只标脏（连增量都省）；显示时优先走顺序打轴增量追加，失败再回退全量
+        if hasattr(self, "timeline") and not self.timeline.is_waveform_visible():
+            self._timetags_dirty_while_hidden = True
+        elif not self._try_incremental_append(line_idx, char_idx, cp_idx):
+            self._schedule_time_tags_update()
         self._update_status()
+
+    def _try_incremental_append(self, line_idx: int, char_idx: int, cp_idx: int) -> bool:
+        """顺序打轴：把新增的单个 checkpoint 直接增量插入波形，绕过 collect + 全量重建。
+
+        从模型回读全局时间戳/字符/注音（与 collect 同源），交给 WaveformDisplay.try_append_tag
+        做"文件序末尾"判定；非末尾/已存在/信息不全则返回 False，由调用方回退全量。
+        """
+        if not self._project or char_idx < 0 or cp_idx < 0:
+            return False
+        if not (0 <= line_idx < len(self._project.sentences)):
+            return False
+        sentence = self._project.sentences[line_idx]
+        if not (0 <= char_idx < len(sentence.characters)):
+            return False
+        ch = sentence.characters[char_idx]
+        is_end = ch.is_sentence_end and cp_idx == ch.check_count
+        if is_end:
+            global_ts = ch.global_sentence_end_ts
+            ruby = None
+        else:
+            if cp_idx >= len(ch.global_timestamps):
+                return False
+            global_ts = ch.global_timestamps[cp_idx]
+            ruby = ch.ruby.parts[cp_idx].text if ch.ruby and cp_idx < len(ch.ruby.parts) else None
+        if global_ts is None:
+            return False
+        return self.timeline.try_append_tag(global_ts, ch.char, line_idx, char_idx, cp_idx, is_end, ruby)
 
     def _handle_timing_error(self, error_type: str, message: str):
         InfoBar.warning(
