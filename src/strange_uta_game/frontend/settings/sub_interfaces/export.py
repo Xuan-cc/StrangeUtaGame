@@ -49,10 +49,10 @@ class ExportSubInterface(SubSettingInterface):
         ])
         self.card_export_dir = self._tr_register(
             BrowseSettingCard(FIF.FOLDER, tr("默认导出目录"),
-                tr("设置后，导出时将始终优先使用此目录。\n留空则不启用，导出时自动使用最近加载的文件所在目录。"),
+                tr("设置后，导出时将始终优先使用此目录。\n留空则不启用，导出时自动使用已保存项目 / 最近加载的文件所在目录。"),
                 clearable=True, parent=g),
             title_source="默认导出目录",
-            content_source="设置后，导出时将始终优先使用此目录。\n留空则不启用，导出时自动使用最近加载的文件所在目录。")
+            content_source="设置后，导出时将始终优先使用此目录。\n留空则不启用，导出时自动使用已保存项目 / 最近加载的文件所在目录。")
         self.card_software_compensation = self._tr_register(
             SpinSettingCard(FIF.HISTORY, tr("软件导出补偿"),
                 tr("导出时给时间戳加上此补偿值（除.sug外的所有格式），负值=提前，正值=延后"),

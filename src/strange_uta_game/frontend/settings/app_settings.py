@@ -205,6 +205,9 @@ class AppSettings:
             # 备份与临时文件（周期保存 / 闪退恢复）的存放目录；留空使用默认
             # 位置（<config_dir>/ProjectBackup）。
             "backup_dir": "",
+            # 保存未命名（untitled）项目时优先使用的目录；留空则回退到
+            # 已保存项目 / 最近加载目录。见 ProjectStore.save_dir。
+            "default_save_dir": "",
         },
         "tools": {
             "ffmpeg_path": "",

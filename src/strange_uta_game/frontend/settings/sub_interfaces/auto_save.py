@@ -42,10 +42,17 @@ class AutoSaveSubInterface(SubSettingInterface):
         self._tr_register(self.card_backup_dir,
             title_source="备份位置",
             content_source="项目备份与临时文件的存放目录（留空使用默认位置）")
+        self.card_default_save_dir = BrowseSettingCard(FIF.SAVE, tr("SUG默认保存目录"),
+            tr("设置后，保存未命名项目时将始终优先使用此目录。\n留空则不启用，自动使用已保存项目 / 最近加载的文件所在目录。"),
+            clearable=True, parent=g)
+        self._tr_register(self.card_default_save_dir,
+            title_source="SUG默认保存目录",
+            content_source="设置后，保存未命名项目时将始终优先使用此目录。\n留空则不启用，自动使用已保存项目 / 最近加载的文件所在目录。")
         g.addSettingCard(self.card_auto_save_enabled)
         g.addSettingCard(self.card_auto_save_interval)
         g.addSettingCard(self.card_backup_count)
         g.addSettingCard(self.card_backup_dir)
+        g.addSettingCard(self.card_default_save_dir)
         self.expandLayout.addWidget(g)
 
     def connect_signals(self):
@@ -53,15 +60,18 @@ class AutoSaveSubInterface(SubSettingInterface):
         self.card_auto_save_interval.value_changed.connect(self._notify_changed)
         self.card_backup_count.value_changed.connect(self._notify_changed)
         self.card_backup_dir.path_changed.connect(self._notify_changed)
+        self.card_default_save_dir.path_changed.connect(self._notify_changed)
 
     def load_settings(self, s):
         self.card_auto_save_enabled.setChecked(s.get("auto_save.enabled", True))
         self.card_auto_save_interval.setValue(s.get("auto_save.interval_minutes", 5))
         self.card_backup_count.setValue(s.get("auto_save.backup_count", 10))
         self.card_backup_dir.setText(s.get("auto_save.backup_dir", "") or "")
+        self.card_default_save_dir.setText(s.get("auto_save.default_save_dir", "") or "")
 
     def collect_settings(self, s):
         s.set("auto_save.enabled", self.card_auto_save_enabled.isChecked())
         s.set("auto_save.interval_minutes", self.card_auto_save_interval.value())
         s.set("auto_save.backup_count", self.card_backup_count.value())
         s.set("auto_save.backup_dir", self.card_backup_dir.text().strip())
+        s.set("auto_save.default_save_dir", self.card_default_save_dir.text().strip())

@@ -220,15 +220,18 @@ class ProjectStore(QObject):
 
     @property
     def working_dir(self) -> str:
-        """派生：当前工作目录。
+        """派生：当前工作目录（"已保存项目 > 上次加载目录"的通用基准）。
 
         优先级：
           1. 已正式保存的项目目录（排除 .cache 临时项目）
           2. 音频文件所在目录
           3. 最近加载/导入的歌词文件所在目录
-          4. settings["export.default_export_dir"]（用户在设置中显式指定的默认导出目录）
-          5. settings["export.last_export_dir"]（系统自动记录的最后操作目录）
-          6. ""（让 Qt 用系统默认）
+          4. settings["export.last_export_dir"]（系统自动记录的最后操作目录）
+          5. ""（让 Qt 用系统默认）
+
+        注：用户在设置中显式指定的「默认导出目录 / SUG默认保存目录」**不在**此链中，
+        分别由 :pyattr:`export_dir` / :pyattr:`save_dir` 叠加在最前面。文件加载、
+        主页等通用场景使用本属性。
         """
         if self._save_path and not self.is_temp_save_path(self._save_path):
             parent = str(Path(self._save_path).parent)
@@ -242,49 +245,51 @@ class ProjectStore(QObject):
             return self._last_lyric_dir
         try:
             from strange_uta_game.frontend.settings.app_settings import AppSettings
-            settings = AppSettings()
-            default_dir = settings.get("export.default_export_dir", "") or ""
-            if default_dir and Path(default_dir).is_dir():
-                return default_dir
-            last = settings.get("export.last_export_dir", "") or ""
+            last = AppSettings().get("export.last_export_dir", "") or ""
         except Exception:
             last = ""
         if last and Path(last).is_dir():
             return last
         return ""
 
-    @property
-    def export_dir(self) -> str:
-        """派生：导出目标目录（仅供导出界面使用，区别于 working_dir）。
-
-        与 ``working_dir`` 的关键差异：用户在设置中显式指定的
-        ``export.default_export_dir`` 优先于音频/歌词/last_export_dir，
-        仅次于已正式保存的项目目录。保存场景仍走 ``working_dir``，不受
-        默认导出目录影响。
-
-        优先级：
-          1. 已正式保存的项目目录（排除 .cache 临时项目；全新未保存的
-             未命名项目 _save_path 为 None，天然跳过）
-          2. settings["export.default_export_dir"]（用户显式指定）
-          3. working_dir 的其余回退（音频 / 歌词 / last_export_dir）
-        """
-        if self._save_path and not self.is_temp_save_path(self._save_path):
-            parent = str(Path(self._save_path).parent)
-            if parent and Path(parent).is_dir():
-                return parent
+    @staticmethod
+    def _user_default_dir(key: str) -> str:
+        """读取并校验用户在设置中显式配置的某个默认目录；无效则返回 ""。"""
         try:
             from strange_uta_game.frontend.settings.app_settings import AppSettings
-            default_dir = AppSettings().get("export.default_export_dir", "") or ""
-            if default_dir and Path(default_dir).is_dir():
-                return default_dir
+            d = AppSettings().get(key, "") or ""
         except Exception:
-            pass
-        return self.working_dir
+            return ""
+        if d and Path(d).is_dir():
+            return d
+        return ""
+
+    @property
+    def export_dir(self) -> str:
+        """派生：导出预填目录（仅供导出界面使用，区别于 working_dir）。
+
+        优先级：**默认导出目录 > 已保存项目 > 上次加载目录**。即用户在设置中
+        显式指定的 ``export.default_export_dir`` 最优先；未设置时回退到
+        ``working_dir``（已保存项目 / 音频 / 歌词 / last_export_dir）。
+        保存场景不受此影响。
+        """
+        return self._user_default_dir("export.default_export_dir") or self.working_dir
+
+    @property
+    def save_dir(self) -> str:
+        """派生：项目保存预填目录（供 untitled / 另存场景使用）。
+
+        优先级：**SUG默认保存目录 > 已保存项目 > 上次加载目录**。即用户在设置中
+        显式指定的 ``auto_save.default_save_dir`` 最优先；未设置时回退到
+        ``working_dir``。
+        """
+        return self._user_default_dir("auto_save.default_save_dir") or self.working_dir
 
     def suggested_save_path(self, ext: str = ".sug") -> str:
-        """根据 working_dir + 项目标题/音频名生成建议的保存全路径。
+        """根据 save_dir + 项目标题/音频名生成建议的保存全路径。
 
-        若无可用目录则只返回建议文件名。
+        目录取 :pyattr:`save_dir`（SUG默认保存目录 > 已保存项目 > 上次加载目录），
+        用于 untitled / 另存场景。若无可用目录则只返回建议文件名。
         """
         if not ext.startswith("."):
             ext = "." + ext
@@ -299,7 +304,7 @@ class ProjectStore(QObject):
         if not base:
             base = "untitled"
 
-        wd = self.working_dir
+        wd = self.save_dir
         if wd:
             return str(Path(wd) / f"{base}{ext}")
         return f"{base}{ext}"
