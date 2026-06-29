@@ -7486,6 +7486,16 @@ KS 来源的配置将优先覆盖同名设置。</translation>
 <context>
     <name>TimingSubInterface</name>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="52" />
+        <source>波形时间标签拖拽</source>
+        <translation>波形时间标签拖拽</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="53" />
+        <source>在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式</source>
+        <translation>在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="47" />
         <source>Alt+↑/Alt+↓ 微调选中节奏点时间戳的步长</source>
         <translation>Alt+↑/Alt+↓ 微调选中节奏点时间戳的步长</translation>
