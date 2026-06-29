@@ -94,6 +94,7 @@ class AppSettings:
             "rewind_ms": 5000,
             "jump_before_ms": 3000,
             "timing_adjust_step_ms": 10,
+            "waveform_tag_edit_enabled": True,
             "disable_click_jump": False,
             "disable_click_recenter": False,
             "preview_guide_enabled": False,

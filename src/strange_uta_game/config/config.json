@@ -17,6 +17,7 @@
     "rewind_ms": 2000,
     "jump_before_ms": 2000,
     "timing_adjust_step_ms": 10,
+    "waveform_tag_edit_enabled": true,
     "disable_click_jump": false,
     "hide_hitbox_highlights": false,
     "preview_guide_enabled": false,
