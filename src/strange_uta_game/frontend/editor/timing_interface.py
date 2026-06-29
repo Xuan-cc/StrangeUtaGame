@@ -2468,6 +2468,11 @@ class EditorInterface(QWidget):
                 self._toggle_needs_guide_at(line_idx, char_idx)
             return
 
+        # 对话框中点击了"填充所有导唱待办"：扫描全项目批量插入，独立处理
+        if dialog.was_fill_all_requested():
+            self._fill_all_todo_guides(dialog.fill_all_params())
+            return
+
         if dialog.was_modified():
             # 对话框已插入导唱符 → 顺手清除"原字符"在新位置上的 needs_guide。
             # 插入后该字符已位于 char_idx + N（N=插入个数），但 sentence.characters
@@ -2504,6 +2509,124 @@ class EditorInterface(QWidget):
             self._update_status()
             if hasattr(self, "_store") and self._store:
                 self._store.notify("lyrics")
+
+    def _fill_all_todo_guides(self, params):
+        """扫描整个项目中所有 needs_guide 标记的字符，按给定参数批量插入导唱符。
+
+        - 仅对带时间戳锚点（check_count>0 且有时间戳）的待办字符插入；其余跳过。
+        - 同一句内按字符索引从右往左处理，避免插入移位影响后续目标的索引与
+          「补足间隔时间」的向前时间戳搜索。
+        - 插入成功后清除该字符的 needs_guide 标记。
+        - 全部修改合并为一次 SentenceSnapshotCommand，支持撤销/重做。
+        """
+        if not self._project or not params:
+            return
+
+        from .timing.dialogs import insert_guide_before
+
+        # 按句分组收集待办目标字符对象（用对象引用，避免索引在插入后失效）
+        by_sentence = {}
+        for sentence in self._project.sentences:
+            todo_chars = [c for c in sentence.characters if getattr(c, "needs_guide", False)]
+            if todo_chars:
+                by_sentence[id(sentence)] = (sentence, todo_chars)
+
+        if not by_sentence:
+            InfoBar.info(
+                title=self.tr("没有导唱待办"),
+                content=self.tr("项目中没有导唱待办标记。"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        before_sentences = deepcopy(self._project.sentences)
+
+        filled = 0
+        skipped = 0
+        clamped_any = False
+        for sentence, todo_chars in by_sentence.values():
+            # 按当前索引从右往左处理
+            ordered = []
+            for c in todo_chars:
+                try:
+                    ordered.append((sentence.characters.index(c), c))
+                except ValueError:
+                    continue
+            ordered.sort(key=lambda t: t[0], reverse=True)
+            for _, c in ordered:
+                idx = sentence.characters.index(c)
+                # 无时间戳锚点的待办无法定位导唱符，跳过（保留标记）
+                if c.check_count == 0 or not c.all_timestamps:
+                    skipped += 1
+                    continue
+                result = insert_guide_before(
+                    sentence, idx, params["symbol"], params["count"],
+                    params["duration_ms"], params["reverse"], params["fill_gap"],
+                )
+                if not result["ok"]:
+                    skipped += 1
+                    continue
+                c.needs_guide = False
+                filled += 1
+                if result.get("clamped"):
+                    clamped_any = True
+
+        if filled == 0:
+            InfoBar.warning(
+                title=self.tr("未填充导唱"),
+                content=self.tr("{n} 个导唱待办均无时间戳锚点或间隔无效，已全部跳过。").format(n=skipped),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
+
+        command_manager = None
+        if self._timing_service:
+            command_manager = self._timing_service.command_manager
+        if command_manager is not None:
+            after_sentences = deepcopy(self._project.sentences)
+            cmd = SentenceSnapshotCommand(
+                self._project,
+                before_sentences,
+                after_sentences,
+                f"填充所有导唱待办（{filled} 处）",
+            )
+            cursor_pos = (self._current_line_idx, self.preview._current_char_idx)
+            cmd.undo_position = cursor_pos
+            cmd.redo_position = cursor_pos
+            command_manager.execute(cmd)
+
+        # Reapply global offset & rebuild global checkpoints
+        self._reapply_global_offset()
+        if self._timing_service:
+            self._timing_service.rebuild_global_checkpoints()
+        self.refresh_lyric_display()
+        self._update_time_tags_display()
+        self._update_status()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("lyrics")
+
+        content = self.tr("已填充 {filled} 处导唱。").format(filled=filled)
+        if skipped:
+            content += self.tr("{n} 处因缺时间戳/间隔无效被跳过。").format(n=skipped)
+        if clamped_any:
+            content += self.tr("部分时间戳越界已自动设为0ms。")
+        InfoBar.success(
+            title=self.tr("填充完成"),
+            content=content,
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=4000,
+            parent=self,
+        )
 
     def _on_complete_timestamp(self):
         """补全时间戳功能入口"""

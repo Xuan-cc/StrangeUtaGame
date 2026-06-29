@@ -1300,5 +1300,17 @@
   "保存或退出时在备份目录保留的项目备份份数（0 表示不备份）": "Number of project backups to keep in the backup folder when saving or exiting (0 = disabled)",
   " 个": " items",
   "备份位置": "Backup location",
-  "项目备份与临时文件的存放目录（留空使用默认位置）": "Folder for project backups and temporary files (leave empty to use the default location)"
+  "项目备份与临时文件的存放目录（留空使用默认位置）": "Folder for project backups and temporary files (leave empty to use the default location)",
+  "扫描整个项目中所有导唱待办标记，按当前数值批量插入导唱符": "Scan all guide-symbol TODO markers in the project and batch-insert guide symbols using the current values",
+  "部分导唱符时间戳小于0，已自动设为0ms": "Some guide-symbol timestamps were < 0 and auto-set to 0ms",
+  "项目中没有导唱待办标记。": "There are no guide-symbol TODO markers in the project.",
+  "未填充导唱": "No guides filled",
+  "填充完成": "Fill complete",
+  "已填充 {filled} 处导唱。": "Filled {filled} guide(s). ",
+  "{n} 处因缺时间戳/间隔无效被跳过。": "{n} skipped due to missing timestamp / invalid gap. ",
+  "部分时间戳越界已自动设为0ms。": "Some timestamps out of range were auto-set to 0ms.",
+  "填充所有导唱待办": "Fill all guide-symbol TODOs",
+  "填充所有导唱待办 ({n})": "Fill all guide-symbol TODOs ({n})",
+  "没有导唱待办": "No guide-symbol TODOs",
+  "{n} 个导唱待办均无时间戳锚点或间隔无效，已全部跳过。": "All {n} TODOs lack a timestamp anchor or have an invalid gap, and were skipped."
 }

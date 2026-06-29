@@ -605,6 +605,90 @@ class ModifyCharacterDialog(QDialog):
         return self._modified
 
 
+def _find_prev_timestamp(sentence, char_idx: int) -> int:
+    """向前搜索最近的一个时间戳（含句尾时间戳）作为时间起点。
+
+    从 char_idx-1 往前逐字符查找，取最近一个有时间戳字符的最大时间戳。
+    搜索不到时返回 0（歌曲开始处 00:00:00）。
+    """
+    for i in range(char_idx - 1, -1, -1):
+        ts_list = sentence.characters[i].all_timestamps
+        if ts_list:
+            return max(ts_list)
+    return 0
+
+
+def _build_guide_chars(sentence, char_idx, symbol, count, duration_ms, reverse):
+    """构建要插入的导唱 Character 列表（不写回 sentence）。
+
+    返回 ``(guide_chars, clamped)``，``clamped`` 表示有时间戳被钳到 0。
+    时间戳赋给每个符号组的第一个字符，其余字符 check_count=0 且与后字连词。
+    """
+    ref_char = sentence.characters[char_idx]
+    singer_id = ref_char.singer_id
+    ref_ts = ref_char.timestamps[0] if ref_char.timestamps else None
+    clamped = False
+    guide_chars = []
+    for i in range(count):
+        for j, ch_str in enumerate(symbol):
+            is_first_of_symbol = j == 0
+            is_last_symbol = i == count - 1
+            is_last_char_of_last_symbol = (j == len(symbol) - 1) and is_last_symbol
+            new_ch = Character(
+                char=ch_str,
+                ruby=None,
+                check_count=1 if is_first_of_symbol else 0,
+                singer_id=singer_id,
+                linked_to_next=not is_last_char_of_last_symbol,
+            )
+            if ref_ts is not None and is_first_of_symbol:
+                if reverse:
+                    ts = ref_ts - duration_ms * (i + 1)
+                else:
+                    ts = ref_ts - duration_ms * (count - i)
+                if ts < 0:
+                    ts = 0
+                    clamped = True
+                new_ch.add_timestamp(ts)
+            guide_chars.append(new_ch)
+    return guide_chars, clamped
+
+
+def insert_guide_before(sentence, char_idx, symbol, count, manual_duration_ms, reverse, fill_gap):
+    """计算并在 ``char_idx`` 前插入导唱符。不弹任何提示，结果由调用方处理。
+
+    返回 dict::
+
+        {
+            "ok": bool,             # 是否完成插入
+            "reason": None | "no_end_ts" | "invalid_gap",
+            "start_ts": int,        # reason=="invalid_gap" 时有意义
+            "end_ts": int,          # reason=="invalid_gap" 时有意义
+            "inserted": int,        # 插入的字符数
+            "clamped": bool,        # 是否有时间戳被钳到 0
+        }
+    """
+    ref_char = sentence.characters[char_idx]
+    ref_ts = ref_char.timestamps[0] if ref_char.timestamps else None
+
+    if fill_gap:
+        # 补足间隔时间：起点 = 向前最近的时间戳（搜索不到则 0），
+        # 终点 = 本字符首个时间戳，按个数平均分配。
+        if ref_ts is None:
+            return {"ok": False, "reason": "no_end_ts"}
+        start_ts = _find_prev_timestamp(sentence, char_idx)
+        if start_ts >= ref_ts:
+            return {"ok": False, "reason": "invalid_gap", "start_ts": start_ts, "end_ts": ref_ts}
+        duration_ms = (ref_ts - start_ts) // count
+    else:
+        duration_ms = manual_duration_ms
+
+    guide_chars, clamped = _build_guide_chars(sentence, char_idx, symbol, count, duration_ms, reverse)
+    for idx, gc in enumerate(guide_chars):
+        sentence.characters.insert(char_idx + idx, gc)
+    return {"ok": True, "reason": None, "inserted": len(guide_chars), "clamped": clamped}
+
+
 class InsertGuideSymbolDialog(QDialog):
     """插入导唱符对话框 — 在选中字符前插入导唱用字符"""
 
@@ -620,6 +704,8 @@ class InsertGuideSymbolDialog(QDialog):
         self._char_idx = char_idx
         self._modified = False
         self._clear_marker_requested = False
+        self._fill_all_requested = False
+        self._fill_all_params = None
 
         # 从 AppSettings 读取记忆的设置
         from strange_uta_game.frontend.settings.settings_interface import AppSettings
@@ -632,7 +718,7 @@ class InsertGuideSymbolDialog(QDialog):
         saved_fill_gap = settings.get("timing.guide_fill_gap", False)
 
         self.setWindowTitle(self.tr("插入导唱符"))
-        fit_to_screen(self, 400, 320)
+        fit_to_screen(self, 400, 360)
         self.setFont(ui_font(10))
 
         layout = QVBoxLayout(self)
@@ -682,6 +768,35 @@ class InsertGuideSymbolDialog(QDialog):
         layout.addLayout(form)
         layout.addStretch()
 
+        # 填充所有 Todo 导唱：扫描整个项目里所有 needs_guide 标记的字符，
+        # 按当前对话框数值批量插入导唱符。实际执行交由调用方（含项目与撤销栈）。
+        todo_count = None
+        proj = getattr(parent, "_project", None)
+        if proj is not None:
+            try:
+                todo_count = sum(
+                    1
+                    for s in proj.sentences
+                    for c in s.characters
+                    if getattr(c, "needs_guide", False)
+                )
+            except Exception:
+                todo_count = None
+        fill_all_layout = QHBoxLayout()
+        self.btn_fill_all = PushButton(self.tr("填充所有导唱待办"), self)
+        if todo_count is not None:
+            self.btn_fill_all.setText(
+                self.tr("填充所有导唱待办 ({n})").format(n=todo_count)
+            )
+            self.btn_fill_all.setEnabled(todo_count > 0)
+        self.btn_fill_all.setToolTip(
+            self.tr("扫描整个项目中所有导唱待办标记，按当前数值批量插入导唱符")
+        )
+        self.btn_fill_all.clicked.connect(self._on_fill_all)
+        fill_all_layout.addWidget(self.btn_fill_all)
+        fill_all_layout.addStretch()
+        layout.addLayout(fill_all_layout)
+
         # Buttons
         btn_layout = QHBoxLayout()
         # 清除导唱标记：仅在当前字符已有 needs_guide 标记时启用
@@ -715,131 +830,123 @@ class InsertGuideSymbolDialog(QDialog):
         """勾选「补足间隔时间」时禁用手动持续时间输入框"""
         self.edit_duration.setEnabled(not checked)
 
-    def _find_prev_timestamp(self) -> int:
-        """向前搜索最近的一个时间戳（含句尾时间戳）作为时间起点。
+    def _read_params(self):
+        """从输入框读取并校验参数。
 
-        从 char_idx-1 往前逐字符查找，取最近一个有时间戳字符的最大时间戳。
-        搜索不到时返回 0（歌曲开始处 00:00:00）。
+        返回 ``(symbol, count, manual_duration_ms, reverse, fill_gap)``；
+        symbol 为空时返回 ``None``（调用方据此中止）。
         """
-        for i in range(self._char_idx - 1, -1, -1):
-            ts_list = self._sentence.characters[i].all_timestamps
-            if ts_list:
-                return max(ts_list)
-        return 0
-
-    def _on_execute(self):
-        from strange_uta_game.backend.domain.models import Character
-
         symbol = strip_variation_selectors(self.edit_symbol.text().strip())
         if not symbol:
-            return
-
+            return None
         try:
             count = max(1, int(self.edit_count.text().strip()))
         except ValueError:
             count = 1
-
         reverse = self.chk_reverse.isChecked()
         fill_gap = self.chk_fill_gap.isChecked()
-
-        # Get reference char's timestamp and singer
-        ref_char = self._sentence.characters[self._char_idx]
-        singer_id = ref_char.singer_id
-
-        # Get reference timestamp (first timestamp of selected char)
-        ref_ts = ref_char.timestamps[0] if ref_char.timestamps else None
-
         if fill_gap:
-            # 补足间隔时间：起点 = 向前最近的时间戳（搜索不到则 0），
-            # 终点 = 本字符首个时间戳，按个数平均分配。
-            if ref_ts is None:
-                InfoBar.warning(
-                    title=self.tr("无法补足间隔时间"),
-                    content=self.tr("当前字符没有时间戳，无法确定间隔终点。"),
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=3000,
-                    parent=self,
-                )
-                return
-            start_ts = self._find_prev_timestamp()
-            if start_ts >= ref_ts:
-                InfoBar.warning(
-                    title=self.tr("无法补足间隔时间"),
-                    content=self.tr("起点 {start}ms 不早于终点 {end}ms，间隔无效。").format(start=start_ts, end=ref_ts),
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=3000,
-                    parent=self,
-                )
-                return
-            duration_ms = (ref_ts - start_ts) // count
+            manual_duration_ms = 0
         else:
             try:
-                duration_ms = max(100, int(self.edit_duration.text().strip()))
+                manual_duration_ms = max(100, int(self.edit_duration.text().strip()))
             except ValueError:
-                duration_ms = 1000
+                manual_duration_ms = 1000
+        return symbol, count, manual_duration_ms, reverse, fill_gap
 
-        # 保存设置到 AppSettings
+    def _save_params(self, symbol, count, manual_duration_ms, reverse, fill_gap):
+        """保存参数到 AppSettings（fill_gap 时不覆盖手动持续时间记忆）。"""
         from strange_uta_game.frontend.settings.settings_interface import AppSettings
         settings = AppSettings()
         settings.set("timing.guide_symbol", symbol)
         settings.set("timing.guide_count", count)
         if not fill_gap:
-            settings.set("timing.guide_duration_ms", duration_ms)
+            settings.set("timing.guide_duration_ms", manual_duration_ms)
         settings.set("timing.guide_reverse", reverse)
         settings.set("timing.guide_fill_gap", fill_gap)
         settings.save()
 
-        # Build guide characters
-        # Each guide symbol has linked_to_next=True (they chain), except last
-        # Actually: if symbol is multi-char, each char of the symbol is linked.
-        # If count > 1, each "symbol group" is also linked.
-        # Result: all guide chars are linked_to_next=True (chained as one word)
-        #
-        # Timestamp is assigned to the FIRST character of each symbol group.
-        # For symbol "ABCD": "A" gets check_count=1 and timestamp, "B"/"C"/"D" get check_count=0.
-        guide_chars = []
-        for i in range(count):
-            for j, ch_str in enumerate(symbol):
-                is_first_of_symbol = j == 0
-                is_last_symbol = i == count - 1
-                is_last_char_of_last_symbol = (j == len(symbol) - 1) and is_last_symbol
-                new_ch = Character(
-                    char=ch_str,
-                    ruby=None,
-                    check_count=1 if is_first_of_symbol else 0,
-                    singer_id=singer_id,
-                    linked_to_next=not is_last_char_of_last_symbol,
-                )
-                # Set timestamp to the first character of each symbol group
-                if ref_ts is not None and is_first_of_symbol:
-                    if reverse:
-                        ts = ref_ts - duration_ms * (i + 1)
-                    else:
-                        ts = ref_ts - duration_ms * (count - i)
-                    if ts < 0:
-                        InfoBar.warning(
-                            title=self.tr("时间戳越界"),
-                            content=self.tr("导唱符时间戳 {ts}ms 小于0，已自动设为0ms").format(ts=ts),
-                            orient=Qt.Orientation.Horizontal,
-                            isClosable=True,
-                            position=InfoBarPosition.TOP,
-                            duration=3000,
-                            parent=self,
-                        )
-                        ts = 0
-                    new_ch.add_timestamp(ts)
-                guide_chars.append(new_ch)
+    def _warn_insert_failure(self, result):
+        """针对 insert_guide_before 失败结果弹出对应提示。"""
+        reason = result.get("reason")
+        if reason == "no_end_ts":
+            InfoBar.warning(
+                title=self.tr("无法补足间隔时间"),
+                content=self.tr("当前字符没有时间戳，无法确定间隔终点。"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+        elif reason == "invalid_gap":
+            InfoBar.warning(
+                title=self.tr("无法补足间隔时间"),
+                content=self.tr("起点 {start}ms 不早于终点 {end}ms，间隔无效。").format(
+                    start=result.get("start_ts", 0), end=result.get("end_ts", 0)
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
 
-        # Insert guide chars BEFORE the selected char
-        for idx, gc in enumerate(guide_chars):
-            self._sentence.characters.insert(self._char_idx + idx, gc)
+    def _on_execute(self):
+        params = self._read_params()
+        if params is None:
+            return
+        symbol, count, manual_duration_ms, reverse, fill_gap = params
+
+        self._save_params(symbol, count, manual_duration_ms, reverse, fill_gap)
+
+        result = insert_guide_before(
+            self._sentence, self._char_idx, symbol, count,
+            manual_duration_ms, reverse, fill_gap,
+        )
+        if not result["ok"]:
+            self._warn_insert_failure(result)
+            return
+        if result["clamped"]:
+            InfoBar.warning(
+                title=self.tr("时间戳越界"),
+                content=self.tr("部分导唱符时间戳小于0，已自动设为0ms"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
 
         self._modified = True
         self.accept()
+
+    def _on_fill_all(self):
+        """点击"填充所有导唱待办"：记下参数并关闭对话框。
+
+        不直接改 Character —— 由调用方扫描整个项目里的 needs_guide 标记，
+        统一执行并登记到撤销栈，以保证撤销/重做语义一致。
+        """
+        params = self._read_params()
+        if params is None:
+            return
+        symbol, count, manual_duration_ms, reverse, fill_gap = params
+        self._save_params(symbol, count, manual_duration_ms, reverse, fill_gap)
+        self._fill_all_params = {
+            "symbol": symbol,
+            "count": count,
+            "duration_ms": manual_duration_ms,
+            "reverse": reverse,
+            "fill_gap": fill_gap,
+        }
+        self._fill_all_requested = True
+        self.accept()
+
+    def was_fill_all_requested(self) -> bool:
+        return self._fill_all_requested
+
+    def fill_all_params(self):
+        return self._fill_all_params
 
     def was_modified(self) -> bool:
         return self._modified
