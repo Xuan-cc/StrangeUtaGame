@@ -671,7 +671,13 @@ class WaveformDisplay(QWidget):
         # 把手拖拽提交
         if self._is_dragging_tags:
             if self._drag_delta_ms != 0 and self._selected_handles:
-                self.tags_drag_committed.emit(list(self._selected_handles), self._drag_delta_ms)
+                # 锚点（被按住拖动的把手）置于首位，供下游 preview 选中同步
+                handles = list(self._selected_handles)
+                anchor = self._drag_anchor_handle
+                if anchor in self._selected_handles:
+                    handles.remove(anchor)
+                    handles.insert(0, anchor)
+                self.tags_drag_committed.emit(handles, self._drag_delta_ms)
             self._reset_drag()
             self.unsetCursor()
             self.update()

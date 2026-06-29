@@ -390,6 +390,8 @@ class EditorInterface(QWidget):
         self.timeline = TimelineWidget(self)
         self.timeline.seek_requested.connect(self._on_seek)
         self.timeline.waveform_visibility_changed.connect(self._on_waveform_visibility_changed)
+        self.timeline.tag_clicked.connect(self._on_timeline_tag_clicked)
+        self.timeline.tags_drag_committed.connect(self._on_timeline_tags_drag_committed)
         layout.addWidget(self.timeline)
 
         # 4) 歌词预览（占主要空间）
@@ -567,10 +569,16 @@ class EditorInterface(QWidget):
     def _on_data_changed(self, change_type: str):
         """响应 ProjectStore 的数据变更。"""
         if change_type == "project":
+            # 项目结构变更，波形选中句柄可能全部失效
+            if hasattr(self, "timeline"):
+                self.timeline.clear_tag_selection()
             self.set_project(self._store.project)
             if self._mini_singer_manager is not None:
                 self._mini_singer_manager.set_project(self._store.project)
         elif change_type in ("rubies", "lyrics", "checkpoints"):
+            # 注音/歌词/节奏点变更可能使波形选中句柄越界悬空，清空避免误写
+            if hasattr(self, "timeline"):
+                self.timeline.clear_tag_selection()
             self.refresh_lyric_display()
         elif change_type == "timetags":
             self._schedule_time_tags_update()
@@ -605,6 +613,11 @@ class EditorInterface(QWidget):
         self._timing_adjust_step_ms = int(
             settings.get("timing.timing_adjust_step_ms", 10)
         )
+        # 波形时间标签拖拽编辑总开关（默认开启，关闭回退旧的纯显示/seek/pan 模式）
+        if hasattr(self, "timeline"):
+            self.timeline.set_tag_edit_enabled(
+                settings.get("timing.waveform_tag_edit_enabled", True)
+            )
         # #8/#11/#13：读取双模式快捷键映射（打轴模式=播放中、编辑模式=未播放）
         # 动作集合（所有动作在两种模式下都存在，读设置时各自取值，互不干扰）
         action_names = [
@@ -4025,6 +4038,73 @@ class EditorInterface(QWidget):
         self.preview.set_current_position(line_idx, char_idx)
         self.preview.set_focus_position(line_idx, char_idx)
         self._update_line_info()
+
+    def _sync_preview_to_handle(self, line_idx: int, char_idx: int, cp_idx: int):
+        """把 preview 选中（current + focus）同步到指定 checkpoint 对应的字符。
+
+        与 ``_on_checkpoint_clicked`` 同义：移动打轴位置但不污染光标域
+        （_suppress_cp_cursor_move），再把 preview 选中落到该字符。供波形时间标签
+        单击选中、拖拽提交后同步使用。
+        """
+        if not self._timing_service:
+            return
+        self._suppress_cp_cursor_move = True
+        try:
+            self._timing_service.move_to_checkpoint(line_idx, char_idx, cp_idx)
+        finally:
+            self._suppress_cp_cursor_move = False
+        self.preview.set_current_position(line_idx, char_idx)
+        self.preview.set_focus_position(line_idx, char_idx)
+        self._update_line_info()
+
+    def _on_timeline_tag_clicked(self, line_idx: int, char_idx: int, cp_idx: int, is_sentence_end: bool):
+        """单击波形时间标签把手：同步 preview 选中到该字符（seek 由 seek_requested 处理）。"""
+        _ = is_sentence_end  # 句尾点 cp_idx == check_count，move_to_checkpoint 可解析
+        self._sync_preview_to_handle(line_idx, char_idx, cp_idx)
+
+    def _on_timeline_tags_drag_committed(self, handles, delta_ms: int):
+        """波形时间标签拖拽提交：按字符分组写入 raw 时间戳，再做完整刷新。
+
+        handles 为 (line, char, cp, is_sentence_end) 列表，首项为锚点（拖动锚字符）。
+        delta_ms 在 raw / global 两域恒等（项目级统一偏移在差分中抵消），直接施加。
+        """
+        if not self._project or not handles or not delta_ms:
+            return
+        from collections import defaultdict
+        groups = defaultdict(list)  # (line, char) -> list[(cp, is_end)]
+        for line_idx, char_idx, cp_idx, is_end in handles:
+            groups[(line_idx, char_idx)].append((cp_idx, is_end))
+
+        for (line_idx, char_idx), items in groups.items():
+            if not (0 <= line_idx < len(self._project.sentences)):
+                continue
+            sentence = self._project.sentences[line_idx]
+            if not (0 <= char_idx < len(sentence.characters)):
+                continue
+            ch = sentence.characters[char_idx]
+            touched_normal = False
+            for cp_idx, is_end in items:
+                if is_end:
+                    if ch.is_sentence_end and ch.sentence_end_ts is not None:
+                        # set_sentence_end_ts 内部已 _update_offset_timestamps + push_to_ruby
+                        ch.set_sentence_end_ts(max(0, ch.sentence_end_ts + delta_ms))
+                else:
+                    if 0 <= cp_idx < len(ch.timestamps):
+                        ch.timestamps[cp_idx] = max(0, ch.timestamps[cp_idx] + delta_ms)
+                        touched_normal = True
+            if touched_normal:
+                ch._update_offset_timestamps()
+                ch.push_to_ruby()
+
+        # 副作用四件套（notify 不会刷新 preview / line_info，需显式调）
+        self._update_time_tags_display()
+        self.refresh_lyric_display()
+        self._update_line_info()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("timetags")
+        # preview 选中同步到锚点字符（handles 首项）
+        a_line, a_char, a_cp, _a_end = handles[0]
+        self._sync_preview_to_handle(a_line, a_char, a_cp)
 
     def _on_char_selected(self, line_idx: int, char_idx: int):
         """点击字符选中 — 移动到该字符的第一个 checkpoint。
