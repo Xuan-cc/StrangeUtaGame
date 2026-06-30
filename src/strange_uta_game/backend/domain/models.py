@@ -231,6 +231,10 @@ class Character:
     # 仅用于 KaraokePreview 视觉提示 + 导出前弹窗汇总。
     needs_guide: bool = field(default=False, compare=False)
 
+    # 强制输出演唱者标签：即使与前一字演唱者相同，也在此字符前插入
+    # 【演唱者名】标签。用于全文本编辑器手动强制插入/冗余标签的场景。
+    force_singer_tag: bool = field(default=False, compare=False)
+
     # 选中的 checkpoint 索引（全局单选不变量由 Project 层管理；None = 未选中）
     # 不参与 .sug 序列化——选中态是 UI 状态，不跨会话持久化。
     selected_checkpoint_idx: Optional[int] = field(default=None, compare=False)

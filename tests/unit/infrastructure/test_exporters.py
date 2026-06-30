@@ -9,6 +9,7 @@ from pathlib import Path
 from strange_uta_game.backend.domain import (
     Project,
     Sentence,
+    Singer,
     Character,
     Ruby,
     TimeTagType,
@@ -375,6 +376,250 @@ class TestNicokaraExporter:
         """测试文件扩展名为 .lrc"""
         exporter = NicokaraExporter()
         assert exporter.file_extension == ".lrc"
+
+    def test_singer_tag_skip_whitespace_only_block(self):
+        """演唱者切换后如果该演唱者的连续片段全是空白字符，则不插入标签"""
+        project = Project()
+        singer_a = project.singers[0]
+        singer_a.name = "A"
+        singer_b = Singer(name="B", color="#00FF00")
+        project.add_singer(singer_b)
+
+        singer_map = {singer_a.id: "A", singer_b.id: "B"}
+
+        sentence = Sentence.from_text("X Y", singer_a.id)
+        sentence.characters[0].add_timestamp(1000)
+        sentence.characters[1].singer_id = singer_b.id
+        sentence.characters[1].add_timestamp(2000)
+        sentence.characters[2].add_timestamp(3000)
+        project.add_sentence(sentence)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(
+                project, temp_path,
+                singer_ids=None,
+                insert_singer_tags=True,
+                singer_map=singer_map,
+            )
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            assert "【B】" not in content
+            assert "【A】" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_singer_tag_whitespace_block_with_real_content(self):
+        """空格后有同演唱者实际字符时仍应插入标签"""
+        project = Project()
+        singer_a = project.singers[0]
+        singer_a.name = "A"
+        singer_b = Singer(name="B", color="#00FF00")
+        project.add_singer(singer_b)
+
+        singer_map = {singer_a.id: "A", singer_b.id: "B"}
+
+        sentence = Sentence.from_text("X Z", singer_a.id)
+        sentence.characters[0].add_timestamp(1000)
+        sentence.characters[1].singer_id = singer_b.id
+        sentence.characters[1].add_timestamp(2000)
+        sentence.characters[2].singer_id = singer_b.id
+        sentence.characters[2].add_timestamp(3000)
+        project.add_sentence(sentence)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(
+                project, temp_path,
+                singer_ids=None,
+                insert_singer_tags=True,
+                singer_map=singer_map,
+            )
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            assert "【B】" in content
+            assert "【A】" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_singer_tag_leading_whitespace_block(self):
+        """行首空格块属于不同演唱者时也不插入标签"""
+        project = Project()
+        singer_a = project.singers[0]
+        singer_a.name = "A"
+        singer_b = Singer(name="B", color="#00FF00")
+        project.add_singer(singer_b)
+
+        singer_map = {singer_a.id: "A", singer_b.id: "B"}
+
+        sentence = Sentence.from_text(" X", singer_b.id)
+        sentence.characters[0].singer_id = singer_a.id
+        sentence.characters[0].add_timestamp(1000)
+        sentence.characters[1].add_timestamp(2000)
+        project.add_sentence(sentence)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(
+                project, temp_path,
+                singer_ids=None,
+                insert_singer_tags=True,
+                singer_map=singer_map,
+            )
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            assert "【A】" not in content
+            assert "【B】" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_singer_tag_skip_multi_space_block(self):
+        """A字 + B空格 + B空格 + C字，B连续两个空格块不插入标签"""
+        project = Project()
+        singer_a = project.singers[0]
+        singer_a.name = "A"
+        singer_b = Singer(name="B", color="#00FF00")
+        singer_c = Singer(name="C", color="#0000FF")
+        project.add_singer(singer_b)
+        project.add_singer(singer_c)
+
+        singer_map = {singer_a.id: "A", singer_b.id: "B", singer_c.id: "C"}
+
+        sentence = Sentence.from_text("X  Z", singer_a.id)
+        sentence.characters[0].char = "X"
+        sentence.characters[0].add_timestamp(1000)
+        sentence.characters[1].singer_id = singer_b.id
+        sentence.characters[1].add_timestamp(2000)
+        sentence.characters[2].singer_id = singer_b.id
+        sentence.characters[2].add_timestamp(3000)
+        sentence.characters[3].char = "Z"
+        sentence.characters[3].singer_id = singer_c.id
+        sentence.characters[3].add_timestamp(4000)
+        project.add_sentence(sentence)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(
+                project, temp_path,
+                singer_ids=None,
+                insert_singer_tags=True,
+                singer_map=singer_map,
+            )
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            assert "【B】" not in content
+            assert "【A】" in content
+            assert "【C】" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_singer_force_tag_overrides_whitespace(self):
+        """force_singer_tag=True 时即使空格块也强制插入标签"""
+        project = Project()
+        singer_a = project.singers[0]
+        singer_a.name = "A"
+        singer_b = Singer(name="B", color="#00FF00")
+        project.add_singer(singer_b)
+
+        singer_map = {singer_a.id: "A", singer_b.id: "B"}
+
+        sentence = Sentence.from_text("X Y", singer_a.id)
+        sentence.characters[0].add_timestamp(1000)
+        sentence.characters[1].singer_id = singer_b.id
+        sentence.characters[1].force_singer_tag = True
+        sentence.characters[1].add_timestamp(2000)
+        sentence.characters[2].add_timestamp(3000)
+        project.add_sentence(sentence)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(
+                project, temp_path,
+                singer_ids=None,
+                insert_singer_tags=True,
+                singer_map=singer_map,
+            )
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            assert "【B】" in content
+            assert "【A】" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_singer_force_tag_same_singer(self):
+        """force_singer_tag 相同演唱者也插入标签"""
+        project = Project()
+        singer_a = project.singers[0]
+        singer_a.name = "A"
+        singer_map = {singer_a.id: "A"}
+
+        sentence = Sentence.from_text("XY", singer_a.id)
+        sentence.characters[0].add_timestamp(1000)
+        sentence.characters[1].force_singer_tag = True
+        sentence.characters[1].add_timestamp(2000)
+        project.add_sentence(sentence)
+
+        exporter = NicokaraExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(
+                project, temp_path,
+                singer_ids=None,
+                insert_singer_tags=True,
+                singer_map=singer_map,
+            )
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            assert content.count("【A】") == 2
+        finally:
+            os.unlink(temp_path)
 
 class TestNicokaraWithRubyExporter:
     """测试带注音的 Nicokara 导出器"""

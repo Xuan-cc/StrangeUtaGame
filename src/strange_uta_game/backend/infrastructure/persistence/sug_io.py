@@ -433,6 +433,7 @@ class SugProjectParser:
                 "is_rest": char.is_rest,
                 "singer_id": char.singer_id,
                 "needs_guide": char.needs_guide,
+                "force_singer_tag": char.force_singer_tag,
             }
             if char.ruby:
                 # 占位 part（停顿符及其全/半角变体）统一写为哨兵 token，使存档
@@ -588,6 +589,7 @@ class SugProjectParser:
                 is_rest=bool(char_data.get("is_rest", False)),
                 singer_id=char_data.get("singer_id", "") or singer_id,
                 needs_guide=bool(char_data.get("needs_guide", False)),
+                force_singer_tag=bool(char_data.get("force_singer_tag", False)),
             )
             # 不变式自愈：旧版存档丢过空 part、或旧迁移路径减 cc 未并段的
             # 存量损伤，在此通过 set_check_count 的收口逻辑修复

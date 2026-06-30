@@ -167,6 +167,7 @@ def sentence_to_annotated_line(characters: "Sequence[Character]") -> str:
 #   [>mm:ss.xx]      该字符的句尾(释放)时间戳，贴字符后方
 #   [>T]             该字符是句尾但句尾时间戳尚无
 #   【演唱者名】       演唱者切换标签（与 Nicokara 一致，出现在切换处）
+#   【>Guide】          导唱待办标记（字符 needs_guide=True）
 #
 # 容错：任何 [...] / [>...] 若内部不是合法 mm:ss.xx，则一律按占位 [T] /
 # [>T] 处理（用户手输的非法时间戳不会丢字符，只是该位轴清空待补）。
@@ -237,6 +238,25 @@ def _effective_singer(ch: "Character", line_singer: str, default_singer: str) ->
     return ch.singer_id or line_singer or default_singer
 
 
+def _is_singer_block_whitespace(
+    characters: "Sequence[Character]",
+    start_idx: int,
+    singer_id: str,
+    line_singer_id: str,
+    default_singer_id: str,
+) -> bool:
+    """检查从 start_idx 开始的同一演唱者连续片段是否全是空白字符。"""
+    n = len(characters)
+    for j in range(start_idx, n):
+        ch = characters[j]
+        eff = _effective_singer(ch, line_singer_id, default_singer_id)
+        if eff != singer_id:
+            break
+        if ch.char.strip():
+            return False
+    return True
+
+
 def sentence_to_timed_line(
     characters: "Sequence[Character]",
     *,
@@ -270,23 +290,33 @@ def sentence_to_timed_line(
     i = 0
     n = len(characters)
 
-    def _emit_singer(sid: str) -> None:
+    def _emit_singer(sid: str, force: bool = False) -> None:
         nonlocal current
         if not use_singer:
             return
-        if sid != current:
-            if not sid or sid == default_singer_id:
-                name = DEFAULT_SINGER_LABEL
-            else:
-                name = singer_id_to_name.get(sid, "")
-            if name:
-                buf.append(f"【{name}】")
+        should_emit = force or (sid != current)
+        if not should_emit:
+            return
+        if not force and _is_singer_block_whitespace(
+            characters, i, sid, line_singer_id, default_singer_id
+        ):
             current = sid
+            return
+        if not sid or sid == default_singer_id:
+            name = DEFAULT_SINGER_LABEL
+        else:
+            name = singer_id_to_name.get(sid, "")
+        if name:
+            buf.append(f"【{name}】")
+        current = sid
 
     while i < n:
         ch = characters[i]
         eff = _effective_singer(ch, line_singer_id, default_singer_id)
-        _emit_singer(eff)
+        _emit_singer(eff, force=ch.force_singer_tag)
+
+        if ch.needs_guide:
+            buf.append("【>Guide】")
 
         if ch.ruby:
             # 连词组（linked_to_next 链）合并为一个块
@@ -528,7 +558,9 @@ def parse_timed_line(
     name_map = name_to_singer_id or {}
     current = inherited_singer_id or default_singer_id
     chars: List[Character] = []
-    pending_starts: List[Optional[int]] = []  # 等待绑定到下一个裸字符的起始 token
+    pending_starts: List[Optional[int]] = []
+    pending_guide = False
+    pending_force_singer = False
     i = 0
     n = len(line_text)
 
@@ -542,12 +574,19 @@ def parse_timed_line(
             # （如 "【【名】" → '【' + 【名】 标签）。
             if close != -1 and "【" not in line_text[i + 1 : close]:
                 name = line_text[i + 1 : close]
+                if name == ">Guide":
+                    pending_guide = True
+                    i = close + 1
+                    continue
                 if name == DEFAULT_SINGER_LABEL:
                     current = default_singer_id
                     i = close + 1
                     continue
                 if name in name_map:
-                    current = name_map[name]
+                    if name_map[name] == current:
+                        pending_force_singer = True
+                    else:
+                        current = name_map[name]
                     i = close + 1
                     continue
                 # 未知演唱者名（不在项目设置中）→ 整个 【名】 当普通字符，
@@ -560,6 +599,12 @@ def parse_timed_line(
                         pending_starts = []
                     else:
                         ch.check_count = 0
+                    if pending_guide:
+                        ch.needs_guide = True
+                        pending_guide = False
+                    if pending_force_singer:
+                        ch.force_singer_tag = True
+                        pending_force_singer = False
                     chars.append(ch)
                 i = close + 1
                 continue
@@ -596,6 +641,12 @@ def parse_timed_line(
                         pending_starts = []
                     else:
                         ch.check_count = 0
+                    if pending_guide:
+                        ch.needs_guide = True
+                        pending_guide = False
+                    if pending_force_singer:
+                        ch.force_singer_tag = True
+                        pending_force_singer = False
                     chars.append(ch)
                 i = close + 1
                 continue
@@ -609,7 +660,14 @@ def parse_timed_line(
                 # 内层 '{' 开始。放行当前 '{' 为普通字符，循环在下一个 '{' 重试
                 # （如 "{{原文||…}" → '{' + {原文||…} 块）。
                 if "{" not in content and is_valid_block_content(content):
+                    before_len = len(chars)
                     chars.extend(_parse_block(content, current, offset_ms))
+                    if pending_guide and len(chars) > before_len:
+                        chars[before_len].needs_guide = True
+                        pending_guide = False
+                    if pending_force_singer and len(chars) > before_len:
+                        chars[before_len].force_singer_tag = True
+                        pending_force_singer = False
                     pending_starts = []
                     i = close + 1
                     continue
@@ -623,6 +681,12 @@ def parse_timed_line(
         else:
             # 裸字符：无 checkpoint
             ch.check_count = 0
+        if pending_guide:
+            ch.needs_guide = True
+            pending_guide = False
+        if pending_force_singer:
+            ch.force_singer_tag = True
+            pending_force_singer = False
         pending_starts = []
         chars.append(ch)
         i += 1

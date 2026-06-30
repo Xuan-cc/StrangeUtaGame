@@ -19,7 +19,7 @@ from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
 )
 
 
-def _ruby_char(ch, moras, timestamps, *, linked=False, end_ts=None, is_end=False, singer=""):
+def _ruby_char(ch, moras, timestamps, *, linked=False, end_ts=None, is_end=False, singer="", needs_guide=False, force_singer_tag=False):
     c = Character(
         char=ch,
         check_count=len(moras),
@@ -28,13 +28,15 @@ def _ruby_char(ch, moras, timestamps, *, linked=False, end_ts=None, is_end=False
         is_sentence_end=is_end or (end_ts is not None),
         sentence_end_ts=end_ts,
         singer_id=singer,
+        needs_guide=needs_guide,
+        force_singer_tag=force_singer_tag,
     )
     c.set_ruby(Ruby(parts=[RubyPart(text=m) for m in moras]))
     c.push_to_ruby()
     return c
 
 
-def _plain_char(ch, *, check_count=1, timestamps=(), end_ts=None, is_end=False, singer=""):
+def _plain_char(ch, *, check_count=1, timestamps=(), end_ts=None, is_end=False, singer="", needs_guide=False, force_singer_tag=False):
     return Character(
         char=ch,
         check_count=check_count,
@@ -42,6 +44,8 @@ def _plain_char(ch, *, check_count=1, timestamps=(), end_ts=None, is_end=False, 
         is_sentence_end=is_end or (end_ts is not None),
         sentence_end_ts=end_ts,
         singer_id=singer,
+        needs_guide=needs_guide,
+        force_singer_tag=force_singer_tag,
     )
 
 
@@ -332,3 +336,65 @@ def test_empty_line_roundtrip():
     assert line == ""
     chars, last2 = parse_timed_line("")
     assert chars == []
+
+
+def test_needs_guide_roundtrip():
+    """【>Guide】→ needs_guide 往返。"""
+    smap = {"id-a": "A"}
+    chars = [
+        _plain_char("あ", timestamps=[100], singer="id-a", needs_guide=True),
+        _plain_char("い", timestamps=[200], singer="id-a"),
+    ]
+    line1, line2, decoded = _roundtrip(chars, singer_id_to_name=smap)
+    assert "【>Guide】" in line1
+    assert line1 == line2
+    assert decoded[0].needs_guide
+    assert not decoded[1].needs_guide
+
+
+def test_force_singer_tag_roundtrip():
+    """冗余【name】→ force_singer_tag 往返。"""
+    smap = {"id-a": "A", "id-b": "B"}
+    chars = [
+        _plain_char("あ", timestamps=[100], singer="id-a"),
+        _plain_char("い", timestamps=[200], singer="id-a", force_singer_tag=True),
+        _plain_char("う", timestamps=[300], singer="id-b"),
+    ]
+    line1, line2, decoded = _roundtrip(chars, singer_id_to_name=smap)
+    assert "【A】" in line1
+    assert "【B】" in line1
+    assert line1 == line2
+    assert decoded[1].force_singer_tag
+    assert not decoded[0].force_singer_tag
+    assert not decoded[2].force_singer_tag
+
+
+def test_singer_whitespace_block_skipped_in_text_emit():
+    """全文本 emit 时连续空格块不输出演唱者标签。"""
+    smap = {"id-a": "A", "id-b": "B"}
+    chars = [
+        _plain_char("X", timestamps=[100], singer="id-a"),
+        _plain_char(" ", timestamps=[200], singer="id-b"),
+        _plain_char(" ", timestamps=[300], singer="id-b"),
+        _plain_char("Y", timestamps=[400], singer="id-a"),
+    ]
+    line, _ = sentence_to_timed_line(
+        chars, singer_id_to_name=smap, default_singer_id="id-a"
+    )
+    assert "【B】" not in line
+    assert "X" in line
+    assert "Y" in line
+
+
+def test_force_singer_tag_overrides_whitespace_in_text_emit():
+    """force_singer_tag 覆盖空格跳过逻辑（全文本 emit）。"""
+    smap = {"id-a": "A", "id-b": "B"}
+    chars = [
+        _plain_char("X", timestamps=[100], singer="id-a"),
+        _plain_char(" ", timestamps=[200], singer="id-b", force_singer_tag=True),
+        _plain_char("Y", timestamps=[300], singer="id-a"),
+    ]
+    line, _ = sentence_to_timed_line(
+        chars, singer_id_to_name=smap, default_singer_id="id-a"
+    )
+    assert "【B】" in line

@@ -217,6 +217,33 @@ class NicokaraExporter(BaseExporter):
             return default_singer_id
         return singer_id
 
+    def _is_singer_block_only_whitespace(
+        self,
+        sentence: Sentence,
+        start_idx: int,
+        singer_id: Optional[str],
+        singer_ids: Optional[Set[str]],
+        default_singer_id: Optional[str],
+        known_singer_ids: Optional[Set[str]],
+    ) -> bool:
+        """检查从 start_idx 开始的同一演唱者连续片段是否全是空白字符
+
+        用于判断演唱者切换时是否应该跳过标签插入：如果切换后
+        该演唱者的所有连续字符都是空格/空白，则不插入标签。
+        """
+        for j in range(start_idx, len(sentence.characters)):
+            ch = sentence.characters[j]
+            eff = ch.singer_id or sentence.singer_id
+            eff = self._normalize_singer_id(eff, default_singer_id, known_singer_ids)
+            if eff != singer_id:
+                break
+            if singer_ids is not None and eff not in singer_ids:
+                continue
+            cleaned = strip_variation_selectors(ch.char)
+            if cleaned.strip():
+                return False
+        return True
+
     def _sentence_has_singer(
         self,
         sentence: Sentence,
@@ -273,11 +300,23 @@ class NicokaraExporter(BaseExporter):
                 continue
 
             # 演唱者标签插入：在演唱者发生变化时插入标签
+            # 但如果切换后该演唱者的连续片段全是空白字符（空格等），则跳过标签
+            # force_singer_tag 强制要求插入，覆盖空白跳过检查
             if insert_singer_tags and singer_map and effective_singer != prev_singer_id:
+                if not ch.force_singer_tag and self._is_singer_block_only_whitespace(
+                    sentence, i, effective_singer, singer_ids,
+                    default_singer_id, known_singer_ids,
+                ):
+                    prev_singer_id = effective_singer  # 仍追踪演唱者变化
+                else:
+                    singer_name = singer_map.get(effective_singer, "") if effective_singer else ""
+                    if singer_name:
+                        parts.append(f"【{singer_name}】")
+                    prev_singer_id = effective_singer
+            elif insert_singer_tags and singer_map and ch.force_singer_tag and effective_singer == prev_singer_id:
                 singer_name = singer_map.get(effective_singer, "") if effective_singer else ""
                 if singer_name:
                     parts.append(f"【{singer_name}】")
-                prev_singer_id = effective_singer
 
             # 过滤变体选择符：纯变体选择符字符整体跳过（含时间戳），
             # 非纯变体选择符则移除尾随的选择符后输出

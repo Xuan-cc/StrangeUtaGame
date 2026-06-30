@@ -369,7 +369,7 @@ class ASSDirectExporter(BaseExporter):
             # 演唱者变化标记：在新字符的第一段前检测
             if ci != prev_char_idx:
                 effective_id = chars[ci].singer_id or sentence.singer_id
-                if effective_id != prev_effective_id and singer_map:
+                if (effective_id != prev_effective_id or chars[ci].force_singer_tag) and singer_map:
                     singer = singer_map.get(effective_id)
                     if singer is not None:
                         escaped_name = self._escape_ass_text(singer.name)
