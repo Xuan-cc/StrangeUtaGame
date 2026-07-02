@@ -3342,13 +3342,13 @@ class EditorInterface(QWidget):
                 if char_idx > 0 and chars_list[char_idx - 1].linked_to_next:
                     return False
 
-            # 捨仮名检查
-            if include_chisai_kana and char in _SMALL_KANA:
-                return True
+            # 捨仮名字符只由 chisai_kana 选项控制，不被平假名/片假名覆盖
+            if char in _SMALL_KANA:
+                return include_chisai_kana
 
-            # 拨音检查
-            if include_chon and char in _CHON_CHARS:
-                return True
+            # 拨音字符只由 chon 选项控制，不被平假名/片假名覆盖
+            if char in _CHON_CHARS:
+                return include_chon
 
             # 普通类型检查
             try:
