@@ -3440,6 +3440,13 @@ class EditorInterface(QWidget):
                     prev_ts = _find_prev_timestamp(line_idx, segment_start)
                     next_ts = _find_next_timestamp(line_idx, segment_end - 1)
 
+                    # 如果段最后一个字符自身有句尾时间戳，且比向后搜寻到的 next_ts 更近，
+                    # 则以句尾时间戳为插值上限，避免补偿后的时间戳跑到句尾之后。
+                    last_char = chars[segment_end - 1]
+                    if last_char.is_sentence_end and last_char.sentence_end_ts is not None:
+                        if next_ts is None or last_char.sentence_end_ts < next_ts:
+                            next_ts = last_char.sentence_end_ts
+
                     # 行尾：段之后若仅剩“多余空格占位符”（句尾 token 贴轴后被解析
                     # 出来的裸空格），也视为行尾。必须校验 check_count==0，避免误吞
                     # 真正带轴的空格字符。
