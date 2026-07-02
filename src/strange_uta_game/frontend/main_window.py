@@ -742,8 +742,42 @@ class MainWindow(MSFluentWindow):
         等闪退恢复结束后再调度后续异步检查。
         """
         self.check_crash_recovery()
+        self._clear_all_audio_cache()
         QTimer.singleShot(1000, self._check_for_app_update)
         QTimer.singleShot(1500, self._schedule_network_dict_auto_update)
+
+    @staticmethod
+    def _clear_all_audio_cache() -> None:
+        """启动时清理所有缓存的音频文件（视频提取 mp3、TSM 缓存、fallback wav 等）。
+
+        所有缓存均可安全删除 — 项目 .sug 保存的是原始媒体路径，打开时会重新提取；
+        TSM 渲染缓存引擎会在下一首歌加载时自动重建。
+        """
+        try:
+            from strange_uta_game import app_dirs
+            cache_dir = app_dirs.cache_dir()
+            if not cache_dir.exists():
+                return
+            # 1. 清除 extracted/ 子目录（视频提取的 mp3 + 引擎 fallback wav）
+            extracted = cache_dir / "extracted"
+            if extracted.exists():
+                for f in extracted.glob("*"):
+                    try:
+                        if f.is_file():
+                            f.unlink()
+                    except Exception:
+                        pass
+            # 2. 清除 cache 根目录下的音频缓存（TSM source / render / fallback wav）
+            for f in cache_dir.glob("*"):
+                if not f.is_file():
+                    continue
+                if f.suffix.lower() in (".mp3", ".wav"):
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     def check_crash_recovery(self, dialog_parent: "Optional[object]" = None) -> bool:
         """检查是否有闪退恢复文件，并询问用户是否加载。

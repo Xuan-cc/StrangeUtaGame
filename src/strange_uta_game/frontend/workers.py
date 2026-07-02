@@ -36,6 +36,10 @@ class AudioLoadWorker(QObject):
     def run(self) -> None:
         try:
             self._engine.stop()
+            from strange_uta_game.backend.infrastructure.audio.video_converter import (
+                clear_extracted_cache,
+            )
+            clear_extracted_cache()
             self._engine.load(self._file_path, progress_cb=self.progress.emit)
             self.finished.emit()
         except Exception as e:

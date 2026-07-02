@@ -716,9 +716,19 @@ class ProjectStore(QObject):
 
     @staticmethod
     def _crash_recovery_dirs() -> list[Path]:
-        """闪退恢复文件可能所在的目录：当前 .temp 目录 + 旧版 .cache（升级兼容）。"""
+        """闪退恢复文件可能所在的目录。
+
+        扫描三个位置（去重）：
+        1. 当前 .temp（受用户自定义备份目录影响）
+        2. 默认 .temp（用户从默认位置改为自定义路径后，旧恢复文件仍可被检测/清理）
+        3. 旧版 .cache（升级兼容）
+        """
         dirs: list[Path] = []
-        for d in (_temp_dir(), _cache_dir()):
+        for d in (
+            _temp_dir(),
+            app_dirs.default_backup_dir() / ".temp",
+            _cache_dir(),
+        ):
             if d not in dirs:
                 dirs.append(d)
         return dirs
