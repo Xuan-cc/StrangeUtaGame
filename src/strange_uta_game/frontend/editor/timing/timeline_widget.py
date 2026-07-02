@@ -715,10 +715,10 @@ class WaveformDisplay(QWidget):
         box_w = text_w + pad * 2
         box_h = line_h * (2 if line2 else 1) + pad * 2
 
-        # 徽标定位在锚点当前 x 的右上方，夹到控件内
+        # 徽标定位在锚点当前 x 的右下角，夹到控件内
         anchor_x = self._ts_to_x(anchor_ts, visible_start_ms, visible_duration_ms, w)
         bx = anchor_x + 8
-        by = max(2, int(h * 0.15))
+        by = h // 2 + 12
         bx = max(2, min(bx, w - box_w - 2))
         by = max(2, min(by, h - box_h - 2))
 
