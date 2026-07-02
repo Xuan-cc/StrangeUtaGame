@@ -30,6 +30,24 @@ def _get_ts_list(char: Character) -> List[int]:
     return char.timestamps
 
 
+def _get_sentence_end_ts(char: Character) -> Optional[int]:
+    if char.sentence_end_ts is None:
+        return None
+    if char.global_sentence_end_ts is not None:
+        return char.global_sentence_end_ts
+    return char.sentence_end_ts
+
+
+def _format_sentence_end(char: Character) -> str:
+    """如果字符是句尾，返回句尾时间标签字符串；否则返回空串。"""
+    if not char.is_sentence_end:
+        return ""
+    se_ts = _get_sentence_end_ts(char)
+    if se_ts is not None:
+        return f"[{format_timestamp(se_ts)}]"
+    return ""
+
+
 def _is_kana_text(text: str) -> bool:
     if not text:
         return False
@@ -137,9 +155,12 @@ def sentences_to_kasugamuki(sentences: List[Sentence]) -> str:
 
 def _char_plain(char: Character) -> str:
     ts_list = _get_ts_list(char)
+    base = ""
     if ts_list:
-        return f"[{format_timestamp(ts_list[0])}]{char.char}"
-    return char.char
+        base = f"[{format_timestamp(ts_list[0])}]{char.char}"
+    else:
+        base = char.char
+    return base + _format_sentence_end(char)
 
 
 def _char_ruby_kana(char: Character) -> str:
@@ -147,7 +168,7 @@ def _char_ruby_kana(char: Character) -> str:
     kana_texts = [p.text for p in char.ruby.parts]
     ts_list = _get_ts_list(char)
     tagged = _build_tagged_parts(kana_texts, ts_list)
-    return f"{{{char.char}|{tagged}}}"
+    return f"{{{char.char}|{tagged}}}{_format_sentence_end(char)}"
 
 
 def _linked_group_kana(group: List[Character]) -> str:
@@ -213,7 +234,7 @@ def _char_ruby_romaji(
     romaji_list = romanize_ruby_parts(kana_texts, particle_indices=local_pi)
     romaji_tagged = _build_tagged_parts(romaji_list, ts_list)
 
-    return f"{{{char.char}|{kana_tagged}>{romaji_tagged}}}"
+    return f"{{{char.char}|{kana_tagged}>{romaji_tagged}}}{_format_sentence_end(char)}"
 
 
 def _char_self_ruby_romaji(char: Character) -> str:
@@ -221,7 +242,7 @@ def _char_self_ruby_romaji(char: Character) -> str:
     moras = split_into_moras(char.char)
     romaji_list = romanize_ruby_parts(moras)
     romaji_tagged = _build_tagged_parts(romaji_list, ts_list)
-    return f"{{{char.char}|>{romaji_tagged}}}"
+    return f"{{{char.char}|>{romaji_tagged}}}{_format_sentence_end(char)}"
 
 
 def _linked_group_romaji(
