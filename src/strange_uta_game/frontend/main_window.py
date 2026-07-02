@@ -155,13 +155,9 @@ class MainWindow(MSFluentWindow):
         # - 网络词典更新理论上 embedded 也可保留，但本期先一并跳过，由
         #   宿主显式调度（保持本模块"嵌入后零启动副作用"）。
         if not self._embedded:
-            # 延迟检查闪退恢复（等 UI 显示完毕后再弹窗）
-            QTimer.singleShot(500, self.check_crash_recovery)
-            # 延迟检查应用自动更新（在闪退恢复之后，避免抢占用户注意力）。
-            # 失败/无网时静默跳过，绝不阻塞主流程。
-            QTimer.singleShot(2500, self._check_for_app_update)
-            # 启动期网络词典自动更新（独立于应用版本检查；HTTP 在后台线程跑，不阻塞 UI）
-            QTimer.singleShot(3000, self._schedule_network_dict_auto_update)
+            # 延迟启动期检查：先闪退恢复，完成后再检查更新/词典更新，
+            # 避免两个模态弹窗同时弹出导致无法操作。
+            QTimer.singleShot(500, self._startup_checks)
 
         # 由 updater 流程主动设置；closeEvent 检测到此标志即 bypass dirty 弹窗，
         # 走"兜底保存 + 直接退出"路径。
@@ -737,6 +733,17 @@ class MainWindow(MSFluentWindow):
     def has_pending_crash_recovery() -> bool:
         """是否存在待恢复的闪退临时文件（公开 API，供宿主在弹窗前查询）。"""
         return ProjectStore.has_crash_recovery()
+
+    def _startup_checks(self) -> None:
+        """启动期检查入口：先处理闪退恢复弹窗，完成后再触发更新/词典检查。
+
+        闪退恢复弹窗是模态的（``message_question``），如果独立的 QTimer 在此
+        期间触发更新检测，两个模态弹窗会同时弹出导致无法操作。因此改为串行：
+        等闪退恢复结束后再调度后续异步检查。
+        """
+        self.check_crash_recovery()
+        QTimer.singleShot(1000, self._check_for_app_update)
+        QTimer.singleShot(1500, self._schedule_network_dict_auto_update)
 
     def check_crash_recovery(self, dialog_parent: "Optional[object]" = None) -> bool:
         """检查是否有闪退恢复文件，并询问用户是否加载。
