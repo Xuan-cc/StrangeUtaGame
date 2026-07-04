@@ -1888,13 +1888,13 @@ class AutoCheckService:
                 传 False 可推迟词典覆盖到删除注音之后，再手动调用
                 :meth:`apply_user_dict_to_project`。
             restrict_indices: 仅对这些字符索引应用分析；其余字符的
-                Ruby/check_count/linked_to_next 原样保留。None 表示作用于整句。
+                Ruby/check_count/linked_to_next/is_sentence_end/is_line_end 原样保留。None 表示作用于整句。
                 与 only_noruby 取并集（任一要求保留即保留）。
         """
         # 预先快照需保留字符的状态：
         #   - restrict_indices 给定时，范围外字符全部保留；
         #   - only_noruby 时，已注音字符保留。
-        preserved: Dict[int, Tuple[Optional[Ruby], int, bool]] = {}
+        preserved: Dict[int, Tuple[Optional[Ruby], int, bool, bool, bool]] = {}
         for i in range(len(sentence.characters)):
             keep = False
             if restrict_indices is not None and i not in restrict_indices:
@@ -1903,7 +1903,7 @@ class AutoCheckService:
                 keep = True
             if keep:
                 c = sentence.characters[i]
-                preserved[i] = (c.ruby, c.check_count, c.linked_to_next)
+                preserved[i] = (c.ruby, c.check_count, c.linked_to_next, c.is_sentence_end, c.is_line_end)
         # 全部字符都需保留 → 无事可做
         if preserved and len(preserved) == len(sentence.characters) and sentence.characters:
             return
@@ -2078,16 +2078,19 @@ class AutoCheckService:
         sentence.characters = new_characters
 
         # 对需保留的字符恢复原 Ruby/check_count/linked_to_next
+        # /is_sentence_end/is_line_end
         # （only_noruby 已注音字符 / restrict_indices 范围外字符）。
         # 注意：analyze 过程可能改变字符数量时（当前流程下不会），此覆盖按原位置对齐。
         if preserved:
-            for i, (old_ruby, old_cc, old_link) in preserved.items():
+            for i, (old_ruby, old_cc, old_link, old_sent_end, old_line_end) in preserved.items():
                 if i < len(sentence.characters):
                     sentence.characters[i].ruby = old_ruby
                     # 已先恢复 ruby，此时 set_check_count 走 force=True 安全
                     # （ruby.parts 与 old_cc 在原 Character 上本就匹配）
                     sentence.characters[i].set_check_count(old_cc, force=True)
                     sentence.characters[i].linked_to_next = old_link
+                    sentence.characters[i].is_sentence_end = old_sent_end
+                    sentence.characters[i].is_line_end = old_line_end
 
         # Phase 5: 用户词典覆盖（优先级最高，覆盖一切包括 only_noruby preserved）。
         # 按词典数组顺序逐条扫描，先命中锁定 span，后命中若与已锁定区间重叠则跳过。
