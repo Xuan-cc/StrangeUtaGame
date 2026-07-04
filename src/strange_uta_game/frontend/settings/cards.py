@@ -412,7 +412,9 @@ class _KeyCaptureButton(PushButton):
             a0.accept()
             return
         modifiers = a0.modifiers()
-        key_name = _KeyCaptureButton._build_key_name(key, modifiers)
+        key_name = _KeyCaptureButton._build_key_name(
+            key, modifiers, a0.nativeVirtualKey(), a0.nativeScanCode()
+        )
         if key_name:
             self._pending_key = key_name
             self._hold_timer.start(self.HOLD_THRESHOLD_MS)
@@ -522,8 +524,17 @@ class _KeyCaptureButton(PushButton):
         self._update_display()
 
     @staticmethod
-    def _build_key_name(key, modifiers) -> Optional[str]:
-        """将 Qt key + modifiers 转换为规范化字符串，如 'CTRL+F4'、'SPACE'。"""
+    def _build_key_name(
+        key,
+        modifiers,
+        native_virtual_key: int = 0,
+        native_scan_code: int = 0,
+    ) -> Optional[str]:
+        """将 Qt key + modifiers 转换为规范化字符串，如 'CTRL+F4'、'SPACE'。
+
+        macOS 上 ``QKeyEvent.key()`` 对符号按键可能返回 0，
+        此时通过 ``native_virtual_key`` + Carbon kVK 映射做 fallback。
+        """
         parts = []
         if modifiers & Qt.KeyboardModifier.ControlModifier:
             parts.append("CTRL")
@@ -583,6 +594,15 @@ class _KeyCaptureButton(PushButton):
             parts.append(chr(key))
         elif Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
             parts.append(chr(key))
+        elif native_virtual_key:
+            from strange_uta_game.frontend.macos_keymap import (
+                macos_vk_to_key_name,
+            )
+            vk_name = macos_vk_to_key_name(native_virtual_key, native_scan_code)
+            if vk_name:
+                parts.append(vk_name)
+            else:
+                return None
         else:
             return None
         return "+".join(parts)
