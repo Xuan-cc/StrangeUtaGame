@@ -103,6 +103,8 @@ module = [
     "pedalboard.io",
     "numpy",
     "pykakasi",
+    "jieba",
+    "pypinyin",
 ]
 ignore_missing_imports = true
 

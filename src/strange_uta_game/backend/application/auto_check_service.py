@@ -294,6 +294,7 @@ class AutoCheckService:
         user_dictionary: Optional[List[Dict[str, Any]]] = None,
         annotate_katakana_with_english: bool = False,
         chinese_mode: bool = False,
+        pinyin_analyzer: Optional[RubyAnalyzer] = None,
     ):
         """
         Args:
@@ -302,9 +303,13 @@ class AutoCheckService:
             user_dictionary: 用户读音词典，格式 [{"enabled": bool, "word": str, "reading": str}, ...]
             annotate_katakana_with_english: 是否根据用户词典给片假名标注英文
             chinese_mode: 中文歌词模式（跳过日文注音分析，每个汉字视为中文单字节奏点）
+            pinyin_analyzer: 中文拼音分析器（chinese_mode=True 时，
+                若提供则为每个汉字标注带声调拼音 ruby；若为 None 则不产生 ruby）
         """
         self._chinese_mode = chinese_mode
         self._analyzer = ruby_analyzer or (None if chinese_mode else create_analyzer())
+        self._pinyin_analyzer = pinyin_analyzer
+        self._ruby_analyzer = ruby_analyzer
         self._flags = auto_check_flags or {}
         self._romanize_ruby = bool(self._flags.get("romanize_ruby", False))
         self._annotate_katakana_with_english = annotate_katakana_with_english
@@ -1294,9 +1299,11 @@ class AutoCheckService:
         sentence: Sentence,
         keep_existing_timetags: bool = True,
     ) -> None:
-        """中文歌词模式：按字符流计算节奏点；跳过日语注音引擎、用户词典、ruby、罗马音。
+        """中文歌词模式：按字符流计算节奏点。
 
-        全程不产生 ruby，也不查询用户词典/词组词典。
+        - 若 ``self._pinyin_analyzer`` 已提供，为每个汉字标注带声调拼音 ruby；
+        - 否则全程不产生 ruby（仅节奏点模式）。
+
         check 规则与日文路径共用 _apply_flags_filter + _apply_english_and_endpoints。
         """
         text = sentence.text
@@ -1317,11 +1324,25 @@ class AutoCheckService:
         n = len(chars)
         check_counts: List[int] = [1] * n
 
+        # 拼音注音子步骤：chinese_mode 下若传入了 pinyin_analyzer，则标注拼音
+        pinyin_map: Dict[int, str] = {}
+        if self._pinyin_analyzer is not None:
+            pinyin_results = self._pinyin_analyzer.analyze(text)
+            for r in pinyin_results:
+                for offset in range(r.end_idx - r.start_idx):
+                    idx = r.start_idx + offset
+                    if r.reading and r.reading != r.text:
+                        pinyin_map[idx] = r.reading
+
         new_characters: List[Character] = []
         for i, ch in enumerate(chars):
+            ruby = None
+            py = pinyin_map.get(i, "")
+            if py:
+                ruby = Ruby(parts=[RubyPart(text=py)])
             character = Character(
                 char=ch,
-                ruby=None,
+                ruby=ruby,
                 check_count=1,
                 is_line_end=False,
                 is_sentence_end=False,

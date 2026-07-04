@@ -1354,5 +1354,12 @@
   "中点": "Middle dot",
   "音符": "Music notes",
   "爱心": "Heart",
-  "星形": "Star"
+  "星形": "Star",
+  "中文歌标注拼音": "Annotate Chinese lyrics with Pinyin",
+  "检测到中文歌词时，自动为汉字标注带声调拼音注音": "When Chinese lyrics are detected, automatically annotate Chinese characters with tone-marked Pinyin ruby",
+  "缺少依赖": "Missing dependency",
+  "正在拼音注音": "Annotating Pinyin",
+  "拼音注音失败": "Pinyin annotation failed",
+  "拼音注音": "Pinyin annotation",
+  "中文拼音注音": "Chinese Pinyin annotation"
 }

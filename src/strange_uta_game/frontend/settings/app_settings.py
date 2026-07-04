@@ -137,6 +137,7 @@ class AppSettings:
             "check_space_as_line_end": True,
             "check_english_word_end": True,
             "chinese_lyrics_detection": True,
+            "chinese_pinyin_annotation": False,
             "romanize_ruby": False,
             "delete_ruby_types": [],
         },

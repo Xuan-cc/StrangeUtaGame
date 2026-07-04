@@ -56,6 +56,7 @@ class EditorToolBar(QFrame):
     delete_all_timestamps_keep_head_clicked = pyqtSignal() # 删除所有时间戳（保留行首）
 
     delete_timestamps_selected_clicked = pyqtSignal()      # 删除所选范围时间戳
+    analyze_pinyin_clicked = pyqtSignal()                   # 中文拼音注音
     offset_changed = pyqtSignal(int)  # 偏移量变化（毫秒）
 
     def __init__(self, parent=None):
@@ -128,6 +129,8 @@ class EditorToolBar(QFrame):
         ruby_menu.addAction(Action(FIF.FONT, tr("全部转为罗马字"), self, triggered=self.romanize_all_clicked.emit))
         ruby_menu.addSeparator()
         ruby_menu.addAction(Action(FIF.DELETE, tr("按类型删除注音"), self, triggered=self.delete_rubies_by_type_clicked.emit))
+        ruby_menu.addSeparator()
+        ruby_menu.addAction(Action(FIF.FONT, tr("中文拼音注音"), self, triggered=self.analyze_pinyin_clicked.emit))
         self.btn_ruby.setMenu(ruby_menu)
         layout.addWidget(self.btn_ruby)
 

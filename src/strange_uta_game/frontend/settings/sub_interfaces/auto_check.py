@@ -63,6 +63,12 @@ class AutoCheckSubInterface(SubSettingInterface):
                 parent=g),
             title_source="中文歌词检测",
             content_source="加载歌词时，若未检测到日文假名则自动切换为中文模式（汉字每字一个节奏点，跳过日文注音）")
+        self.card_chinese_pinyin_annotation = self._tr_register(
+            SwitchSettingCard(FIF.FONT, tr("中文歌标注拼音"),
+                tr("检测到中文歌词时，自动为汉字标注带声调拼音注音"),
+                parent=g),
+            title_source="中文歌标注拼音",
+            content_source="检测到中文歌词时，自动为汉字标注带声调拼音注音")
         self.card_romanize_ruby = self._tr_register(
             SwitchSettingCard(FIF.LANGUAGE, tr("罗马音注音"),
                 tr("需重新执行自动注音以生效"),
@@ -85,6 +91,7 @@ class AutoCheckSubInterface(SubSettingInterface):
             content_source="自动注音完成后，自动删除指定类型的注音")
         for c in [self.card_checkpoint_chars, self.card_check_rules,
                   self.card_auto_on_load, self.card_chinese_lyrics_detection,
+                  self.card_chinese_pinyin_annotation,
                   self.card_romanize_ruby, self.card_delete_ruby_types]:
             g.addSettingCard(c)
         self.expandLayout.addWidget(g)
@@ -94,6 +101,7 @@ class AutoCheckSubInterface(SubSettingInterface):
         self.card_check_rules.selection_changed.connect(self._notify_changed)
         self.card_auto_on_load.checked_changed.connect(self._notify_changed)
         self.card_chinese_lyrics_detection.checked_changed.connect(self._notify_changed)
+        self.card_chinese_pinyin_annotation.checked_changed.connect(self._notify_changed)
         self.card_romanize_ruby.checked_changed.connect(self._on_romanize_ruby_changed)
         self.card_delete_ruby_types.selection_changed.connect(self._on_delete_ruby_types_changed)
 
@@ -167,6 +175,7 @@ class AutoCheckSubInterface(SubSettingInterface):
             })
             self.card_auto_on_load.setChecked(s.get("auto_check.auto_on_load", True))
             self.card_chinese_lyrics_detection.setChecked(s.get("auto_check.chinese_lyrics_detection", True))
+            self.card_chinese_pinyin_annotation.setChecked(s.get("auto_check.chinese_pinyin_annotation", False))
             romanize_ruby = s.get("auto_check.romanize_ruby", False)
             saved_delete_types = s.get("auto_check.delete_ruby_types", [])
             if "katakana" in saved_delete_types:
@@ -198,6 +207,7 @@ class AutoCheckSubInterface(SubSettingInterface):
             s.set(f"auto_check.{key}", val)
         s.set("auto_check.auto_on_load", self.card_auto_on_load.isChecked())
         s.set("auto_check.chinese_lyrics_detection", self.card_chinese_lyrics_detection.isChecked())
+        s.set("auto_check.chinese_pinyin_annotation", self.card_chinese_pinyin_annotation.isChecked())
         delete_types = self.card_delete_ruby_types.selectedValues()
         romanize_ruby = self.card_romanize_ruby.isChecked()
         if romanize_ruby:

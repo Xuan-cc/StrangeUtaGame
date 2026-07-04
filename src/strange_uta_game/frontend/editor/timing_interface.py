@@ -373,6 +373,7 @@ class EditorInterface(QWidget):
         self.toolbar.delete_all_timestamps_keep_head_clicked.connect(self._on_delete_all_timestamps_keep_head)
 
         self.toolbar.delete_timestamps_selected_clicked.connect(self._on_delete_timestamps_selected)
+        self.toolbar.analyze_pinyin_clicked.connect(self._on_analyze_pinyin)
         self.toolbar.offset_changed.connect(self._on_offset_changed)
         layout.addWidget(self.toolbar)
 
@@ -6741,11 +6742,21 @@ class EditorInterface(QWidget):
         if chinese_mode:
             analyzer = None
             llm_apply_user_dict = True
+            pinyin_analyzer = None
+            if auto_check_flags.get("chinese_pinyin_annotation", False):
+                try:
+                    from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
+                        create_pinyin_analyzer,
+                    )
+                    pinyin_analyzer = create_pinyin_analyzer()
+                except ImportError:
+                    pass
             auto_check = AutoCheckService(
                 auto_check_flags=auto_check_flags,
                 user_dictionary=user_dict,
                 annotate_katakana_with_english=annotate_katakana_with_english,
                 chinese_mode=True,
+                pinyin_analyzer=pinyin_analyzer,
             )
         else:
             lines = [s.text for s in self._project.sentences]
@@ -6934,6 +6945,149 @@ class EditorInterface(QWidget):
     def _on_analyze_rubies_no_cp(self):
         """工具栏「注音分析（不更新节奏点）」— 只刷注音、保留节奏点。"""
         self._on_analyze_rubies(update_checkpoints=False)
+
+    def _on_analyze_pinyin(self):
+        """工具栏「中文拼音注音」— 为全项目汉字标注带声调拼音。"""
+        self._auto_analyze_pinyin()
+
+    def _auto_analyze_pinyin(self):
+        """中文拼音注音入口（工具栏 + 自动检测共用）。
+
+        下发进度为 "拼音注音" 的 StateToolTip，
+        分析完成后通过 SentenceSnapshotCommand 纳入 undo 堆栈。
+        """
+        if not self._project:
+            return
+        if getattr(self, "_ruby_analyzing", False):
+            return
+
+        from strange_uta_game.backend.application import AutoCheckService
+        from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
+            create_pinyin_analyzer,
+        )
+        from strange_uta_game.frontend.settings.settings_interface import AppSettings
+        from strange_uta_game.frontend.workers import RubyAnalyzeWorker
+        from qfluentwidgets import InfoBar, InfoBarPosition, StateToolTip
+        from PyQt6.QtCore import Qt, QThread
+        from copy import deepcopy
+
+        app_settings = AppSettings()
+        auto_check_flags = app_settings.get_all().get("auto_check", {})
+
+        try:
+            pinyin_analyzer = create_pinyin_analyzer()
+        except ImportError as e:
+            InfoBar.error(
+                title=self.tr("缺少依赖"),
+                content=str(e),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            return
+
+        auto_check = AutoCheckService(
+            auto_check_flags=auto_check_flags,
+            chinese_mode=True,
+            pinyin_analyzer=pinyin_analyzer,
+        )
+
+        before_sentences = deepcopy(self._project.sentences)
+        undo_pos = (self._current_line_idx, self.preview._current_char_idx)
+        focus_line_idx = self._current_line_idx
+        focus_char_idx = self.preview._current_char_idx
+
+        project_copy = deepcopy(self._project)
+
+        green = theme.status_complete.name()
+        state_tooltip = StateToolTip(self.tr("正在拼音注音"), self.tr("准备中..."), self)
+        state_tooltip.setStyleSheet(f"""
+            StateToolTip {{
+                background-color: {green};
+                border: 1px solid {green};
+                border-radius: 8px;
+            }}
+            StateToolTip QLabel {{
+                color: white;
+            }}
+        """)
+        state_tooltip.move(state_tooltip.getSuitablePos())
+        state_tooltip.show()
+        self._ruby_analyzing = True
+
+        worker = RubyAnalyzeWorker(
+            project_copy, auto_check, only_noruby=False, delete_types=[],
+            llm_apply_user_dict=True, update_checkpoints=False,
+        )
+        thread = QThread(self)
+        worker.moveToThread(thread)
+
+        self._ruby_analyze_worker = worker
+        self._ruby_analyze_thread = thread
+
+        def _on_progress(phase: str, current: int, total: int) -> None:
+            state_tooltip.setContent(f"{phase} {current}/{total}")
+
+        def _cleanup() -> None:
+            self._ruby_analyze_worker = None
+            self._ruby_analyze_thread = None
+            self._ruby_analyzing = False
+
+        def _on_finished(analyzed_project, deleted_count: int) -> None:
+            state_tooltip.setState(True)
+            _cleanup()
+
+            after_sentences = analyzed_project.sentences
+            command_manager = (
+                self._timing_service.command_manager if self._timing_service else None
+            )
+            if command_manager is not None:
+                command = SentenceSnapshotCommand(
+                    self._project,
+                    before_sentences,
+                    after_sentences,
+                    "拼音注音",
+                )
+                command.undo_position = undo_pos
+                command.redo_position = (focus_line_idx, focus_char_idx)
+                command_manager.execute(command)
+            else:
+                self._project.sentences = deepcopy(after_sentences)
+
+            self._sync_after_structure_change(
+                change_type="rubies",
+                focus_line_idx=focus_line_idx,
+                focus_char_idx=focus_char_idx,
+                checkpoint_idx=None,
+                move_cp=False,
+            )
+
+        def _on_error(error_msg: str) -> None:
+            _cleanup()
+            state_tooltip.setState(False)
+            InfoBar.error(
+                title=self.tr("拼音注音失败"),
+                content=error_msg or "",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+
+        worker.llm_progress.connect(lambda _: None)  # pinyin 无 LLM，忽略
+        thread.started.connect(worker.run)
+        worker.progress.connect(_on_progress)
+        worker.finished.connect(_on_finished)
+        worker.error.connect(_on_error)
+        worker.finished.connect(thread.quit)
+        worker.error.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+
+        thread.start()
 
     def _auto_analyze_all_rubies(self):
         """自动分析全部注音（用于歌词导入后重新注音，覆盖已有）"""

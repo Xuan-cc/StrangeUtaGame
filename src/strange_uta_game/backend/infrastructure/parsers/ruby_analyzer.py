@@ -801,6 +801,100 @@ class DummyAnalyzer(RubyAnalyzer):
 
 
 # ──────────────────────────────────────────────
+# 中文拼音分析器
+# ──────────────────────────────────────────────
+
+
+class PinyinAnalyzer(RubyAnalyzer):
+    """基于 pypinyin + jieba 的中文拼音注音分析器。
+
+    使用 jieba 分词后调用 pypinyin，利用词组上下文提升多音字准确度。
+    输出带声调符号的拼音（如 ``zhōng``、``hǎo``）。
+    """
+
+    def __init__(self):
+        try:
+            import warnings
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore", message=".*pkg_resources.*", category=UserWarning
+                )
+                import jieba
+            import logging
+
+            jieba.setLogLevel(logging.WARNING)
+        except ImportError as e:
+            raise ImportError(
+                "jieba is required for pinyin analysis. "
+                "Install with: pip install jieba"
+            ) from e
+        try:
+            from pypinyin import Style, pinyin
+        except ImportError as e:
+            raise ImportError(
+                "pypinyin is required for pinyin analysis. "
+                "Install with: pip install pypinyin"
+            ) from e
+        self._jieba = jieba
+        self._pinyin = pinyin
+        self._style = Style.TONE
+        # 歌曲常用口语读音覆盖（仅对口语中几乎从不读文读音的字做全局覆盖）
+        from pypinyin import load_single_dict
+        load_single_dict({
+            ord('谁'): 'shéi',   # 流行歌曲中几乎不用 shuí
+            ord('熟'): 'shóu',   # 口语/歌词里读 shóu 而非 shú
+            ord('血'): 'xiě',    # 口语/歌词里多读 xiě
+        })
+
+    def analyze(self, text: str) -> List[RubyResult]:
+        if not text:
+            return []
+
+        chars = list(text)
+        words = list(self._jieba.cut(text))
+        py_result = self._pinyin(words, style=self._style)
+
+        results: List[RubyResult] = []
+        for i, ch in enumerate(chars):
+            if i < len(py_result) and py_result[i]:
+                reading = py_result[i][0]
+            else:
+                reading = ch
+            results.append(
+                RubyResult(
+                    text=ch,
+                    reading=reading if self._is_chinese_char(ch) else ch,
+                    start_idx=i,
+                    end_idx=i + 1,
+                )
+            )
+
+        return results
+
+    def get_reading(self, text: str) -> str:
+        if not text:
+            return ""
+        results = self.analyze(text)
+        return " ".join(r.reading for r in results)
+
+    @staticmethod
+    def _is_chinese_char(char: str) -> bool:
+        code = ord(char)
+        return (
+            (0x4E00 <= code <= 0x9FFF)
+            or (0x3400 <= code <= 0x4DBF)
+            or (0xF900 <= code <= 0xFAFF)
+            or code == 0x3005
+        )
+
+
+def create_pinyin_analyzer() -> PinyinAnalyzer:
+    """创建中文拼音注音分析器。"""
+    return PinyinAnalyzer()
+
+
+# ──────────────────────────────────────────────
 # WinRT 日语注音引擎：可用性探测 + 安装引导
 # ──────────────────────────────────────────────
 
