@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QEvent, Qt, QRect, QSize, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from strange_uta_game.frontend.font_utils import DEFAULT_FONT_FAMILY, ui_font
 from PyQt6.QtWidgets import (
@@ -2011,6 +2011,8 @@ _SEPARATE_SYM_DEFAULT: frozenset[str] = frozenset({
     "ja_quotes", "question", "ellipsis", "period", "comma",
 })
 
+_tr = lambda s: QCoreApplication.translate("SeparateSymbolTimestampDialog", s)
+
 
 def _make_tri_checkbox(text: str, parent: QWidget) -> CheckBox:
     """创建三态复选框（全选 / 部分选中 / 未选）。
@@ -2041,13 +2043,10 @@ class _GroupRow:
         char_set: frozenset,
         parent_widget: QWidget,
         saved_chars: set[str] | None,
-        tr_func,
     ):
         self._key = key
         self._char_set = char_set
         self._sub_chars: list[str] = sorted(char_set)
-        self._parent = parent_widget
-        self._tr = tr_func
 
         self._container = QWidget(parent_widget)
         v = QVBoxLayout(self._container)
@@ -2063,14 +2062,15 @@ class _GroupRow:
         self._parent_chk.clicked.connect(self._on_parent_clicked)
         row.addWidget(self._parent_chk)
 
-        self._detail_btn = QPushButton(self._tr("详情 ▸"))
+        row.addStretch()
+
+        self._detail_btn = QPushButton(_tr("详情 ▸"))
         self._detail_btn.setFixedWidth(56)
         self._detail_btn.setFixedHeight(22)
         self._detail_btn.setFlat(True)
         self._detail_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._detail_btn.clicked.connect(self._toggle_detail)
         row.addWidget(self._detail_btn)
-        row.addStretch()
         v.addLayout(row)
 
         # ── 子复选框区（默认隐藏） ──
@@ -2132,9 +2132,9 @@ class _GroupRow:
 
     def _update_detail_text(self):
         if self._is_expanded:
-            self._detail_btn.setText(self._tr("收起 ▾"))
+            self._detail_btn.setText(_tr("收起 ▾"))
         else:
-            self._detail_btn.setText(self._tr("详情 ▸"))
+            self._detail_btn.setText(_tr("详情 ▸"))
 
     @property
     def container(self) -> QWidget:
@@ -2169,7 +2169,7 @@ class SeparateSymbolTimestampDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(self.tr("分离符号时间戳"))
-        fit_to_screen(self, 620, 640)
+        fit_to_screen(self, 680, 660)
         self.setFont(ui_font(10))
         self._apply_clicked = False
 
@@ -2237,9 +2237,31 @@ class SeparateSymbolTimestampDialog(QDialog):
         right_col.setSpacing(4)
 
         self._group_rows: dict[str, _GroupRow] = {}
-        for i, (key, label, examples, char_set) in enumerate(_SEPARATE_SYM_GROUPS):
+        _TL = {  # noqa: N806  group-key → translated label
+            "parentheses":       self.tr("圆括号"),
+            "brackets":          self.tr("方括号"),
+            "exclamation":       self.tr("感叹号"),
+            "angle_brackets":    self.tr("尖括号"),
+            "ja_quotes":         self.tr("日文引号"),
+            "ja_dbl_quotes":     self.tr("日文双引号"),
+            "question":          self.tr("问号"),
+            "ellipsis":          self.tr("省略号"),
+            "period":            self.tr("句号"),
+            "comma":             self.tr("逗号"),
+            "ideographic_comma": self.tr("顿号"),
+            "semicolon":         self.tr("分号"),
+            "colon":             self.tr("冒号"),
+            "wave":              self.tr("波浪号"),
+            "dash":              self.tr("破折号"),
+            "middle_dot":        self.tr("中点"),
+            "music_note":        self.tr("音符"),
+            "heart":             self.tr("爱心"),
+            "star":              self.tr("星形"),
+        }
+        for i, (key, _raw_label, examples, char_set) in enumerate(_SEPARATE_SYM_GROUPS):
             saved = self._saved_group_chars.get(key)
-            row = _GroupRow(key, label, examples, char_set, scroll_w, saved, self.tr)
+            tr_label = _TL.get(key, _raw_label)
+            row = _GroupRow(key, tr_label, examples, char_set, scroll_w, saved)
             self._group_rows[key] = row
             if i < mid:
                 left_col.addWidget(row.container)
