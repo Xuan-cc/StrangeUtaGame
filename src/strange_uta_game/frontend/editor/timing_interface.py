@@ -3425,9 +3425,17 @@ class EditorInterface(QWidget):
                         i += 1
                         continue
 
-                    # 收集连续的待补全字符段
+                    # 收集连续的待补全字符段。
+                    # 遇到带 sentence_end_ts 的非符号字符时，将其纳入当前段
+                    # 但立即结束：句尾时间戳本身就是天然边界，不应与后文混段。
                     segment_start = i
                     while i < total_chars and _is_target_char(chars[i], i, chars):
+                        cur = chars[i]
+                        if (cur.is_sentence_end
+                                and cur.sentence_end_ts is not None
+                                and get_char_type(cur.char) != CharType.SYMBOL):
+                            i += 1
+                            break
                         i += 1
                     segment_end = i  # 不包含
 
@@ -3440,8 +3448,8 @@ class EditorInterface(QWidget):
                     prev_ts = _find_prev_timestamp(line_idx, segment_start)
                     next_ts = _find_next_timestamp(line_idx, segment_end - 1)
 
-                    # 如果段最后一个字符自身有句尾时间戳，且比向后搜寻到的 next_ts 更近，
-                    # 则以句尾时间戳为插值上限，避免补偿后的时间戳跑到句尾之后。
+                    # 分段保证了：若段内有句尾字符，它一定是段的最后一个。
+                    # 其 sentence_end_ts 是比 _find_next_timestamp 更紧的上限。
                     last_char = chars[segment_end - 1]
                     if last_char.is_sentence_end and last_char.sentence_end_ts is not None:
                         if next_ts is None or last_char.sentence_end_ts < next_ts:
@@ -5919,7 +5927,7 @@ class EditorInterface(QWidget):
             # 其他 Ctrl 组合键：不直接 return，继续走 key_map 查找
 
         # Convert Qt key to string name for mapping lookup
-        key_name = self._qt_key_to_name(key, modifiers)
+        key_name = self._qt_key_to_name(key, modifiers, a0.nativeVirtualKey(), a0.nativeScanCode())
         if not key_name:
             super().keyPressEvent(a0)
             return
@@ -6022,7 +6030,7 @@ class EditorInterface(QWidget):
         handler_entry_s = time.monotonic()
         key = a0.key()
         modifiers = a0.modifiers()
-        key_name = self._qt_key_to_name(key, modifiers)
+        key_name = self._qt_key_to_name(key, modifiers, a0.nativeVirtualKey(), a0.nativeScanCode())
         if not key_name:
             super().keyReleaseEvent(a0)
             return
@@ -6102,11 +6110,17 @@ class EditorInterface(QWidget):
         super().keyReleaseEvent(a0)
 
     def _qt_key_to_name(
-        self, key, modifiers=Qt.KeyboardModifier.NoModifier
+        self,
+        key,
+        modifiers=Qt.KeyboardModifier.NoModifier,
+        native_virtual_key: int = 0,
+        native_scan_code: int = 0,
     ) -> Optional[str]:
         """Convert Qt key enum to string name for shortcut mapping.
 
         支持组合键，如 CTRL+F4、ALT+A、SHIFT+Z 等。
+        macOS 上 ``QKeyEvent.key()`` 对符号按键可能返回 0，
+        此时通过 ``native_virtual_key`` + Carbon kVK 映射做 fallback。
         """
         parts = []
         if modifiers & Qt.KeyboardModifier.ControlModifier:
@@ -6166,6 +6180,15 @@ class EditorInterface(QWidget):
             parts.append(chr(key))
         elif Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
             parts.append(chr(key))
+        elif native_virtual_key:
+            from strange_uta_game.frontend.macos_keymap import (
+                macos_vk_to_key_name,
+            )
+            vk_name = macos_vk_to_key_name(native_virtual_key, native_scan_code)
+            if vk_name:
+                parts.append(vk_name)
+            else:
+                return None
         else:
             return None
         return "+".join(parts) if parts else None
