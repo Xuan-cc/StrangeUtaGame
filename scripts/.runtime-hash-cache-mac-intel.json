@@ -1,8 +1,8 @@
 {
-  "version": "1.3.4",
+  "version": "1.3.5",
   "content_hash": "7fd101348d88ce8ff1857d52608b80cd75bcc700baa5eaa59298866ec97a8852",
   "size": 119521683,
-  "requirements_hash": "cd18b9734dc05d51fad1634c17638f6659978acb901770f5bd6946bec34f3d52",
+  "requirements_hash": "5620b926163241250568e93d93990a70762fdfa89cf9e3d25e065179dfed7a50",
   "req_lines": [
     "PyQt6==6.11.0",
     "PyQt6-Qt6==6.11.0",
@@ -15,6 +15,8 @@
     "pykakasi==2.3.0",
     "jaconv==0.5.0",
     "pyphen==0.17.2",
+    "jieba==0.42.1",
+    "pypinyin==0.55.0",
     "requests==2.32.5",
     "urllib3==2.6.1",
     "charset-normalizer==3.4.4",
