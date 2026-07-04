@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QPushButton,
     QRadioButton,
     QTableWidget,
     QTableWidgetItem,
@@ -62,6 +63,7 @@ from qfluentwidgets import (
     SpinBox,
     setCustomStyleSheet,
 )
+
 
 from strange_uta_game.frontend.theme import theme, ThemeColors
 from strange_uta_game.frontend.fluent_widgets import FluentGroupBox
@@ -1998,7 +2000,7 @@ _SEPARATE_SYM_GROUPS: list[tuple[str, str, str, frozenset]] = [
     ("wave",               "波浪号",       "~ ～ 〜",          frozenset("~～〜")),
     ("dash",               "破折号",       "— ―",              frozenset("—―")),
     ("middle_dot",         "中点",         "· ・ •",           frozenset("·・•")),
-    ("music_note",         "音符",         "♪ ♫ ♩ ♬",         frozenset("♪♫♩♬")),
+    ("music_note",         "音符",         "♪ ♫ ♩ ♬",        frozenset("♪♫♩♬")),
     ("heart",              "爱心",         "♡ ♥",              frozenset("♡♥")),
     ("star",               "星形",         "★ ☆",              frozenset("★☆")),
 ]
@@ -2008,6 +2010,148 @@ _SEPARATE_SYM_DEFAULT: frozenset[str] = frozenset({
     "parentheses", "brackets", "exclamation", "angle_brackets",
     "ja_quotes", "question", "ellipsis", "period", "comma",
 })
+
+
+def _make_tri_checkbox(text: str, parent: QWidget) -> CheckBox:
+    """创建三态复选框（全选 / 部分选中 / 未选）。
+
+    点击行为：未选 → 全选；部分选 → 全选；全选 → 未选。
+    部分选中状态由 ``_sync_parent_state()`` 程序化设置，
+    ``clicked`` 回调会在此之后将意外的 PartiallyChecked 修正为 Checked。
+    """
+    chk = CheckBox(text, parent)
+    chk.setTristate(True)
+
+    def _fix_click():
+        if chk.checkState() == Qt.CheckState.PartiallyChecked:
+            chk.setCheckState(Qt.CheckState.Checked)
+
+    chk.clicked.connect(_fix_click)
+    return chk
+
+
+class _GroupRow:
+    """单组符号分组控件：父复选框 + 详情展开区 + 子复选框。"""
+
+    def __init__(
+        self,
+        key: str,
+        label: str,
+        examples: str,
+        char_set: frozenset,
+        parent_widget: QWidget,
+        saved_chars: set[str] | None,
+        tr_func,
+    ):
+        self._key = key
+        self._char_set = char_set
+        self._sub_chars: list[str] = sorted(char_set)
+        self._parent = parent_widget
+        self._tr = tr_func
+
+        self._container = QWidget(parent_widget)
+        v = QVBoxLayout(self._container)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(1)
+
+        # ── 父行：复选框 + 标签 + 详情按钮 ──
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+
+        self._parent_chk = _make_tri_checkbox(f"{label}   {examples}", parent_widget)
+        self._parent_chk.clicked.connect(self._on_parent_clicked)
+        row.addWidget(self._parent_chk)
+
+        self._detail_btn = QPushButton(self._tr("详情 ▸"))
+        self._detail_btn.setFixedWidth(56)
+        self._detail_btn.setFixedHeight(22)
+        self._detail_btn.setFlat(True)
+        self._detail_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._detail_btn.clicked.connect(self._toggle_detail)
+        row.addWidget(self._detail_btn)
+        row.addStretch()
+        v.addLayout(row)
+
+        # ── 子复选框区（默认隐藏） ──
+        self._child_container = QWidget(parent_widget)
+        child_layout = QVBoxLayout(self._child_container)
+        child_layout.setContentsMargins(28, 0, 0, 0)
+        child_layout.setSpacing(1)
+
+        self._child_checkboxes: dict[str, CheckBox] = {}
+        for ch in self._sub_chars:
+            chk = CheckBox(ch, self._child_container)
+            child_layout.addWidget(chk)
+            chk.toggled.connect(self._on_child_toggled)
+            self._child_checkboxes[ch] = chk
+
+        self._child_container.setVisible(False)
+        v.addWidget(self._child_container)
+
+        # ── 初始化选中状态 ──
+        if saved_chars is not None:
+            for ch, chk in self._child_checkboxes.items():
+                chk.setChecked(ch in saved_chars)
+        else:
+            for chk in self._child_checkboxes.values():
+                chk.setChecked(True)
+
+        self._sync_parent_state()
+        self._update_detail_text()
+
+    def _on_parent_clicked(self):
+        if self._parent_chk.checkState() == Qt.CheckState.Checked:
+            for chk in self._child_checkboxes.values():
+                chk.setChecked(True)
+        else:
+            for chk in self._child_checkboxes.values():
+                chk.setChecked(False)
+
+    def _on_child_toggled(self):
+        self._sync_parent_state()
+
+    def _sync_parent_state(self):
+        total = len(self._child_checkboxes)
+        checked = sum(1 for chk in self._child_checkboxes.values() if chk.isChecked())
+        if checked == 0:
+            self._parent_chk.setCheckState(Qt.CheckState.Unchecked)
+        elif checked == total:
+            self._parent_chk.setCheckState(Qt.CheckState.Checked)
+        else:
+            self._parent_chk.setCheckState(Qt.CheckState.PartiallyChecked)
+
+    @property
+    def _is_expanded(self) -> bool:
+        return self._child_container.isVisible()
+
+    def _toggle_detail(self):
+        expanded = not self._is_expanded
+        self._child_container.setVisible(expanded)
+        self._update_detail_text()
+
+    def _update_detail_text(self):
+        if self._is_expanded:
+            self._detail_btn.setText(self._tr("收起 ▾"))
+        else:
+            self._detail_btn.setText(self._tr("详情 ▸"))
+
+    @property
+    def container(self) -> QWidget:
+        return self._container
+
+    def get_selected_chars(self) -> set[str]:
+        return {ch for ch, chk in self._child_checkboxes.items() if chk.isChecked()}
+
+    def get_group_key(self) -> str:
+        return self._key
+
+    def set_all_checked(self, checked: bool):
+        for chk in self._child_checkboxes.values():
+            chk.setChecked(checked)
+
+    def is_any_checked(self) -> bool:
+        return any(chk.isChecked() for chk in self._child_checkboxes.values())
 
 
 class SeparateSymbolTimestampDialog(QDialog):
@@ -2025,61 +2169,88 @@ class SeparateSymbolTimestampDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(self.tr("分离符号时间戳"))
-        fit_to_screen(self, 600, 640)
+        fit_to_screen(self, 620, 640)
         self.setFont(ui_font(10))
         self._apply_clicked = False
 
-        # 读取上次设置
+        # ── 读取上次设置 ──
+        self._saved_group_chars: dict[str, set[str] | None] = {}
+        self._saved_pre_comp: int = 150
+        self._saved_post_comp: int = 150
         try:
             from strange_uta_game.frontend.settings.app_settings import AppSettings
-            settings = AppSettings()
-            saved_groups = settings.get("separate_symbol_ts.groups", list(_SEPARATE_SYM_DEFAULT))
-            self._saved_groups: set[str] = set(saved_groups)
-            self._saved_pre_comp: int = settings.get("separate_symbol_ts.pre_comp_ms", 150)
-            self._saved_post_comp: int = settings.get("separate_symbol_ts.post_comp_ms", 150)
+            s = AppSettings()
+            gc = s.get("separate_symbol_ts.group_chars")
+            if gc and isinstance(gc, dict):
+                for gk, cv in gc.items():
+                    if cv is None:
+                        self._saved_group_chars[gk] = None
+                    elif isinstance(cv, list):
+                        self._saved_group_chars[gk] = set(cv)
+            else:
+                saved_groups = s.get("separate_symbol_ts.groups", list(_SEPARATE_SYM_DEFAULT))
+                for gk in saved_groups:
+                    if isinstance(gk, str):
+                        self._saved_group_chars[gk] = None
+            self._saved_pre_comp = s.get("separate_symbol_ts.pre_comp_ms", 150)
+            self._saved_post_comp = s.get("separate_symbol_ts.post_comp_ms", 150)
         except Exception:
-            self._saved_groups = set(_SEPARATE_SYM_DEFAULT)
-            self._saved_pre_comp = 150
-            self._saved_post_comp = 150
+            for gk in _SEPARATE_SYM_DEFAULT:
+                self._saved_group_chars[gk] = None
 
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
 
-        # 说明文本
+        # ── 说明文本 ──
         desc = QLabel(self.tr(
             "针对选中的符号分组，自动处理时间戳：\n"
             "• 后补偿：符号无普通时间戳（cc=0）但有句尾停顿标记时，将停顿时间提升为普通时间戳，"
             "并将句尾时间戳后移「后补偿」值。\n"
             "• 前补偿：符号已有时间戳（cc=1）且紧跟的第一个非符号字符无时间戳（cc=0）时，"
-            "将符号时间戳传递给该字符，并将符号时间戳前移「前补偿」值。"
+            "将符号时间戳传递给该字符，并将符号时间戳前移「前补偿」值。\n\n"
+            "点击分组旁的「详情」可细化选择组内具体符号。"
         ))
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
-        # 符号分组选择（两列布局）
+        # ── 符号分组选择（两列布局，可滚动） ──
         group_box = FluentGroupBox(self.tr("适用符号分组"))
-        group_hlayout = QHBoxLayout()
-        group_box.contentLayout.addLayout(group_hlayout)
+        gbox_v = QVBoxLayout()
+        group_box.contentLayout.addLayout(gbox_v)
+        gbox_v.setContentsMargins(0, 0, 0, 0)
+
+        scroll = ScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_w = QWidget()
+        scroll.setWidget(scroll_w)
+        gbox_v.addWidget(scroll)
+        layout.addWidget(group_box)
+
+        group_hlayout = QHBoxLayout(scroll_w)
+        group_hlayout.setSpacing(12)
+        group_hlayout.setContentsMargins(4, 4, 4, 4)
         mid = (len(_SEPARATE_SYM_GROUPS) + 1) // 2
         left_col = QVBoxLayout()
         right_col = QVBoxLayout()
+        left_col.setSpacing(4)
+        right_col.setSpacing(4)
 
-        self._group_checkboxes: dict[str, CheckBox] = {}
-        for i, (key, label, examples, _) in enumerate(_SEPARATE_SYM_GROUPS):
-            chk = CheckBox(f"{label}   {examples}")
-            chk.setChecked(key in self._saved_groups)
-            self._group_checkboxes[key] = chk
+        self._group_rows: dict[str, _GroupRow] = {}
+        for i, (key, label, examples, char_set) in enumerate(_SEPARATE_SYM_GROUPS):
+            saved = self._saved_group_chars.get(key)
+            row = _GroupRow(key, label, examples, char_set, scroll_w, saved, self.tr)
+            self._group_rows[key] = row
             if i < mid:
-                left_col.addWidget(chk)
+                left_col.addWidget(row.container)
             else:
-                right_col.addWidget(chk)
+                right_col.addWidget(row.container)
         left_col.addStretch()
         right_col.addStretch()
         group_hlayout.addLayout(left_col)
         group_hlayout.addLayout(right_col)
-        layout.addWidget(group_box)
 
-        # 全选 / 全不选
+        # ── 全选 / 全不选 ──
         sel_row = QHBoxLayout()
         btn_all = PushButton(self.tr("全选"), self)
         btn_all.clicked.connect(self._select_all)
@@ -2090,7 +2261,7 @@ class SeparateSymbolTimestampDialog(QDialog):
         sel_row.addStretch()
         layout.addLayout(sel_row)
 
-        # 补偿设置
+        # ── 补偿设置 ──
         comp_box = FluentGroupBox(self.tr("补偿时间戳"))
         comp_form = QFormLayout()
         comp_box.contentLayout.addLayout(comp_form)
@@ -2116,7 +2287,7 @@ class SeparateSymbolTimestampDialog(QDialog):
 
         layout.addWidget(comp_box)
 
-        # 按钮
+        # ── 按钮 ──
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         btn_apply = PrimaryPushButton(self.tr("应用"), self)
@@ -2129,19 +2300,29 @@ class SeparateSymbolTimestampDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _select_all(self):
-        for chk in self._group_checkboxes.values():
-            chk.setChecked(True)
+        for row in self._group_rows.values():
+            row.set_all_checked(True)
 
     def _deselect_all(self):
-        for chk in self._group_checkboxes.values():
-            chk.setChecked(False)
+        for row in self._group_rows.values():
+            row.set_all_checked(False)
 
     def _on_apply(self):
         self._apply_clicked = True
         try:
             from strange_uta_game.frontend.settings.app_settings import AppSettings
             settings = AppSettings()
-            settings.set("separate_symbol_ts.groups", list(self.get_selected_groups()))
+            gc: dict = {}
+            for key, row in self._group_rows.items():
+                sel = row.get_selected_chars()
+                total = len(next(entry[3] for entry in _SEPARATE_SYM_GROUPS if entry[0] == key))
+                if len(sel) == total:
+                    gc[key] = None
+                elif len(sel) == 0:
+                    gc[key] = []
+                else:
+                    gc[key] = sorted(sel)
+            settings.set("separate_symbol_ts.group_chars", gc)
             settings.set("separate_symbol_ts.pre_comp_ms", self.get_pre_comp_ms())
             settings.set("separate_symbol_ts.post_comp_ms", self.get_post_comp_ms())
             settings.save()
@@ -2153,15 +2334,12 @@ class SeparateSymbolTimestampDialog(QDialog):
         return self._apply_clicked
 
     def get_selected_groups(self) -> set[str]:
-        return {key for key, chk in self._group_checkboxes.items() if chk.isChecked()}
+        return {key for key, row in self._group_rows.items() if row.is_any_checked()}
 
     def get_symbol_chars(self) -> frozenset:
-        """返回所有选中分组的字符集合"""
         chars: set = set()
-        selected = self.get_selected_groups()
-        for key, _, _, char_set in _SEPARATE_SYM_GROUPS:
-            if key in selected:
-                chars |= char_set
+        for row in self._group_rows.values():
+            chars |= row.get_selected_chars()
         return frozenset(chars)
 
     def get_pre_comp_ms(self) -> int:
