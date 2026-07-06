@@ -35,6 +35,8 @@ from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
 )
 
 
+# 带内联时间戳的注音文本格式（|| 分隔符，[mm:ss.xx] 时间戳）
+_ANNOTATED_PATTERN = re.compile(r"\{[^}]+\|\|[^}]*\}")
 # 内联格式检测（包括 inline 和纯 RLF 文本格式）
 _INLINE_PATTERN = re.compile(r"\[.*?\|.*?\]|{[^}]+\|[^}]+}")
 # LRC 时间标签检测
@@ -380,6 +382,9 @@ def detect_lyric_format(content: str) -> str:
         return "sug"
     if UtatenRubyParser.is_utaten_format(content):
         return "utaten"
+    # 带内联时间戳的注音文本格式（|| 分隔符）优先于内联格式检测
+    if _ANNOTATED_PATTERN.search(content):
+        return "annotated"
     # 内联格式检测（包括 inline 和纯 RLF 文本格式）
     if _INLINE_PATTERN.search(content):
         return "inline"
@@ -467,6 +472,33 @@ def parse_lyric_content(
             progress_cb=progress_cb,
         )
         return _apply_compensation(sentences), False, [], {"format": "utaten"}
+
+    # 带内联时间戳的注音文本格式（|| 分隔符）
+    if fmt == "annotated":
+        from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
+            parse_timed_line,
+        )
+
+        raw_lines = content.split("\n")
+        inherited = default_singer_id
+        sentences = []
+        for raw_line in raw_lines:
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            chars, inherited = parse_timed_line(
+                stripped,
+                name_to_singer_id=None,
+                default_singer_id=default_singer_id,
+                inherited_singer_id=inherited,
+                offset_ms=0,
+            )
+            if chars:
+                sentences.append(Sentence(
+                    singer_id=inherited,
+                    characters=chars,
+                ))
+        return _apply_compensation(sentences), False, [], {}
 
     # 内联格式（包括 inline 和纯 RLF 文本格式）
     if fmt == "inline":

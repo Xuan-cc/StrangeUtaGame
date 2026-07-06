@@ -111,7 +111,7 @@ def test_encode_sentence_end_inside_block():
 def test_encode_placeholders_when_no_timestamps():
     chars = [_ruby_char("大", ["だ", "い"], [], is_end=True)]
     line = _enc(chars)
-    assert line == "{大||[T]だ|[T]い[>T]}"
+    assert line == "{大||だ|い[>T]}"
 
 
 def test_encode_bare_char_check_count_zero():

@@ -215,6 +215,14 @@ def _start_token(ms: Optional[int]) -> str:
     return f"[{_format_ms(ms)}]" if ms is not None else f"[{_TODO}]"
 
 
+def _ruby_prefix(ms: Optional[int]) -> str:
+    """Ruby 块内 checkpoint 前缀：有 ts 输出 [ts]，无则不输出占位符。
+
+    ``|`` 分隔符已编码 checkpoint 结构，无需 [T] 占位。
+    """
+    return f"[{_format_ms(ms)}]" if ms is not None else ""
+
+
 def _end_token(ms: Optional[int]) -> str:
     return f"[>{_format_ms(ms)}]" if ms is not None else f"[>{_TODO}]"
 
@@ -330,7 +338,7 @@ def sentence_to_timed_line(
             for c in group:
                 if c.ruby:
                     pieces = [
-                        _start_token(_add_off(_char_start_ts(c, k), offset_ms)) + part.text
+                        _ruby_prefix(_add_off(_char_start_ts(c, k), offset_ms)) + part.text
                         for k, part in enumerate(c.ruby.parts)
                     ]
                     seg = "|".join(pieces)
@@ -410,7 +418,7 @@ def timed_line_columns(
             for c in group:
                 if c.ruby:
                     seg = "|".join(
-                        _start_token(_add_off(_char_start_ts(c, k), offset_ms)) + part.text
+                        _ruby_prefix(_add_off(_char_start_ts(c, k), offset_ms)) + part.text
                         for k, part in enumerate(c.ruby.parts)
                     )
                 elif c.check_count > 0:

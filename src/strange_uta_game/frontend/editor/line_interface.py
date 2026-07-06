@@ -106,7 +106,8 @@ def _row_to_block_str(
     """把一行扁平列数据拼成 annotated_text 的 ``{原文||...}`` 带时间戳块串。
 
     每字符按其 check_count 取走对应的 mora / 时间戳段，组成
-    ``[ts]mora|[ts]mora`` 段；缺省时间戳用占位 ``[T]``；句尾释放点贴在末字段尾。
+    ``[ts]mora|[ts]mora`` 段；无时间戳时不输出占位符（``|`` 分隔符已编码结构）。
+    句尾释放点贴在末字段尾。
     """
     total = sum(check_counts)
     segs: List[str] = []
@@ -118,7 +119,7 @@ def _row_to_block_str(
             idx = offset + j
             ts = ts_flat_global[idx] if idx < len(ts_flat_global) else None
             mora = mora_flat[idx] if idx < len(mora_flat) else ""
-            tok = f"[{_fmt_time(ts)}]" if ts is not None else "[T]"
+            tok = f"[{_fmt_time(ts)}]" if ts is not None else ""
             slots.append(tok + mora)
         seg = "|".join(slots)
         if is_sentence_end and i == len(glyphs) - 1:
