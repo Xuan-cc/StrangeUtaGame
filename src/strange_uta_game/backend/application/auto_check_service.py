@@ -2330,6 +2330,34 @@ class AutoCheckService:
                     locked.add(idx + k)
                 search_from = idx + wlen
 
+        # 后处理：把用户词典覆盖后的读音传播到相邻的々字符。
+        # 々 表「同前字」，当前方汉字被用户词典改变读音后，々 也应跟随。
+        # 仅当々的当前读音与前方汉字不同、且不是连浊变体时才覆盖，
+        # 以保留分析器正确给出的连浊读法（如 日々→ひび 中 々→び）。
+        chars = sentence.characters
+        for i in range(1, len(chars)):
+            if chars[i].char != "\u3005":
+                continue
+            prev = chars[i - 1]
+            if not prev.ruby or not prev.ruby.parts:
+                continue
+            prev_reading = "".join(p.text for p in prev.ruby.parts)
+            if not prev_reading or prev_reading == prev.char:
+                continue
+            cur_reading = "".join(p.text for p in chars[i].ruby.parts) if chars[i].ruby else ""
+            if cur_reading == prev_reading:
+                continue  # 已经一致，无需覆盖
+            # 检查々的读音是不是 prev_reading 的连浊/半浊变体：
+            # 连浊：首假名从清音变浊音；半浊：は行→ぱ行。
+            # 若是有效变体则保留，否则覆盖为 prev_reading。
+            if cur_reading and len(cur_reading) == len(prev_reading):
+                mutated = prev_reading[0].translate(self._DAKUTEN_MAP)
+                mutated_h = prev_reading[0].translate(self._HANDAKUTEN_MAP)
+                if cur_reading == mutated + prev_reading[1:] or cur_reading == mutated_h + prev_reading[1:]:
+                    continue  # 连浊/半浊变体，保留
+            chars[i].ruby = Ruby(parts=[RubyPart(text=prev_reading)])
+            chars[i].set_check_count(len(split_into_moras(prev_reading)), force=True)
+
     def analyze_project(
         self, project: Project, split_config: Optional[SplitConfig] = None
     ) -> List[Tuple[int, List[AutoCheckResult]]]:
