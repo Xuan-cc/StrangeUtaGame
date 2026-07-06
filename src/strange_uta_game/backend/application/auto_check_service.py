@@ -2579,10 +2579,20 @@ class AutoCheckService:
         """
         # 不更新节奏点：注音分析本身（apply_to_project/delete/romanize）会改写
         # check_count，故先快照全项目节奏点数，管线末尾再还原。
+        # 同时也快照 is_sentence_end / is_line_end，避免 apply_to_sentence 重建
+        # 字符时根据 check_line_end / check_space_as_line_end 自动覆盖。
         saved_cc = None
+        saved_se = None
+        saved_le = None
         if not update_checkpoints:
             saved_cc = [
                 [c.check_count for c in s.characters] for s in project.sentences
+            ]
+            saved_se = [
+                [c.is_sentence_end for c in s.characters] for s in project.sentences
+            ]
+            saved_le = [
+                [c.is_line_end for c in s.characters] for s in project.sentences
             ]
 
         # Step 1: 注音分析（延迟 romaji，delete 之后再转）
@@ -2616,9 +2626,15 @@ class AutoCheckService:
 
         # Step 5: 还原节奏点（不更新节奏点模式）。在所有改动之后兜底还原，
         # 权威 setter 会把新注音的 ruby.parts 重新对齐回原节奏点数。
+        # 同时还原 is_sentence_end / is_line_end，避免「仅注音」意外改变句尾标记。
         if saved_cc is not None:
-            for s, ccs in zip(project.sentences, saved_cc):
+            for s, ccs, ses, les in zip(project.sentences, saved_cc, saved_se, saved_le):
                 self._restore_sentence_check_counts(s, ccs)
+                for i, ch in enumerate(s.characters):
+                    if i < len(ses):
+                        ch.is_sentence_end = ses[i]
+                    if i < len(les):
+                        ch.is_line_end = les[i]
 
         return deleted_count
 
@@ -2646,9 +2662,14 @@ class AutoCheckService:
         """
         # 不更新节奏点：apply_to_sentence 内部会按新注音重写 check_count，
         # 故先快照整句节奏点数，分析后还原（覆盖全句，确保节奏点完全不动）。
+        # 同时也快照 is_sentence_end / is_line_end。
         saved_cc = None
+        saved_se = None
+        saved_le = None
         if not update_checkpoints:
             saved_cc = [c.check_count for c in sentence.characters]
+            saved_se = [c.is_sentence_end for c in sentence.characters]
+            saved_le = [c.is_line_end for c in sentence.characters]
 
         self.apply_to_sentence(
             sentence,
@@ -2660,6 +2681,11 @@ class AutoCheckService:
             self.update_checkpoints_from_rubies(sentence)
         elif saved_cc is not None:
             self._restore_sentence_check_counts(sentence, saved_cc)
+            for i, ch in enumerate(sentence.characters):
+                if i < len(saved_se):
+                    ch.is_sentence_end = saved_se[i]
+                if i < len(saved_le):
+                    ch.is_line_end = saved_le[i]
 
     @staticmethod
     def _restore_sentence_check_counts(sentence: Sentence, saved: List[int]) -> None:
