@@ -30,6 +30,7 @@ from strange_uta_game.backend.domain import (
 from strange_uta_game.backend.domain.models import RubyPart
 from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
     parse_timed_line,
+    sentence_to_timed_line,
 )
 from strange_uta_game.frontend.theme import theme
 from strange_uta_game.frontend.fluent_widgets import message_question
@@ -68,6 +69,13 @@ def _row_cells_from_chars(
         parts = c.ruby.parts if c.ruby else []
         for j in range(c.check_count):
             ruby_segs.append(parts[j].text if j < len(parts) else "")
+    # cc=0 字符的注音：每字符一条目，parts 用 | 连接；无注音则为空串
+    for c in chars:
+        if c.check_count == 0:
+            if c.ruby:
+                ruby_segs.append("|".join(p.text for p in c.ruby.parts))
+            else:
+                ruby_segs.append("")
     ruby_str = ",".join(ruby_segs) if has_ruby else ""
 
     # 时间标签：每 cp 一段全局时间戳 + 句尾释放点；整行无时间戳则留空
@@ -106,22 +114,33 @@ def _row_to_block_str(
     """把一行扁平列数据拼成 annotated_text 的 ``{原文||...}`` 带时间戳块串。
 
     每字符按其 check_count 取走对应的 mora / 时间戳段，组成
-    ``[ts]mora|[ts]mora`` 段；无时间戳时不输出占位符（``|`` 分隔符已编码结构）。
-    句尾释放点贴在末字段尾。
+    ``[ts]mora|[ts]mora`` 段；缺省时间戳用占位 ``[T]``；句尾释放点贴在末字段尾。
     """
     total = sum(check_counts)
     segs: List[str] = []
     offset = 0
+    cc0_idx = total  # cc=0 注音在 mora_flat 中的起始位置
     for i, _g in enumerate(glyphs):
         k = check_counts[i]
-        slots: List[str] = []
-        for j in range(k):
-            idx = offset + j
-            ts = ts_flat_global[idx] if idx < len(ts_flat_global) else None
-            mora = mora_flat[idx] if idx < len(mora_flat) else ""
-            tok = f"[{_fmt_time(ts)}]" if ts is not None else ""
-            slots.append(tok + mora)
-        seg = "|".join(slots)
+        if k > 0:
+            slots: List[str] = []
+            for j in range(k):
+                idx = offset + j
+                ts = ts_flat_global[idx] if idx < len(ts_flat_global) else None
+                mora = mora_flat[idx] if idx < len(mora_flat) else ""
+                tok = f"[{_fmt_time(ts)}]" if ts is not None else "[T]"
+                slots.append(tok + mora)
+            seg = "|".join(slots)
+            offset += k
+        else:
+            # cc=0: 从 mora_flat 尾部读取注音（跳过空串分隔符）
+            parts: List[str] = []
+            while cc0_idx < len(mora_flat) and mora_flat[cc0_idx] == "":
+                cc0_idx += 1
+            while cc0_idx < len(mora_flat) and mora_flat[cc0_idx] != "":
+                parts.append(mora_flat[cc0_idx])
+                cc0_idx += 1
+            seg = "|".join(parts)
         if is_sentence_end and i == len(glyphs) - 1:
             rel = ts_flat_global[total] if total < len(ts_flat_global) else None
             seg += f"[>{_fmt_time(rel)}]" if rel is not None else "[>T]"
@@ -146,15 +165,25 @@ def _build_row_chars_direct(
     total = sum(check_counts)
     chars: List[Character] = []
     offset = 0
+    cc0_idx = total
     for i, g in enumerate(glyphs):
         k = check_counts[i]
-        mora_i = mora_flat[offset : offset + k]
-        ts_i = ts_flat_global[offset : offset + k]
-        timestamps: List[int] = []
-        for t in ts_i:
-            if t is None:
-                break
-            timestamps.append(max(0, t - global_offset))
+        if k > 0:
+            mora_i = mora_flat[offset : offset + k]
+            ts_i = ts_flat_global[offset : offset + k]
+            timestamps: List[int] = []
+            for t in ts_i:
+                if t is None:
+                    break
+                timestamps.append(max(0, t - global_offset))
+            offset += k
+        else:
+            # cc=0: 从 mora_flat 尾部读取一条目，| 分割为 parts
+            entry = mora_flat[cc0_idx] if cc0_idx < len(mora_flat) else ""
+            cc0_idx += 1
+            mora_i = [p for p in entry.split("|") if p]
+            ts_i = []
+            timestamps = []
         is_end = is_sentence_end and i == len(glyphs) - 1
         end_ts = None
         if is_end:
@@ -173,7 +202,6 @@ def _build_row_chars_direct(
             ch.set_ruby(Ruby(parts=parts))
         ch.push_to_ruby()
         chars.append(ch)
-        offset += k
     for k in range(len(chars) - 1):
         chars[k].linked_to_next = True
     return chars
@@ -184,9 +212,9 @@ def _build_row_chars(
 ) -> List[Character]:
     """把一行解析后的扁平数据构造成 Character 列表。
 
-    常规行：拼成带时间戳块串 → parse_timed_line（复用经测试的解析引擎）；
+    先由扁平数据直接构造 Character → sentence_to_timed_line 序列化
+    → parse_timed_line 解析回 Character（确保格式与全文本编辑器一致）。
     字符/注音含行内格式元字符时回退到直接构造，避免串损坏。
-    时间戳遇到中间空洞即截断（其后时间戳丢弃）——domain 紧凑存储不支持中间空洞。
     """
     glyphs = data["glyphs"]
     mora_flat = data["mora_flat"]
@@ -195,26 +223,81 @@ def _build_row_chars(
     is_se = data["is_sentence_end"]
     singer_ids = data["singer_ids"]
 
+    # 先用直接构造生成临时 Character（暂不设 linked_to_next）
+    total = sum(ccs)
+    tmp_chars: List[Character] = []
+    offset = 0
+    cc0_idx = total
+    for i, g in enumerate(glyphs):
+        k = ccs[i]
+        if k > 0:
+            mora_i = mora_flat[offset : offset + k]
+            ts_i = ts_flat[offset : offset + k]
+            timestamps: List[int] = []
+            for t in ts_i:
+                if t is None:
+                    break
+                timestamps.append(max(0, t - global_offset))
+            offset += k
+        else:
+            # cc=0: 从 mora_flat 尾部读取一条目，| 分割为 parts
+            entry = mora_flat[cc0_idx] if cc0_idx < len(mora_flat) else ""
+            cc0_idx += 1
+            mora_i = [p for p in entry.split("|") if p]
+            ts_i = []
+            timestamps = []
+        is_end = is_se and i == len(glyphs) - 1
+        end_ts = None
+        if is_end:
+            rel = ts_flat[total] if total < len(ts_flat) else None
+            end_ts = max(0, rel - global_offset) if rel is not None else None
+        ch = Character(
+            char=g,
+            check_count=k,
+            timestamps=timestamps,
+            singer_id=singer_ids[i],
+            is_sentence_end=is_end,
+            sentence_end_ts=end_ts,
+        )
+        parts = [RubyPart(text=m) for m in mora_i]
+        if any(m for m in mora_i):
+            ch.set_ruby(Ruby(parts=parts))
+        ch.push_to_ruby()
+        tmp_chars.append(ch)
+
+    # 设置行内 linked_to_next（同组字符链接，末字符不链）
+    for k in range(len(tmp_chars) - 1):
+        tmp_chars[k].linked_to_next = True
+
+    # 使用统一序列化引擎编码再解码，确保与全文本编辑器格式一致
     if _row_needs_direct(glyphs, mora_flat):
         chars = _build_row_chars_direct(
             glyphs, ccs, mora_flat, ts_flat, is_se, global_offset, singer_ids
         )
     else:
-        block = _row_to_block_str(glyphs, mora_flat, ts_flat, ccs, is_se)
-        chars, _ = parse_timed_line(
-            block, default_singer_id=default_singer_id, offset_ms=global_offset
-        )
-        if len(chars) != len(glyphs):
-            # 解析结果与预期字符数不符（异常字符），安全回退
-            chars = _build_row_chars_direct(
-                glyphs, ccs, mora_flat, ts_flat, is_se, global_offset, singer_ids
+        try:
+            line, _ = sentence_to_timed_line(
+                tmp_chars,
+                default_singer_id=default_singer_id,
+                offset_ms=global_offset,
             )
-        else:
-            for i, ch in enumerate(chars):
-                ch.singer_id = singer_ids[i]
+            chars, _ = parse_timed_line(
+                line,
+                default_singer_id=default_singer_id,
+                offset_ms=global_offset,
+            )
+        except Exception:
+            chars = tmp_chars
 
-    for ch in chars:
-        ch.is_line_end = False  # 真正行尾由 _fix_sentence_character_invariants 设定
+    if len(chars) != len(glyphs):
+        chars = _build_row_chars_direct(
+            glyphs, ccs, mora_flat, ts_flat, is_se, global_offset, singer_ids
+        )
+
+    for i, ch in enumerate(chars):
+        if i < len(singer_ids):
+            ch.singer_id = singer_ids[i]
+        ch.is_line_end = False
         ch.push_to_ruby()
     return chars
 
@@ -665,14 +748,22 @@ class LineDetailDialog(QDialog):
 
         # --- 注音 (col 1) —— 全行展平，每段一个 mora；段数须 == K ---
         ruby_text = cell(1)
+        cc0_count = sum(1 for c in check_counts if c == 0)
         if ruby_text.strip() == "":
             mora_flat = [""] * total_cp
         else:
             mora_flat = [m.strip() for m in ruby_text.split(",")]
-            if len(mora_flat) != total_cp:
+            expected_min = total_cp + cc0_count
+            if len(mora_flat) < total_cp:
                 errors.append(
-                    f"行 {row_idx + 1}: 注音段数 {len(mora_flat)} 与节奏点总数 "
-                    f"{total_cp} 不一致"
+                    f"行 {row_idx + 1}: 注音段数 {len(mora_flat)} 少于节奏点总数 "
+                    f"{total_cp}"
+                )
+                return None, errors
+            if len(mora_flat) > expected_min:
+                errors.append(
+                    f"行 {row_idx + 1}: 注音段数 {len(mora_flat)} 超过预期 "
+                    f"{expected_min}（节奏点 {total_cp} + cc=0 字符 {cc0_count}）"
                 )
                 return None, errors
 

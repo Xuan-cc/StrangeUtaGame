@@ -215,14 +215,6 @@ def _start_token(ms: Optional[int]) -> str:
     return f"[{_format_ms(ms)}]" if ms is not None else f"[{_TODO}]"
 
 
-def _ruby_prefix(ms: Optional[int]) -> str:
-    """Ruby 块内 checkpoint 前缀：有 ts 输出 [ts]，无则不输出占位符。
-
-    ``|`` 分隔符已编码 checkpoint 结构，无需 [T] 占位。
-    """
-    return f"[{_format_ms(ms)}]" if ms is not None else ""
-
-
 def _end_token(ms: Optional[int]) -> str:
     return f"[>{_format_ms(ms)}]" if ms is not None else f"[>{_TODO}]"
 
@@ -326,7 +318,7 @@ def sentence_to_timed_line(
         if ch.needs_guide:
             buf.append("【>Guide】")
 
-        if ch.ruby:
+        if ch.ruby or ch.linked_to_next:
             # 连词组（linked_to_next 链）合并为一个块
             group_start = i
             while i < n - 1 and characters[i].linked_to_next:
@@ -337,10 +329,15 @@ def sentence_to_timed_line(
             segs: List[str] = []
             for c in group:
                 if c.ruby:
-                    pieces = [
-                        _ruby_prefix(_add_off(_char_start_ts(c, k), offset_ms)) + part.text
-                        for k, part in enumerate(c.ruby.parts)
-                    ]
+                    pieces: List[str] = []
+                    for k, part in enumerate(c.ruby.parts):
+                        ts = _add_off(_char_start_ts(c, k), offset_ms)
+                        if ts is not None:
+                            pieces.append(f"[{_format_ms(ts)}]" + part.text)
+                        elif k < c.check_count:
+                            pieces.append(f"[{_TODO}]" + part.text)
+                        else:
+                            pieces.append(part.text)
                     seg = "|".join(pieces)
                 elif c.check_count > 0:
                     pieces = [
@@ -355,14 +352,26 @@ def sentence_to_timed_line(
                 segs.append(seg)
             buf.append("{" + text_part + "||" + ",".join(segs) + "}")
         else:
-            prefix = "".join(
-                _start_token(_add_off(_char_start_ts(ch, k), offset_ms))
-                for k in range(ch.check_count)
-            )
-            piece = prefix + ch.char
-            if ch.is_sentence_end:
-                piece += _end_token(_add_off(ch.sentence_end_ts, offset_ms))
-            buf.append(piece)
+            if ch.check_count > 1:
+                pieces = [
+                    _start_token(_add_off(_char_start_ts(ch, k), offset_ms))
+                    for k in range(ch.check_count)
+                ]
+                seg = "|".join(pieces)
+                if ch.is_sentence_end:
+                    seg += _end_token(_add_off(ch.sentence_end_ts, offset_ms))
+                buf.append("{" + ch.char + "||" + seg + "}")
+            elif ch.check_count == 1:
+                prefix = _start_token(_add_off(_char_start_ts(ch, 0), offset_ms))
+                piece = prefix + ch.char
+                if ch.is_sentence_end:
+                    piece += _end_token(_add_off(ch.sentence_end_ts, offset_ms))
+                buf.append(piece)
+            else:
+                piece = ch.char
+                if ch.is_sentence_end:
+                    piece += _end_token(_add_off(ch.sentence_end_ts, offset_ms))
+                buf.append(piece)
             i += 1
 
     return "".join(buf), current
@@ -404,7 +413,7 @@ def timed_line_columns(
         ch = characters[i]
         col += _singer_len(_effective_singer(ch, line_singer_id, default_singer_id))
 
-        if ch.ruby:
+        if ch.ruby or ch.linked_to_next:
             group_start = i
             while i < n - 1 and characters[i].linked_to_next:
                 i += 1
@@ -417,10 +426,16 @@ def timed_line_columns(
             segs: List[str] = []
             for c in group:
                 if c.ruby:
-                    seg = "|".join(
-                        _ruby_prefix(_add_off(_char_start_ts(c, k), offset_ms)) + part.text
-                        for k, part in enumerate(c.ruby.parts)
-                    )
+                    pieces: List[str] = []
+                    for k, part in enumerate(c.ruby.parts):
+                        ts = _add_off(_char_start_ts(c, k), offset_ms)
+                        if ts is not None:
+                            pieces.append(f"[{_format_ms(ts)}]" + part.text)
+                        elif k < c.check_count:
+                            pieces.append(f"[{_TODO}]" + part.text)
+                        else:
+                            pieces.append(part.text)
+                    seg = "|".join(pieces)
                 elif c.check_count > 0:
                     seg = "|".join(
                         _start_token(_add_off(_char_start_ts(c, k), offset_ms))
@@ -434,15 +449,30 @@ def timed_line_columns(
             text_part = "".join(c.char for c in group)
             col += len("{" + text_part + "||" + ",".join(segs) + "}")
         else:
-            prefix = "".join(
-                _start_token(_add_off(_char_start_ts(ch, k), offset_ms))
-                for k in range(ch.check_count)
-            )
-            columns[i] = col + len(prefix)  # 字形在前缀 token 之后
-            piece = prefix + ch.char
-            if ch.is_sentence_end:
-                piece += _end_token(_add_off(ch.sentence_end_ts, offset_ms))
-            col += len(piece)
+            if ch.check_count > 1:
+                pieces = [
+                    _start_token(_add_off(_char_start_ts(ch, k), offset_ms))
+                    for k in range(ch.check_count)
+                ]
+                seg = "|".join(pieces)
+                if ch.is_sentence_end:
+                    seg += _end_token(_add_off(ch.sentence_end_ts, offset_ms))
+                block = "{" + ch.char + "||" + seg + "}"
+                columns[i] = col + 1
+                col += len(block)
+            elif ch.check_count == 1:
+                prefix = _start_token(_add_off(_char_start_ts(ch, 0), offset_ms))
+                columns[i] = col + len(prefix)
+                piece = prefix + ch.char
+                if ch.is_sentence_end:
+                    piece += _end_token(_add_off(ch.sentence_end_ts, offset_ms))
+                col += len(piece)
+            else:
+                columns[i] = col
+                extra = len(ch.char)
+                if ch.is_sentence_end:
+                    extra += len(_end_token(_add_off(ch.sentence_end_ts, offset_ms)))
+                col += extra
             i += 1
 
     return columns
@@ -515,14 +545,17 @@ def _parse_block(content: str, singer_id: str, offset_ms: int = 0):
         mora_slots = seg.split("|") if seg != "" else []
         parts: List[RubyPart] = []
         slot_ms: List[Optional[int]] = []
+        any_token = False
         for slot in mora_slots:
-            ms, _had, text = _consume_leading_start(slot)
+            ms, had, text = _consume_leading_start(slot)
+            if had:
+                any_token = True
             parts.append(RubyPart(text=text))
             slot_ms.append(_sub_off(ms, offset_ms))
 
         ch = Character(
             char=chc,
-            check_count=len(parts),
+            check_count=len(parts) if any_token else 0,
             timestamps=_build_timestamps(slot_ms),
             singer_id=singer_id or "",
             is_sentence_end=is_end,
