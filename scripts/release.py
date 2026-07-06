@@ -910,11 +910,18 @@ def _pack_parts(
 
         if cached_dist_pkgs and current_dist_pkgs:
             if cached_dist_pkgs == current_dist_pkgs:
-                dep_changed = False
-                dep_reason = (
-                    f"dist-info 包版本与上次构建完全吻合"
-                    f"（{len(current_dist_pkgs)} 个包）"
-                )
+                # dist-info 包列表一致，但还要确认 requirements hash 也没变。
+                # 纯 Python 包可能不在 _internal/ 留下 .dist-info，只靠 package 列表
+                # 对比会漏掉这类新依赖，导致已变更的需求未触发 runtime 重建。
+                if cache and cache.get("requirements_hash") != current_req_hash:
+                    dep_changed = True
+                    dep_reason = "requirements.txt 运行时依赖已变化（dist-info 未变但 hash 不同）"
+                else:
+                    dep_changed = False
+                    dep_reason = (
+                        f"dist-info 包版本与上次构建完全吻合"
+                        f"（{len(current_dist_pkgs)} 个包）"
+                    )
             else:
                 dep_changed = True
                 dep_reason = "dist-info 包版本已变化（新构建与缓存不同）"
