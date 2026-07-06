@@ -246,6 +246,7 @@ class RubySubsetAnalyzeWorker(QObject):
         restrict_indices=None 表示整行分析。
     """
 
+    progress = pyqtSignal(str, int, int)  # (phase, current, total)
     llm_waiting = pyqtSignal()     # LLM 整首批量请求发出、等待返回中
     llm_progress = pyqtSignal(str) # LLM 内部阶段文本（请求/解析/重试/轮次）
     finished = pyqtSignal(object)  # analyzed project copy
@@ -283,7 +284,10 @@ class RubySubsetAnalyzeWorker(QObject):
                 self.llm_waiting.emit()
                 _analyzer.prewarm()
 
-            for line_idx, restrict_indices in self._specs:
+            total = len(self._specs)
+            for idx, (line_idx, restrict_indices) in enumerate(self._specs):
+                if total > 1:
+                    self.progress.emit(self.tr("注音分析"), idx + 1, total)
                 sentence = self._project.sentences[line_idx]
                 self._auto_check.analyze_and_apply_sentence_pipeline(
                     sentence,

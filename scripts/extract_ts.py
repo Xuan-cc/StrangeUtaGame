@@ -175,10 +175,11 @@ def write_ts(
             locs = catalog[ctx][source]
             lines.append("    <message>")
             for path, line in locs:
-                try:
-                    rel = path.relative_to(ts_path.parent).as_posix()
-                except ValueError:
-                    rel = path.as_posix()
+                rel = (
+                    path.resolve().relative_to(Path.cwd()).as_posix()
+                    if path.resolve().is_relative_to(Path.cwd())
+                    else path.as_posix()
+                )
                 lines.append(f'        <location filename="{escape(rel)}" line="{line}"/>')
             lines.append(f"        <source>{escape(source)}</source>")
             tr = existing_translations.get((ctx, source))

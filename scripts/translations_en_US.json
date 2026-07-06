@@ -822,6 +822,7 @@
   "正在保存": "Saving",
   "正在准备更新": "Preparing update",
   "正在分析注音": "Analyzing ruby",
+  "正在初始化…": "Initializing\u2026",
   "正在初始化核心服务...": "Initializing core services...",
   "正在初始化窗口...": "Initializing window...",
   "正在初始化窗口框架...": "Initializing window framework...",

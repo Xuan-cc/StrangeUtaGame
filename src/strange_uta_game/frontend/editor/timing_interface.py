@@ -7188,11 +7188,10 @@ class EditorInterface(QWidget):
         project_copy = deepcopy(self._project)
         self._ruby_subset_analyzing = True
 
-        # LLM 注音整首一次发送、可能较慢：显示忙碌指示器（本地引擎很快，无需）。
-        subset_tooltip = None
+        # 分析中显示忙碌提示器（本地引擎 / LLM 通用）。
+        subset_tooltip = StateToolTip(self.tr("正在分析注音"), self.tr("正在初始化…"), self)
         if llm_active:
             green = theme.status_complete.name()
-            subset_tooltip = StateToolTip(self.tr("正在分析注音"), self.tr("正在等待 LLM 返回…"), self)
             subset_tooltip.setStyleSheet(f"""
                 StateToolTip {{
                     background-color: {green};
@@ -7203,8 +7202,8 @@ class EditorInterface(QWidget):
                     color: white;
                 }}
             """)
-            subset_tooltip.move(subset_tooltip.getSuitablePos())
-            subset_tooltip.show()
+        subset_tooltip.move(subset_tooltip.getSuitablePos())
+        subset_tooltip.show()
 
         worker = RubySubsetAnalyzeWorker(
             project_copy, auto_check, specs, apply_user_dict=llm_apply_user_dict,
@@ -7288,14 +7287,13 @@ class EditorInterface(QWidget):
             )
 
         def _on_llm_waiting() -> None:
-            if subset_tooltip is not None:
-                subset_tooltip.setContent(self.tr("正在等待 LLM 返回…（整首歌词一次性发送，请稍候）"))
+            subset_tooltip.setContent(self.tr("正在等待 LLM 返回…（整首歌词一次性发送，请稍候）"))
 
         def _on_llm_progress(msg: str) -> None:
-            if subset_tooltip is not None:
-                subset_tooltip.setContent(msg)
+            subset_tooltip.setContent(msg)
 
         thread.started.connect(worker.run)
+        worker.progress.connect(lambda phase, cur, tot: subset_tooltip.setContent(f"{phase} {cur}/{tot}"))
         worker.llm_waiting.connect(_on_llm_waiting)
         worker.llm_progress.connect(_on_llm_progress)
         worker.finished.connect(_on_finished)
