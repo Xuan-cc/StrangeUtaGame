@@ -298,6 +298,26 @@ class KanaDistributingAnalyzer(RubyAnalyzer):
 
             pos = end
 
+        # 后处理：修复迭字符 々 被分析器拆成独立字符后拿到错误读音的问题。
+        # 分析器（WinRT/Sudachi）可能将「爛々々々々」拆成多个独立字符，
+        # 每个々的读音要么是自身表面形「々」，要么是字符名读法「くりかえし」。
+        # 々 本身表「同前字」，应从前方汉字继承读音，无论分析器给了什么读音。
+        # 注意：此处只影响单字成对的々（分析器拆散的情况）；多字 token 如
+        # 「日々」会整体走 _distribute_morpheme_reading 拆分，不经过这里。
+        # 例：爛[らん]々[くりかえし] → 爛[らん]々[らん]
+        for i in range(1, len(results)):
+            r = results[i]
+            if r.text == "\u3005":
+                prev = results[i - 1]
+                if prev.reading and prev.reading != prev.text:
+                    results[i] = RubyResult(
+                        text=r.text,
+                        reading=prev.reading,
+                        start_idx=r.start_idx,
+                        end_idx=r.end_idx,
+                        morpheme_span=r.morpheme_span,
+                    )
+
         return results
 
     # ── 读音分配 ──

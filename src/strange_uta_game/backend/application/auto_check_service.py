@@ -33,6 +33,9 @@ from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     split_ruby_for_checkpoints,
     split_into_moras,
 )
+from strange_uta_game.backend.infrastructure.parsers.kanji_reading_split import (
+    even_distribute_kana,
+)
 from strange_uta_game.backend.infrastructure.parsers.english_ruby import (
     EnglishRubyLookup,
     find_english_words,
@@ -820,6 +823,9 @@ class AutoCheckService:
         for i, ch in enumerate(word):
             if ch == "\u3005":  # 々: 继承前一个汉字的候选
                 if i == 0:
+                    # 々 作为块首字（前方汉字已被头尾剥离），无法继承读音。
+                    # 若整块全为々，每字应得相同读音 → 均分后各取一份读法即可。
+                    # 返回 None 交给调用方做均分，而非错误弃整块。
                     return None
                 prev_opts = char_options[-1]
                 opts = list(prev_opts)
@@ -999,6 +1005,12 @@ class AutoCheckService:
         # Step 5: 中间块 [left..right]，尝试对「纯汉字中间块」再次调用 _try_split_to_chars
         # 若成功则按字分配；失败则首字全吃，其余空（后续 apply_to_sentence 会连词）
         mid_word = word[left : right + 1]
+        # 中间块全为々（迭字符）：每个々均继承前字读音，均分 remaining
+        if all(c == "\u3005" for c in mid_word) and len(mid_word) > 1:
+            dist = even_distribute_kana(remaining, len(mid_word))
+            for i, part in enumerate(dist):
+                split_parts[left + i] = part
+            return split_parts
         all_kanji = all(
             (get_char_type(c) if len(c) == 1 else CharType.OTHER) == CharType.KANJI
             for c in mid_word

@@ -83,6 +83,7 @@ def _char_reading_options(ch: str, kanji_dict: dict, prev_opts: Optional[List[st
     """
     if ch == "々":
         if not prev_opts:
+            # 々 作为块首字时无法继承读音，返回 None 交调用方均分
             return None
         opts = list(prev_opts)
         for opt in prev_opts:
