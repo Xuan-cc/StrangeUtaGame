@@ -97,7 +97,11 @@ _VARIANT_CONFIGS = {
             "--hidden-import=winrt.windows.foundation",
             "--hidden-import=winrt.windows.foundation.collections",
         ],
-        "collect_all": ["--collect-all=winrt"],
+        "collect_all": [
+            "--collect-all=winrt",
+            "--collect-all=jieba",
+            "--collect-all=pypinyin",
+        ],
         # 主版本不含 sudachi：即便构建机器上恰好装了 sudachipy，也不打进包里
         "exclude_modules": [
             "--exclude-module=sudachipy",
@@ -107,6 +111,7 @@ _VARIANT_CONFIGS = {
         ],
         # 额外检查的依赖（import 名）
         "required_deps": ["winrt.windows.globalization"],
+        "hooks_dir": str(PROJECT_ROOT / "pyinstaller_hooks"),
     },
     "noWinIME": {
         "hidden_imports": [
@@ -116,6 +121,8 @@ _VARIANT_CONFIGS = {
         "collect_all": [
             "--collect-all=sudachipy",
             "--collect-data=sudachidict_small",
+            "--collect-all=jieba",
+            "--collect-all=pypinyin",
         ],
         "exclude_modules": [
             "--exclude-module=winrt",
@@ -137,6 +144,8 @@ _VARIANT_CONFIGS = {
         "collect_all": [
             "--collect-all=sudachipy",
             "--collect-data=sudachidict_small",
+            "--collect-all=jieba",
+            "--collect-all=pypinyin",
         ],
         "exclude_modules": [
             "--exclude-module=winrt",
@@ -177,6 +186,8 @@ _common_deps = [
     ("qfluentwidgets", "qfluentwidgets"),
     ("numpy", "numpy"),
     ("jaconv", "jaconv"),
+    ("jieba", "jieba"),
+    ("pypinyin", "pypinyin"),
 ]
 
 _failed = False
