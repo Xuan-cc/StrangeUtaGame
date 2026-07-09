@@ -1206,6 +1206,7 @@ class MainWindow(MSFluentWindow):
 
             self._store.set_working_dir(path)
             self._store.save(path)
+            self._refresh_frameless()
 
     def _connect_store_save_signals(self) -> None:
         for sig, slot in [

@@ -1594,6 +1594,8 @@ class EditorInterface(QWidget):
             store.save(path)
         else:
             self._fallback_sync_save(path)
+
+        self._file_loader._notify_main_window_frameless_refresh()
         return True
 
     def _connect_save_signals(self, store) -> None:
@@ -1791,6 +1793,8 @@ class EditorInterface(QWidget):
             store.save(path)
         else:
             self._fallback_sync_save(path)
+
+        self._file_loader._notify_main_window_frameless_refresh()
 
     def _on_load_project(self):
         """加载项目文件"""
@@ -5846,6 +5850,8 @@ class EditorInterface(QWidget):
                 duration=5000,
                 parent=self,
             )
+
+        self._file_loader._notify_main_window_frameless_refresh()
 
     def _on_long_press_timeout(self):
         """长按定时器超时，执行 long 动作。"""
