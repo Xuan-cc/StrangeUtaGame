@@ -402,6 +402,8 @@ class FileLoader:
             self._project_on_success = None
             cb(project, file_path)
 
+        self._notify_main_window_frameless_refresh()
+
     def _apply_project_extras(self, file_path: str) -> None:
         """读取并应用 .sug 的附加字段（nicokara_tags、media_path）。"""
         from strange_uta_game.backend.infrastructure.persistence.sug_io import (
@@ -507,6 +509,20 @@ class FileLoader:
         if self._loading_worker:
             self._loading_worker.deleteLater()
             self._loading_worker = None
+
+    def _notify_main_window_frameless_refresh(self) -> None:
+        """通知主窗口刷新无边框状态。
+
+        macOS 上 QFileDialog（原生 NSOpenPanel）关闭后，NSWindow 的
+        styleMask 可能丢失 NSResizableWindowMask，导致窗口边缘无法拖拽调整大小。
+        本项目导入完成后调用，委托 MainWindow._refresh_frameless 恢复。
+        """
+        try:
+            win = self._editor.window()
+            if hasattr(win, '_refresh_frameless'):
+                win._refresh_frameless()
+        except Exception:
+            pass
 
     def _on_lyric_progress(self, stage: str) -> None:
         """更新歌词解析进度提示。"""
@@ -974,6 +990,8 @@ class FileLoader:
                 position=InfoBarPosition.TOP, duration=3000,
                 parent=self._editor,
             )
+
+            self._notify_main_window_frameless_refresh()
         except Exception as e:
             InfoBar.error(
                 title=self._editor.tr("加载失败"),

@@ -353,6 +353,55 @@ class MainWindow(MSFluentWindow):
             self.setWindowTitle(self.tr("StrangeUtaGame - 歌词打轴工具 Bilibili@不会说话的呆轩cc"))
             self._refresh_navigation_labels()
 
+    def _refresh_frameless(self) -> None:
+        """刷新无边框窗口状态，修复导入后无法拖拽边缘调整窗口大小。
+
+        原生文件对话框（Windows/macOS 的 QFileDialog）接管窗口事件循环；
+        关闭后窗口的边框/阴影/边缘命中检测可能丢失，表现为无法拖拽缩放。
+
+        本方法应由各加载路径在项目导入完成后调用。
+        """
+        import sys
+        if sys.platform != "darwin":
+            return
+        self._do_refresh_frameless()
+
+    def _do_refresh_frameless(self, _index=None) -> None:
+        """刷新无边框状态，恢复窗口边缘拖拽缩放能力。
+
+        加载流程中，原生文件对话框会接管窗口事件循环；
+        关闭后 ``WM_NCCALCSIZE`` 等消息可能导致 DWM 阴影/边框丢失，
+        使 ``WindowsFramelessWindow.nativeEvent`` 的 ``WM_NCHITTEST``
+        边缘命中检测失效。macOS 同理，``NSResizableWindowMask`` 可能丢失。
+
+        ``updateFrameless()`` 会重建无边框结构（Windows 恢复 DWM 阴影、
+        macOS 重建 NSWindow styleMask），``show()`` 确保 ``setWindowFlags``
+        改变时窗口不被隐藏。
+        """
+        try:
+            self.updateFrameless()
+            self.show()
+
+            import sys
+            if sys.platform != "darwin":
+                return
+
+            from ctypes import c_void_p
+            import Cocoa
+            import objc
+
+            view = objc.objc_object(c_void_p=c_void_p(self.winId().__int__()))
+            ns_window = view.window()
+            if ns_window is None:
+                return
+
+            mask = ns_window.styleMask()
+            # NSResizableWindowMask = 1 << 3
+            if not (mask & 8):
+                ns_window.setStyleMask_(mask | 8)
+        except Exception:
+            pass
+
     def _refresh_navigation_labels(self) -> None:
         """切语言后重置侧边栏 4 个 NavigationItem 的 label。
 
@@ -541,6 +590,8 @@ class MainWindow(MSFluentWindow):
             duration=3000,
             parent=self,
         )
+
+        self._refresh_frameless()
 
     def _apply_project_extras(self, file_path: str) -> None:
         """读取并应用 .sug 的附加字段（nicokara_tags、media_path）。"""
@@ -820,6 +871,7 @@ class MainWindow(MSFluentWindow):
                 )
                 # 恢复后删除临时文件
                 ProjectStore.delete_crash_recovery()
+                self._refresh_frameless()
                 return True
             else:
                 InfoBar.error(
@@ -1104,6 +1156,7 @@ class MainWindow(MSFluentWindow):
                 duration=3000,
                 parent=self,
             )
+            self._refresh_frameless()
 
         file_loader.load_project(file_path, check_unsaved=False, on_success=_on_success)
 
