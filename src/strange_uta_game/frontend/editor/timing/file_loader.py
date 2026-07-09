@@ -125,6 +125,7 @@ class FileLoader:
             else:
                 self._editor.load_audio(path)
                 self._save_last_dir(path)
+            self._notify_main_window_frameless_refresh()
 
     def prompt_load_lyrics(self):
         """弹出文件选择框加载歌词（等同「新建项目 + 加载歌词」）。
@@ -143,6 +144,7 @@ class FileLoader:
         if path:
             self.load_lyrics(path, check_unsaved=False)
             self._save_last_dir(path)
+            self._notify_main_window_frameless_refresh()
 
     def _load_video_as_audio(self, file_path: str):
         """加载视频文件，提取音频并加载（异步）"""
@@ -276,6 +278,8 @@ class FileLoader:
 
         # 记录临时文件路径以便后续清理
         self._temp_audio_path = temp_path
+
+        self._notify_main_window_frameless_refresh()
 
     def _on_video_error(self, error_msg: str) -> None:
         """视频处理失败的回调"""
@@ -552,6 +556,8 @@ class FileLoader:
             )
 
         self._apply_lyrics_result(sentences, is_nicokara, new_singers, parse_meta)
+
+        self._notify_main_window_frameless_refresh()
 
     def _on_lyrics_parse_error(self, error_msg: str) -> None:
         """歌词解析失败的回调。"""
