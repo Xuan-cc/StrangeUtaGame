@@ -16,12 +16,31 @@ from strange_uta_game.backend.domain.entities import Sentence
 from strange_uta_game.backend.domain.models import Character, RubyPart
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     format_timestamp,
-    split_into_moras,
 )
 from strange_uta_game.backend.infrastructure.parsers.romaji import (
     detect_particle_part_indices,
     romanize_ruby_parts,
 )
+
+# 小假名中，拗音（ゃゅょ等）合并到前一拍；促音（っ）和长音（ー）各为一拍
+_YOUON = set("ゃゅょャュョ")
+_SOKUON = set("っッ")
+_LONG_VOWEL = set("ー")
+
+
+def _split_kana_moras(text: str) -> List[str]:
+    """将假名文本按拍（モーラ）拆分。"""
+    if not text:
+        return []
+    moras: List[str] = []
+    for ch in text:
+        if ch in _YOUON and moras:
+            moras[-1] += ch
+        elif ch in _SOKUON or ch in _LONG_VOWEL:
+            moras.append(ch)
+        else:
+            moras.append(ch)
+    return moras
 
 
 def _get_ts_list(char: Character) -> List[int]:
@@ -172,13 +191,7 @@ def _char_ruby_kana(char: Character) -> str:
 
 
 def _linked_group_kana(group: List[Character]) -> str:
-    result: List[str] = []
-    for ch in group:
-        if ch.ruby:
-            result.append(_char_ruby_kana(ch))
-        else:
-            result.append(_char_plain(ch))
-    return "".join(result)
+    return _linked_group_common(group, with_romaji=False, char_start={}, particle_indices=set(), group_start=0)
 
 
 # ── 双注音格式（带罗马音） ──
@@ -195,9 +208,10 @@ def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
     while i < len(chars):
         char = chars[i]
         if char.linked_to_next and i + 1 < len(chars):
+            group_start = i
             group, i = _collect_linked(chars, i)
             segments.append(
-                _linked_group_romaji(group, char_start, particle_indices)
+                _linked_group_romaji(group, group_start, char_start, particle_indices)
             )
         elif char.ruby:
             segments.append(
@@ -239,7 +253,7 @@ def _char_ruby_romaji(
 
 def _char_self_ruby_romaji(char: Character) -> str:
     ts_list = _get_ts_list(char)
-    moras = split_into_moras(char.char)
+    moras = _split_kana_moras(char.char)
     romaji_list = romanize_ruby_parts(moras)
     romaji_tagged = _build_tagged_parts(romaji_list, ts_list)
     return f"{{{char.char}|>{romaji_tagged}}}{_format_sentence_end(char)}"
@@ -247,20 +261,105 @@ def _char_self_ruby_romaji(char: Character) -> str:
 
 def _linked_group_romaji(
     group: List[Character],
+    group_start: int,
     char_start: Dict[int, int],
     particle_indices: set,
 ) -> str:
-    result: List[str] = []
-    for idx, ch in enumerate(group):
-        if ch.ruby:
-            result.append(
-                _char_ruby_romaji(ch, idx, char_start, particle_indices)
-            )
-        elif _is_kana_text(ch.char):
-            result.append(_char_self_ruby_romaji(ch))
+    return _linked_group_common(
+        group, with_romaji=True,
+        char_start=char_start, particle_indices=particle_indices,
+        group_start=group_start,
+    )
+
+
+def _linked_group_common(
+    group: List[Character],
+    *,
+    with_romaji: bool,
+    char_start: Dict[int, int],
+    particle_indices: set,
+    group_start: int,
+) -> str:
+    """处理连词组，合并连续假名字符的罗马音。"""
+    # 先把 group 分成若干批次：连续的无 ruby 假名字符合并，其他各成一个批次
+    batches: List[Tuple[int, List[Character]]] = []  # (start_in_group, chars)
+    i = 0
+    while i < len(group):
+        ch = group[i]
+        if not ch.ruby and _is_kana_text(ch.char):
+            batch_start = i
+            batch_chars = []
+            while i < len(group) and not group[i].ruby and _is_kana_text(group[i].char):
+                batch_chars.append(group[i])
+                i += 1
+            batches.append((batch_start, batch_chars))
         else:
-            result.append(_char_plain(ch))
-    return "".join(result)
+            batches.append((i, [ch]))
+            i += 1
+
+    result_parts: List[Optional[str]] = [None] * len(group)
+    for batch_start, batch_chars in batches:
+        ch = batch_chars[0]
+        if len(batch_chars) == 1 or ch.ruby or not _is_kana_text(ch.char):
+            # 单人批次，走原逻辑
+            char_idx = group_start + batch_start
+            if ch.ruby:
+                if with_romaji:
+                    result_parts[batch_start] = _char_ruby_romaji(
+                        ch, char_idx, char_start, particle_indices,
+                    )
+                else:
+                    result_parts[batch_start] = _char_ruby_kana(ch)
+            elif with_romaji and _is_kana_text(ch.char):
+                result_parts[batch_start] = _char_self_ruby_romaji(ch)
+            else:
+                result_parts[batch_start] = _char_plain(ch)
+        else:
+            # 连续假名批次：合并全部文本后统一 mora 拆分和罗马化
+            _process_kana_batch(
+                batch_chars, batch_start, result_parts,
+                with_romaji=with_romaji,
+            )
+
+    return "".join(p for p in result_parts if p is not None)
+
+
+def _process_kana_batch(
+    batch: List[Character],
+    batch_start: int,
+    result_parts: List[Optional[str]],
+    *,
+    with_romaji: bool,
+) -> None:
+    """连续假名字符：按字符粒度传入 romanize_ruby_parts，让其自行处理跨字符拗音拆分。
+    然后每个字符各自拿到自己那部分 romaji。"""
+    # 收集每个字符的假名文本（按字符粒度，不做 mora 合并）
+    char_kana_list = [ch.char for ch in batch]
+
+    if with_romaji:
+        char_romaji_list = romanize_ruby_parts(char_kana_list)
+    else:
+        char_romaji_list = char_kana_list
+
+    for bi, ch in enumerate(batch):
+        ts_list = _get_ts_list(ch)
+        rm = char_romaji_list[bi] if bi < len(char_romaji_list) else ""
+        km = char_kana_list[bi]
+
+        if not rm:
+            result_parts[batch_start + bi] = ""
+            continue
+
+        if with_romaji:
+            romaji_tagged = _build_tagged_parts([rm], ts_list)
+            result_parts[batch_start + bi] = (
+                f"{{{ch.char}|>{romaji_tagged}}}{_format_sentence_end(ch)}"
+            )
+        else:
+            kana_tagged = _build_tagged_parts([km], ts_list)
+            result_parts[batch_start + bi] = (
+                f"{{{ch.char}|{kana_tagged}}}{_format_sentence_end(ch)}"
+            )
 
 
 def _collect_linked(
