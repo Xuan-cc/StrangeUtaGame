@@ -1012,6 +1012,30 @@ def _pack_parts(
     return app_zip, runtime_zip, app_targets, runtime_targets
 
 
+def _generate_updater_deps(dist_root: Path) -> None:
+    """扫描 UpdaterEx 构建产物的 ``_internal/`` 顶层条目，写入 ``_updater_deps.json``。
+
+    这份清单供更新器运行时选择性复制 ``_internal/`` 使用——只复制更新器真正需要的
+    顶层目录和文件，跳过主程序独有的重型依赖（dict、numpy 等）。
+    """
+    updater_internal = ROOT / "updater_app" / "dist" / "UpdaterEx" / "_internal"
+    if not updater_internal.is_dir():
+        print("  ! 未找到 UpdaterEx/_internal/，跳过生成 _updater_deps.json")
+        return
+
+    target = dist_root / "_internal" / "_updater_deps.json"
+    if not target.parent.is_dir():
+        return
+
+    entries = sorted(p.name for p in updater_internal.iterdir())
+    data = {"version": 1, "entries": entries}
+    target.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    print(f"  ✓ 已生成 {target.relative_to(dist_root.parent)} ({len(entries)} 条目)")
+
+
 def _write_installed_manifest_into_dist(
     version: str,
     vcfg: VariantConfig,
@@ -1024,7 +1048,7 @@ def _write_installed_manifest_into_dist(
     dist_root = vcfg.dist_dir
     payload = {
         "version": version,
-        "schema": 1,
+        "schema": 2,
         "parts": {
             "app": {
                 "sha256": _content_hash_of_zip(app_zip),
@@ -1061,7 +1085,7 @@ def _write_release_manifest(
     """生成对外发布的 ``manifest-[variant-]vX.Y.Z.json``。"""
     manifest: Dict = {
         "version": version,
-        "schema": 1,
+        "schema": 2,
         "parts": {
             "app": {
                 "asset": app_zip.name,
@@ -1124,6 +1148,10 @@ def cmd_build(
 
     # 2. 主程序
     _run_main_build(clean=clean, variant=vcfg.variant)
+
+    # 2.1 生成更新器依赖清单（供运行时选择性复制 _internal 使用）
+    if vcfg.has_updater_exe and sys.platform == "win32":
+        _generate_updater_deps(vcfg.dist_dir)
 
     # 关键顺序：
     #   1) 打 app + runtime part zip（不含 .installed_manifest.json）→ 算 sha256

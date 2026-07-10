@@ -88,7 +88,7 @@ FILE_LOCK_RETRY_INTERVAL = 1.5
 # 本地已安装版本/分包指纹的存放位置（相对 ``--app-dir/<internal_name>/``）。
 LOCAL_MANIFEST_FILENAME = ".installed_manifest.json"
 # manifest schema 兼容版本（远端 manifest.schema 必须 <= 该值才走增量；否则降级全量）。
-SUPPORTED_MANIFEST_SCHEMA = 1
+SUPPORTED_MANIFEST_SCHEMA = 2
 # Updater 自身的文件名；自更新时 rename 为 ``<name>.old``，下次启动时清理。
 UPDATER_EXE_NAME = "Updater.exe"
 # onedir 版 Updater（v1.2.3+ 与主程序共享 _internal）。
@@ -198,6 +198,32 @@ def setup_logger(log_path: Path) -> logging.Logger:
 # ───────────────────────── 流程步骤 ─────────────────────────
 
 
+def _load_updater_deps(internal_dir: Path) -> Optional[set]:
+    """读取 ``_updater_deps.json``，返回更新器所需的顶层条目名集合。文件不存在返回 ``None``。"""
+    f = internal_dir / "_updater_deps.json"
+    if not f.is_file():
+        return None
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+        entries = data.get("entries")
+        if isinstance(entries, list):
+            return set(entries)
+    except (OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def _copytree_filtered(src: Path, dst: Path, needed: set) -> None:
+    """复制目录树，仅保留 ``needed`` 中的顶层条目。顶层文件不受控（全部复制）。"""
+
+    def _ignore(dir_path: str, dir_names: List[str]) -> set:
+        if Path(dir_path).resolve() != src.resolve():
+            return set()
+        return {n for n in dir_names if n not in needed}
+
+    shutil.copytree(str(src), str(dst), ignore=_ignore)
+
+
 def _needs_relocation(app_dir: Path, internal_name: str) -> bool:
     """检测更新器是否需要搬迁到独立环境。
 
@@ -241,8 +267,11 @@ def _relaunch_from_temp(args: "Args") -> int:
                 except OSError:
                     shutil.rmtree(str(tmp_internal), ignore_errors=True)  # 物理目录
             if not tmp_internal.exists():
-                # copytree 会跟随 junction 解析到实际文件
-                shutil.copytree(str(internal_dir), str(tmp_internal))
+                needed = _load_updater_deps(internal_dir)
+                if needed is not None:
+                    _copytree_filtered(internal_dir, tmp_internal, needed)
+                else:
+                    shutil.copytree(str(internal_dir), str(tmp_internal))
 
         print(f"[StrangeUtaGame Updater] 运行环境与主程序共享，正在搬迁到临时目录…")
         print(f"  {tmp_exe}")
