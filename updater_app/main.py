@@ -100,13 +100,11 @@ UPDATER_EX_NAME = "UpdaterEx.exe"
 _UPDATER_EXCLUDE: set = {
     "sudachidict_core",
     "numpy", "numpy.libs",
-    "PIL",
     "pykakasi", "sudachipy",
     "pedalboard", "_soundfile_data", "_sounddevice_data",
     "cryptography",
     "winrt",
-    "pywin32_system32", "Pythonwin", "win32",
-    "brotlicffi", "wrapt", "setuptools",
+    "brotlicffi", "wrapt",
     "jieba", "pypinyin", "pyphen", "jaconv",
 }
 
