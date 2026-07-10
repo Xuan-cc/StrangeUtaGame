@@ -111,6 +111,18 @@ try:
 except Exception:
     pass
 
+# 清理上次更新遗留的 _internal 临时副本（更新器将此目录复制到 TEMP 以解除文件锁，
+# 更新完成后主程序启动时清理，避免长期占用磁盘空间）
+try:
+    import shutil
+    from pathlib import Path as _P
+    import tempfile as _tp
+    _tmp_internal = _P(_tp.gettempdir()) / "StrangeUtaGameUpdater" / "_internal"
+    if _tmp_internal.exists():
+        shutil.rmtree(str(_tmp_internal), ignore_errors=True)
+except Exception:
+    pass
+
 # 现在可以安全导入其他模块
 from strange_uta_game.frontend.main_window import MainWindow
 
