@@ -1546,8 +1546,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         global _gui_mode_active
         _gui_mode_active = True
         return run_gui(args, run)
-    except ImportError:
-        pass
+    except Exception as e:
+        # GUI 启动失败——记下原因，回退到控制台模式
+        import traceback
+        err = f"GUI 启动失败，回退到控制台模式: {e}\n{traceback.format_exc()}"
+        try:
+            (Path(tempfile.gettempdir()) / TMP_DIR_NAME / "updater_gui_error.log").write_text(
+                err, encoding="utf-8"
+            )
+        except OSError:
+            pass
+        print(err, file=sys.stderr)
 
     return run(args)
 

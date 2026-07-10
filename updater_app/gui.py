@@ -194,6 +194,10 @@ class _UpdaterWindow(QWidget):
         self._center_on_screen()
         self._drag_pos = None
 
+        # 确保窗口在前台（子进程搬迁后可能被父进程窗口遮挡）
+        self.raise_()
+        self.activateWindow()
+
     # ── 主题 ──
 
     def _apply_theme(self) -> None:
@@ -313,9 +317,8 @@ class _UpdaterWindow(QWidget):
         self._running = False
         self._btn.setEnabled(True)
         if code == 0:
-            self._status.setText(_tr("更新完成，即将关闭…"))
-            self._ring.setValue(100)
-            QTimer.singleShot(3000, self.close)
+            # 搬迁完成（code=0）——子进程接管，此窗口静默关闭
+            self.close()
         else:
             self._status.setText(
                 _tr("更新失败（退出码 {code}），请查看日志").format(code=code)
