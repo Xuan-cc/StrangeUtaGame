@@ -3570,6 +3570,7 @@ class EditorInterface(QWidget):
                     all_chars.append(ch)
 
             # ── Pass 1: 后补偿 ──────────────────────────────
+            # 条件：符号无普通时间戳（cc=0）且 is_sentence_end=True
             for ch in all_chars:
                 if (
                     ch.char in symbol_chars
@@ -3584,11 +3585,17 @@ class EditorInterface(QWidget):
                     post_count += 1
 
             # ── Pass 2: 前补偿 ──────────────────────────────
+            # 条件：符号有普通时间戳（cc=1）且 is_sentence_end=False
+            #       且后方紧跟的非符号字符无时间戳（cc=0）
             for i, ch in enumerate(all_chars):
-                if ch.char not in symbol_chars or ch.check_count != 1 or not ch.timestamps:
+                if (
+                    ch.char not in symbol_chars
+                    or ch.check_count != 1
+                    or not ch.timestamps
+                    or ch.is_sentence_end
+                ):
                     continue
 
-                # 找紧跟的第一个非符号字符
                 next_non_sym = None
                 for j in range(i + 1, len(all_chars)):
                     if all_chars[j].char not in symbol_chars:
