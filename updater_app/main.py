@@ -229,7 +229,7 @@ def _load_updater_deps(internal_dir: Path) -> set:
 
     # 2) 自动生成的 Python 常量（嵌在更新器源码里，由 release.py 维护）
     try:
-        from _updater_deps_data import _UPDATER_DEPS_DATA
+        from _updater_deps_data import _UPDATER_DEPS_DATA  # noqa: F811
         return set(_UPDATER_DEPS_DATA)
     except ImportError:
         pass
@@ -237,7 +237,8 @@ def _load_updater_deps(internal_dir: Path) -> set:
     # 3) 最终兜底：扫描实际目录，排除黑名单中的重型依赖
     if internal_dir.is_dir():
         all_entries = {p.name for p in internal_dir.iterdir()}
-        return all_entries - _UPDATER_EXCLUDE
+        result = all_entries - _UPDATER_EXCLUDE
+        return result
 
     return set()
 
@@ -278,15 +279,22 @@ def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -
     """
     import subprocess as _sp
 
+    if log is not None:
+        log.info("正在准备独立运行环境…")
+
     exe_path = Path(sys.executable).resolve()
     internal_dir = exe_path.parent / args.internal_name
     tmp_dir = Path(tempfile.gettempdir()) / TMP_DIR_NAME / "relocated"
     # 清理上次搬迁残留——仅当标记文件不存在时（说明上次子进程已结束）
     if tmp_dir.exists() and not (tmp_dir / ".relocated").exists():
+        if log is not None:
+            log.info("清理上次搬迁残留…")
         shutil.rmtree(str(tmp_dir), ignore_errors=True)
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        if log is not None:
+            log.info("正在复制更新器程序文件…")
         tmp_exe = tmp_dir / exe_path.name
         try:
             shutil.copy2(str(exe_path), str(tmp_exe))
@@ -302,9 +310,17 @@ def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -
                 except OSError:
                     shutil.rmtree(str(tmp_internal), ignore_errors=True)  # 物理目录
             if not tmp_internal.exists():
+                # 判断依赖清单来源（优先级由上到下）
+                f_json = internal_dir / "_updater_deps.json"
+                if f_json.is_file():
+                    if log is not None:
+                        log.info("正在迁移运行依赖（来源: JSON 清单）…")
+                else:
+                    if log is not None:
+                        log.info("正在迁移运行依赖（来源: 目录扫描 + 黑名单）…")
                 needed = _load_updater_deps(internal_dir)
                 if log is not None:
-                    log.info("选择性复制运行依赖（%d 条目）…", len(needed))
+                    log.info("  跳过 %d 个重型依赖，复制 %d 个条目", len(_UPDATER_EXCLUDE), len(needed))
                 try:
                     _copytree_filtered(internal_dir, tmp_internal, needed)
                 except Exception:
@@ -314,11 +330,14 @@ def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -
                         shutil.rmtree(str(tmp_internal), ignore_errors=True)
                     shutil.copytree(str(internal_dir), str(tmp_internal))
 
-        print(f"[StrangeUtaGame Updater] 运行环境与主程序共享，正在搬迁到临时目录…")
-        print(f"  {tmp_exe}")
-
         # 写标记文件，让 _cleanup_temp_workdir 知道此目录正在使用
         (tmp_dir / ".relocated").write_text("", encoding="utf-8")
+
+        if log is not None:
+            log.info("依赖迁移完毕，正在重启更新器…")
+
+        print(f"[StrangeUtaGame Updater] 运行环境与主程序共享，正在搬迁到临时目录…")
+        print(f"  {tmp_exe}")
 
         flags = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0
         _sp.Popen(
