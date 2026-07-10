@@ -269,7 +269,12 @@ def _relaunch_from_temp(args: "Args") -> int:
             if not tmp_internal.exists():
                 needed = _load_updater_deps(internal_dir)
                 if needed is not None:
-                    _copytree_filtered(internal_dir, tmp_internal, needed)
+                    try:
+                        _copytree_filtered(internal_dir, tmp_internal, needed)
+                    except Exception:
+                        if tmp_internal.exists():
+                            shutil.rmtree(str(tmp_internal), ignore_errors=True)
+                        shutil.copytree(str(internal_dir), str(tmp_internal))
                 else:
                     shutil.copytree(str(internal_dir), str(tmp_internal))
 
@@ -285,7 +290,15 @@ def _relaunch_from_temp(args: "Args") -> int:
             stderr=None,
         )
     except Exception as e:
-        print(f"[StrangeUtaGame Updater] 搬迁失败: {e}", file=sys.stderr)
+        import traceback
+        err_msg = f"[StrangeUtaGame Updater] 搬迁失败: {e}\n{traceback.format_exc()}"
+        print(err_msg, file=sys.stderr)
+        try:
+            (Path(tempfile.gettempdir()) / TMP_DIR_NAME / "updater_relocate_error.log").write_text(
+                err_msg, encoding="utf-8"
+            )
+        except OSError:
+            pass
         return 2
 
     return 0
