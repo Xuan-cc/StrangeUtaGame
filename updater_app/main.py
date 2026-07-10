@@ -228,12 +228,15 @@ def _load_updater_deps(internal_dir: Path) -> set:
 
 
 def _copytree_filtered(src: Path, dst: Path, needed: set) -> None:
-    """复制目录树，仅保留 ``needed`` 中的顶层条目。顶层文件不受控（全部复制）。"""
+    """复制目录树，仅跳过 ``needed`` 之外的顶层**目录**。所有顶层文件一律保留。"""
 
     def _ignore(dir_path: str, dir_names: List[str]) -> set:
         if Path(dir_path).resolve() != src.resolve():
             return set()
-        return {n for n in dir_names if n not in needed}
+        return {
+            n for n in dir_names
+            if n not in needed and os.path.isdir(os.path.join(dir_path, n))
+        }
 
     shutil.copytree(str(src), str(dst), ignore=_ignore)
 
