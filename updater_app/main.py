@@ -248,7 +248,7 @@ def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -
 
     exe_path = Path(sys.executable).resolve()
     internal_dir = exe_path.parent / args.internal_name
-    tmp_dir = Path(tempfile.gettempdir()) / TMP_DIR_NAME
+    tmp_dir = Path(tempfile.gettempdir()) / TMP_DIR_NAME / "relocated"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -312,7 +312,7 @@ def _cleanup_temp_workdir(work_dir: Path) -> None:
 
     当前进程正在使用的文件（通过 open handles）不会被删除。
     """
-    stale_dirs = ["download", "extracted", "extract-runtime", "extract-app", "parts"]
+    stale_dirs = ["download", "extracted", "extract-runtime", "extract-app", "parts", "relocated"]
     for name in stale_dirs:
         path = work_dir / name
         if path.is_dir():
