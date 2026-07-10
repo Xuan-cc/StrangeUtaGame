@@ -281,6 +281,9 @@ def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -
     exe_path = Path(sys.executable).resolve()
     internal_dir = exe_path.parent / args.internal_name
     tmp_dir = Path(tempfile.gettempdir()) / TMP_DIR_NAME / "relocated"
+    # 清理上次搬迁残留——仅当标记文件不存在时（说明上次子进程已结束）
+    if tmp_dir.exists() and not (tmp_dir / ".relocated").exists():
+        shutil.rmtree(str(tmp_dir), ignore_errors=True)
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -314,6 +317,9 @@ def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -
         print(f"[StrangeUtaGame Updater] 运行环境与主程序共享，正在搬迁到临时目录…")
         print(f"  {tmp_exe}")
 
+        # 写标记文件，让 _cleanup_temp_workdir 知道此目录正在使用
+        (tmp_dir / ".relocated").write_text("", encoding="utf-8")
+
         flags = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0
         _sp.Popen(
             [str(tmp_exe)] + sys.argv[1:],
@@ -343,13 +349,16 @@ def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -
 def _cleanup_temp_workdir(work_dir: Path) -> None:
     """清理 TEMP 工作目录中前次运行残留：旧下载、解压产物、旧 EXE 副本、旧日志。
 
-    当前进程正在使用的文件（通过 open handles）不会被删除。
+    跳过含有 ``.relocated`` 标记的目录（当前更新器子进程正在其中运行）。
     """
     stale_dirs = ["download", "extracted", "extract-runtime", "extract-app", "parts", "relocated"]
     for name in stale_dirs:
         path = work_dir / name
-        if path.is_dir():
-            shutil.rmtree(str(path), ignore_errors=True)
+        if not path.is_dir():
+            continue
+        if (path / ".relocated").exists():
+            continue  # 子进程正在此目录中运行，跳过
+        shutil.rmtree(str(path), ignore_errors=True)
 
     for p in work_dir.glob("Updater-*.exe"):
         try:
@@ -362,6 +371,19 @@ def _cleanup_temp_workdir(work_dir: Path) -> None:
             p.unlink()
         except OSError:
             pass
+
+
+def _final_cleanup(work_dir: Path) -> None:
+    """进程退出前的最终清理：删标记后清理所有工作目录。"""
+    relocated = work_dir / "relocated"
+    marker = relocated / ".relocated"
+    if marker.exists():
+        try:
+            marker.unlink()
+        except OSError:
+            pass
+    if relocated.is_dir() and not marker.exists():
+        shutil.rmtree(str(relocated), ignore_errors=True)
 
 
 def _cleanup_old_files(app_dir: Path, log: logging.Logger) -> None:
@@ -1390,6 +1412,7 @@ def run(
                 launch_main_app(args.app_dir, args.app_exe, log)
             log.info("更新完成 ✓（增量路径）")
             _cleanup_temp_workdir(work_dir)
+            _final_cleanup(work_dir)
             if not gui_mode and sys.platform == "win32":
                 try:
                     print()
@@ -1455,6 +1478,7 @@ def run(
         if download_path.exists():
             download_path.unlink()
         _cleanup_temp_workdir(work_dir)
+        _final_cleanup(work_dir)
     except OSError:
         pass
 
