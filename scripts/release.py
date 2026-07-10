@@ -1013,27 +1013,42 @@ def _pack_parts(
 
 
 def _generate_updater_deps(dist_root: Path) -> None:
-    """扫描 UpdaterEx 构建产物的 ``_internal/`` 顶层条目，写入 ``_updater_deps.json``。
+    """扫描 UpdaterEx 构建产物的 ``_internal/`` 顶层条目，写入两份产物：
 
-    这份清单供更新器运行时选择性复制 ``_internal/`` 使用——只复制更新器真正需要的
-    顶层目录和文件，跳过主程序独有的重型依赖（dict、numpy 等）。
+    1. ``dist/<app>/_internal/_updater_deps.json`` — 随主程序分发，优先级最高
+    2. ``updater_app/_updater_deps_data.py`` — 嵌在更新器代码里的 Python 常量，
+       作为 JSON 文件不存在时的兜底（旧版本用户升级时使用）
     """
     updater_internal = ROOT / "updater_app" / "dist" / "UpdaterEx" / "_internal"
     if not updater_internal.is_dir():
         print("  ! 未找到 UpdaterEx/_internal/，跳过生成 _updater_deps.json")
         return
 
-    target = dist_root / "_internal" / "_updater_deps.json"
-    if not target.parent.is_dir():
-        return
-
     entries = sorted(p.name for p in updater_internal.iterdir())
-    data = {"version": 1, "entries": entries}
-    target.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
+
+    # 1) JSON（随主程序 _internal 分发）
+    target = dist_root / "_internal" / "_updater_deps.json"
+    if target.parent.is_dir():
+        data = {"version": 1, "entries": entries}
+        target.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"  ✓ 已生成 {target.relative_to(dist_root.parent)} ({len(entries)} 条目)")
+
+    # 2) Python 常量（嵌在更新器源码里，旧版用户的兜底）
+    py_file = ROOT / "updater_app" / "_updater_deps_data.py"
+    new_content = (
+        "# 由 release.py 自动生成，请勿手动编辑。\n"
+        "# 供 updater_app/main.py 的 _load_updater_deps 兜底使用。\n"
+        f"_UPDATER_DEPS_DATA = {entries!r}\n"
     )
-    print(f"  ✓ 已生成 {target.relative_to(dist_root.parent)} ({len(entries)} 条目)")
+    old_content = py_file.read_text(encoding="utf-8") if py_file.is_file() else ""
+    if new_content != old_content:
+        py_file.write_text(new_content, encoding="utf-8")
+        print(f"  ✓ 已更新 {py_file.relative_to(ROOT)} ({len(entries)} 条目)")
+    else:
+        print(f"  ✓ {py_file.relative_to(ROOT)} 与现状一致，无需更新")
 
 
 def _write_installed_manifest_into_dist(

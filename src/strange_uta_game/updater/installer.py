@@ -188,9 +188,9 @@ def _create_dir_link(target: Path, link: Path) -> bool:
 def _copy_updater_to_temp(updater_exe: Path) -> Path:
     """把 Updater EXE 复制到临时目录，避免自身被锁。
 
-    同时创建 ``_internal`` junction/symlink（对 onefile 无害，onedir 必需）。
-    注：更新器启动后会自行检测运行位置，若不在 TEMP 则会自复制并重新启动，
-    因此 junction 方式不会导致文件锁问题。
+    优先用 junction 避免复制 _internal（快），junction 失败时回退到物理复制。
+    更新器启动后会自行检测运行位置，新版更新器在 _relaunch_from_temp 里完成
+    选择性复制——因此这里不自己做选择性复制，保持简单可靠。
     """
     tmp_dir = Path(tempfile.gettempdir()) / TMP_DIR_NAME
     tmp_dir.mkdir(parents=True, exist_ok=True)

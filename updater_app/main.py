@@ -94,6 +94,21 @@ UPDATER_EXE_NAME = "Updater.exe"
 # onedir 版 Updater（v1.2.3+ 与主程序共享 _internal）。
 UPDATER_EX_NAME = "UpdaterEx.exe"
 
+# 更新器自身的 _internal 顶层条目清单。
+# 优先从 release.py 自动生成的 _updater_deps_data 读取；不存在时用硬编码兜底。
+try:
+    from _updater_deps_data import _UPDATER_DEPS_DATA as _UPDATER_DEPS
+except ImportError:
+    _UPDATER_DEPS: set = {
+        "PyQt6",
+        "qfluentwidgets",
+        "certifi",
+        "charset_normalizer",
+        "idna",
+        "urllib3",
+        "requests",
+    }
+
 
 # ───────────────────────── 数据结构 ─────────────────────────
 
@@ -198,19 +213,18 @@ def setup_logger(log_path: Path) -> logging.Logger:
 # ───────────────────────── 流程步骤 ─────────────────────────
 
 
-def _load_updater_deps(internal_dir: Path) -> Optional[set]:
-    """读取 ``_updater_deps.json``，返回更新器所需的顶层条目名集合。文件不存在返回 ``None``。"""
+def _load_updater_deps(internal_dir: Path) -> set:
+    """读取 ``_updater_deps.json``，优先 JSON（自动维护），回退到硬编码常量。"""
     f = internal_dir / "_updater_deps.json"
-    if not f.is_file():
-        return None
-    try:
-        data = json.loads(f.read_text(encoding="utf-8"))
-        entries = data.get("entries")
-        if isinstance(entries, list):
-            return set(entries)
-    except (OSError, ValueError, TypeError):
-        pass
-    return None
+    if f.is_file():
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            entries = data.get("entries")
+            if isinstance(entries, list):
+                return set(entries)
+        except (OSError, ValueError, TypeError):
+            pass
+    return _UPDATER_DEPS
 
 
 def _copytree_filtered(src: Path, dst: Path, needed: set) -> None:
@@ -268,14 +282,15 @@ def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -
                     shutil.rmtree(str(tmp_internal), ignore_errors=True)  # 物理目录
             if not tmp_internal.exists():
                 needed = _load_updater_deps(internal_dir)
-                if needed is not None:
-                    try:
-                        _copytree_filtered(internal_dir, tmp_internal, needed)
-                    except Exception:
-                        if tmp_internal.exists():
-                            shutil.rmtree(str(tmp_internal), ignore_errors=True)
-                        shutil.copytree(str(internal_dir), str(tmp_internal))
-                else:
+                if log is not None:
+                    log.info("选择性复制运行依赖（%d 条目）…", len(needed))
+                try:
+                    _copytree_filtered(internal_dir, tmp_internal, needed)
+                except Exception:
+                    if log is not None:
+                        log.warning("选择性复制失败，回退到全量复制")
+                    if tmp_internal.exists():
+                        shutil.rmtree(str(tmp_internal), ignore_errors=True)
                     shutil.copytree(str(internal_dir), str(tmp_internal))
 
         print(f"[StrangeUtaGame Updater] 运行环境与主程序共享，正在搬迁到临时目录…")

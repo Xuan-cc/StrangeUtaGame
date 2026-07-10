@@ -102,6 +102,15 @@ class _UpdaterWorker(QThread):
                 gui_mode=True,
             )
         except Exception:
+            import traceback
+            err_msg = traceback.format_exc()
+            try:
+                record = logging.LogRecord(
+                    "updater", logging.ERROR, "", 0, err_msg, (), None
+                )
+                self._log_handler.emit(record)
+            except Exception:
+                pass
             rc = 99
         self.finished.emit(rc)
 
