@@ -94,20 +94,21 @@ UPDATER_EXE_NAME = "Updater.exe"
 # onedir 版 Updater（v1.2.3+ 与主程序共享 _internal）。
 UPDATER_EX_NAME = "UpdaterEx.exe"
 
-# 更新器自身的 _internal 顶层条目清单。
-# 优先从 release.py 自动生成的 _updater_deps_data 读取；不存在时用硬编码兜底。
-try:
-    from _updater_deps_data import _UPDATER_DEPS_DATA as _UPDATER_DEPS
-except ImportError:
-    _UPDATER_DEPS: set = {
-        "PyQt6",
-        "qfluentwidgets",
-        "certifi",
-        "charset_normalizer",
-        "idna",
-        "urllib3",
-        "requests",
-    }
+# 更新器选择性复制的黑名单：目录名在此集合中的顶层目录会被跳过。
+# JSON 清单 (_updater_deps.json / _updater_deps_data.py) 优先；不存在时，
+# _load_updater_deps 扫描实际目录减去此列表。
+_UPDATER_EXCLUDE: set = {
+    "sudachidict_core",
+    "numpy", "numpy.libs",
+    "PIL",
+    "pykakasi", "sudachipy",
+    "pedalboard", "_soundfile_data", "_sounddevice_data",
+    "cryptography",
+    "winrt",
+    "pywin32_system32", "Pythonwin", "win32",
+    "brotlicffi", "wrapt", "setuptools",
+    "jieba", "pypinyin", "pyphen", "jaconv",
+}
 
 
 # ───────────────────────── 数据结构 ─────────────────────────
@@ -214,7 +215,8 @@ def setup_logger(log_path: Path) -> logging.Logger:
 
 
 def _load_updater_deps(internal_dir: Path) -> set:
-    """读取 ``_updater_deps.json``，优先 JSON（自动维护），回退到硬编码常量。"""
+    """获取选择性复制的条目集合。优先 JSON 清单，回退到黑名单排除法。"""
+    # 1) JSON（_generate_updater_deps 自动生成，最准确）
     f = internal_dir / "_updater_deps.json"
     if f.is_file():
         try:
@@ -224,7 +226,20 @@ def _load_updater_deps(internal_dir: Path) -> set:
                 return set(entries)
         except (OSError, ValueError, TypeError):
             pass
-    return _UPDATER_DEPS
+
+    # 2) 自动生成的 Python 常量（嵌在更新器源码里，由 release.py 维护）
+    try:
+        from _updater_deps_data import _UPDATER_DEPS_DATA
+        return set(_UPDATER_DEPS_DATA)
+    except ImportError:
+        pass
+
+    # 3) 最终兜底：扫描实际目录，排除黑名单中的重型依赖
+    if internal_dir.is_dir():
+        all_entries = {p.name for p in internal_dir.iterdir()}
+        return all_entries - _UPDATER_EXCLUDE
+
+    return set()
 
 
 def _copytree_filtered(src: Path, dst: Path, needed: set) -> None:
