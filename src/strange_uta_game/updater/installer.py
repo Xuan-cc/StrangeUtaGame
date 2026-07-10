@@ -184,11 +184,11 @@ def _create_dir_link(target: Path, link: Path) -> None:
 
 
 def _copy_updater_to_temp(updater_exe: Path) -> Path:
-    """把 Updater EXE 及 _internal 依赖复制到临时目录，确保更新器不锁定目标文件。
+    """把 Updater EXE 复制到临时目录，避免自身被锁。
 
-    不使用 junction（软链接），因为更新器启动后自身会持有 _internal 下的
-    DLL 句柄，导致后续无法覆写/重命名主程序的 _internal。
-    改为完整复制一份到 TEMP，更新器有了独立的运行时副本，可以自由操作目标的 _internal。
+    同时创建 ``_internal`` junction/symlink（对 onefile 无害，onedir 必需）。
+    注：更新器启动后会自行检测运行位置，若不在 TEMP 则会自复制并重新启动，
+    因此 junction 方式不会导致文件锁问题。
     """
     tmp_dir = Path(tempfile.gettempdir()) / TMP_DIR_NAME
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -197,25 +197,18 @@ def _copy_updater_to_temp(updater_exe: Path) -> Path:
         shutil.copy2(str(updater_exe), str(dest))
     except PermissionError:
         import time
-
         dest = tmp_dir / f"Updater-{int(time.time())}.exe"
         shutil.copy2(str(updater_exe), str(dest))
 
-    # 复制 _internal 到 TEMP（不复用主程序的，避免文件锁冲突）
+    # 创建 _internal link（对 onefile 打包无害，onedir 必需它来定位运行时）
     app_internal = updater_exe.parent / "_internal"
     tmp_internal = tmp_dir / "_internal"
     if app_internal.is_dir():
-        # 清理旧的 junction 或目录
-        try:
+        # 先安全移除旧的 junction/symlink（不跟随删除内容）
+        if tmp_internal.is_symlink() or tmp_internal.exists():
             _remove_dir_link(tmp_internal)
-        except OSError:
-            import shutil as _shutil
-
-            _shutil.rmtree(str(tmp_internal), ignore_errors=True)
         if not tmp_internal.exists():
-            log.info("[updater] 正在复制运行依赖到临时目录（首次可能较慢）…")
-            shutil.copytree(str(app_internal), str(tmp_internal))
-            log.info("[updater] 运行依赖复制完成")
+            _create_dir_link(app_internal, tmp_internal)
 
     return dest
 
