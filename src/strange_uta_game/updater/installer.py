@@ -165,22 +165,24 @@ def _remove_dir_link(link: Path) -> None:
         pass
 
 
-def _create_dir_link(target: Path, link: Path) -> None:
-    """创建目录 junction（Windows）或 symlink（其他平台）。"""
+def _create_dir_link(target: Path, link: Path) -> bool:
+    """创建目录 junction（Windows）或 symlink（其他平台）。成功返回 True。"""
     if sys.platform == "win32":
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["cmd", "/c", "mklink", "/J", str(link), str(target)],
                 capture_output=True,
                 creationflags=0x08000000,  # CREATE_NO_WINDOW
             )
+            return result.returncode == 0
         except OSError:
-            pass
+            return False
     else:
         try:
             os.symlink(str(target), str(link), target_is_directory=True)
+            return True
         except OSError:
-            pass
+            return False
 
 
 def _copy_updater_to_temp(updater_exe: Path) -> Path:
@@ -201,14 +203,21 @@ def _copy_updater_to_temp(updater_exe: Path) -> Path:
         shutil.copy2(str(updater_exe), str(dest))
 
     # 创建 _internal link（对 onefile 打包无害，onedir 必需它来定位运行时）
+    # junction 可能因权限等原因失败，此时回退到物理复制
     app_internal = updater_exe.parent / "_internal"
     tmp_internal = tmp_dir / "_internal"
     if app_internal.is_dir():
-        # 先安全移除旧的 junction/symlink（不跟随删除内容）
-        if tmp_internal.is_symlink() or tmp_internal.exists():
+        # 安全移除旧的 junction 或目录（不跟随删除内容）
+        try:
             _remove_dir_link(tmp_internal)
+        except OSError:
+            shutil.rmtree(str(tmp_internal), ignore_errors=True)
         if not tmp_internal.exists():
-            _create_dir_link(app_internal, tmp_internal)
+            if not _create_dir_link(app_internal, tmp_internal):
+                log.info("[updater] junction 创建失败，改用物理复制…")
+                log.info("[updater] 正在复制运行依赖到临时目录（首次可能较慢）…")
+                shutil.copytree(str(app_internal), str(tmp_internal))
+                log.info("[updater] 运行依赖复制完成")
 
     return dest
 

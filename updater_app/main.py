@@ -238,7 +238,7 @@ def _needs_relocation(app_dir: Path, internal_name: str) -> bool:
         return True  # 解析失败，保守搬迁
 
 
-def _relaunch_from_temp(args: "Args") -> int:
+def _relaunch_from_temp(args: "Args", *, log: Optional[logging.Logger] = None) -> int:
     """把更新器自身及其 _internal 复制到 TEMP，从那里重新启动，然后退出当前进程。
 
     复制 _internal 时会跟随 junction 解析到实际文件，确保 TEMP 副本是独立
@@ -291,8 +291,11 @@ def _relaunch_from_temp(args: "Args") -> int:
         )
     except Exception as e:
         import traceback
-        err_msg = f"[StrangeUtaGame Updater] 搬迁失败: {e}\n{traceback.format_exc()}"
-        print(err_msg, file=sys.stderr)
+        err_msg = f"搬迁失败: {e}\n{traceback.format_exc()}"
+        if log is not None:
+            log.error(err_msg)
+        else:
+            print(f"[StrangeUtaGame Updater] {err_msg}", file=sys.stderr)
         try:
             (Path(tempfile.gettempdir()) / TMP_DIR_NAME / "updater_relocate_error.log").write_text(
                 err_msg, encoding="utf-8"
@@ -302,6 +305,30 @@ def _relaunch_from_temp(args: "Args") -> int:
         return 2
 
     return 0
+
+
+def _cleanup_temp_workdir(work_dir: Path) -> None:
+    """清理 TEMP 工作目录中前次运行残留：旧下载、解压产物、旧 EXE 副本、旧日志。
+
+    当前进程正在使用的文件（通过 open handles）不会被删除。
+    """
+    stale_dirs = ["download", "extracted", "extract-runtime", "extract-app", "parts"]
+    for name in stale_dirs:
+        path = work_dir / name
+        if path.is_dir():
+            shutil.rmtree(str(path), ignore_errors=True)
+
+    for p in work_dir.glob("Updater-*.exe"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+    for p in work_dir.glob("updater_relocate_error.log*"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
 
 
 def _cleanup_old_files(app_dir: Path, log: logging.Logger) -> None:
@@ -1263,17 +1290,25 @@ def run(
     extra_log_handler: Optional[logging.Handler] = None,
     gui_mode: bool = False,
 ) -> int:
-    # 0. 自检：如果更新器的 _internal 与主程序共享同一目录（junction/copytree），
-    #    则需要搬迁到 TEMP 以便拥有独立的运行副本，解除 DLL 文件锁。
-    if _needs_relocation(args.app_dir, args.internal_name):
-        return _relaunch_from_temp(args)
-
     work_dir = Path(tempfile.gettempdir()) / TMP_DIR_NAME
     work_dir.mkdir(parents=True, exist_ok=True)
 
     log = setup_logger(work_dir / "updater.log")
     if extra_log_handler is not None:
         log.addHandler(extra_log_handler)
+
+    # 清理前次运行残留的临时文件
+    _cleanup_temp_workdir(work_dir)
+
+    # 0. 自检：如果更新器的 _internal 与主程序共享同一目录（junction/copytree），
+    #    则需要搬迁到 TEMP 以便拥有独立的运行副本，解除 DLL 文件锁。
+    if _needs_relocation(args.app_dir, args.internal_name):
+        log.info("检测到运行环境与主程序共享，准备搬迁到临时目录…")
+        rc = _relaunch_from_temp(args, log=log)
+        if rc != 0:
+            log.error("搬迁失败，退出码 %d", rc)
+        return rc
+
     log.info("=" * 60)
     log.info("StrangeUtaGame Updater 启动")
     log.info("目标版本: v%s  (tag: %s)", args.target_version, args.target_tag)
@@ -1321,6 +1356,7 @@ def run(
             if args.launch_after:
                 launch_main_app(args.app_dir, args.app_exe, log)
             log.info("更新完成 ✓（增量路径）")
+            _cleanup_temp_workdir(work_dir)
             if not gui_mode and sys.platform == "win32":
                 try:
                     print()
@@ -1385,6 +1421,7 @@ def run(
         shutil.rmtree(str(extract_dir), ignore_errors=True)
         if download_path.exists():
             download_path.unlink()
+        _cleanup_temp_workdir(work_dir)
     except OSError:
         pass
 
