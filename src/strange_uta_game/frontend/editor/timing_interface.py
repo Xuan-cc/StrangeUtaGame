@@ -569,26 +569,29 @@ class EditorInterface(QWidget):
 
     def _on_data_changed(self, change_type: str):
         """响应 ProjectStore 的数据变更。"""
-        if change_type == "project":
-            # 项目结构变更，波形选中句柄可能全部失效
-            if hasattr(self, "timeline"):
-                self.timeline.clear_tag_selection()
-            self.set_project(self._store.project)
-            if self._mini_singer_manager is not None:
-                self._mini_singer_manager.set_project(self._store.project)
-        elif change_type in ("rubies", "lyrics", "checkpoints"):
-            # 注音/歌词/节奏点变更可能使波形选中句柄越界悬空，清空避免误写
-            if hasattr(self, "timeline"):
-                self.timeline.clear_tag_selection()
-            self.refresh_lyric_display()
-            # 导入歌词/项目时可能自带时间戳，波形 timetag 也需刷新（此前只刷了 preview）
-            self._update_time_tags_display()
-            self._update_status()
-        elif change_type == "timetags":
-            self._schedule_time_tags_update()
-            self._update_status()
-        elif change_type == "settings":
-            self._apply_settings()
+        try:
+            if change_type == "project":
+                # 项目结构变更，波形选中句柄可能全部失效
+                if hasattr(self, "timeline"):
+                    self.timeline.clear_tag_selection()
+                self.set_project(self._store.project)
+                if self._mini_singer_manager is not None:
+                    self._mini_singer_manager.set_project(self._store.project)
+            elif change_type in ("rubies", "lyrics", "checkpoints"):
+                # 注音/歌词/节奏点变更可能使波形选中句柄越界悬空，清空避免误写
+                if hasattr(self, "timeline"):
+                    self.timeline.clear_tag_selection()
+                self.refresh_lyric_display()
+                # 导入歌词/项目时可能自带时间戳，波形 timetag 也需刷新（此前只刷了 preview）
+                self._update_time_tags_display()
+                self._update_status()
+            elif change_type == "timetags":
+                self._schedule_time_tags_update()
+                self._update_status()
+            elif change_type == "settings":
+                self._apply_settings()
+        except Exception as e:
+            print(f"[TimingInterface] _on_data_changed({change_type}) 失败: {e}")
 
     def _apply_settings(self):
         """从 AppSettings 读取设定并应用到编辑器。"""
@@ -2447,17 +2450,24 @@ class EditorInterface(QWidget):
         打开一个微型浮动窗口，复用 SingerManagerInterface 的全部功能，
         允许用户在打轴的同时随时编辑演唱者。
         """
-        if self._mini_singer_manager is not None and self._mini_singer_manager.isVisible():
-            self._mini_singer_manager.raise_()
-            self._mini_singer_manager.activateWindow()
-            return
+        try:
+            if self._mini_singer_manager is not None and self._mini_singer_manager.isVisible():
+                self._mini_singer_manager.raise_()
+                self._mini_singer_manager.activateWindow()
+                return
+        except RuntimeError:
+            self._mini_singer_manager = None
 
         self._mini_singer_manager = MiniSingerManager(self)
+        self._mini_singer_manager.destroyed.connect(self._on_mini_singer_manager_closed)
         if self._project:
             self._mini_singer_manager.set_project(self._project)
-        if hasattr(self, "_store") and self._store:
+        if getattr(self, "_store", None) is not None:
             self._mini_singer_manager.set_store(self._store)
         self._mini_singer_manager.show_at_cursor()
+
+    def _on_mini_singer_manager_closed(self):
+        self._mini_singer_manager = None
 
     def _on_insert_guide(self):
         """打开插入导唱符对话框（针对 focus 字符）。

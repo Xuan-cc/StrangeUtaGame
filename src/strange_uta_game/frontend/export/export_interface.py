@@ -434,23 +434,26 @@ class ExportInterface(QWidget):
 
     def _on_data_changed(self, change_type: str):
         """响应 ProjectStore 的数据变更。"""
-        if change_type == "project":
-            self._project = self._store.project
-            self._sync_default_filename()
-            # 切换项目才清除用户上次的浏览选择
-            self._sync_default_output_dir(reset_user_choice=True)
-            self._refresh_singer_checkboxes()
-        elif change_type == "audio":
-            # 音频变更即刻反映到默认文件名（无需等待"创建项目"）
-            self._sync_default_filename()
-            self._sync_default_output_dir()
-        elif change_type == "singers":
-            if self._store and self._store.project:
+        try:
+            if change_type == "project":
                 self._project = self._store.project
-            self._refresh_singer_checkboxes()
-        elif change_type == "settings":
-            self._sync_default_format()
-            self._sync_default_output_dir()
+                self._sync_default_filename()
+                # 切换项目才清除用户上次的浏览选择
+                self._sync_default_output_dir(reset_user_choice=True)
+                self._refresh_singer_checkboxes()
+            elif change_type == "audio":
+                # 音频变更即刻反映到默认文件名（无需等待"创建项目"）
+                self._sync_default_filename()
+                self._sync_default_output_dir()
+            elif change_type == "singers":
+                if self._store and self._store.project:
+                    self._project = self._store.project
+                self._refresh_singer_checkboxes()
+            elif change_type == "settings":
+                self._sync_default_format()
+                self._sync_default_output_dir()
+        except Exception as e:
+            print(f"[ExportInterface] _on_data_changed({change_type}) 失败: {e}")
 
     def _sync_default_format(self):
         """将 format_list 的选中项与配置中的 default_format 同步。"""

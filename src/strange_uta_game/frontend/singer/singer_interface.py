@@ -298,8 +298,10 @@ class SingerEditDialog(QDialog):
     def _rebuild_split_rows(self):
         while self._split_rows_layout.count():
             item = self._split_rows_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
 
         all_colors = self._all_split_colors()
         n = len(all_colors)
@@ -1159,18 +1161,21 @@ class SingerManagerInterface(QWidget):
 
     def _on_data_changed(self, change_type: str):
         """响应 ProjectStore 的数据变更。"""
-        if change_type == "project":
-            project = self._store.project
-            if project:
-                self._project = project
-                self._singer_service = SingerService(project)
-            else:
-                self._project = None
-                self._singer_service = None
-            self._selected_ids.clear()
-            self._refresh_list()
-        elif change_type == "singers":
-            self._refresh_list()
+        try:
+            if change_type == "project":
+                project = self._store.project
+                if project:
+                    self._project = project
+                    self._singer_service = SingerService(project)
+                else:
+                    self._project = None
+                    self._singer_service = None
+                self._selected_ids.clear()
+                self._refresh_list()
+            elif change_type == "singers":
+                self._refresh_list()
+        except Exception as e:
+            print(f"[SingerInterface] _on_data_changed({change_type}) 失败: {e}")
 
     # ==================== 列表刷新 ====================
 
@@ -1451,6 +1456,9 @@ class SingerManagerInterface(QWidget):
     def _on_add_singer(self):
         if not self._project:
             self._warn("未加载项目", "请先打开或创建一个项目")
+            return
+        if not self._singer_service:
+            self._warn("服务未就绪", "演唱者服务尚未初始化，请稍后重试")
             return
 
         dialog = SingerEditDialog(
@@ -1780,7 +1788,7 @@ class SingerManagerInterface(QWidget):
     def _notify_singers_changed(self):
         """统一通知：刷新本地列表 + 通知 ProjectStore"""
         self._refresh_list()
-        if hasattr(self, "_store"):
+        if getattr(self, "_store", None) is not None:
             self._store.notify("singers")
         self.singers_changed.emit()
 

@@ -911,11 +911,14 @@ class EditInterface(QWidget):
 
     def _on_data_changed(self, change_type: str):
         """响应 ProjectStore 的数据变更。"""
-        if change_type == "project":
-            self.project = self._store.project
-            self._update_table()
-        elif change_type in ("rubies", "singers", "lyrics", "timetags", "checkpoints"):
-            self._update_table()
+        try:
+            if change_type == "project":
+                self.project = self._store.project
+                self._update_table()
+            elif change_type in ("rubies", "singers", "lyrics", "timetags", "checkpoints"):
+                self._update_table()
+        except Exception as e:
+            print(f"[LineInterface] _on_data_changed({change_type}) 失败: {e}")
 
     def _update_table(self):
         if not self.project:
