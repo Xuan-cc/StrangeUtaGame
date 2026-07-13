@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -99,7 +100,7 @@ class AboutSubInterface(SubSettingInterface):
         self._ffmpeg_card.hBoxLayout.addWidget(self._ffmpeg_path_label, 0, Qt.AlignmentFlag.AlignRight)
         self._ffmpeg_card.hBoxLayout.addWidget(self._btn_browse_ffmpeg, 0, Qt.AlignmentFlag.AlignRight)
         self._ffmpeg_card.hBoxLayout.addWidget(self._btn_clear_ffmpeg, 0, Qt.AlignmentFlag.AlignRight)
-        if sys.platform == "win32":
+        if sys.platform in ("win32", "darwin"):
             self._btn_install_ffmpeg = PrimaryPushButton(self.tr("一键安装"), self._ffmpeg_card)
             self._btn_install_ffmpeg.setFont(ui_font(10))
             self._btn_install_ffmpeg.clicked.connect(self._install_ffmpeg)
@@ -354,16 +355,35 @@ class AboutSubInterface(SubSettingInterface):
             self._ffmpeg_path_label.setText(self.tr("（使用环境变量）"))
             self._ffmpeg_path_label.setToolTip("")
 
+    @staticmethod
+    def _ffmpeg_file_filter() -> str:
+        if sys.platform == "win32":
+            return "可执行文件 (ffmpeg.exe ffmpeg);;所有文件 (*.*)"
+        return "所有文件 (*)"
+
+    @staticmethod
+    def _ffmpeg_default_dir() -> str:
+        if sys.platform != "darwin":
+            return ""
+        import shutil
+        located = shutil.which("ffmpeg")
+        if located:
+            return str(Path(located).parent)
+        for d in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"):
+            if Path(d).is_dir():
+                return d
+        return ""
+
     def _browse_ffmpeg(self):
         if self._settings_ref is not None and getattr(self._settings_ref, "_provider", None) is not None:
             return
         current = ""
         if self._settings_ref:
             current = self._settings_ref.get("tools.ffmpeg_path", "") or ""
-        init_dir = str(Path(current).parent) if current else ""
+        init_dir = str(Path(current).parent) if current else self._ffmpeg_default_dir()
         path, _ = QFileDialog.getOpenFileName(
             self, self.tr("选择 FFmpeg 可执行文件"), init_dir,
-            self.tr("可执行文件 (ffmpeg.exe ffmpeg);;所有文件 (*.*)"),
+            self._ffmpeg_file_filter(),
         )
         if not path:
             return
@@ -393,8 +413,21 @@ class AboutSubInterface(SubSettingInterface):
                 position=InfoBarPosition.TOP, duration=3000, parent=self)
 
     def _install_ffmpeg(self):
+        if sys.platform == "win32":
+            self._install_ffmpeg_windows()
+            return
+        if sys.platform == "darwin":
+            self._install_ffmpeg_macos()
+            return
+        InfoBar.info(
+            title=self.tr("暂不支持"),
+            content=self.tr("当前平台不支持一键安装 FFmpeg，请手动安装后通过「浏览」指定路径。"),
+            orient=Qt.Orientation.Horizontal, isClosable=True,
+            position=InfoBarPosition.TOP, duration=5000, parent=self,
+        )
+
+    def _install_ffmpeg_windows(self):
         import ctypes
-        # -Command 参数用双引号包裹，内部用单引号，避免转义冲突
         ps_args = (
             "-NoExit -Command \""
             "winget install Gyan.FFmpeg "
@@ -403,7 +436,6 @@ class AboutSubInterface(SubSettingInterface):
             "Write-Host '>>> 安装完成，可关闭此窗口。<<<' -ForegroundColor Green; "
             "pause\""
         )
-        # ShellExecuteW verb=runas 触发 UAC 提权，返回值 >32 表示成功启动
         ret = ctypes.windll.shell32.ShellExecuteW(
             None, "runas", "powershell", ps_args, None, 1
         )
@@ -417,6 +449,39 @@ class AboutSubInterface(SubSettingInterface):
             return
         InfoBar.info(
             title=self.tr("已请求管理员权限启动 FFmpeg 安装"),
+            content=self.tr("安装完成后，重启软件即可通过环境变量自动使用，或点击「浏览」手动指定路径。"),
+            orient=Qt.Orientation.Horizontal, isClosable=True,
+            position=InfoBarPosition.TOP, duration=8000, parent=self,
+        )
+
+    def _install_ffmpeg_macos(self):
+        try:
+            subprocess.run(
+                [
+                    "osascript", "-e",
+                    'tell app "Terminal" to do script "brew install ffmpeg && echo && echo \'>>> 安装完成，可关闭此窗口。<<<\' && read -p \'\'"',
+                ],
+                check=True,
+                timeout=10,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            InfoBar.error(
+                title=self.tr("无法启动终端"),
+                content=self.tr("请确认已安装 Homebrew (https://brew.sh)，然后在终端中手动运行: brew install ffmpeg"),
+                orient=Qt.Orientation.Horizontal, isClosable=True,
+                position=InfoBarPosition.TOP, duration=8000, parent=self,
+            )
+            return
+        except FileNotFoundError:
+            InfoBar.error(
+                title=self.tr("无法启动终端"),
+                content=self.tr("请确认已安装 Homebrew (https://brew.sh)，然后在终端中手动运行: brew install ffmpeg"),
+                orient=Qt.Orientation.Horizontal, isClosable=True,
+                position=InfoBarPosition.TOP, duration=8000, parent=self,
+            )
+            return
+        InfoBar.info(
+            title=self.tr("已在终端中启动 FFmpeg 安装"),
             content=self.tr("安装完成后，重启软件即可通过环境变量自动使用，或点击「浏览」手动指定路径。"),
             orient=Qt.Orientation.Horizontal, isClosable=True,
             position=InfoBarPosition.TOP, duration=8000, parent=self,
