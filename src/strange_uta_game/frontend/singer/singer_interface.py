@@ -978,17 +978,21 @@ class SingerManagerInterface(QWidget):
         _selected_ids / _filter_text / _group_filter / _project 都是 self
         实例状态——重建后 _refresh_list() 会按这些原状态恢复。"""
         if event.type() == QEvent.Type.LanguageChange:
-            from strange_uta_game.frontend.localization import detach_layout_for_rebuild
-            saved_search = self.line_search.text() if hasattr(self, "line_search") else ""
-            detach_layout_for_rebuild(self)
-            self._init_ui()
-            if saved_search and hasattr(self, "line_search"):
-                self.line_search.setText(saved_search)
-            # 重新填充列表（持久 _selected_ids 已保留）
             try:
+                from strange_uta_game.frontend.localization import detach_layout_for_rebuild
+                saved_search = self.line_search.text() if hasattr(self, "line_search") else ""
+                detach_layout_for_rebuild(self)
+                self._init_ui()
+                if saved_search and hasattr(self, "line_search"):
+                    self.line_search.setText(saved_search)
                 self._refresh_list()
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "[SingerInterface] changeEvent(LanguageChange) 失败: %s",
+                    e, exc_info=True)
+                if getattr(self, "_store", None) is not None:
+                    self._store.error_notify.emit("界面重建异常", str(e))
         super().changeEvent(event)
 
     def _init_ui(self):
@@ -1175,7 +1179,11 @@ class SingerManagerInterface(QWidget):
             elif change_type == "singers":
                 self._refresh_list()
         except Exception as e:
-            print(f"[SingerInterface] _on_data_changed({change_type}) 失败: {e}")
+            import logging
+            logging.getLogger(__name__).warning(
+                "[SingerInterface] _on_data_changed(%s) 失败: %s",
+                change_type, e, exc_info=True)
+            self._store.error_notify.emit("数据刷新异常", str(e))
 
     # ==================== 列表刷新 ====================
 

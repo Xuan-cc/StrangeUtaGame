@@ -86,6 +86,9 @@ class ProjectStore(QObject):
     save_finished = pyqtSignal(str)   # saved_path
     save_error = pyqtSignal(str)      # error_msg
 
+    # 全局错误通知（供 _on_data_changed 等信号处理器在兜底时发射）
+    error_notify = pyqtSignal(str, str)  # title, message
+
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
 

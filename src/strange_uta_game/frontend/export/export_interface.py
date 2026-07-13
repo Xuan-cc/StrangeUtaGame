@@ -453,7 +453,11 @@ class ExportInterface(QWidget):
                 self._sync_default_format()
                 self._sync_default_output_dir()
         except Exception as e:
-            print(f"[ExportInterface] _on_data_changed({change_type}) 失败: {e}")
+            import logging
+            logging.getLogger(__name__).warning(
+                "[ExportInterface] _on_data_changed(%s) 失败: %s",
+                change_type, e, exc_info=True)
+            self._store.error_notify.emit("数据刷新异常", str(e))
 
     def _sync_default_format(self):
         """将 format_list 的选中项与配置中的 default_format 同步。"""

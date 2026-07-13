@@ -592,7 +592,11 @@ class EditorInterface(QWidget):
             elif change_type == "settings":
                 self._apply_settings()
         except Exception as e:
-            print(f"[TimingInterface] _on_data_changed({change_type}) 失败: {e}")
+            import logging
+            logging.getLogger(__name__).warning(
+                "[TimingInterface] _on_data_changed(%s) 失败: %s",
+                change_type, e, exc_info=True)
+            self._store.error_notify.emit("数据刷新异常", str(e))
 
     def _apply_settings(self):
         """从 AppSettings 读取设定并应用到编辑器。"""

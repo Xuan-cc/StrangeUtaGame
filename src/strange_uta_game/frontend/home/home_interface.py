@@ -128,8 +128,15 @@ class HomeInterface(QWidget):
 
     def _on_data_changed(self, change_type: str):
         """响应 ProjectStore 的数据变更。"""
-        if change_type == "project":
-            self.set_project(self._store.project)
+        try:
+            if change_type == "project":
+                self.set_project(self._store.project)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "[HomeInterface] _on_data_changed(%s) 失败: %s",
+                change_type, e, exc_info=True)
+            self._store.error_notify.emit("数据刷新异常", str(e))
 
     def dragEnterEvent(self, a0: Optional[QDragEnterEvent]):
         if a0 is None:

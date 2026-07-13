@@ -619,13 +619,20 @@ class RubyInterface(QWidget):
 
     def _on_data_changed(self, change_type: str):
         """响应 ProjectStore 的数据变更。"""
-        if change_type == "project":
-            self._project = self._store.project
-            self._refresh_display()
-        elif change_type in ("rubies", "lyrics"):
-            self._refresh_display()
-        elif change_type == "settings":
-            self._refresh_ch_width_font()
+        try:
+            if change_type == "project":
+                self._project = self._store.project
+                self._refresh_display()
+            elif change_type in ("rubies", "lyrics"):
+                self._refresh_display()
+            elif change_type == "settings":
+                self._refresh_ch_width_font()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "[FulltextInterface] _on_data_changed(%s) 失败: %s",
+                change_type, e, exc_info=True)
+            self._store.error_notify.emit("数据刷新异常", str(e))
 
     def _refresh_ch_width_font(self):
         """设置变更时，重新读取卡拉OK主文字字体并应用到字宽统计。"""

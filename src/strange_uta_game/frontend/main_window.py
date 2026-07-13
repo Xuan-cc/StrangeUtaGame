@@ -127,6 +127,15 @@ class MainWindow(MSFluentWindow):
         # 中央响应：store 的 project 变更 → 同步 timing_service 等
         self._store.data_changed.connect(self._on_data_changed)
 
+        # 全局兜底错误可见化：信号处理器中的异常通过此信号通知用户
+        self._store.error_notify.connect(self._on_error_notify)
+        self._error_notify_timer = QTimer(self)
+        self._error_notify_timer.setSingleShot(True)
+        self._error_notify_timer.setInterval(3000)
+        self._error_notify_timer.timeout.connect(self._show_pending_error)
+        self._pending_error_title: Optional[str] = None
+        self._pending_error_msg: Optional[str] = None
+
         # 监听主题变化，更新 Win10 兜底背景色
         theme.changed.connect(self._on_theme_changed)
 
@@ -430,7 +439,38 @@ class MainWindow(MSFluentWindow):
 
     def _on_theme_changed(self):
         """主题变化时更新 Win10 兜底背景色"""
-        self._apply_win10_fallback_bg()
+        try:
+            self._apply_win10_fallback_bg()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "[MainWindow] _on_theme_changed 失败: %s",
+                e, exc_info=True)
+            self._store.error_notify.emit("主题切换异常", str(e))
+
+    def _on_error_notify(self, title: str, message: str):
+        """全局兜底错误通知：攒批 3 秒，只展示最新一条，避免信号风暴弹出多个 toasts。"""
+        self._pending_error_title = title
+        self._pending_error_msg = message
+        if not self._error_notify_timer.isActive():
+            self._error_notify_timer.start()
+
+    def _show_pending_error(self):
+        title = self._pending_error_title or ""
+        msg = self._pending_error_msg or ""
+        self._pending_error_title = None
+        self._pending_error_msg = None
+        from qfluentwidgets import InfoBar, InfoBarPosition
+        from PyQt6.QtCore import Qt
+        InfoBar.error(
+            title=title,
+            content=msg,
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=7000,
+            parent=self,
+        )
 
     def _apply_win10_fallback_bg(self):
         """强制覆盖窗口背景色，确保强制主题模式下 Win11 Mica 不漏色。
@@ -665,36 +705,50 @@ class MainWindow(MSFluentWindow):
 
     def _on_data_changed(self, change_type: str):
         """响应 store 的数据变更 — 同步非 UI 组件。"""
-        if change_type == "project":
-            project = self._store.project
-            self._command_manager.clear()
-            if project:
-                self._timing_service.set_project(project)
-        elif change_type == "settings":
-            # 同步打轴偏移到 TimingService
-            settings = self.settingInterface.get_settings()
-            offset_ms = settings.get("timing.tag_offset_ms", -230)
-            self._timing_service.set_timing_offset(offset_ms)
-            # 同步自动保存配置到 ProjectStore
-            self._apply_auto_save_settings()
-            # 按"高质量音频变速"开关切换引擎（仅在实际变化时重建+重载）
-            self._apply_audio_engine_setting()
-        elif change_type in ("lyrics", "checkpoints"):
-            # 歌词/轴点变更后重建全局 checkpoint 列表
-            self._timing_service.rebuild_global_checkpoints()
-        elif change_type == "audio":
-            # 音频路径变更 → 全局加载到 editor
-            # 幂等守卫：editor 已加载相同路径时跳过，避免
-            # Editor.load_audio → store.set_audio_path → emit("audio")
-            # → MainWindow → Editor.load_audio 的重入回环导致 UI 卡死。
-            audio_path = self._store.audio_path
-            if audio_path and getattr(self.editorInterface, "_audio_file_path", None) != audio_path:
-                self.editorInterface.load_audio(audio_path)
-        self._update_title()
+        try:
+            if change_type == "project":
+                project = self._store.project
+                self._command_manager.clear()
+                if project:
+                    self._timing_service.set_project(project)
+            elif change_type == "settings":
+                # 同步打轴偏移到 TimingService
+                settings = self.settingInterface.get_settings()
+                offset_ms = settings.get("timing.tag_offset_ms", -230)
+                self._timing_service.set_timing_offset(offset_ms)
+                # 同步自动保存配置到 ProjectStore
+                self._apply_auto_save_settings()
+                # 按"高质量音频变速"开关切换引擎（仅在实际变化时重建+重载）
+                self._apply_audio_engine_setting()
+            elif change_type in ("lyrics", "checkpoints"):
+                # 歌词/轴点变更后重建全局 checkpoint 列表
+                self._timing_service.rebuild_global_checkpoints()
+            elif change_type == "audio":
+                # 音频路径变更 → 全局加载到 editor
+                # 幂等守卫：editor 已加载相同路径时跳过，避免
+                # Editor.load_audio → store.set_audio_path → emit("audio")
+                # → MainWindow → Editor.load_audio 的重入回环导致 UI 卡死。
+                audio_path = self._store.audio_path
+                if audio_path and getattr(self.editorInterface, "_audio_file_path", None) != audio_path:
+                    self.editorInterface.load_audio(audio_path)
+            self._update_title()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "[MainWindow] _on_data_changed(%s) 失败: %s",
+                change_type, e, exc_info=True)
+            self._store.error_notify.emit("数据刷新异常", str(e))
 
     def _on_command_state_changed(self) -> None:
-        if self._store:
-            self._store.mark_dirty()
+        try:
+            if self._store:
+                self._store.mark_dirty()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "[MainWindow] _on_command_state_changed 失败: %s",
+                e, exc_info=True)
+            self._store.error_notify.emit("命令状态异常", str(e))
 
     # ==================== 音频引擎选择 ====================
 
