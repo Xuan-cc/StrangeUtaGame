@@ -2750,6 +2750,7 @@ class EditorInterface(QWidget):
         symbol_chars = dlg.get_symbol_chars()
         pre_comp_ms = dlg.get_pre_comp_ms()
         post_comp_ms = dlg.get_post_comp_ms()
+        force_copy = dlg.get_force_copy()
 
         if not symbol_chars:
             InfoBar.warning(
@@ -2764,7 +2765,7 @@ class EditorInterface(QWidget):
             return
 
         post_count, pre_count = self._execute_separate_symbol_timestamp(
-            symbol_chars, pre_comp_ms, post_comp_ms
+            symbol_chars, pre_comp_ms, post_comp_ms, force_copy
         )
 
         total = post_count + pre_count
@@ -3551,14 +3552,9 @@ class EditorInterface(QWidget):
         symbol_chars: frozenset,
         pre_comp_ms: int,
         post_comp_ms: int,
+        force_copy: bool = False,
     ) -> tuple:
-        """执行分离符号时间戳的核心逻辑。
-
-        两个独立 pass：
-        - Pass 1（后补偿）：符号 cc=0 且 is_sentence_end=True 且 sentence_end_ts 不为空
-          → cc 改为 1，timestamps = [old_end_ts]，sentence_end_ts 后移 post_comp_ms
-        - Pass 2（前补偿）：符号 cc=1 且紧跟的第一个非符号字符 cc=0
-          → 非符号字符 cc 改为 1 并获得符号时间戳，符号时间戳前移 pre_comp_ms
+        """执行分离符号时间戳的核心逻辑，根据模式分发到子函数。
 
         Returns:
             (post_count, pre_count)
@@ -3566,6 +3562,23 @@ class EditorInterface(QWidget):
         if not self._project:
             return 0, 0
 
+        if force_copy:
+            return self._separate_symbol_force(symbol_chars, pre_comp_ms, post_comp_ms)
+        return self._separate_symbol_normal(symbol_chars, pre_comp_ms, post_comp_ms)
+
+    def _separate_symbol_normal(
+        self,
+        symbol_chars: frozenset,
+        pre_comp_ms: int,
+        post_comp_ms: int,
+    ) -> tuple:
+        """普通模式：分离符号时间戳。
+
+        - Pass 1（后补偿）：符号 cc=0 且 is_sentence_end=True 且 sentence_end_ts 不为空
+          → cc 改为 1，timestamps = [old_end_ts]，sentence_end_ts 后移 post_comp_ms
+        - Pass 2（前补偿）：符号 cc=1 且 is_sentence_end=False 且紧跟的第一个非符号字符 cc=0
+          → 非符号字符 cc 改为 1 并获得符号时间戳，符号时间戳前移 pre_comp_ms
+        """
         post_count = 0
         pre_count = 0
 
@@ -3573,14 +3586,12 @@ class EditorInterface(QWidget):
             nonlocal post_count, pre_count
             assert self._project is not None
 
-            # 构建全局字符列表（跨行，保持顺序）
             all_chars: list = []
             for sentence in self._project.sentences:
                 for ch in sentence.characters:
                     all_chars.append(ch)
 
-            # ── Pass 1: 后补偿 ──────────────────────────────
-            # 条件：符号无普通时间戳（cc=0）且 is_sentence_end=True
+            # ── Pass 1: 后补偿 ──────────────────────────
             for ch in all_chars:
                 if (
                     ch.char in symbol_chars
@@ -3594,9 +3605,7 @@ class EditorInterface(QWidget):
                     ch.set_check_count(1, force=True)
                     post_count += 1
 
-            # ── Pass 2: 前补偿 ──────────────────────────────
-            # 条件：符号有普通时间戳（cc=1）且 is_sentence_end=False
-            #       且后方紧跟的非符号字符无时间戳（cc=0）
+            # ── Pass 2: 前补偿 ──────────────────────────
             for i, ch in enumerate(all_chars):
                 if (
                     ch.char not in symbol_chars
@@ -3616,15 +3625,167 @@ class EditorInterface(QWidget):
                     continue
 
                 old_sym_ts = ch.timestamps[0]
-
-                # 给紧跟非符号字符赋予符号的原始时间戳
                 next_non_sym.timestamps = [old_sym_ts]
                 next_non_sym.set_check_count(1, force=True)
 
-                # 符号时间戳前移
                 ch.timestamps = [max(0, old_sym_ts - pre_comp_ms)]
                 ch._update_offset_timestamps()
                 ch.push_to_ruby()
+                pre_count += 1
+
+            if post_count == 0 and pre_count == 0:
+                return None
+            return (self._current_line_idx, self.preview._current_char_idx, None, "timetags")
+
+        ok = self._execute_structural_edit("分离符号时间戳", _mutate)
+        if not ok:
+            return 0, 0
+        return post_count, pre_count
+
+    def _separate_symbol_force(
+        self,
+        symbol_chars: frozenset,
+        pre_comp_ms: int,
+        post_comp_ms: int,
+    ) -> tuple:
+        """强制复制模式：连续符号视为整体，不检测相邻非符号字符状态。
+
+        后补偿（从右向左扫描）：
+          连续句尾符号视为整体 → 符号组全部普通时间戳集中赋予前一字符，
+          组首获 sentence_end_ts 作为普通时间戳，其余符号均匀分配后补偿区间，
+          组尾保持 sentence_end 标记并后移。
+
+        前补偿（从左向右扫描）：
+          连续非句尾符号视为整体 → 符号组全部时间戳 prepend 至后一字符，
+          组首时间戳前移 pre_comp_ms，其余符号均匀分配前补偿区间。
+        """
+        post_count = 0
+        pre_count = 0
+
+        def _mutate():
+            nonlocal post_count, pre_count
+            assert self._project is not None
+
+            all_chars: list = []
+            for sentence in self._project.sentences:
+                for ch in sentence.characters:
+                    all_chars.append(ch)
+
+            n = len(all_chars)
+            processed: set[int] = set()
+
+            # ═══════════════════════════════════════════════
+            #  后补偿：连续句尾符号整体处理（从右向左扫描）
+            # ═══════════════════════════════════════════════
+            for i in range(n - 1, -1, -1):
+                ch = all_chars[i]
+                if (
+                    ch.char not in symbol_chars
+                    or not ch.is_sentence_end
+                    or ch.sentence_end_ts is None
+                ):
+                    continue
+                if i in processed:
+                    continue
+
+                # 向前找连续符号组的起点
+                group_start = i
+                while group_start > 0 and all_chars[group_start - 1].char in symbol_chars:
+                    group_start -= 1
+
+                group = range(group_start, i + 1)
+                processed.update(group)
+
+                # 收集组内全部普通时间戳
+                all_ts: list[int] = []
+                for j in group:
+                    all_ts.extend(all_chars[j].timestamps)
+                    all_chars[j].timestamps = []
+
+                # 全部时间戳赋予组前一字符
+                prev_idx = group_start - 1
+                if prev_idx >= 0:
+                    prev_ch = all_chars[prev_idx]
+                    prev_ch.set_check_count(prev_ch.check_count + len(all_ts), force=True)
+                    if all_ts:
+                        prev_ch.timestamps.extend(all_ts)
+                        prev_ch._update_offset_timestamps()
+
+                sent_ts = ch.sentence_end_ts
+                new_sent_end = sent_ts + post_comp_ms
+
+                # 组首获得 sentence_end_ts 作为普通时间戳
+                all_chars[group_start].timestamps = [sent_ts]
+                all_chars[group_start].set_check_count(1, force=True)
+
+                # 组内其余符号均匀分配 [sent_ts, new_sent_end] 区间
+                rest = [j for j in group if j != group_start]
+                m = len(rest)
+                for rank, j in enumerate(rest, 1):
+                    val = sent_ts + post_comp_ms * rank // (m + 1)
+                    all_chars[j].timestamps = [val]
+                    all_chars[j].set_check_count(1, force=True)
+
+                # 句尾符号保持标记并后移
+                ch.sentence_end_ts = new_sent_end
+                post_count += 1
+
+            # ═══════════════════════════════════════════════
+            #  前补偿：连续非句尾符号整体处理（从左向右扫描）
+            # ═══════════════════════════════════════════════
+            for i, ch in enumerate(all_chars):
+                if ch.char not in symbol_chars or ch.is_sentence_end:
+                    continue
+                if i in processed:
+                    continue
+                if ch.check_count < 1 or not ch.timestamps:
+                    continue
+
+                # 向后找连续非句尾符号组的终点
+                group_end = i
+                while (
+                    group_end + 1 < n
+                    and all_chars[group_end + 1].char in symbol_chars
+                    and not all_chars[group_end + 1].is_sentence_end
+                    and all_chars[group_end + 1].check_count >= 1
+                    and all_chars[group_end + 1].timestamps
+                ):
+                    group_end += 1
+
+                group = range(i, group_end + 1)
+                processed.update(group)
+
+                # 收集组内全部普通时间戳
+                all_ts: list[int] = []
+                for j in group:
+                    all_ts.extend(all_chars[j].timestamps)
+                    all_chars[j].timestamps = []
+
+                # 全部时间戳 prepend 至组后一字符
+                next_idx = group_end + 1
+                if next_idx < n:
+                    next_ch = all_chars[next_idx]
+                    next_ch.set_check_count(next_ch.check_count + len(all_ts), force=True)
+                    if all_ts:
+                        next_ch.timestamps = all_ts + next_ch.timestamps
+                        next_ch._update_offset_timestamps()
+
+                first_old_ts = all_ts[0] if all_ts else 0
+                new_first = max(0, first_old_ts - pre_comp_ms)
+
+                # 组首时间戳前移
+                all_chars[i].timestamps = [new_first]
+                all_chars[i].set_check_count(1, force=True)
+                all_chars[i]._update_offset_timestamps()
+                all_chars[i].push_to_ruby()
+
+                # 组内其余符号均匀分配 [new_first, first_old_ts] 区间
+                rest = [j for j in group if j != i]
+                m = len(rest)
+                for rank, j in enumerate(rest, 1):
+                    val = new_first + pre_comp_ms * rank // (m + 1)
+                    all_chars[j].timestamps = [val]
+                    all_chars[j].set_check_count(1, force=True)
 
                 pre_count += 1
 

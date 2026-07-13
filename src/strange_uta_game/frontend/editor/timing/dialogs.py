@@ -61,6 +61,7 @@ from qfluentwidgets import (
     RadioButton,
     ScrollArea,
     SpinBox,
+    SwitchButton,
     setCustomStyleSheet,
 )
 
@@ -2169,7 +2170,7 @@ class SeparateSymbolTimestampDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(self.tr("分离符号时间戳"))
-        fit_to_screen(self, 680, 660)
+        fit_to_screen(self, 680, 700)
         self.setFont(ui_font(10))
         self._apply_clicked = False
 
@@ -2194,9 +2195,11 @@ class SeparateSymbolTimestampDialog(QDialog):
                         self._saved_group_chars[gk] = None
             self._saved_pre_comp = s.get("separate_symbol_ts.pre_comp_ms", 150)
             self._saved_post_comp = s.get("separate_symbol_ts.post_comp_ms", 150)
+            self._saved_force_copy: bool = s.get("separate_symbol_ts.force_copy", False)
         except Exception:
             for gk in _SEPARATE_SYM_DEFAULT:
                 self._saved_group_chars[gk] = None
+            self._saved_force_copy = False
 
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
@@ -2281,6 +2284,24 @@ class SeparateSymbolTimestampDialog(QDialog):
         sel_row.addWidget(btn_all)
         sel_row.addWidget(btn_none)
         sel_row.addStretch()
+
+        hint = QLabel(self.tr("ⓘ 悬停查看详情"))
+        hint.setToolTip(self.tr(
+            "前补偿：不考虑后方字符是否已有时间戳，前移符号时间戳并强制复制给后一字符\n"
+            "后补偿：连续句尾符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配"
+        ))
+        hint.setCursor(Qt.CursorShape.WhatsThisCursor)
+        sel_row.addWidget(hint)
+
+        self.sw_force_copy = SwitchButton(self)
+        self.sw_force_copy.setOnText(self.tr("强制复制"))
+        self.sw_force_copy.setOffText(self.tr("强制复制"))
+        self.sw_force_copy.setChecked(self._saved_force_copy)
+        self.sw_force_copy.setToolTip(self.tr(
+            "前补偿：不考虑后方字符是否已有时间戳，前移符号时间戳并强制复制给后一字符\n"
+            "后补偿：连续句尾符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配"
+        ))
+        sel_row.addWidget(self.sw_force_copy)
         layout.addLayout(sel_row)
 
         # ── 补偿设置 ──
@@ -2347,6 +2368,7 @@ class SeparateSymbolTimestampDialog(QDialog):
             settings.set("separate_symbol_ts.group_chars", gc)
             settings.set("separate_symbol_ts.pre_comp_ms", self.get_pre_comp_ms())
             settings.set("separate_symbol_ts.post_comp_ms", self.get_post_comp_ms())
+            settings.set("separate_symbol_ts.force_copy", self.get_force_copy())
             settings.save()
         except Exception:
             pass
@@ -2369,3 +2391,6 @@ class SeparateSymbolTimestampDialog(QDialog):
 
     def get_post_comp_ms(self) -> int:
         return self.spin_post_comp.value()
+
+    def get_force_copy(self) -> bool:
+        return self.sw_force_copy.isChecked()
