@@ -895,9 +895,16 @@ class RubyInterface(QWidget):
             )
         )
 
-    def _create_auto_check_service(self):
-        """创建带设置的自动检查服务"""
+    def _create_auto_check_service(self, auto_detect_chinese: bool = False):
+        """创建带设置的自动检查服务
+
+        Args:
+            auto_detect_chinese: True=自动检测中文歌词并走中文模式。
+                「更新节奏点」传 True，使其与主编辑器注音流程行为一致；
+                「全部注音」传 False，用户明确表达注音意图不做中文检测。
+        """
         from strange_uta_game.frontend.settings.settings_interface import AppSettings
+        from strange_uta_game.backend.application import is_chinese_lyrics
 
         app_settings = AppSettings()
         all_settings = app_settings.get_all()
@@ -906,6 +913,14 @@ class RubyInterface(QWidget):
         annotate_katakana_with_english = app_settings.get(
             "ruby_dictionary.annotate_katakana_with_english", False
         )
+
+        chinese_mode = (
+            auto_detect_chinese
+            and auto_check_flags.get("chinese_lyrics_detection", True)
+            and bool(self._project)
+            and is_chinese_lyrics("".join(s.text for s in self._project.sentences))
+        )
+
         # 用户主动触发：不做中文检测——按下"自动分析全部注音"按钮即明确表达
         # 注音意图，避免纯汉字日文行被误判跳过。
         # LLM 整首一次发送：传入全部行文本以保留上下文（LLM 未激活时忽略）。
@@ -918,6 +933,7 @@ class RubyInterface(QWidget):
             auto_check_flags=auto_check_flags,
             user_dictionary=user_dict,
             annotate_katakana_with_english=annotate_katakana_with_english,
+            chinese_mode=chinese_mode,
         )
 
     # ==================== 批量操作 ====================
@@ -1134,10 +1150,31 @@ class RubyInterface(QWidget):
             self._on_apply_changes()
 
         try:
-            auto_check = self._create_auto_check_service()
-            auto_check.update_checkpoints_for_project(self._project)
+            auto_check = self._create_auto_check_service(
+                auto_detect_chinese=True
+            )
+            if auto_check._chinese_mode:
+                # 中文项目：按中文模式更新（复用 _apply_chinese_to_sentence
+                # 的 check 规则，但保留每个字符已有的 ruby/拼音注音）
+                for sentence in self._project.sentences:
+                    text = sentence.text
+                    if not text:
+                        continue
+                    chars = list(text)
+                    n = len(chars)
+                    check_counts: list = [1] * n
+                    auto_check._apply_flags_filter(
+                        chars, check_counts, text
+                    )
+                    auto_check._apply_english_and_endpoints(
+                        sentence, check_counts
+                    )
+            else:
+                auto_check.update_checkpoints_for_project(self._project)
             if hasattr(self, "_store"):
                 self._store.notify("checkpoints")
+
+            self._refresh_display()
 
             InfoBar.success(
                 title=self.tr("更新完成"),
