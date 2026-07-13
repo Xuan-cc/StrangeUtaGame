@@ -26,7 +26,6 @@ from PyQt6.QtWidgets import (
     QRadioButton,
     QTableWidget,
     QTableWidgetItem,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
     QButtonGroup,
@@ -2701,11 +2700,10 @@ class AutoGenerateInterludeGuideDialog(QDialog):
         basic_layout.addLayout(form_basic)
 
         basic_layout.addWidget(QLabel(self.tr("间奏指引格式:")))
-        self.edit_format = QTextEdit(self)
-        self.edit_format.setPlainText(self._saved_format)
+        self.edit_format = LineEdit(self)
+        self.edit_format.setText(self._saved_format)
         self.edit_format.setPlaceholderText(self.tr("「{position}约{time}秒」"))
         self.edit_format.setToolTip(self.tr("{position}=位置映射文本, {time}=计算间隔时间（秒）"))
-        self.edit_format.setFixedHeight(52)
         basic_layout.addWidget(self.edit_format)
 
         chk_layout = QHBoxLayout()
@@ -2722,7 +2720,7 @@ class AutoGenerateInterludeGuideDialog(QDialog):
 
         layout.addWidget(basic_group)
 
-        # ── {position} 设置 ──
+        # ── Position 相关设置 ──
         self._build_position_settings(layout)
 
         # ── 时间戳偏移 ──
@@ -2765,38 +2763,22 @@ class AutoGenerateInterludeGuideDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _build_position_settings(self, layout):
-        """构建可展开的 {position} 映射文本设置区域"""
-        self._pos_gb = FluentGroupBox("", self)
+        """构建 Position 相关设置区域"""
+        pos_gb = FluentGroupBox(self.tr("Position相关设置"), self)
+        gb_layout = pos_gb.contentLayout
 
-        vbox = QVBoxLayout()
-        vbox.setContentsMargins(0, 0, 0, 0)
-        vbox.setSpacing(4)
-
-        # 标题行
+        # 表头行
         header_row = QHBoxLayout()
+        hdr_enable = CaptionLabel(self.tr("启用"))
+        hdr_enable.setFixedWidth(44)
+        header_row.addWidget(hdr_enable)
+        hdr_cat = CaptionLabel(self.tr("类别"))
+        hdr_cat.setFixedWidth(48)
+        header_row.addWidget(hdr_cat)
+        header_row.addWidget(CaptionLabel(self.tr("映射文本")), stretch=1)
+        gb_layout.addLayout(header_row)
 
-        self._pos_header_label = QLabel(self.tr("{position}映射文本:"))
-        header_row.addWidget(self._pos_header_label)
-
-        self._pos_summary_label = QLabel()
-        self._pos_summary_label.setWordWrap(True)
-        header_row.addWidget(self._pos_summary_label, stretch=1)
-
-        self._pos_toggle_btn = QPushButton(self.tr("展开 ▸"))
-        self._pos_toggle_btn.setFixedWidth(64)
-        self._pos_toggle_btn.setFixedHeight(22)
-        self._pos_toggle_btn.setFlat(True)
-        self._pos_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._pos_toggle_btn.clicked.connect(self._toggle_position_settings)
-        header_row.addWidget(self._pos_toggle_btn)
-        vbox.addLayout(header_row)
-
-        # 详情区域（默认隐藏）
-        self._pos_detail_widget = QWidget()
-        detail_layout = QVBoxLayout(self._pos_detail_widget)
-        detail_layout.setContentsMargins(0, 4, 0, 0)
-        detail_layout.setSpacing(4)
-
+        pos_keys = ["0", "1", "2"]
         pos_labels = [
             self.tr("前奏"),
             self.tr("间奏"),
@@ -2810,58 +2792,26 @@ class AutoGenerateInterludeGuideDialog(QDialog):
         self._pos_checkboxes: dict[str, CheckBox] = {}
         self._pos_edits: dict[str, LineEdit] = {}
 
-        for i, pos_label in enumerate(pos_labels):
-            key = str(i)
+        for i, key in enumerate(pos_keys):
             row = QHBoxLayout()
             chk = CheckBox("", self)
+            chk.setFixedWidth(44)
             chk.setChecked(self._saved_position_mappings.get(key, {}).get("enabled", True))
-            chk.toggled.connect(self._update_position_summary)
             self._pos_checkboxes[key] = chk
             row.addWidget(chk)
 
-            lbl = QLabel(f'"{pos_label}" :')
-            row.addWidget(lbl)
+            cat_lbl = QLabel(pos_labels[i])
+            cat_lbl.setFixedWidth(48)
+            row.addWidget(cat_lbl)
 
             edit = LineEdit(self)
             text_val = self._saved_position_mappings.get(key, {}).get("text", default_texts[i])
             edit.setText(text_val)
-            edit.textChanged.connect(self._update_position_summary)
             self._pos_edits[key] = edit
             row.addWidget(edit, stretch=1)
-            detail_layout.addLayout(row)
+            gb_layout.addLayout(row)
 
-        self._pos_detail_widget.setVisible(False)
-        vbox.addWidget(self._pos_detail_widget)
-
-        self._pos_gb.contentLayout.addLayout(vbox)
-        self._update_position_summary()
-        layout.addWidget(self._pos_gb)
-
-    def _toggle_position_settings(self):
-        from strange_uta_game.frontend.window_sizing import clamp_size
-        saved_w = self.width()
-        expanded = not self._pos_detail_widget.isVisible()
-        self._pos_detail_widget.setVisible(expanded)
-        if expanded:
-            self._pos_header_label.setText(self.tr("{position}设置"))
-            self._pos_toggle_btn.setText(self.tr("收起 ▾"))
-            self._pos_summary_label.setVisible(False)
-        else:
-            self._pos_header_label.setText(self.tr("{position}映射文本:"))
-            self._pos_toggle_btn.setText(self.tr("展开 ▸"))
-            self._pos_summary_label.setVisible(True)
-        self._update_position_summary()
-        _, new_h = clamp_size(self, saved_w, self.sizeHint().height())
-        self.resize(saved_w, new_h)
-
-    def _update_position_summary(self):
-        parts = []
-        for key in ["0", "1", "2"]:
-            enabled = self._pos_checkboxes[key].isChecked()
-            text = self._pos_edits[key].text()
-            status = self.tr("启用") if enabled else self.tr("禁用")
-            parts.append(f"[{status}]{text}")
-        self._pos_summary_label.setText("，".join(parts))
+        layout.addWidget(pos_gb)
 
     def _on_apply(self):
         front_ms = self._read_int(self.edit_front_margin.text(), 150)
@@ -2919,7 +2869,7 @@ class AutoGenerateInterludeGuideDialog(QDialog):
         return self._read_float(self.edit_min_time.text(), 5.0)
 
     def get_format(self) -> str:
-        return self.edit_format.toPlainText().strip()
+        return self.edit_format.text().strip()
 
     def get_position_mappings(self) -> dict:
         return {
