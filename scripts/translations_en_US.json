@@ -822,7 +822,7 @@
   "正在保存": "Saving",
   "正在准备更新": "Preparing update",
   "正在分析注音": "Analyzing ruby",
-  "正在初始化…": "Initializing\u2026",
+  "正在初始化…": "Initializing…",
   "正在初始化核心服务...": "Initializing core services...",
   "正在初始化窗口...": "Initializing window...",
   "正在初始化窗口框架...": "Initializing window framework...",
@@ -1362,5 +1362,14 @@
   "正在拼音注音": "Annotating Pinyin",
   "拼音注音失败": "Pinyin annotation failed",
   "拼音注音": "Pinyin annotation",
-  "中文拼音注音": "Chinese Pinyin annotation"
+  "中文拼音注音": "Chinese Pinyin annotation",
+  "强制复制": "Force copy",
+  "前补偿：不考虑后方字符是否已有时间戳，前移符号时间戳并强制复制给后一字符\n后补偿：不考虑符号自身是否有时间戳，将符号全部时间戳复制给前一字符": "Pre-comp: move symbol timestamp forward and force-copy to next char regardless of existing timestamps\nPost-comp: copy all symbol timestamps to previous char regardless of symbol having timestamps",
+  "已在终端中启动 FFmpeg 安装": "FFmpeg installation started in terminal",
+  "当前平台不支持一键安装 FFmpeg，请手动安装后通过「浏览」指定路径。": "One-click FFmpeg installation is not supported on this platform. Please install manually and specify the path via \"Browse\".",
+  "无法启动终端": "Unable to launch terminal",
+  "暂不支持": "Not supported yet",
+  "请确认已安装 Homebrew (https://brew.sh)，然后在终端中手动运行: brew install ffmpeg": "Please ensure Homebrew (https://brew.sh) is installed, then manually run in terminal: brew install ffmpeg",
+  "ⓘ 悬停查看详情": "ⓘ Hover for details",
+  "前补偿：不考虑后方字符是否已有时间戳，前移符号时间戳并强制复制给后一字符\n后补偿：连续句尾符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配": "Pre-comp: move symbol timestamps forward and force-copy to next char regardless of existing timestamps\nPost-comp: treat consecutive sentence-end symbols as a group, give all timestamps to previous char, distribute evenly within group"
 }
