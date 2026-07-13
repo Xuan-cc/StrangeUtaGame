@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QRadioButton,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
     QButtonGroup,
@@ -2394,3 +2395,549 @@ class SeparateSymbolTimestampDialog(QDialog):
 
     def get_force_copy(self) -> bool:
         return self.sw_force_copy.isChecked()
+
+
+# ──────────────────────────────────────────────
+# 自动生成间奏指引
+# ──────────────────────────────────────────────
+
+
+def _find_first_timestamped_char(sentences: list[Sentence]) -> int | None:
+    """在所有字符中搜索第一个有时间戳的字符，返回其最小时间戳（毫秒）。
+
+    搜索不到时返回 None（歌曲尚未打轴）。
+    """
+    for sentence in sentences:
+        for ch in sentence.characters:
+            ts_list = ch.all_timestamps
+            if ts_list:
+                return min(ts_list)
+    return None
+
+
+def _find_next_timestamp(sentences: list[Sentence], start_si: int, start_ci: int) -> int | None:
+    """从 (start_si, start_ci) 的下一个字符开始向后搜索最近的时间戳。早停。"""
+    found_start = False
+    for si, sentence in enumerate(sentences):
+        for ci, ch in enumerate(sentence.characters):
+            if not found_start:
+                if si == start_si and ci == start_ci:
+                    found_start = True
+                continue
+            ts_list = ch.all_timestamps
+            if ts_list:
+                return min(ts_list)
+    return None
+
+
+def _build_guide_chars_for_interlude(
+    text: str,
+    singer_id: str,
+    gap_start_ms: int,
+    gap_end_ms: int,
+    front_margin_ms: int,
+    back_margin_ms: int,
+) -> list[Character]:
+    """构建间奏指引 Character 列表。
+
+    第一个字符时间戳 = gap_start_ms + front_margin_ms；
+    最后一个字符 is_sentence_end=True，sentence_end_ts = gap_end_ms - back_margin_ms；
+    所有字符 cc=1，时间戳在区间内均匀分配。
+    """
+    chars = list(text)
+    n = len(chars)
+    if n == 0:
+        return []
+
+    start_ts = gap_start_ms + front_margin_ms
+    end_ts = gap_end_ms - back_margin_ms
+    if end_ts < start_ts:
+        end_ts = start_ts
+
+    result: list[Character] = []
+    for i, ch_str in enumerate(chars):
+        is_last = i == n - 1
+        if n == 1:
+            ts = start_ts
+        else:
+            ts = start_ts + int((end_ts - start_ts) * i / n)
+        new_ch = Character(
+            char=ch_str,
+            ruby=None,
+            check_count=1,
+            singer_id=singer_id,
+            is_sentence_end=is_last,
+            linked_to_next=False,
+            is_line_end=False,
+        )
+        new_ch.add_timestamp(ts)
+        if is_last:
+            new_ch.sentence_end_ts = end_ts
+        result.append(new_ch)
+    return result
+
+
+def execute_auto_interlude_guide(
+    project,
+    min_guide_time_s: float,
+    format_str: str,
+    position_mappings: dict,
+    allow_inline: bool,
+    new_line: bool,
+    front_margin_ms: int,
+    back_margin_ms: int,
+) -> dict:
+    """执行自动生成间奏指引，原地修改 project.sentences。
+
+    Returns:
+        {"inserted": int, "skipped": int, "message": str}
+    """
+    min_guide_ms = int(min_guide_time_s * 1000)
+    audio_duration_ms = getattr(project, "audio_duration_ms", 0) or 0
+
+    if not project.sentences:
+        return {"inserted": 0, "skipped": 0, "message": "项目中没有歌词行"}
+
+    singer_id = ""
+    for s in project.sentences:
+        if s.characters:
+            singer_id = s.characters[0].singer_id
+            break
+
+    gaps: list[tuple[int, int, int, int, int]] = []
+
+    # Position 0
+    first_ts = _find_first_timestamped_char(project.sentences)
+    if first_ts is not None and first_ts >= min_guide_ms:
+        pos_key = "0"
+        if position_mappings.get(pos_key, {}).get("enabled", True):
+            gaps.append((-1, -1, 0, 0, first_ts))
+
+    # Position 1/2
+    for si, sentence in enumerate(project.sentences):
+        for ci, ch in enumerate(sentence.characters):
+            if not ch.is_sentence_end or ch.sentence_end_ts is None:
+                continue
+            next_ts = _find_next_timestamp(project.sentences, si, ci)
+            if next_ts is not None:
+                pos = 1
+                gap_end = next_ts
+            else:
+                pos = 2
+                gap_end = audio_duration_ms
+            gap_ms = gap_end - ch.sentence_end_ts
+            if gap_ms < min_guide_ms:
+                continue
+            pos_key = str(pos)
+            if not position_mappings.get(pos_key, {}).get("enabled", True):
+                continue
+
+            is_last_in_sentence = ci == len(sentence.characters) - 1
+            if not allow_inline and not is_last_in_sentence:
+                continue
+
+            gaps.append((si, ci, pos, ch.sentence_end_ts, gap_end))
+
+    if not gaps:
+        return {"inserted": 0, "skipped": 0, "message": "未找到符合条件的间奏间隙"}
+
+    gaps.sort(key=lambda g: (g[0], g[1]), reverse=True)
+
+    inserted = 0
+    for si, ci, pos, gap_start_ms, gap_end_ms in gaps:
+        pos_key = str(pos)
+        mapping_text = position_mappings.get(pos_key, {}).get("text", "")
+        gap_time_s = (gap_end_ms - gap_start_ms) / 1000.0
+        time_str = str(int(gap_time_s))
+
+        guide_text = format_str.replace("{position}", mapping_text).replace("{time}", time_str)
+        if not guide_text.strip():
+            continue
+
+        if pos == 0:
+            if not project.sentences:
+                continue
+            first_sentence = project.sentences[0]
+            guide_chars = _build_guide_chars_for_interlude(
+                guide_text, singer_id, gap_start_ms, gap_end_ms,
+                front_margin_ms, back_margin_ms,
+            )
+            if not guide_chars:
+                continue
+            if new_line:
+                new_sentence = Sentence(
+                    singer_id=singer_id,
+                    characters=guide_chars,
+                )
+                if guide_chars:
+                    guide_chars[-1].is_line_end = True
+                project.sentences.insert(0, new_sentence)
+            else:
+                for i, gc in enumerate(guide_chars):
+                    first_sentence.characters.insert(i, gc)
+            inserted += 1
+            continue
+
+        if si < 0 or si >= len(project.sentences):
+            continue
+        sentence = project.sentences[si]
+        if ci < 0 or ci >= len(sentence.characters):
+            continue
+
+        ref_char = sentence.characters[ci]
+        ref_singer_id = ref_char.singer_id or singer_id
+
+        is_last_in_sentence = ci == len(sentence.characters) - 1
+        guide_chars = _build_guide_chars_for_interlude(
+            guide_text, ref_singer_id, gap_start_ms, gap_end_ms,
+            front_margin_ms, back_margin_ms,
+        )
+        if not guide_chars:
+            continue
+
+        if is_last_in_sentence or not allow_inline:
+            if new_line:
+                new_sentence = Sentence(
+                    singer_id=ref_singer_id,
+                    characters=guide_chars,
+                )
+                if guide_chars:
+                    guide_chars[-1].is_line_end = True
+                project.sentences.insert(si + 1, new_sentence)
+            else:
+                if is_last_in_sentence:
+                    sentence.characters[ci].is_line_end = False
+                insert_pos = ci + 1
+                for i, gc in enumerate(guide_chars):
+                    sentence.characters.insert(insert_pos + i, gc)
+                if is_last_in_sentence and guide_chars:
+                    guide_chars[-1].is_line_end = True
+        else:
+            if new_line:
+                right_chars = sentence.characters[ci + 1 :]
+                del sentence.characters[ci + 1 :]
+                sentence.characters[ci].is_line_end = True
+
+                mid_sentence = Sentence(
+                    singer_id=ref_singer_id,
+                    characters=list(guide_chars),
+                )
+                if guide_chars:
+                    guide_chars[-1].is_line_end = True
+
+                right_sentence = Sentence(
+                    singer_id=ref_singer_id,
+                    characters=right_chars,
+                )
+                if right_chars:
+                    right_chars[-1].is_line_end = True
+
+                project.sentences.insert(si + 1, mid_sentence)
+                project.sentences.insert(si + 2, right_sentence)
+            else:
+                insert_pos = ci + 1
+                for i, gc in enumerate(guide_chars):
+                    sentence.characters.insert(insert_pos + i, gc)
+
+        inserted += 1
+
+    return {
+        "inserted": inserted,
+        "skipped": 0,
+        "message": "",
+    }
+
+
+class AutoGenerateInterludeGuideDialog(QDialog):
+    """自动生成间奏指引对话框。
+
+    自动扫描整首歌中所有 is_sentence_end=True 的字符，根据前后时间戳间隔
+    自动生成间奏指引文本并插入到对应位置。
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("自动生成间奏指引"))
+        fit_to_screen(self, 520, 460)
+        self.setFont(ui_font(10))
+        self._apply_clicked = False
+
+        from strange_uta_game.frontend.settings.app_settings import AppSettings
+        settings = AppSettings()
+        self._saved_min_guide_time = float(settings.get("auto_interlude_guide.min_guide_time_s", 5.0))
+        self._saved_format = settings.get("auto_interlude_guide.format", self.tr("「{position}约{time}秒」"))
+        self._saved_position_mappings = settings.get("auto_interlude_guide.position_mappings", {
+            "0": {"enabled": True, "text": self.tr("前奏")},
+            "1": {"enabled": True, "text": self.tr("间奏")},
+            "2": {"enabled": True, "text": self.tr("后奏")},
+        })
+        self._saved_allow_inline = bool(settings.get("auto_interlude_guide.allow_inline", False))
+        self._saved_new_line = bool(settings.get("auto_interlude_guide.new_line", True))
+        self._saved_front_margin = int(settings.get("auto_interlude_guide.front_margin_ms", 150))
+        self._saved_back_margin = int(settings.get("auto_interlude_guide.back_margin_ms", 150))
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        # ── 功能说明 ──
+        desc_label = CaptionLabel(self.tr(
+            "自动扫描整首歌中所有 is_sentence_end=True 的字符，根据前后时间戳间隔"
+            "自动生成间奏指引文本并插入到对应位置。"
+        ))
+        desc_label.setWordWrap(True)
+        desc_label.setContentsMargins(8, 8, 8, 8)
+        layout.addWidget(desc_label)
+
+        # ── 基本设置 ──
+        basic_group = FluentGroupBox(self.tr("基本设置"))
+        basic_layout = basic_group.contentLayout
+
+        form_basic = QFormLayout()
+        self.edit_min_time = LineEdit(self)
+        self.edit_min_time.setText(str(self._saved_min_guide_time))
+        self.edit_min_time.setPlaceholderText("5")
+        self.edit_min_time.setToolTip(self.tr("间隔时间小于此值的间隙将被跳过，支持小数"))
+        form_basic.addRow(self.tr("最小生成间奏指引时间 (s):"), self.edit_min_time)
+        basic_layout.addLayout(form_basic)
+
+        basic_layout.addWidget(QLabel(self.tr("间奏指引格式:")))
+        self.edit_format = QTextEdit(self)
+        self.edit_format.setPlainText(self._saved_format)
+        self.edit_format.setPlaceholderText(self.tr("「{position}约{time}秒」"))
+        self.edit_format.setToolTip(self.tr("{position}=位置映射文本, {time}=计算间隔时间（秒）"))
+        self.edit_format.setFixedHeight(52)
+        basic_layout.addWidget(self.edit_format)
+
+        chk_layout = QHBoxLayout()
+        self.chk_allow_inline = CheckBox(self.tr("允许单行内插入"))
+        self.chk_allow_inline.setChecked(self._saved_allow_inline)
+        self.chk_allow_inline.setToolTip(self.tr("允许在行中间的 is_sentence_end 字符处也进行插入"))
+        self.chk_new_line = CheckBox(self.tr("新建一行"))
+        self.chk_new_line.setChecked(self._saved_new_line)
+        self.chk_new_line.setToolTip(self.tr("将生成的间奏指引文本放在独立的新行中"))
+        chk_layout.addWidget(self.chk_allow_inline)
+        chk_layout.addWidget(self.chk_new_line)
+        chk_layout.addStretch()
+        basic_layout.addLayout(chk_layout)
+
+        layout.addWidget(basic_group)
+
+        # ── {position} 设置 ──
+        self._build_position_settings(layout)
+
+        # ── 时间戳偏移 ──
+        offset_group = FluentGroupBox(self.tr("时间戳偏移"))
+        offset_layout = QFormLayout()
+        offset_group.contentLayout.addLayout(offset_layout)
+
+        front_row = QHBoxLayout()
+        self.edit_front_margin = LineEdit(self)
+        self.edit_front_margin.setText(str(self._saved_front_margin))
+        self.edit_front_margin.setPlaceholderText("150")
+        self.edit_front_margin.setToolTip(self.tr("生成文本第一个字符的时间戳偏移"))
+        front_row.addWidget(self.edit_front_margin)
+        front_row.addWidget(CaptionLabel("ms"))
+        front_row.addStretch()
+        offset_layout.addRow(self.tr("前余量:"), front_row)
+
+        back_row = QHBoxLayout()
+        self.edit_back_margin = LineEdit(self)
+        self.edit_back_margin.setText(str(self._saved_back_margin))
+        self.edit_back_margin.setPlaceholderText("150")
+        self.edit_back_margin.setToolTip(self.tr("生成文本最后一个字符的句尾时间戳回退"))
+        back_row.addWidget(self.edit_back_margin)
+        back_row.addWidget(CaptionLabel("ms"))
+        back_row.addStretch()
+        offset_layout.addRow(self.tr("后余量:"), back_row)
+
+        layout.addWidget(offset_group)
+
+        # ── 按钮 ──
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_apply = PrimaryPushButton(self.tr("应用"), self)
+        btn_apply.setDefault(True)
+        btn_apply.clicked.connect(self._on_apply)
+        btn_layout.addWidget(btn_apply)
+        btn_cancel = PushButton(self.tr("取消"), self)
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+
+    def _build_position_settings(self, layout):
+        """构建可展开的 {position} 映射文本设置区域"""
+        self._pos_gb = FluentGroupBox("", self)
+
+        vbox = QVBoxLayout()
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(4)
+
+        # 标题行
+        header_row = QHBoxLayout()
+
+        self._pos_header_label = QLabel(self.tr("{position}映射文本:"))
+        header_row.addWidget(self._pos_header_label)
+
+        self._pos_summary_label = QLabel()
+        self._pos_summary_label.setWordWrap(True)
+        header_row.addWidget(self._pos_summary_label, stretch=1)
+
+        self._pos_toggle_btn = QPushButton(self.tr("展开 ▸"))
+        self._pos_toggle_btn.setFixedWidth(64)
+        self._pos_toggle_btn.setFixedHeight(22)
+        self._pos_toggle_btn.setFlat(True)
+        self._pos_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pos_toggle_btn.clicked.connect(self._toggle_position_settings)
+        header_row.addWidget(self._pos_toggle_btn)
+        vbox.addLayout(header_row)
+
+        # 详情区域（默认隐藏）
+        self._pos_detail_widget = QWidget()
+        detail_layout = QVBoxLayout(self._pos_detail_widget)
+        detail_layout.setContentsMargins(0, 4, 0, 0)
+        detail_layout.setSpacing(4)
+
+        pos_labels = [
+            self.tr("前奏"),
+            self.tr("间奏"),
+            self.tr("后奏"),
+        ]
+        default_texts = [
+            self.tr("前奏"),
+            self.tr("间奏"),
+            self.tr("后奏"),
+        ]
+        self._pos_checkboxes: dict[str, CheckBox] = {}
+        self._pos_edits: dict[str, LineEdit] = {}
+
+        for i, pos_label in enumerate(pos_labels):
+            key = str(i)
+            row = QHBoxLayout()
+            chk = CheckBox("", self)
+            chk.setChecked(self._saved_position_mappings.get(key, {}).get("enabled", True))
+            chk.toggled.connect(self._update_position_summary)
+            self._pos_checkboxes[key] = chk
+            row.addWidget(chk)
+
+            lbl = QLabel(f'"{pos_label}" :')
+            row.addWidget(lbl)
+
+            edit = LineEdit(self)
+            text_val = self._saved_position_mappings.get(key, {}).get("text", default_texts[i])
+            edit.setText(text_val)
+            edit.textChanged.connect(self._update_position_summary)
+            self._pos_edits[key] = edit
+            row.addWidget(edit, stretch=1)
+            detail_layout.addLayout(row)
+
+        self._pos_detail_widget.setVisible(False)
+        vbox.addWidget(self._pos_detail_widget)
+
+        self._pos_gb.contentLayout.addLayout(vbox)
+        self._update_position_summary()
+        layout.addWidget(self._pos_gb)
+
+    def _toggle_position_settings(self):
+        from strange_uta_game.frontend.window_sizing import clamp_size
+        saved_w = self.width()
+        expanded = not self._pos_detail_widget.isVisible()
+        self._pos_detail_widget.setVisible(expanded)
+        if expanded:
+            self._pos_header_label.setText(self.tr("{position}设置"))
+            self._pos_toggle_btn.setText(self.tr("收起 ▾"))
+            self._pos_summary_label.setVisible(False)
+        else:
+            self._pos_header_label.setText(self.tr("{position}映射文本:"))
+            self._pos_toggle_btn.setText(self.tr("展开 ▸"))
+            self._pos_summary_label.setVisible(True)
+        self._update_position_summary()
+        _, new_h = clamp_size(self, saved_w, self.sizeHint().height())
+        self.resize(saved_w, new_h)
+
+    def _update_position_summary(self):
+        parts = []
+        for key in ["0", "1", "2"]:
+            enabled = self._pos_checkboxes[key].isChecked()
+            text = self._pos_edits[key].text()
+            status = self.tr("启用") if enabled else self.tr("禁用")
+            parts.append(f"[{status}]{text}")
+        self._pos_summary_label.setText("，".join(parts))
+
+    def _on_apply(self):
+        front_ms = self._read_int(self.edit_front_margin.text(), 150)
+        back_ms = self._read_int(self.edit_back_margin.text(), 150)
+        try:
+            min_ms = int(float(self.edit_min_time.text().strip()) * 1000)
+        except (ValueError, TypeError):
+            min_ms = 5000
+
+        if front_ms + back_ms < min_ms:
+            InfoBar.warning(
+                title=self.tr("参数提示"),
+                content=self.tr("前余量 + 后余量 ({sum}ms) 小于最小生成间奏指引时间 ({min}ms)，\n"
+                                "某些间隙可能无法容纳生成的文本。").format(
+                    sum=front_ms + back_ms, min=min_ms),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+
+        self._apply_clicked = True
+
+        from strange_uta_game.frontend.settings.app_settings import AppSettings
+        settings = AppSettings()
+        settings.set("auto_interlude_guide.min_guide_time_s", self.get_min_guide_time_s())
+        settings.set("auto_interlude_guide.format", self.get_format())
+        settings.set("auto_interlude_guide.position_mappings", self.get_position_mappings())
+        settings.set("auto_interlude_guide.allow_inline", self.get_allow_inline())
+        settings.set("auto_interlude_guide.new_line", self.get_new_line())
+        settings.set("auto_interlude_guide.front_margin_ms", self.get_front_margin_ms())
+        settings.set("auto_interlude_guide.back_margin_ms", self.get_back_margin_ms())
+        settings.save()
+        self.accept()
+
+    @staticmethod
+    def _read_int(text: str, default: int) -> int:
+        try:
+            return int(text.strip())
+        except (ValueError, TypeError):
+            return default
+
+    @staticmethod
+    def _read_float(text: str, default: float) -> float:
+        try:
+            return float(text.strip())
+        except (ValueError, TypeError):
+            return default
+
+    def was_apply_clicked(self) -> bool:
+        return self._apply_clicked
+
+    def get_min_guide_time_s(self) -> float:
+        return self._read_float(self.edit_min_time.text(), 5.0)
+
+    def get_format(self) -> str:
+        return self.edit_format.toPlainText().strip()
+
+    def get_position_mappings(self) -> dict:
+        return {
+            key: {
+                "enabled": self._pos_checkboxes[key].isChecked(),
+                "text": self._pos_edits[key].text(),
+            }
+            for key in ["0", "1", "2"]
+        }
+
+    def get_allow_inline(self) -> bool:
+        return self.chk_allow_inline.isChecked()
+
+    def get_new_line(self) -> bool:
+        return self.chk_new_line.isChecked()
+
+    def get_front_margin_ms(self) -> int:
+        return self._read_int(self.edit_front_margin.text(), 150)
+
+    def get_back_margin_ms(self) -> int:
+        return self._read_int(self.edit_back_margin.text(), 150)

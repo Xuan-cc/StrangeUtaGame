@@ -373,6 +373,7 @@ class EditorInterface(QWidget):
         self.toolbar.delete_all_timestamps_keep_head_clicked.connect(self._on_delete_all_timestamps_keep_head)
 
         self.toolbar.delete_timestamps_selected_clicked.connect(self._on_delete_timestamps_selected)
+        self.toolbar.auto_generate_interlude_guide_clicked.connect(self._on_auto_generate_interlude_guide)
         self.toolbar.analyze_pinyin_clicked.connect(self._on_analyze_pinyin)
         self.toolbar.offset_changed.connect(self._on_offset_changed)
         layout.addWidget(self.toolbar)
@@ -2790,6 +2791,149 @@ class EditorInterface(QWidget):
                 duration=3000,
                 parent=self,
             )
+
+    def _check_timing_complete_for_guide(self) -> bool:
+        """检查打轴是否完毕，未完毕时弹窗确认。
+
+        Returns:
+            True — 可以继续（已完成或用户确认）
+            False — 用户取消
+        """
+        if not self._project:
+            return True
+        stats = self._project.get_timing_statistics()
+        total_lines = stats.get("total_lines", 0)
+        completed_lines = stats.get("completed_lines", 0)
+        if completed_lines >= total_lines:
+            return True
+
+        untimed = []
+        for i, s in enumerate(self._project.sentences):
+            if any(c.total_timing_points > 0 for c in s.characters) and not s.is_fully_timed():
+                untimed.append(self.tr("第 {line} 行「{text}」").format(line=i + 1, text=s.text))
+                if len(untimed) >= 10:
+                    break
+
+        detail = "\n".join(untimed)
+        extra = self.tr("\n...另 {n} 行").format(n=total_lines - completed_lines - len(untimed)) \
+            if total_lines - completed_lines > len(untimed) else ""
+
+        return message_question(
+            self,
+            self.tr("打轴尚未完毕"),
+            self.tr("仅有 {done}/{total} 行完成打轴，继续可能导致生成结果不准确。\n\n"
+                    "是否仍要继续？").format(done=completed_lines, total=total_lines)
+            + "\n" + detail + extra,
+            yes_text=self.tr("仍要继续"),
+            no_text=self.tr("取消"),
+        )
+
+    def _on_auto_generate_interlude_guide(self):
+        """自动生成间奏指引功能入口"""
+        if not self._project:
+            InfoBar.warning(
+                title=self.tr("无项目"),
+                content=self.tr("请先创建或打开项目"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        from .timing.dialogs import AutoGenerateInterludeGuideDialog, execute_auto_interlude_guide
+
+        dlg = AutoGenerateInterludeGuideDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.was_apply_clicked():
+            return
+
+        min_guide_time_s = dlg.get_min_guide_time_s()
+        format_str = dlg.get_format()
+        position_mappings = dlg.get_position_mappings()
+        allow_inline = dlg.get_allow_inline()
+        new_line = dlg.get_new_line()
+        front_margin_ms = dlg.get_front_margin_ms()
+        back_margin_ms = dlg.get_back_margin_ms()
+
+        if not format_str:
+            InfoBar.warning(
+                title=self.tr("格式为空"),
+                content=self.tr("请输入间奏指引格式字符串"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        # 打轴完毕检测
+        if not self._check_timing_complete_for_guide():
+            return
+
+        # 快照 before
+        before_sentences = deepcopy(self._project.sentences)
+
+        result = execute_auto_interlude_guide(
+            self._project,
+            min_guide_time_s,
+            format_str,
+            position_mappings,
+            allow_inline,
+            new_line,
+            front_margin_ms,
+            back_margin_ms,
+        )
+
+        inserted = result.get("inserted", 0)
+        if inserted == 0:
+            InfoBar.info(
+                title=self.tr("无符合条件的间隙"),
+                content=self.tr("未找到满足最小间隔时间的 is_sentence_end 字符"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        # 登记撤销
+        command_manager = None
+        if self._timing_service:
+            command_manager = self._timing_service.command_manager
+        if command_manager is not None:
+            after_sentences = deepcopy(self._project.sentences)
+            cmd = SentenceSnapshotCommand(
+                self._project,
+                before_sentences,
+                after_sentences,
+                self.tr("自动生成间奏指引（{n} 处）").format(n=inserted),
+            )
+            cursor_pos = (self._current_line_idx, self.preview._current_char_idx)
+            cmd.undo_position = cursor_pos
+            cmd.redo_position = cursor_pos
+            command_manager.execute(cmd)
+
+        self._reapply_global_offset()
+        if self._timing_service:
+            self._timing_service.rebuild_global_checkpoints()
+        self.refresh_lyric_display()
+        self._update_time_tags_display()
+        self._update_status()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("lyrics")
+
+        InfoBar.success(
+            title=self.tr("生成完成"),
+            content=self.tr("已生成 {n} 处间奏指引").format(n=inserted),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=4000,
+            parent=self,
+        )
 
     def _on_adjust_raw_timestamp(self):
         """调整原始时间戳功能入口 — 打开非模态调整窗口，允许边测试边调整"""
