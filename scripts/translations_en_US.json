@@ -1408,5 +1408,8 @@
   "仅有 {done}/{total} 行完成打轴，继续可能导致生成结果不准确。\n\n是否仍要继续？": "Only {done}/{total} lines have been tagged; continuing may produce inaccurate results.\n\nContinue anyway?",
   "仍要继续": "Continue Anyway",
   "第 {line} 行「{text}」": "Line {line} \"{text}\"",
-  "\n...另 {n} 行": "\n...{n} more lines"
+  "\n...另 {n} 行": "\n...{n} more lines",
+  "Position相关设置": "Position Settings",
+  "映射文本": "Mapping Text",
+  "类别": "Category"
 }
