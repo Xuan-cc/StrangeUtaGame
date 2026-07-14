@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 
 from PyQt6.QtCore import Qt, QRectF, QCoreApplication, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QPainterPath, QCursor
+from PyQt6.QtGui import QPainter, QColor, QPainterPath, QCursor, QKeyEvent, QCloseEvent
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -41,6 +41,9 @@ class UpdateProgressWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(self._WIDTH, self._HEIGHT)
+
+        # 是否由用户主动取消（而非正常完成）。用于 _on_done 回调判断是否需要跳过后续处理。
+        self._cancelled_by_user = False
 
         # paintEvent 用到的颜色，先给默认值，由 _apply_theme 覆盖
         self._bg_color = QColor(32, 32, 36, 240)
@@ -201,7 +204,21 @@ class UpdateProgressWindow(QWidget):
     def _on_cancel(self) -> None:
         self._btn_cancel.setEnabled(False)
         self._btn_cancel.setText(_tr("正在取消…"))
+        self._cancelled_by_user = True
         self.cancelled.emit()
+        self.finish()
+
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        if event is not None and event.key() == Qt.Key.Key_Escape:
+            self._on_cancel()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event: QCloseEvent | None) -> None:
+        if not self._cancelled_by_user:
+            self._on_cancel()
+        if event is not None:
+            event.accept()
 
     # ---- 绘制 ----
 

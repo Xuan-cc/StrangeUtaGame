@@ -462,6 +462,9 @@ def _show_update_dialog(parent: "SettingsInterface", result: CheckResult) -> Non
         from .. import installer as _inst
         lr: _inst.LaunchResult = launch_result  # type: ignore[assignment]
 
+        if progress_win._cancelled_by_user:
+            return
+
         progress_win.finish()
 
         if lr.reason == "用户取消更新":

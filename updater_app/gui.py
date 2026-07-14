@@ -24,7 +24,7 @@ from PyQt6.QtCore import (
     QTranslator,
     pyqtSignal,
 )
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QCursor
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QCursor, QKeyEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -183,9 +183,8 @@ class _UpdaterWindow(QWidget):
         # 底部按钮
         bottom = QHBoxLayout()
         bottom.addStretch()
-        self._btn = PushButton(_tr("关闭"), self)
+        self._btn = PushButton(_tr("取消更新"), self)
         self._btn.setFixedWidth(100)
-        self._btn.setEnabled(False)
         self._btn.clicked.connect(self.close)
         bottom.addWidget(self._btn)
         root.addLayout(bottom)
@@ -315,7 +314,7 @@ class _UpdaterWindow(QWidget):
 
     def on_finished(self, code: int) -> None:
         self._running = False
-        self._btn.setEnabled(True)
+        self._btn.setText(_tr("关闭"))
         if code == 0:
             # 搬迁完成（code=0）——子进程接管，此窗口静默关闭
             self.close()
@@ -355,6 +354,12 @@ class _UpdaterWindow(QWidget):
         self._drag_pos = None
 
     # ── 关闭 ──
+
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        if event is not None and event.key() == Qt.Key.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
 
     def closeEvent(self, event) -> None:
         if self._running:
