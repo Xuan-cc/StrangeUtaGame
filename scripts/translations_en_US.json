@@ -1411,5 +1411,8 @@
   "\n...另 {n} 行": "\n...{n} more lines",
   "Position相关设置": "Position Settings",
   "映射文本": "Mapping Text",
-  "类别": "Category"
+  "类别": "Category",
+  "定时将项目副本保存到文件旁，切换/关闭项目或另存为时自动清理": "Periodically save a project copy alongside the file; automatically cleaned when switching/closing projects or Save As",
+  "编辑后 2 秒内自动保存恢复文件，闪退后可恢复未保存的数据": "Auto-save recovery file within 2 seconds after editing; recover unsaved data after a crash",
+  "闪退恢复": "Crash Recovery"
 }

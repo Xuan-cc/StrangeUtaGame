@@ -751,7 +751,7 @@
         <translation> 分</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="45" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="50" />
         <source>SUG默认保存目录</source>
         <translation>SUG規定の保存先</translation>
     </message>
@@ -766,19 +766,24 @@
         <translation>定期自動保存を有効化</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="39" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="44" />
         <source>备份位置</source>
         <translation>バックアップの保存先</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="21" />
-        <source>定时将项目保存为临时文件，防止闪退丢失数据</source>
-        <translation>定期的にプロジェクトを一時ファイルへ保存し、クラッシュ時の喪失を防止</translation>
+        <source>定时将项目副本保存到文件旁，切换/关闭项目或另存为时自动清理</source>
+        <translation>定期的にプロジェクトのコピーをファイルの横に保存。切替/終了/名前を付けて保存時に自動削除</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="26" />
         <source>每隔多少分钟自动保存一次（1~60分钟）</source>
         <translation>何分ごとに自動保存するか（1〜60 分）</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="40" />
+        <source>编辑后 2 秒内自动保存恢复文件，闪退后可恢复未保存的数据</source>
+        <translation>編集後2秒以内に復旧ファイルを自動保存。クラッシュ後に未保存データを復元可能</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="18" />
@@ -796,14 +801,19 @@
         <translation>自動バックアップの保持数</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="46" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="51" />
         <source>设置后，保存未命名项目时将始终优先使用此目录。
 留空则不启用，自动使用已保存项目 / 最近加载的文件所在目录。</source>
         <translation>設定後、未保存プロジェクトの保存先としてこのフォルダーが優先されます。
 空欄にすると、保存済みプロジェクト / 最後に読み込んだファイルのフォルダーが自動で使われます。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="40" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="39" />
+        <source>闪退恢复</source>
+        <translation>クラッシュ復旧</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="45" />
         <source>项目备份与临时文件的存放目录（留空使用默认位置）</source>
         <translation>プロジェクトのバックアップと一時ファイルの保存先フォルダー（空欄で既定の場所を使用）</translation>
     </message>
@@ -4587,7 +4597,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>StrangeUtaGame - 歌詞タイミングツール Bilibili@不会说话的呆轩cc</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1247" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1270" />
         <source>StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)</source>
         <translation>StrangeUtaGame プロジェクト (*.sug);;すべてのファイル (*.*)</translation>
     </message>
@@ -4597,7 +4607,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>[未保存]</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1041" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1055" />
         <source>macOS 暂不支持自动更新，已在浏览器打开最新版本下载页。</source>
         <translation>macOS は自動更新に未対応のため、最新版のダウンロードページをブラウザで開きました。</translation>
     </message>
@@ -4607,34 +4617,34 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>前回関連付けたメディアファイルが存在しません：{name}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1418" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1441" />
         <source>保存</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1349" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1372" />
         <source>保存失败</source>
         <translation>保存に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1325" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1348" />
         <source>保存完成</source>
         <translation>保存完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1332" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1355" />
         <source>保存成功</source>
         <translation>保存しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1245" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1268" />
         <source>保存项目</source>
         <translation>プロジェクトを保存</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="608" />
         <location filename="src/strange_uta_game/frontend/main_window.py" line="626" />
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1206" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1229" />
         <source>共 {n} 行歌词</source>
         <translation>歌詞 {n} 行</translation>
     </message>
@@ -4644,12 +4654,12 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>準備完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1126" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1146" />
         <source>即将退出应用，由 Updater 完成替换并自动重启…</source>
         <translation>アプリを終了し、Updater が置換と自動再起動を行います…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1418" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1441" />
         <source>取消</source>
         <translation>キャンセル</translation>
     </message>
@@ -4659,7 +4669,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>いいえ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1114" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1133" />
         <source>启动 Updater 失败</source>
         <translation>Updater の起動に失敗しました</translation>
     </message>
@@ -4690,7 +4700,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>歌詞 {n} 行を復元しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1040" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1054" />
         <source>已打开下载页面</source>
         <translation>ダウンロードページを開きました</translation>
     </message>
@@ -4710,7 +4720,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>未保存のプロジェクトを復元</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1103" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1121" />
         <source>您可以稍后在设置中重新检查更新</source>
         <translation>後で設定から更新を再確認できます</translation>
     </message>
@@ -4721,27 +4731,27 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>タグ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1522" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1545" />
         <source>打轴编辑器尚未准备好</source>
         <translation>タグエディタの準備ができていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1418" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1441" />
         <source>放弃</source>
         <translation>破棄</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1188" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1211" />
         <source>文件不存在: {path}</source>
         <translation>ファイルが存在しません: {path}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1521" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1544" />
         <source>无法导入</source>
         <translation>インポートできません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1187" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1210" />
         <source>无法打开文件</source>
         <translation>ファイルを開けません</translation>
     </message>
@@ -4751,7 +4761,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>復元ファイルを読み込めません。破損している可能性があります</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1227" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1250" />
         <source>无项目</source>
         <translation>プロジェクトなし</translation>
     </message>
@@ -4761,22 +4771,22 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>はい</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1052" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1066" />
         <source>更新器未就绪</source>
         <translation>アップデータが準備できていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1102" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1120" />
         <source>更新已取消</source>
         <translation>更新がキャンセルされました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1125" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1145" />
         <source>更新已启动</source>
         <translation>更新を開始しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1416" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1439" />
         <source>未保存的更改</source>
         <translation>未保存の変更</translation>
     </message>
@@ -4786,12 +4796,12 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>無題</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1053" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1067" />
         <source>未找到 Updater.exe。请到 GitHub 手动下载完整安装包。</source>
         <translation>Updater.exe が見つかりません。GitHub から完全版インストーラを手動でダウンロードしてください。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1115" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1134" />
         <source>未知错误</source>
         <translation>不明なエラー</translation>
     </message>
@@ -4803,12 +4813,12 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
 復元しますか？</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1508" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1531" />
         <source>歌词为空</source>
         <translation>歌詞が空です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1297" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1320" />
         <source>正在保存</source>
         <translation>保存中</translation>
     </message>
@@ -4893,7 +4903,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>ナビゲーションバーを設定中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1509" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1532" />
         <source>没有可导入的歌词内容</source>
         <translation>インポート可能な歌詞内容がありません</translation>
     </message>
@@ -4910,7 +4920,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
         <translation>設定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1228" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1251" />
         <source>请先创建或打开项目</source>
         <translation>先にプロジェクトを作成または開いてください</translation>
     </message>
@@ -4926,12 +4936,12 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="625" />
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1205" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1228" />
         <source>项目打开成功</source>
         <translation>プロジェクトを開きました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1417" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1440" />
         <source>项目有未保存的更改，是否在退出前保存？</source>
         <translation>プロジェクトに未保存の変更があります。終了前に保存しますか？</translation>
     </message>
@@ -8392,22 +8402,22 @@ KS側の設定が優先されます。</translation>
 <context>
     <name>UpdateProgressWindow</name>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="82" />
+        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="85" />
         <source>取消更新</source>
         <translation>更新をキャンセル</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="54" />
+        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="57" />
         <source>正在准备更新</source>
         <translation>更新を準備中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="203" />
+        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="206" />
         <source>正在取消…</source>
         <translation>キャンセル中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="69" />
+        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="72" />
         <source>正在获取最新更新器，请稍候…</source>
         <translation>最新のアップデータを取得中、しばらくお待ちください…</translation>
     </message>
@@ -8482,7 +8492,7 @@ KS側の設定が優先されます。</translation>
         <translation>プロキシ無効</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="493" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="496" />
         <source>即将退出当前应用，由 Updater 完成替换并自动重启…</source>
         <translation>現在のアプリを終了し、Updater が置換と自動再起動を行います…</translation>
     </message>
@@ -8573,7 +8583,7 @@ KS側の設定が優先されます。</translation>
         <translation>デフォルトへ戻す</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="470" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="473" />
         <source>您可以稍后在设置中重新检查更新</source>
         <translation>後で設定から更新を再確認できます</translation>
     </message>
@@ -8611,7 +8621,7 @@ KS側の設定が優先されます。</translation>
 項目をドラッグ、または選択後に右の ↑/↓ ボタンで調整できます。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="481" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="484" />
         <source>无法启动 Updater</source>
         <translation>Updater を起動できません</translation>
     </message>
@@ -8626,12 +8636,12 @@ KS側の設定が優先されます。</translation>
         <translation>アップデータが準備できていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="469" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="472" />
         <source>更新已取消</source>
         <translation>更新がキャンセルされました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="492" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="495" />
         <source>更新已启动</source>
         <translation>更新を開始しました</translation>
     </message>
@@ -8672,7 +8682,7 @@ KS側の設定が優先されます。</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/updater/ui/update_card.py" line="309" />
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="482" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="485" />
         <source>未知错误</source>
         <translation>不明なエラー</translation>
     </message>

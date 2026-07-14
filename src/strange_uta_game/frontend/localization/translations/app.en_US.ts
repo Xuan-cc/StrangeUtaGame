@@ -751,7 +751,7 @@
         <translation> min</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="45" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="50" />
         <source>SUG默认保存目录</source>
         <translation>SUG Default Save Directory</translation>
     </message>
@@ -766,19 +766,24 @@
         <translation>Enable scheduled auto-save</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="39" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="44" />
         <source>备份位置</source>
         <translation>Backup location</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="21" />
-        <source>定时将项目保存为临时文件，防止闪退丢失数据</source>
-        <translation>Periodically save the project to a temp file to prevent data loss on crash</translation>
+        <source>定时将项目副本保存到文件旁，切换/关闭项目或另存为时自动清理</source>
+        <translation>Periodically save a project copy alongside the file; automatically cleaned when switching/closing projects or Save As</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="26" />
         <source>每隔多少分钟自动保存一次（1~60分钟）</source>
         <translation>Auto-save every N minutes (1~60)</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="40" />
+        <source>编辑后 2 秒内自动保存恢复文件，闪退后可恢复未保存的数据</source>
+        <translation>Auto-save recovery file within 2 seconds after editing; recover unsaved data after a crash</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="18" />
@@ -796,14 +801,19 @@
         <translation>Number of project backups</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="46" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="51" />
         <source>设置后，保存未命名项目时将始终优先使用此目录。
 留空则不启用，自动使用已保存项目 / 最近加载的文件所在目录。</source>
         <translation>When set, saving untitled projects will always prefer this directory.
 Leave empty to disable, and automatically use the saved project / last loaded file directory.</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="40" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="39" />
+        <source>闪退恢复</source>
+        <translation>Crash Recovery</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_save.py" line="45" />
         <source>项目备份与临时文件的存放目录（留空使用默认位置）</source>
         <translation>Folder for project backups and temporary files (leave empty to use the default location)</translation>
     </message>
@@ -4587,7 +4597,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>StrangeUtaGame - Lyrics Timing Tool Bilibili@不会说话的呆轩cc</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1247" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1270" />
         <source>StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)</source>
         <translation>StrangeUtaGame Project (*.sug);;All Files (*.*)</translation>
     </message>
@@ -4597,7 +4607,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>[unsaved]</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1041" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1055" />
         <source>macOS 暂不支持自动更新，已在浏览器打开最新版本下载页。</source>
         <translation>Auto-update isn't supported on macOS yet; the latest version's download page has been opened in your browser.</translation>
     </message>
@@ -4607,34 +4617,34 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Previously linked media file not found: {name}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1418" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1441" />
         <source>保存</source>
         <translation>Save</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1349" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1372" />
         <source>保存失败</source>
         <translation>Save failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1325" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1348" />
         <source>保存完成</source>
         <translation>Save complete</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1332" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1355" />
         <source>保存成功</source>
         <translation>Saved</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1245" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1268" />
         <source>保存项目</source>
         <translation>Save project</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="608" />
         <location filename="src/strange_uta_game/frontend/main_window.py" line="626" />
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1206" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1229" />
         <source>共 {n} 行歌词</source>
         <translation>{n} lyrics lines</translation>
     </message>
@@ -4644,12 +4654,12 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Ready</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1126" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1146" />
         <source>即将退出应用，由 Updater 完成替换并自动重启…</source>
         <translation>Exiting app. Updater will perform replacement and auto-restart…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1418" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1441" />
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
@@ -4659,7 +4669,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>No</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1114" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1133" />
         <source>启动 Updater 失败</source>
         <translation>Failed to launch Updater</translation>
     </message>
@@ -4690,7 +4700,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Restored {n} lyrics lines</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1040" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1054" />
         <source>已打开下载页面</source>
         <translation>Download page opened</translation>
     </message>
@@ -4710,7 +4720,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Restore unsaved project</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1103" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1121" />
         <source>您可以稍后在设置中重新检查更新</source>
         <translation>You can check for updates later in Settings</translation>
     </message>
@@ -4721,27 +4731,27 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Tag</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1522" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1545" />
         <source>打轴编辑器尚未准备好</source>
         <translation>Timing editor not ready</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1418" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1441" />
         <source>放弃</source>
         <translation>Discard</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1188" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1211" />
         <source>文件不存在: {path}</source>
         <translation>File not found: {path}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1521" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1544" />
         <source>无法导入</source>
         <translation>Cannot import</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1187" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1210" />
         <source>无法打开文件</source>
         <translation>Cannot open file</translation>
     </message>
@@ -4751,7 +4761,7 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Cannot read restore file; it may be corrupted</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1227" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1250" />
         <source>无项目</source>
         <translation>No project</translation>
     </message>
@@ -4761,22 +4771,22 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Yes</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1052" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1066" />
         <source>更新器未就绪</source>
         <translation>Updater not ready</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1102" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1120" />
         <source>更新已取消</source>
         <translation>Update Cancelled</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1125" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1145" />
         <source>更新已启动</source>
         <translation>Update started</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1416" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1439" />
         <source>未保存的更改</source>
         <translation>Unsaved changes</translation>
     </message>
@@ -4786,12 +4796,12 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Untitled</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1053" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1067" />
         <source>未找到 Updater.exe。请到 GitHub 手动下载完整安装包。</source>
         <translation>Updater.exe not found. Please download the full installer from GitHub manually.</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1115" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1134" />
         <source>未知错误</source>
         <translation>Unknown error</translation>
     </message>
@@ -4803,12 +4813,12 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
 Load to restore?</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1508" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1531" />
         <source>歌词为空</source>
         <translation>Lyrics are empty</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1297" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1320" />
         <source>正在保存</source>
         <translation>Saving</translation>
     </message>
@@ -4893,7 +4903,7 @@ Load to restore?</translation>
         <translation>Configuring navigation bar...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1509" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1532" />
         <source>没有可导入的歌词内容</source>
         <translation>No importable lyrics content</translation>
     </message>
@@ -4910,7 +4920,7 @@ Load to restore?</translation>
         <translation>Settings</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1228" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1251" />
         <source>请先创建或打开项目</source>
         <translation>Please create or open a project first</translation>
     </message>
@@ -4926,12 +4936,12 @@ Load to restore?</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="625" />
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1205" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1228" />
         <source>项目打开成功</source>
         <translation>Project opened</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/main_window.py" line="1417" />
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1440" />
         <source>项目有未保存的更改，是否在退出前保存？</source>
         <translation>Project has unsaved changes. Save before exit?</translation>
     </message>
@@ -8391,22 +8401,22 @@ This cannot be undone.</translation>
 <context>
     <name>UpdateProgressWindow</name>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="82" />
+        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="85" />
         <source>取消更新</source>
         <translation>Cancel Update</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="54" />
+        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="57" />
         <source>正在准备更新</source>
         <translation>Preparing update</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="203" />
+        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="206" />
         <source>正在取消…</source>
         <translation>Cancelling…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="69" />
+        <location filename="src/strange_uta_game/updater/ui/update_progress_window.py" line="72" />
         <source>正在获取最新更新器，请稍候…</source>
         <translation>Fetching latest updater, please wait…</translation>
     </message>
@@ -8481,7 +8491,7 @@ This cannot be undone.</translation>
         <translation>No proxy</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="493" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="496" />
         <source>即将退出当前应用，由 Updater 完成替换并自动重启…</source>
         <translation>Exiting current app. Updater will perform replacement and auto-restart…</translation>
     </message>
@@ -8572,7 +8582,7 @@ This cannot be undone.</translation>
         <translation>Restore default</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="470" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="473" />
         <source>您可以稍后在设置中重新检查更新</source>
         <translation>You can check for updates later in Settings</translation>
     </message>
@@ -8609,7 +8619,7 @@ This cannot be undone.</translation>
         <translation>Try in order; on failure, fall back to next. Drag items or use ↑/↓ on the right to reorder.</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="481" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="484" />
         <source>无法启动 Updater</source>
         <translation>Cannot launch Updater</translation>
     </message>
@@ -8624,12 +8634,12 @@ This cannot be undone.</translation>
         <translation>Updater not ready</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="469" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="472" />
         <source>更新已取消</source>
         <translation>Update Cancelled</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="492" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="495" />
         <source>更新已启动</source>
         <translation>Update started</translation>
     </message>
@@ -8670,7 +8680,7 @@ This cannot be undone.</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/updater/ui/update_card.py" line="309" />
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="482" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="485" />
         <source>未知错误</source>
         <translation>Unknown error</translation>
     </message>
