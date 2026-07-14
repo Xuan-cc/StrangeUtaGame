@@ -18,10 +18,10 @@ class AutoSaveSubInterface(SubSettingInterface):
         g = SettingCardGroup(tr("自动保存"), self.scrollWidget)
         self._tr_register(g, title_source="自动保存")
         self.card_auto_save_enabled = SwitchSettingCard(FIF.SAVE, tr("启用定时自动保存"),
-            tr("定时将项目副本保存到文件旁，降低数据丢失风险"), parent=g)
+            tr("定时将项目副本保存到文件旁，切换/关闭项目或另存为时自动清理"), parent=g)
         self._tr_register(self.card_auto_save_enabled,
             title_source="启用定时自动保存",
-            content_source="定时将项目副本保存到文件旁，降低数据丢失风险")
+            content_source="定时将项目副本保存到文件旁，切换/关闭项目或另存为时自动清理")
         self.card_auto_save_interval = SpinSettingCard(FIF.HISTORY, tr("自动保存间隔"),
             tr("每隔多少分钟自动保存一次（1~60分钟）"),
             min_val=1, max_val=60, step=1, suffix=tr(" 分钟"), parent=g)
