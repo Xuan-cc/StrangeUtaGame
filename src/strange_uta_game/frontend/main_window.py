@@ -831,6 +831,8 @@ class MainWindow(MSFluentWindow):
         enabled = settings.get("auto_save.enabled", True)
         interval = settings.get("auto_save.interval_minutes", 5)
         self._store.set_periodic_save_config(enabled, interval)
+        crash_recovery = settings.get("auto_save.crash_recovery_enabled", True)
+        self._store.set_crash_recovery_enabled(crash_recovery)
 
     # ==================== 闪退恢复 ====================
 
@@ -1107,6 +1109,9 @@ class MainWindow(MSFluentWindow):
             def _on_launch_done(launch_result: object) -> None:
                 from strange_uta_game.updater import installer as _inst
                 lr: _inst.LaunchResult = launch_result  # type: ignore[assignment]
+
+                if progress_win._cancelled_by_user:
+                    return
 
                 progress_win.finish()
 

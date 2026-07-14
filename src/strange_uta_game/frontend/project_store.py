@@ -117,6 +117,7 @@ class ProjectStore(QObject):
         self._auto_save_timer.setInterval(5 * 60 * 1000)  # 默认 5 分钟
         self._auto_save_timer.timeout.connect(self._do_auto_save)
         self._periodic_save_enabled = True
+        self._crash_recovery_enabled = True
         self._auto_save_defer_predicate: Optional[Callable[[], bool]] = None
 
         # 异步保存线程管理
@@ -561,6 +562,16 @@ class ProjectStore(QObject):
         if self._project:
             self._start_periodic_save()
 
+    def set_crash_recovery_enabled(self, enabled: bool) -> None:
+        """启用或禁用闪退恢复防抖保存（.sug.temp）。
+
+        Args:
+            enabled: 是否启用闪退恢复。
+        """
+        self._crash_recovery_enabled = enabled
+        if not enabled:
+            self._periodic_save_timer.stop()
+
     def set_auto_save_defer_predicate(
         self, predicate: Optional[Callable[[], bool]]
     ) -> None:
@@ -580,7 +591,7 @@ class ProjectStore(QObject):
 
     def _schedule_auto_save(self) -> None:
         """重置防抖定时器，触发 .sug.temp 保存。"""
-        if self._project:
+        if self._project and self._crash_recovery_enabled:
             self._periodic_save_timer.start()
 
     def _do_auto_save(self) -> None:
