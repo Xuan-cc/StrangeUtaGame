@@ -106,16 +106,16 @@ class ProjectStore(QObject):
         # 每次 load_project 递增，用于防止异步保存回调在项目被替换后覆盖 _save_path。
         self._load_count: int = 0
 
-        # 防抖 auto-save（2 秒无操作后写临时文件）
-        self._auto_save_timer = QTimer(self)
-        self._auto_save_timer.setSingleShot(True)
-        self._auto_save_timer.setInterval(2000)
-        self._auto_save_timer.timeout.connect(self._do_auto_save)
-
-        # 定时 auto-save（周期性保存到 .sug.temp，用于闪退恢复）
+        # 防抖保存到 .sug.temp（2 秒无操作后写，用于闪退恢复）
         self._periodic_save_timer = QTimer(self)
-        self._periodic_save_timer.setInterval(5 * 60 * 1000)  # 默认 5 分钟
+        self._periodic_save_timer.setSingleShot(True)
+        self._periodic_save_timer.setInterval(2000)
         self._periodic_save_timer.timeout.connect(self._do_periodic_save)
+
+        # 定时 auto-save（周期性保存到 .autosave）
+        self._auto_save_timer = QTimer(self)
+        self._auto_save_timer.setInterval(5 * 60 * 1000)  # 默认 5 分钟
+        self._auto_save_timer.timeout.connect(self._do_auto_save)
         self._periodic_save_enabled = True
         self._auto_save_defer_predicate: Optional[Callable[[], bool]] = None
 
@@ -557,7 +557,7 @@ class ProjectStore(QObject):
         """
         self._periodic_save_enabled = enabled
         interval_ms = max(1, min(60, interval_minutes)) * 60 * 1000
-        self._periodic_save_timer.setInterval(interval_ms)
+        self._auto_save_timer.setInterval(interval_ms)
         if self._project:
             self._start_periodic_save()
 
@@ -579,17 +579,16 @@ class ProjectStore(QObject):
     # ── auto-save（内部） ────────────────────────
 
     def _schedule_auto_save(self) -> None:
-        """重置防抖定时器。"""
-        if self._project and self._save_path:
-            self._auto_save_timer.start()
+        """重置防抖定时器，触发 .sug.temp 保存。"""
+        if self._project:
+            self._periodic_save_timer.start()
 
     def _do_auto_save(self) -> None:
-        """异步执行 auto-save 到 ``<原路径>.autosave``。"""
+        """异步执行定时保存到 ``<原路径>.autosave``。"""
         if not self._project or not self._save_path:
             return
         if self._should_defer_auto_save():
             log_perf_event("project.auto_save.deferred", reason="predicate")
-            self._auto_save_timer.start()
             return
 
         autosave_path = self._save_path + ".autosave"
@@ -609,13 +608,13 @@ class ProjectStore(QObject):
     # ── 定时 auto-save（内部） ───────────────────
 
     def _start_periodic_save(self) -> None:
-        """启动或重启定时自动保存。"""
-        self._periodic_save_timer.stop()
+        """启动或重启定时 .autosave。"""
+        self._auto_save_timer.stop()
         if self._periodic_save_enabled and self._project:
-            self._periodic_save_timer.start()
+            self._auto_save_timer.start()
 
     def _do_periodic_save(self) -> None:
-        """异步执行定时保存到 .sug.temp 文件。
+        """异步执行防抖保存到 .sug.temp 文件，用于闪退恢复。
 
         所有临时文件统一存放在备份目录下的隐藏 .temp 子目录中：
         - 已保存项目 → ``<备份目录>/.temp/.项目名.sug.temp``
@@ -625,6 +624,7 @@ class ProjectStore(QObject):
             return
         if self._should_defer_auto_save():
             log_perf_event("project.periodic_save.deferred", reason="predicate")
+            self._periodic_save_timer.start()
             return
 
         _temp_dir().mkdir(parents=True, exist_ok=True)
