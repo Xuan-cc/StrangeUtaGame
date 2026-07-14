@@ -840,16 +840,14 @@ class MainWindow(MSFluentWindow):
         return ProjectStore.has_crash_recovery()
 
     def _startup_checks(self) -> None:
-        """启动期检查入口：先处理闪退恢复弹窗，完成后再触发更新/词典检查。
+        """启动期检查入口：清缓存 → 检查更新 → 更新解决后再做闪退恢复。
 
-        闪退恢复弹窗是模态的（``message_question``），如果独立的 QTimer 在此
-        期间触发更新检测，两个模态弹窗会同时弹出导致无法操作。因此改为串行：
-        等闪退恢复结束后再调度后续异步检查。
+        闪退恢复弹窗和更新检测弹窗都是模态的，必须串行。更新优先：
+        用户确认更新则直接 force quit（不弹恢复，保留 temp 供更新后重启使用）；
+        用户跳过/取消/无更新时，再做闪退恢复。
         """
-        self.check_crash_recovery()
         self._clear_all_audio_cache()
-        QTimer.singleShot(1000, self._check_for_app_update)
-        QTimer.singleShot(1500, self._schedule_network_dict_auto_update)
+        self._check_for_app_update()
 
     @staticmethod
     def _clear_all_audio_cache() -> None:
@@ -951,6 +949,8 @@ class MainWindow(MSFluentWindow):
 
         实际逻辑全部委托给 ``strange_uta_game.updater``；任何异常均吞掉并仅写日志，
         以确保更新模块的故障不会影响主程序使用。
+
+        更新检查完成且无需退出时，会通过 ``_on_update_check_done`` 继续闪退恢复流程。
         """
         try:
             from strange_uta_game.updater.settings import UpdaterSettings
@@ -958,6 +958,7 @@ class MainWindow(MSFluentWindow):
 
             settings = UpdaterSettings.load(self.settingInterface.get_settings())
             if not (settings.enabled and settings.check_on_startup):
+                self._on_update_check_done()
                 return
 
             # 启动期检查：受 ``min_check_interval_hours`` 防抖限制
@@ -969,6 +970,12 @@ class MainWindow(MSFluentWindow):
             logging.getLogger(__name__).warning(
                 "启动更新检查失败，已忽略", exc_info=True
             )
+            self._on_update_check_done()
+
+    def _on_update_check_done(self) -> None:
+        """更新检查已解决（无更新 / 用户跳过 / 取消 / 出错），继续闪退恢复。"""
+        self.check_crash_recovery()
+        QTimer.singleShot(500, self._schedule_network_dict_auto_update)
 
     def _on_startup_update_check(self, result_obj: object) -> None:
         """处理启动期 UpdateChecker 的回调。"""
@@ -981,14 +988,17 @@ class MainWindow(MSFluentWindow):
 
             result = result_obj  # type: ignore[assignment]
             if not getattr(result, "ok", False) or not getattr(result, "has_update", False):
+                self._on_update_check_done()
                 return
             release = getattr(result, "release", None)
             if release is None:
+                self._on_update_check_done()
                 return
 
             # 用户曾经点击「跳过此版本」 → 静默忽略
             settings = UpdaterSettings.load(self.settingInterface.get_settings())
             if settings.skipped_version and settings.skipped_version == release.version:
+                self._on_update_check_done()
                 return
 
             # 记录最近一次发现的远端版本（仅用于以后扩展，例如"侧栏红点"）
@@ -1017,8 +1027,10 @@ class MainWindow(MSFluentWindow):
                     settings.save(self.settingInterface.get_settings())
                 except Exception:
                     pass
+                self._on_update_check_done()
                 return
             if not accepted or choice == "later":
+                self._on_update_check_done()
                 return
 
             # 用户确认更新 → 启动 Updater.exe 并退出
@@ -1057,6 +1069,7 @@ class MainWindow(MSFluentWindow):
                         duration=6000,
                         parent=self,
                     )
+                self._on_update_check_done()
                 return
 
             from strange_uta_game.updater.proxy import resolve_proxy
@@ -1107,6 +1120,7 @@ class MainWindow(MSFluentWindow):
                         duration=4000,
                         parent=self,
                     )
+                    self._on_update_check_done()
                     return
 
                 if not lr.launched:
@@ -1119,6 +1133,7 @@ class MainWindow(MSFluentWindow):
                         duration=6000,
                         parent=self,
                     )
+                    self._on_update_check_done()
                     return
 
                 InfoBar.success(
@@ -1131,6 +1146,8 @@ class MainWindow(MSFluentWindow):
                     parent=self,
                 )
                 # 用强制退出而非 QApplication.quit()
+                # 注意：force quit 路径会保存 .sug.temp，不调 _on_update_check_done，
+                # 保留闪退恢复数据供更新后重启使用。
                 QTimer.singleShot(1200, self.request_force_quit)
 
             worker.done.connect(_on_launch_done, Qt.ConnectionType.QueuedConnection)
@@ -1140,6 +1157,7 @@ class MainWindow(MSFluentWindow):
             logging.getLogger(__name__).warning(
                 "处理启动更新回调时异常，已忽略", exc_info=True
             )
+            self._on_update_check_done()
 
     def _schedule_network_dict_auto_update(self) -> None:
         """启动期网络词典自动更新调度（独立于应用版本检查）。
