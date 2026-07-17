@@ -834,7 +834,7 @@ class ProjectStore(QObject):
     def create_backup(self) -> Optional[str]:
         """在 ProjectBackup 目录写入一份命名备份，并按全局上限轮换删除最旧。
 
-        命名规则：``项目名-YYYYMMDD-HHMMSS.sug``（无项目名时退用音频文件名，
+        命名规则：``项目名-YYYYMMDD-HHMMSS.sug.bak``（无项目名时退用音频文件名，
         再退用 untitled）。备份个数为 0 时直接跳过。同步写盘（.sug 为纯 JSON，
         不内嵌媒体，开销很小），失败时静默返回 None，不影响主保存流程。
 
@@ -855,11 +855,11 @@ class ProjectStore(QObject):
 
         base = self._backup_base_name()
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        target = root / f"{base}-{stamp}.sug"
+        target = root / f"{base}-{stamp}.sug.bak"
         # 同一秒内多次备份的去重保护
         dedup = 1
         while target.exists():
-            target = root / f"{base}-{stamp}_{dedup}.sug"
+            target = root / f"{base}-{stamp}_{dedup}.sug.bak"
             dedup += 1
 
         try:
@@ -877,12 +877,25 @@ class ProjectStore(QObject):
 
     @staticmethod
     def _prune_backups(root: Path, count: int) -> None:
-        """保留 root 下最新的 count 个 .sug 备份，按修改时间删除多余的最旧文件。
+        """保留 root 下最新的 count 个备份，按修改时间删除多余的最旧文件。
 
         仅扫描 root 顶层（不递归），因此隐藏的 .temp 子目录不受影响。
+        仅删除可明确识别为备份的文件（.sug.bak 新格式，或 .sug 带时间戳后缀
+        的旧格式），不会误删用户的普通 .sug 项目文件。
         """
+        legacy_backup_re = re.compile(r"-\d{8}-\d{6}(?:_\d+)?\.sug$")
+
+        def _is_backup(path: Path) -> bool:
+            """判断是否为可清理的备份文件（含新旧格式兼容）。"""
+            name = path.name
+            if name.endswith(".sug.bak"):
+                return True
+            if name.endswith(".sug") and legacy_backup_re.search(name):
+                return True
+            return False
+
         try:
-            backups = [p for p in root.glob("*.sug") if p.is_file()]
+            backups = [p for p in root.iterdir() if p.is_file() and _is_backup(p)]
         except OSError:
             return
         if len(backups) <= count:
