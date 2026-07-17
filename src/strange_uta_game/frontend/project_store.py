@@ -872,25 +872,37 @@ class ProjectStore(QObject):
         except Exception:
             return None
 
-        self._prune_backups(root, count)
+        # 仅当用户使用默认备份位置（未自定义 backup_dir）时，才兼容清理旧格式
+        # .sug 备份。若用户自定义了备份目录（可能与项目存放目录相同），
+        # 则只清理 .sug.bak 新格式文件，避免误删用户的普通 .sug 项目。
+        using_default_dir = False
+        try:
+            from strange_uta_game.frontend.settings.app_settings import AppSettings
+            custom = AppSettings().get("auto_save.backup_dir", "") or ""
+            using_default_dir = not bool(custom.strip())
+        except Exception:
+            using_default_dir = True
+
+        self._prune_backups(root, count, include_legacy=using_default_dir)
         return str(target)
 
     @staticmethod
-    def _prune_backups(root: Path, count: int) -> None:
+    def _prune_backups(root: Path, count: int, *, include_legacy: bool = False) -> None:
         """保留 root 下最新的 count 个备份，按修改时间删除多余的最旧文件。
 
         仅扫描 root 顶层（不递归），因此隐藏的 .temp 子目录不受影响。
-        仅删除可明确识别为备份的文件（.sug.bak 新格式，或 .sug 带时间戳后缀
-        的旧格式），不会误删用户的普通 .sug 项目文件。
+        仅删除可明确识别为备份的文件：.sug.bak 始终识别；旧格式 .sug
+        （带时间戳后缀）仅在 ``include_legacy=True`` 时识别，避免自定义
+        备份目录与项目目录相同时误删用户的普通 .sug 文件。
         """
         legacy_backup_re = re.compile(r"-\d{8}-\d{6}(?:_\d+)?\.sug$")
 
         def _is_backup(path: Path) -> bool:
-            """判断是否为可清理的备份文件（含新旧格式兼容）。"""
+            """判断是否为可清理的备份文件。"""
             name = path.name
             if name.endswith(".sug.bak"):
                 return True
-            if name.endswith(".sug") and legacy_backup_re.search(name):
+            if include_legacy and name.endswith(".sug") and legacy_backup_re.search(name):
                 return True
             return False
 
