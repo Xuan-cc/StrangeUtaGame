@@ -26,7 +26,6 @@ class MiniSingerManager(QWidget):
         self.setWindowTitle(self.tr("演唱者管理"))
         self.setWindowFlags(
             Qt.WindowType.Window
-            | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.WindowCloseButtonHint
         )
         fit_to_screen(self, 420, 560)
