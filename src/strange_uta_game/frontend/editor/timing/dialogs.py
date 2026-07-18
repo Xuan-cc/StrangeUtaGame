@@ -1947,7 +1947,7 @@ class AdjustRawTimestampDialog(QDialog):
 
         form = QFormLayout()
         self.spin_delta = SpinBox(self)
-        self.spin_delta.setRange(-99999, 99999)
+        self.spin_delta.setRange(-18000000, 18000000)
         self.spin_delta.setValue(0)
         self.spin_delta.setSuffix(" ms")
         form.addRow(self.tr("偏移量:"), self.spin_delta)
