@@ -976,11 +976,20 @@ class MainWindow(MSFluentWindow):
 
     def _on_update_check_done(self) -> None:
         """更新检查已解决（无更新 / 用户跳过 / 取消 / 出错），继续闪退恢复。"""
+        if QApplication.activeModalWidget() is not None:
+            QTimer.singleShot(500, self._on_update_check_done)
+            return
         self.check_crash_recovery()
         QTimer.singleShot(500, self._schedule_network_dict_auto_update)
 
     def _on_startup_update_check(self, result_obj: object) -> None:
         """处理启动期 UpdateChecker 的回调。"""
+        # 如果当前已有其他模态组件活跃（如用户正在 QFileDialog 保存文件），
+        # 延迟 500ms 重试整个回调，避免两个模态弹窗叠加导致 UI 死锁。
+        if QApplication.activeModalWidget() is not None:
+            QTimer.singleShot(500, lambda: self._on_startup_update_check(result_obj))
+            return
+
         try:
             from strange_uta_game.__version__ import __version__
             from strange_uta_game.updater.settings import UpdaterSettings
