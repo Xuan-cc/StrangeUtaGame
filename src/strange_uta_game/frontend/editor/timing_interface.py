@@ -375,6 +375,7 @@ class EditorInterface(QWidget):
         self.toolbar.delete_timestamps_selected_clicked.connect(self._on_delete_timestamps_selected)
         self.toolbar.auto_generate_interlude_guide_clicked.connect(self._on_auto_generate_interlude_guide)
         self.toolbar.analyze_pinyin_clicked.connect(self._on_analyze_pinyin)
+        self.toolbar.concat_sug_clicked.connect(self._on_concat_sug)
         self.toolbar.offset_changed.connect(self._on_offset_changed)
         layout.addWidget(self.toolbar)
 
@@ -1814,6 +1815,135 @@ class EditorInterface(QWidget):
     def _on_load_lyrics(self):
         """加载歌词文件到当前项目（替换现有歌词）。"""
         self._file_loader.prompt_load_lyrics()
+
+    def _on_concat_sug(self):
+        """拼接多个SUG项目为新的单一项目。"""
+        from strange_uta_game.frontend.editor.timing.sug_concat_dialog import SugConcatDialog
+
+        # 弹窗前先复用 FileLoader.check_unsaved_changes 做未保存检测
+        # （与「新建项目」「加载项目」完全一致的逻辑）
+        if not self._file_loader.check_unsaved_changes():
+            return
+
+        dlg = SugConcatDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.was_apply_clicked():
+            return
+
+        entries = dlg.get_entries()
+        output_name = dlg.get_output_name()
+        uniform_offset = dlg.get_uniform_offset()
+
+        self._launch_concat_worker(entries, output_name, uniform_offset)
+
+    def _launch_concat_worker(
+        self,
+        entries: list,
+        output_name: str,
+        uniform_offset: int,
+    ):
+        """在后台线程中执行SUG拼接，主线程显示进度。"""
+        from strange_uta_game.frontend.theme import theme
+        from strange_uta_game.frontend.editor.timing.sug_concat_worker import (
+            SugConcatWorker,
+        )
+
+        # 创建并显示进度提示
+        self._concat_tooltip = StateToolTip(
+            self.tr("正在拼接SUG"), self.tr("准备中..."), self,
+        )
+        green = theme.status_complete.name()
+        self._concat_tooltip.setStyleSheet(f"""
+            StateToolTip {{
+                background-color: {green};
+                border: 1px solid {green};
+                border-radius: 8px;
+            }}
+            StateToolTip QLabel {{
+                color: white;
+            }}
+        """)
+        self._concat_tooltip.move(self._concat_tooltip.getSuitablePos())
+        self._concat_tooltip.show()
+
+        # 创建 worker + 线程
+        self._concat_thread = QThread(self)
+        self._concat_worker = SugConcatWorker(entries, output_name, uniform_offset)
+        self._concat_worker.moveToThread(self._concat_thread)
+
+        self._concat_thread.started.connect(self._concat_worker.run)
+        self._concat_worker.progress.connect(self._on_concat_progress)
+        self._concat_worker.finished.connect(self._on_concat_finished)
+        self._concat_worker.error.connect(self._on_concat_error)
+        self._concat_worker.finished.connect(self._cleanup_concat_thread)
+        self._concat_worker.error.connect(self._cleanup_concat_thread)
+
+        self._concat_thread.start()
+
+    def _on_concat_progress(self, stage: str, current: int, total: int):
+        if hasattr(self, "_concat_tooltip") and self._concat_tooltip:
+            self._concat_tooltip.setContent(
+                f"{stage} ({current}/{total})"
+            )
+
+    def _on_concat_finished(self, project, entries_count: int):
+        if hasattr(self, "_concat_tooltip") and self._concat_tooltip:
+            self._concat_tooltip.setState(True)
+            self._concat_tooltip.setContent(self.tr("拼接完成"))
+            self._concat_tooltip.close()
+            self._concat_tooltip = None
+
+        # 重置 nicokara_tags
+        setting_iface = self._get_setting_interface()
+        if setting_iface is not None:
+            from strange_uta_game.frontend.settings.app_settings import AppSettings
+            settings = setting_iface.get_settings()
+            settings.set("nicokara_tags", dict(AppSettings.DEFAULT_SETTINGS.get("nicokara_tags", {})))
+            settings.save()
+
+        # 加载新项目：load_project 会清零 dirty，拼接产物本身尚未落盘，
+        # 需立即标记为未保存，使用户退出/切换项目时会被提示保存。
+        if self._store:
+            self._store.load_project(project)
+            self._store.mark_dirty()
+        else:
+            self.set_project(project)
+
+        InfoBar.success(
+            title=self.tr("拼接完成"),
+            content=self.tr("已从 {n} 个SUG文件拼接生成新项目，共 {lines} 行歌词。").format(
+                n=entries_count,
+                lines=len(project.sentences),
+            ),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=5000,
+            parent=self,
+        )
+
+    def _on_concat_error(self, error_msg: str):
+        if hasattr(self, "_concat_tooltip") and self._concat_tooltip:
+            self._concat_tooltip.close()
+            self._concat_tooltip = None
+
+        InfoBar.error(
+            title=self.tr("拼接失败"),
+            content=error_msg,
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=5000,
+            parent=self,
+        )
+
+    def _cleanup_concat_thread(self):
+        if hasattr(self, "_concat_thread") and self._concat_thread:
+            self._concat_thread.quit()
+            self._concat_thread.wait()
+            self._concat_thread = None
+        if hasattr(self, "_concat_worker") and self._concat_worker:
+            self._concat_worker.deleteLater()
+            self._concat_worker = None
 
     def _on_undo(self):
         if self._timing_service and self._timing_service.can_undo():

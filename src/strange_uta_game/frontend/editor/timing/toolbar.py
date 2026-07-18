@@ -58,6 +58,7 @@ class EditorToolBar(QFrame):
 
     delete_timestamps_selected_clicked = pyqtSignal()      # 删除所选范围时间戳
     analyze_pinyin_clicked = pyqtSignal()                   # 中文拼音注音
+    concat_sug_clicked = pyqtSignal()                       # 拼接多个SUG
     offset_changed = pyqtSignal(int)  # 偏移量变化（毫秒）
 
     def __init__(self, parent=None):
@@ -84,6 +85,8 @@ class EditorToolBar(QFrame):
         load_menu.addSeparator()
         load_menu.addAction(Action(FIF.MUSIC, tr("加载音频"), self, triggered=self.load_audio_clicked.emit))
         load_menu.addAction(Action(FIF.DOCUMENT, tr("加载歌词"), self, triggered=self.load_lyrics_clicked.emit))
+        load_menu.addSeparator()
+        load_menu.addAction(Action(FIF.LINK, tr("多项目拼接"), self, triggered=self.concat_sug_clicked.emit))
         self.btn_load.setMenu(load_menu)
         layout.addWidget(self.btn_load)
 
