@@ -18,7 +18,9 @@ from PyQt6.QtCore import Qt, pyqtSignal, QRect, QSize, QEvent
 from PyQt6.QtGui import (
     QColor,
     QFont,
+    QKeySequence,
     QPainter,
+    QShortcut,
     QSyntaxHighlighter,
     QTextCharFormat,
     QTextCursor,
@@ -449,6 +451,7 @@ class DeleteRubyByTypeDialog(QDialog):
         """返回用户选中的类型名称列表（config 格式）。"""
         return [self._TYPE_NAME_MAP[ct] for ct, cb in self._checkboxes if cb.isChecked()]
 
+from strange_uta_game.frontend.editor.find_dialog import FindDialog
 
 class RubyInterface(QWidget):
     """注音编辑界面
@@ -463,6 +466,8 @@ class RubyInterface(QWidget):
         super().__init__(parent)
 
         self._project: Optional[Project] = None
+        self._find_highlights: list = []
+        self._find_dialog: Optional[FindDialog] = None
 
         self._init_ui()
 
@@ -518,6 +523,11 @@ class RubyInterface(QWidget):
         self.btn_update_cp.setEnabled(False)
         batch_layout.addWidget(self.btn_update_cp)
 
+        self.btn_find = PushButton(self.tr("查找和替换"), self)
+        self.btn_find.setIcon(FIF.SEARCH)
+        self.btn_find.clicked.connect(self._open_find)
+        batch_layout.addWidget(self.btn_find)
+
         # 字号调整（与上面按钮同栏；也可用 Alt+滚轮）
         batch_layout.addSpacing(12)
 
@@ -572,6 +582,9 @@ class RubyInterface(QWidget):
         from strange_uta_game.frontend.theme import theme
         theme.changed.connect(self._on_theme_changed)
         layout.addWidget(self.text_edit, stretch=1)
+
+        self._find_shortcut = QShortcut(QKeySequence.StandardKey.Find, self.text_edit)
+        self._find_shortcut.activated.connect(self._open_find)
 
         self.text_edit.set_show_ch_width(_saved_show_ch)
         # 字宽统计跟随卡拉OK主文字字体（缺字回退微软雅黑测量），并提示实际字体
@@ -736,17 +749,22 @@ class RubyInterface(QWidget):
             return
         from strange_uta_game.frontend.theme import theme
 
+        selections: list = []
+
         sel = QTextEdit.ExtraSelection()
         sel.format.setBackground(theme.editor_current_line)
         sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
-        # 选中整个文本块（而非折叠光标），使自动换行占多视觉行的长行整行高亮
         cursor = QTextCursor(block)
         cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
         cursor.movePosition(
             QTextCursor.MoveOperation.EndOfBlock, QTextCursor.MoveMode.KeepAnchor
         )
         sel.cursor = cursor
-        self.text_edit.setExtraSelections([sel])
+        selections.append(sel)
+
+        selections.extend(self._find_highlights)
+
+        self.text_edit.setExtraSelections(selections)
 
     def _on_theme_changed(self):
         """主题切换：重建着色配色、刷新行号栏与当前行高亮。"""
@@ -754,6 +772,29 @@ class RubyInterface(QWidget):
             self._highlighter.rehighlight_with_theme()
         self.text_edit._line_number_area.update()
         self.text_edit._line_info_area.update()
+        self._highlight_current_line()
+
+    def _refresh_highlight(self):
+        """强制刷新高亮（当前行 + 查找匹配）。"""
+        if hasattr(self, "_highlighter"):
+            self._highlight_current_line()
+
+    def _open_find(self):
+        """打开查找对话框。如已存在则激活置顶。"""
+        if self._find_dialog is not None and self._find_dialog.isVisible():
+            self._find_dialog.raise_()
+            self._find_dialog.activateWindow()
+            self._find_dialog._search_input.setFocus()
+            self._find_dialog._search_input.selectAll()
+            return
+        dlg = FindDialog(self, self.window())
+        self._find_dialog = dlg
+        dlg.finished.connect(lambda: self._on_find_dialog_closed())
+        dlg.show()
+
+    def _on_find_dialog_closed(self):
+        self._find_highlights = []
+        self._find_dialog = None
         self._highlight_current_line()
 
     def _apply_font_size(self, pt: int):
@@ -1328,6 +1369,8 @@ class RubyInterface(QWidget):
             self.btn_delete_by_type.setText(self.tr("按类型删除注音"))
         if hasattr(self, "btn_update_cp"):
             self.btn_update_cp.setText(self.tr("更新节奏点"))
+        if hasattr(self, "btn_find"):
+            self.btn_find.setText(self.tr("查找和替换"))
         if hasattr(self, "btn_apply"):
             self.btn_apply.setText(self.tr("应用更改"))
         if hasattr(self, "btn_revert"):
