@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QTableWidget,
     QTableWidgetItem,
+    QTableWidgetSelectionRange,
     QVBoxLayout,
 )
 from qfluentwidgets import (
@@ -43,6 +44,7 @@ from qfluentwidgets import (
     InfoBarPosition,
     PrimaryPushButton,
     PushButton,
+    SearchLineEdit,
 )
 
 from strange_uta_game.backend.infrastructure.network_dictionary import (
@@ -117,6 +119,13 @@ class NetworkSourceEntriesDialog(QDialog):
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
+        # 实时过滤框：按「词」列子串匹配，不匹配的行隐藏（行号保持原词典序号）
+        self._filter_edit = SearchLineEdit(self)
+        self._filter_edit.setPlaceholderText(self.tr("输入以筛选词（行号保持原词典序号）…"))
+        self._filter_edit.setClearButtonEnabled(True)
+        self._filter_edit.textChanged.connect(self._apply_filter)
+        layout.addWidget(self._filter_edit)
+
         self._table = QTableWidget(0, 3, self)
         self._table.setHorizontalHeaderLabels([self.tr("启用"), self.tr("词"), self.tr("注音(annotated)")])
         header = self._table.horizontalHeader()
@@ -134,14 +143,19 @@ class NetworkSourceEntriesDialog(QDialog):
             self._append_row(e.get("enabled", True), e.get("word", ""), e.get("reading", ""))
 
         btn_row = QHBoxLayout()
-        for label, slot in [
-            (self.tr("添加"), self._on_add),
-            (self.tr("删除选中"), self._on_delete),
-            (self.tr("上移"), lambda: self._move(-1)),
-            (self.tr("下移"), lambda: self._move(+1)),
-        ]:
-            btn = PushButton(label, self)
-            btn.clicked.connect(slot)
+        btn_add = PushButton(self.tr("添加"), self)
+        btn_add.clicked.connect(self._on_add)
+        btn_del = PushButton(self.tr("删除选中"), self)
+        btn_del.clicked.connect(self._on_delete)
+        self._btn_up = PushButton(self.tr("上移"), self)
+        self._btn_up.clicked.connect(lambda: self._move(-1))
+        self._btn_down = PushButton(self.tr("下移"), self)
+        self._btn_down.clicked.connect(lambda: self._move(+1))
+        btn_top = PushButton(self.tr("置顶"), self)
+        btn_top.clicked.connect(self._on_move_to_top)
+        btn_bottom = PushButton(self.tr("置底"), self)
+        btn_bottom.clicked.connect(self._on_move_to_bottom)
+        for btn in (btn_add, btn_del, self._btn_up, self._btn_down, btn_top, btn_bottom):
             btn_row.addWidget(btn)
         btn_row.addStretch()
         layout.addLayout(btn_row)
@@ -156,6 +170,24 @@ class NetworkSourceEntriesDialog(QDialog):
         ok_row.addWidget(btn_cancel)
         layout.addLayout(ok_row)
 
+    def _apply_filter(self, text: str) -> None:
+        """按「词」列实时过滤：不匹配的行隐藏，行号保持原词典序号。
+
+        过滤期间禁用上移/下移（隐藏行的存在会让交换目标不明确）。
+        """
+        needle = (text or "").strip().casefold()
+        if needle:
+            # 隐藏行仍保留选中态，可能导致「删除选中」误删不可见行——先清掉
+            self._table.clearSelection()
+        for row in range(self._table.rowCount()):
+            item = self._table.item(row, 1)
+            word = item.text() if item else ""
+            self._table.setRowHidden(
+                row, bool(needle) and needle not in word.casefold()
+            )
+        self._btn_up.setEnabled(not needle)
+        self._btn_down.setEnabled(not needle)
+
     def _append_row(self, enabled: bool, word: str, reading: str) -> None:
         row = self._table.rowCount()
         self._table.insertRow(row)
@@ -165,13 +197,29 @@ class NetworkSourceEntriesDialog(QDialog):
         self._table.setItem(row, 1, QTableWidgetItem(word))
         self._table.setItem(row, 2, QTableWidgetItem(reading))
 
-    def _on_add(self) -> None:
-        self._table.insertRow(0)
+    def _insert_row_at(self, row: int, enabled: bool, word: str, reading: str) -> None:
+        """在指定位置插入一行。"""
+        self._table.insertRow(row)
         chk = QTableWidgetItem()
-        chk.setCheckState(Qt.CheckState.Checked)
-        self._table.setItem(0, 0, chk)
-        self._table.setItem(0, 1, QTableWidgetItem(""))
-        self._table.setItem(0, 2, QTableWidgetItem(""))
+        chk.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+        self._table.setItem(row, 0, chk)
+        self._table.setItem(row, 1, QTableWidgetItem(word))
+        self._table.setItem(row, 2, QTableWidgetItem(reading))
+
+    def _row_data(self, row: int) -> tuple:
+        """读取一行的 (enabled, word, reading) 数据。"""
+        chk = self._table.item(row, 0)
+        word_item = self._table.item(row, 1)
+        reading_item = self._table.item(row, 2)
+        enabled = chk.checkState() == Qt.CheckState.Checked if chk else True
+        word = word_item.text() if word_item else ""
+        reading = reading_item.text() if reading_item else ""
+        return enabled, word, reading
+
+    def _on_add(self) -> None:
+        # 新条目插入到顶部（最高优先级）；先清空过滤确保新行可见
+        self._filter_edit.clear()
+        self._insert_row_at(0, True, "", "")
         self._table.scrollToTop()
         self._table.selectRow(0)
 
@@ -179,6 +227,44 @@ class NetworkSourceEntriesDialog(QDialog):
         rows = sorted(set(idx.row() for idx in self._table.selectedIndexes()), reverse=True)
         for r in rows:
             self._table.removeRow(r)
+
+    def _on_move_to_top(self) -> None:
+        """选中行整体移到词典顶部（保持相对顺序）；过滤状态下同样可用。"""
+        rows = sorted(set(idx.row() for idx in self._table.selectedIndexes()))
+        if not rows or rows == list(range(len(rows))):
+            return
+        self._relocate_rows(rows, 0)
+
+    def _on_move_to_bottom(self) -> None:
+        """选中行整体移到词典底部（保持相对顺序）；过滤状态下同样可用。"""
+        rows = sorted(set(idx.row() for idx in self._table.selectedIndexes()))
+        total = self._table.rowCount()
+        if not rows or rows == list(range(total - len(rows), total)):
+            return
+        self._relocate_rows(rows, total - len(rows))
+
+    def _relocate_rows(self, rows: List[int], insert_at: int) -> None:
+        """把 rows（升序）整体搬运到 insert_at，保持相对顺序并重新选中。
+
+        先抽取数据、倒序删行（避免位移），再在目标位置按原顺序插回。
+        过滤状态下同样安全：插入后重新套用过滤条件，仅补选仍可见的行。
+        """
+        data = [self._row_data(r) for r in rows]
+        for r in reversed(rows):
+            self._table.removeRow(r)
+        for i, (enabled, word, reading) in enumerate(data):
+            self._insert_row_at(insert_at + i, enabled, word, reading)
+        # 新插入的行默认可见，需重新套用当前过滤（过滤时会顺带清空选中态）
+        self._apply_filter(self._filter_edit.text())
+        self._table.clearSelection()
+        # setRangeSelected 累加选中（selectRow 程序化调用会替换选择，多行时只剩最后一行）
+        last_col = self._table.columnCount() - 1
+        for i in range(len(data)):
+            row = insert_at + i
+            if not self._table.isRowHidden(row):
+                self._table.setRangeSelected(
+                    QTableWidgetSelectionRange(row, 0, row, last_col), True
+                )
 
     def _move(self, delta: int) -> None:
         rows = sorted(set(idx.row() for idx in self._table.selectedIndexes()))

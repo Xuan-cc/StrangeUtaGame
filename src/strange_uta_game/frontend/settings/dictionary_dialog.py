@@ -13,9 +13,16 @@ from PyQt6.QtWidgets import (
     QLabel,
     QTableWidget,
     QTableWidgetItem,
+    QTableWidgetSelectionRange,
     QVBoxLayout,
 )
-from qfluentwidgets import InfoBar, InfoBarPosition, PrimaryPushButton, PushButton
+from qfluentwidgets import (
+    InfoBar,
+    InfoBarPosition,
+    PrimaryPushButton,
+    PushButton,
+    SearchLineEdit,
+)
 
 from .app_settings import _parse_rl_dictionary
 from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
@@ -63,6 +70,13 @@ class DictionaryEditDialog(QDialog):
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
+        # 实时过滤框：按「词」列子串匹配，不匹配的行隐藏（行号保持原词典序号）
+        self._filter_edit = SearchLineEdit(self)
+        self._filter_edit.setPlaceholderText(self.tr("输入以筛选词（行号保持原词典序号）…"))
+        self._filter_edit.setClearButtonEnabled(True)
+        self._filter_edit.textChanged.connect(self._apply_filter)
+        layout.addWidget(self._filter_edit)
+
         self._table = QTableWidget(0, 3, self)
         self._table.setHorizontalHeaderLabels([self.tr("启用"), self.tr("词"), self.tr("注音(annotated)")])
         header = self._table.horizontalHeader()
@@ -92,16 +106,22 @@ class DictionaryEditDialog(QDialog):
         btn_add.clicked.connect(self._on_add)
         btn_del = PushButton(self.tr("删除选中"), self)
         btn_del.clicked.connect(self._on_delete)
-        btn_up = PushButton(self.tr("上移"), self)
-        btn_up.clicked.connect(self._on_move_up)
-        btn_down = PushButton(self.tr("下移"), self)
-        btn_down.clicked.connect(self._on_move_down)
+        self._btn_up = PushButton(self.tr("上移"), self)
+        self._btn_up.clicked.connect(self._on_move_up)
+        self._btn_down = PushButton(self.tr("下移"), self)
+        self._btn_down.clicked.connect(self._on_move_down)
+        btn_top = PushButton(self.tr("置顶"), self)
+        btn_top.clicked.connect(self._on_move_to_top)
+        btn_bottom = PushButton(self.tr("置底"), self)
+        btn_bottom.clicked.connect(self._on_move_to_bottom)
         btn_import = PushButton(self.tr("导入RL字典"), self)
         btn_import.clicked.connect(self._on_import_rl)
         btn_row.addWidget(btn_add)
         btn_row.addWidget(btn_del)
-        btn_row.addWidget(btn_up)
-        btn_row.addWidget(btn_down)
+        btn_row.addWidget(self._btn_up)
+        btn_row.addWidget(self._btn_down)
+        btn_row.addWidget(btn_top)
+        btn_row.addWidget(btn_bottom)
         btn_row.addWidget(btn_import)
         btn_row.addStretch()
         layout.addLayout(btn_row)
@@ -116,6 +136,24 @@ class DictionaryEditDialog(QDialog):
         ok_row.addWidget(btn_ok)
         ok_row.addWidget(btn_cancel)
         layout.addLayout(ok_row)
+
+    def _apply_filter(self, text: str):
+        """按「词」列实时过滤：不匹配的行隐藏，行号保持原词典序号。
+
+        过滤期间禁用上移/下移（隐藏行的存在会让交换目标不明确）。
+        """
+        needle = (text or "").strip().casefold()
+        if needle:
+            # 隐藏行仍保留选中态，可能导致「删除选中」误删不可见行——先清掉
+            self._table.clearSelection()
+        for row in range(self._table.rowCount()):
+            item = self._table.item(row, 1)
+            word = item.text() if item else ""
+            self._table.setRowHidden(
+                row, bool(needle) and needle not in word.casefold()
+            )
+        self._btn_up.setEnabled(not needle)
+        self._btn_down.setEnabled(not needle)
 
     def _append_row(self, enabled: bool, word: str = "", reading: str = ""):
         """在表格末尾追加一行。"""
@@ -138,7 +176,8 @@ class DictionaryEditDialog(QDialog):
         self._table.setItem(row, 2, QTableWidgetItem(reading))
 
     def _on_add(self):
-        # 新条目插入到顶部（最高优先级）
+        # 新条目插入到顶部（最高优先级）；先清空过滤确保新行可见
+        self._filter_edit.clear()
         self._insert_row_at(0, True, "", "")
         self._table.scrollToTop()
         self._table.selectRow(0)
@@ -175,6 +214,54 @@ class DictionaryEditDialog(QDialog):
         self._table.clearSelection()
         for row in rows:
             self._table.selectRow(row + 1)
+
+    def _on_move_to_top(self):
+        """选中行整体移到词典顶部（保持相对顺序）；过滤状态下同样可用。"""
+        rows = sorted(set(idx.row() for idx in self._table.selectedIndexes()))
+        if not rows or rows == list(range(len(rows))):
+            return
+        self._relocate_rows(rows, 0)
+
+    def _on_move_to_bottom(self):
+        """选中行整体移到词典底部（保持相对顺序）；过滤状态下同样可用。"""
+        rows = sorted(set(idx.row() for idx in self._table.selectedIndexes()))
+        total = self._table.rowCount()
+        if not rows or rows == list(range(total - len(rows), total)):
+            return
+        self._relocate_rows(rows, total - len(rows))
+
+    def _relocate_rows(self, rows: list, insert_at: int):
+        """把 rows（升序）整体搬运到 insert_at，保持相对顺序并重新选中。
+
+        先抽取数据、倒序删行（避免位移），再在目标位置按原顺序插回。
+        过滤状态下同样安全：插入后重新套用过滤条件，仅补选仍可见的行。
+        """
+        data = [self._row_data(r) for r in rows]
+        for r in reversed(rows):
+            self._table.removeRow(r)
+        for i, (enabled, word, reading) in enumerate(data):
+            self._insert_row_at(insert_at + i, enabled, word, reading)
+        # 新插入的行默认可见，需重新套用当前过滤（过滤时会顺带清空选中态）
+        self._apply_filter(self._filter_edit.text())
+        self._table.clearSelection()
+        # setRangeSelected 累加选中（selectRow 程序化调用会替换选择，多行时只剩最后一行）
+        last_col = self._table.columnCount() - 1
+        for i in range(len(data)):
+            row = insert_at + i
+            if not self._table.isRowHidden(row):
+                self._table.setRangeSelected(
+                    QTableWidgetSelectionRange(row, 0, row, last_col), True
+                )
+
+    def _row_data(self, row: int) -> tuple:
+        """读取一行的 (enabled, word, reading) 数据。"""
+        chk = self._table.item(row, 0)
+        word_item = self._table.item(row, 1)
+        reading_item = self._table.item(row, 2)
+        enabled = chk.checkState() == Qt.CheckState.Checked if chk else True
+        word = word_item.text() if word_item else ""
+        reading = reading_item.text() if reading_item else ""
+        return enabled, word, reading
 
     def _swap_rows(self, row_a: int, row_b: int):
         """交换两行数据。"""
@@ -243,6 +330,8 @@ class DictionaryEditDialog(QDialog):
             self._insert_row_at(0, True, word, reading)
             added += 1
 
+        # 导入的新行也需要套用当前过滤条件，保持「可见即匹配」的视图一致性
+        self._apply_filter(self._filter_edit.text())
         self._table.scrollToTop()
         InfoBar.success(
             title=self.tr("导入完成"),
