@@ -15,7 +15,7 @@ from typing import Optional
 
 from typing import Sequence
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QEvent
 from PyQt6.QtGui import QColor, QPainter
 from PyQt6.QtWidgets import (
     QApplication,
@@ -107,6 +107,21 @@ class FluentMessageBox(Dialog):
         # 立即激活一次；事件循环 settle 后再补一次，确保嵌入式下取得前台焦点。
         self._ensure_active()
         QTimer.singleShot(0, self._ensure_active)
+        # 监听应用激活事件：用户 Alt+Tab 切出再切回时，重新激活对话框，
+        # 防止模态窗口在父窗口后面无法点击。
+        QApplication.instance().installEventFilter(self)
+
+    def hideEvent(self, e):
+        try:
+            QApplication.instance().removeEventFilter(self)
+        except Exception:
+            pass
+        super().hideEvent(e)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.ApplicationActivate:
+            self._ensure_active()
+        return super().eventFilter(obj, event)
 
     def exec(self):
         """弹出暗化遮罩 → 模态执行 → 退出时移除遮罩。"""

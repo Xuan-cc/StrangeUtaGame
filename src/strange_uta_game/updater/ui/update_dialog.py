@@ -11,14 +11,14 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-from PyQt6.QtCore import Qt, QCoreApplication
+from PyQt6.QtCore import Qt, QCoreApplication, QEvent, QTimer
 from PyQt6.QtGui import QDesktopServices, QFont
 from PyQt6.QtCore import QUrl
 
 
 def _tr(s: str) -> str:
     return QCoreApplication.translate("UpdaterUI", s)
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     HyperlinkButton,
@@ -142,6 +142,23 @@ class UpdateAvailableDialog(MessageBoxBase):
         self.cancelButton.clicked.connect(self._on_later_clicked)
 
         self.setMinimumWidth(560)
+
+    def exec(self):
+        """弹出模态对话框，同时监听应用激活事件防止切窗后不可点击。"""
+        QApplication.instance().installEventFilter(self)
+        try:
+            return super().exec()
+        finally:
+            try:
+                QApplication.instance().removeEventFilter(self)
+            except Exception:
+                pass
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.ApplicationActivate:
+            self.raise_()
+            self.activateWindow()
+        return super().eventFilter(obj, event)
 
     # ── 槽 ──
 
