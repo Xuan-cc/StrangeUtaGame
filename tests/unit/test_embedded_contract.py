@@ -261,6 +261,21 @@ class TestEmbeddedUIContract:
         assert payload["media_kind"] == "video"
         assert payload["audio_path"] == "D:/cache/song.mp3"
 
+    def test_trigger_save_reports_whether_async_save_started(self):
+        from strange_uta_game.frontend.main_window import MainWindow
+
+        started = SimpleNamespace(_on_global_save=lambda: True)
+        cancelled = SimpleNamespace(_on_global_save=lambda: False)
+
+        assert MainWindow.trigger_save(started) is True
+        assert MainWindow.trigger_save(cancelled) is False
+
+    def test_public_save_lifecycle_signals_exist(self):
+        from strange_uta_game.frontend.main_window import MainWindow
+
+        assert MainWindow.project_save_finished is not None
+        assert MainWindow.project_save_failed is not None
+
 
 class TestStandaloneNoRegression:
     def test_file_mode_when_no_provider(self, tmp_path):

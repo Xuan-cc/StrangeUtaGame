@@ -55,6 +55,8 @@ class MainWindow(MSFluentWindow):
     # standalone 行为。
     _embedded: bool = False
     export_to_next_requested = pyqtSignal()
+    project_save_finished = pyqtSignal(str)
+    project_save_failed = pyqtSignal(str)
 
     def __init__(self, embedded: bool = False, settings_provider=None, progress_callback=None):
         # ⚠ 必须在 super().__init__() 之前赋值！MSFluentWindow 初始化
@@ -101,6 +103,8 @@ class MainWindow(MSFluentWindow):
         self._timing_service = TimingService(self._audio_engine, self._command_manager)
         self._store = ProjectStore(self)
         self._store.set_auto_save_defer_predicate(self._timing_service.is_playing)
+        self._store.save_finished.connect(self.project_save_finished.emit)
+        self._store.save_error.connect(self.project_save_failed.emit)
 
         # 跟踪当前界面（用于 switchTo 自动应用修改，必须在 _init_navigation 之前）
         self._current_interface = None
@@ -1258,7 +1262,7 @@ class MainWindow(MSFluentWindow):
         """从任意页面触发保存"""
         self._on_global_save()
 
-    def _on_global_save(self):
+    def _on_global_save(self) -> bool:
         """全局 Ctrl+S 保存（异步，委托给 ProjectStore）"""
         if not self._store.project:
             InfoBar.warning(
@@ -1270,12 +1274,12 @@ class MainWindow(MSFluentWindow):
                 duration=3000,
                 parent=self,
             )
-            return
+            return False
 
         self._connect_store_save_signals()
 
         if self._store.save_path and not self._store.is_temp_save_path():
-            self._store.save(self._store.save_path)
+            return self._store.save(self._store.save_path)
         else:
             suggested = self._store.suggested_save_path(".sug")
             path, _ = QFileDialog.getSaveFileName(
@@ -1285,7 +1289,7 @@ class MainWindow(MSFluentWindow):
                 self.tr("StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)"),
             )
             if not path:
-                return
+                return False
             if not path.endswith(".sug"):
                 path += ".sug"
 
@@ -1297,8 +1301,9 @@ class MainWindow(MSFluentWindow):
                 pass
 
             self._store.set_working_dir(path)
-            self._store.save(path)
+            started = self._store.save(path)
             self._refresh_frameless()
+            return started
 
     def _connect_store_save_signals(self) -> None:
         for sig, slot in [
@@ -1527,13 +1532,15 @@ class MainWindow(MSFluentWindow):
     # 主要供宿主程序（krok-helper）在自己的快捷键/closeEvent/标题栏
     # 等流程里调用，以接管打轴模块的"保存 / 未保存检查"等用户交互。
 
-    def trigger_save(self) -> None:
+    def trigger_save(self) -> bool:
         """请求保存当前项目（公开 API）。
 
         宿主可把自己顶层的 Ctrl+S 快捷键转发到本方法；行为等同于
-        standalone 模式下用户按 Ctrl+S。
+        standalone 模式下用户按 Ctrl+S。返回值仅表示是否成功发起异步
+        保存；真正完成或失败分别通过 ``project_save_finished`` 与
+        ``project_save_failed`` 信号通知。
         """
-        self._on_global_save()
+        return self._on_global_save()
 
     def export_to_next_payload(self) -> "Optional[dict[str, object]]":
         """返回供嵌入式宿主送往下一模块的完整项目快照。
