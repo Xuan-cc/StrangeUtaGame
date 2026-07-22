@@ -123,8 +123,11 @@ class RubyMismatchDialog(QDialog):
 class ExportInterface(QWidget):
     """导出界面"""
 
-    def __init__(self, parent=None):
+    export_to_next_requested = pyqtSignal()
+
+    def __init__(self, parent=None, *, embedded: bool = False):
         super().__init__(parent)
+        self._embedded = bool(embedded)
         self._project: Optional[Project] = None
         self._export_service = ExportService()
         # 输出目录是否由用户通过「浏览」主动选定。一经选定即保留，自动预填不再
@@ -294,12 +297,28 @@ class ExportInterface(QWidget):
 
         right_layout.addStretch()
 
-        # 导出按钮
+        # 导出按钮。宿主联动入口只在 embedded 模式显示；两个按钮使用相同
+        # stretch，始终各占可用宽度的一半。
+        self._export_button_row = QHBoxLayout()
+        self._export_button_row.setSpacing(12)
         self.btn_export = PrimaryPushButton(self.tr("导出"), self)
         self.btn_export.setIcon(FIF.SHARE)
         self.btn_export.setMinimumHeight(45)
         self.btn_export.clicked.connect(self._on_export)
-        right_layout.addWidget(self.btn_export)
+        self._export_button_row.addWidget(self.btn_export, 1)
+
+        self.btn_export_to_next = None
+        if self._embedded:
+            self.btn_export_to_next = PrimaryPushButton(
+                self.tr("导出到下一步"), self
+            )
+            self.btn_export_to_next.setIcon(FIF.RIGHT_ARROW)
+            self.btn_export_to_next.setMinimumHeight(45)
+            self.btn_export_to_next.clicked.connect(
+                self.export_to_next_requested.emit
+            )
+            self._export_button_row.addWidget(self.btn_export_to_next, 1)
+        right_layout.addLayout(self._export_button_row)
 
         content.addWidget(right_card, 1)
 

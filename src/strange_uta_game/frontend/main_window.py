@@ -4,7 +4,9 @@
 参考 March7thAssistant 的 UI 架构。
 """
 
-from PyQt6.QtCore import Qt, QTimer, QEvent
+from copy import deepcopy
+
+from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog
 
@@ -52,6 +54,7 @@ class MainWindow(MSFluentWindow):
     # self._embedded 实例属性写入前就访问它，会落到这个 False，保留
     # standalone 行为。
     _embedded: bool = False
+    export_to_next_requested = pyqtSignal()
 
     def __init__(self, embedded: bool = False, settings_provider=None, progress_callback=None):
         # ⚠ 必须在 super().__init__() 之前赋值！MSFluentWindow 初始化
@@ -516,8 +519,11 @@ class MainWindow(MSFluentWindow):
         self.editorInterface.project_saved.connect(self._update_title)
 
         self._report_progress(63, self.tr("正在加载导出界面..."))
-        self.exportInterface = ExportInterface(self)
+        self.exportInterface = ExportInterface(self, embedded=self._embedded)
         self.exportInterface.setObjectName("exportInterface")
+        self.exportInterface.export_to_next_requested.connect(
+            self.export_to_next_requested.emit
+        )
 
         self._report_progress(68, self.tr("正在加载演唱者管理..."))
         self.singerInterface = SingerManagerInterface(self)
@@ -1528,6 +1534,56 @@ class MainWindow(MSFluentWindow):
         standalone 模式下用户按 Ctrl+S。
         """
         self._on_global_save()
+
+    def export_to_next_payload(self) -> "Optional[dict[str, object]]":
+        """返回供嵌入式宿主送往下一模块的完整项目快照。
+
+        项目对象和 Nicokara 标签均深拷贝，避免宿主后续处理意外修改
+        SUG 当前编辑状态。媒体路径同时包含原始素材与当前播放音频，宿主可
+        优先使用原始素材，并在其缺失时回退到音频。
+        """
+        project = self._store.project if self._store is not None else None
+        if project is None:
+            return None
+
+        tags: object = {}
+        try:
+            settings = self.settingInterface.get_settings()
+            tags = settings.get("nicokara_tags") or {}
+        except Exception:
+            pass
+
+        media_path = None
+        try:
+            media_path = self._store.get_saveable_media_path()
+        except Exception:
+            media_path = self._store.original_media_path
+
+        media_kind = None
+        if media_path:
+            try:
+                from strange_uta_game.backend.infrastructure.audio.video_converter import (
+                    VIDEO_EXTENSIONS,
+                )
+                from pathlib import Path
+
+                suffix = Path(media_path).suffix.lower()
+                media_kind = (
+                    "video"
+                    if suffix in VIDEO_EXTENSIONS and suffix != ".dts"
+                    else "audio"
+                )
+            except Exception:
+                media_kind = None
+
+        return {
+            "project": deepcopy(project),
+            "nicokara_tags": deepcopy(tags) if isinstance(tags, dict) else {},
+            "source_path": self._store.save_path,
+            "media_path": media_path,
+            "media_kind": media_kind,
+            "audio_path": self._store.audio_path,
+        }
 
     def import_lyrics_from_text(self, content: str) -> bool:
         """从宿主传入的文本直接导入歌词（公开 API）。

@@ -205,6 +205,62 @@ class TestEmbeddedUIContract:
         about._open_config_dir()
         about._change_config_dir()
 
+    def test_export_to_next_button_only_exists_in_embedded(self, qapp):
+        from strange_uta_game.frontend.export.export_interface import ExportInterface
+
+        standalone = ExportInterface(embedded=False)
+        embedded = ExportInterface(embedded=True)
+
+        assert standalone.btn_export_to_next is None
+        assert standalone._export_button_row.count() == 1
+        assert embedded.btn_export_to_next is not None
+        assert embedded.btn_export_to_next.text() == "导出到下一步"
+        assert embedded._export_button_row.count() == 2
+        assert embedded._export_button_row.stretch(0) == 1
+        assert embedded._export_button_row.stretch(1) == 1
+
+    def test_export_to_next_button_emits_public_signal(self, qapp):
+        from strange_uta_game.frontend.export.export_interface import ExportInterface
+
+        page = ExportInterface(embedded=True)
+        emitted = []
+        page.export_to_next_requested.connect(lambda: emitted.append(True))
+
+        page.btn_export_to_next.click()
+
+        assert emitted == [True]
+
+    def test_export_to_next_payload_is_isolated_and_complete(self):
+        from strange_uta_game.frontend.main_window import MainWindow
+
+        project = SimpleNamespace(metadata=SimpleNamespace(title="曲名"), singers=[])
+        tags = {"title": "标签曲名", "custom": ["@Emoji=主唱"]}
+        store = SimpleNamespace(
+            project=project,
+            save_path="D:/songs/song.sug",
+            original_media_path="D:/songs/song.webm",
+            audio_path="D:/cache/song.mp3",
+            get_saveable_media_path=lambda: "D:/songs/song.webm",
+        )
+        host = SimpleNamespace(
+            _store=store,
+            settingInterface=SimpleNamespace(
+                get_settings=lambda: SimpleNamespace(
+                    get=lambda key: tags if key == "nicokara_tags" else None
+                )
+            ),
+        )
+
+        payload = MainWindow.export_to_next_payload(host)
+
+        assert payload["project"] is not project
+        assert payload["nicokara_tags"] == tags
+        assert payload["nicokara_tags"] is not tags
+        assert payload["source_path"] == "D:/songs/song.sug"
+        assert payload["media_path"] == "D:/songs/song.webm"
+        assert payload["media_kind"] == "video"
+        assert payload["audio_path"] == "D:/cache/song.mp3"
+
 
 class TestStandaloneNoRegression:
     def test_file_mode_when_no_provider(self, tmp_path):

@@ -53,6 +53,11 @@ class MainWindow(MSFluentWindow):
 | `trigger_save()` | 宿主把自己顶层的 Ctrl+S 转发到这里 |
 | `has_unsaved_changes() -> bool` | 宿主 closeEvent 用，判断是否有脏数据 |
 | `flush_unsaved()` | 宿主销毁 widget 前调用，把脏数据兜底写到崩溃恢复临时文件 |
+| `export_to_next_payload() -> dict \| None` | 获取项目、角色、Nicokara 标签和媒体路径的隔离快照，供宿主送往下一模块 |
+
+embedded 实例还公开 `export_to_next_requested` 信号。SUG 的导出页仅在
+embedded 模式显示“导出到下一步”按钮；点击后发出该信号，宿主收到后调用
+`export_to_next_payload()`。standalone 模式不创建这个按钮，原导出流程不变。
 
 ## 3. 设置后端：SettingsProvider
 
