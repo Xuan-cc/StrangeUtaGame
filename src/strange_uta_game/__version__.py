@@ -22,7 +22,7 @@
 
 from __future__ import annotations
 
-__version__ = "1.4.0" 
+__version__ = "1.4.1" 
 # 构建变体标识。build.py 在打包前将此行替换为对应变体值，打包后还原。
 # 运行时只读，请勿在应用逻辑中修改。
 VARIANT = ""  # "" | "noWinIME" | "mac-arm64" | "mac-intel"
