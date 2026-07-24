@@ -231,6 +231,10 @@ class Character:
     # 仅用于 KaraokePreview 视觉提示 + 导出前弹窗汇总。
     needs_guide: bool = field(default=False, compare=False)
 
+    # 实际导唱字符标记。与 needs_guide（待办）不同，本字段表示该字符本身
+    # 就是导唱块的一部分；不参与时间戳/ruby 不变式，也不影响正式导出。
+    is_guide: bool = field(default=False, compare=False)
+
     # 强制输出演唱者标签：即使与前一字演唱者相同，也在此字符前插入
     # 【演唱者名】标签。用于全文本编辑器手动强制插入/冗余标签的场景。
     force_singer_tag: bool = field(default=False, compare=False)

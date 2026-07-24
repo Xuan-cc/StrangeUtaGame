@@ -398,3 +398,26 @@ def test_force_singer_tag_overrides_whitespace_in_text_emit():
         chars, singer_id_to_name=smap, default_singer_id="id-a"
     )
     assert "【B】" in line
+def test_guide_block_marker_round_trip():
+    chars = [
+        Character(
+            char="●",
+            check_count=1,
+            timestamps=[1000],
+            linked_to_next=True,
+            is_guide=True,
+        ),
+        Character(
+            char="●",
+            check_count=1,
+            timestamps=[2000],
+            is_guide=True,
+        ),
+        Character(char="歌", check_count=1, timestamps=[3000]),
+    ]
+
+    line, _ = sentence_to_timed_line(chars)
+    decoded, _ = parse_timed_line(line)
+
+    assert line.count("【>GuideBlock】") == 1
+    assert [c.is_guide for c in decoded] == [True, True, False]

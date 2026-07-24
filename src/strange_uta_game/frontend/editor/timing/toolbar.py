@@ -55,6 +55,7 @@ class EditorToolBar(QFrame):
     delete_all_timestamps_clicked = pyqtSignal()              # 删除所有时间戳
     delete_all_timestamps_keep_head_clicked = pyqtSignal()    # 删除所有时间戳（保留行首）
     auto_generate_interlude_guide_clicked = pyqtSignal()      # 自动生成间奏指引
+    auto_insert_guide_clicked = pyqtSignal()                  # 根据时间戳自动插入导唱符
 
     delete_timestamps_selected_clicked = pyqtSignal()      # 删除所选范围时间戳
     analyze_pinyin_clicked = pyqtSignal()                   # 中文拼音注音
@@ -176,6 +177,7 @@ class EditorToolBar(QFrame):
 
         ts_menu.addAction(Action(FIF.DELETE, tr("删除所选范围时间戳"), self, triggered=self.delete_timestamps_selected_clicked.emit))
         ts_menu.addSeparator()
+        ts_menu.addAction(Action(FIF.ADD, tr("自动插入导唱符"), self, triggered=self.auto_insert_guide_clicked.emit))
         ts_menu.addAction(Action(FIF.MUSIC, tr("自动生成间奏指引"), self, triggered=self.auto_generate_interlude_guide_clicked.emit))
         self.btn_timestamp.setMenu(ts_menu)
         layout.addWidget(self.btn_timestamp)

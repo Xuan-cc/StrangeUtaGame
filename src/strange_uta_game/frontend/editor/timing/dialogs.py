@@ -643,6 +643,7 @@ def _build_guide_chars(sentence, char_idx, symbol, count, duration_ms, reverse):
                 check_count=1 if is_first_of_symbol else 0,
                 singer_id=singer_id,
                 linked_to_next=not is_last_char_of_last_symbol,
+                is_guide=True,
             )
             if ref_ts is not None and is_first_of_symbol:
                 if reverse:

@@ -168,6 +168,7 @@ def sentence_to_annotated_line(characters: "Sequence[Character]") -> str:
 #   [>T]             该字符是句尾但句尾时间戳尚无
 #   【演唱者名】       演唱者切换标签（与 Nicokara 一致，出现在切换处）
 #   【>Guide】          导唱待办标记（字符 needs_guide=True）
+#   【>GuideBlock】     紧随其后的字符/连词块为实际导唱字符（is_guide=True）
 #
 # 容错：任何 [...] / [>...] 若内部不是合法 mm:ss.xx，则一律按占位 [T] /
 # [>T] 处理（用户手输的非法时间戳不会丢字符，只是该位轴清空待补）。
@@ -314,6 +315,9 @@ def sentence_to_timed_line(
         ch = characters[i]
         eff = _effective_singer(ch, line_singer_id, default_singer_id)
         _emit_singer(eff, force=ch.force_singer_tag)
+
+        if ch.is_guide:
+            buf.append("【>GuideBlock】")
 
         if ch.needs_guide:
             buf.append("【>Guide】")
@@ -601,6 +605,7 @@ def parse_timed_line(
     chars: List[Character] = []
     pending_starts: List[Optional[int]] = []
     pending_guide = False
+    pending_guide_block = False
     pending_force_singer = False
     i = 0
     n = len(line_text)
@@ -617,6 +622,10 @@ def parse_timed_line(
                 name = line_text[i + 1 : close]
                 if name == ">Guide":
                     pending_guide = True
+                    i = close + 1
+                    continue
+                if name == ">GuideBlock":
+                    pending_guide_block = True
                     i = close + 1
                     continue
                 if name == DEFAULT_SINGER_LABEL:
@@ -643,6 +652,9 @@ def parse_timed_line(
                     if pending_guide:
                         ch.needs_guide = True
                         pending_guide = False
+                    if pending_guide_block:
+                        ch.is_guide = True
+                        pending_guide_block = False
                     if pending_force_singer:
                         ch.force_singer_tag = True
                         pending_force_singer = False
@@ -703,6 +715,10 @@ def parse_timed_line(
                 if "{" not in content and is_valid_block_content(content):
                     before_len = len(chars)
                     chars.extend(_parse_block(content, current, offset_ms))
+                    if pending_guide_block and len(chars) > before_len:
+                        for parsed_ch in chars[before_len:]:
+                            parsed_ch.is_guide = True
+                        pending_guide_block = False
                     if pending_guide and len(chars) > before_len:
                         chars[before_len].needs_guide = True
                         pending_guide = False
@@ -725,6 +741,9 @@ def parse_timed_line(
         if pending_guide:
             ch.needs_guide = True
             pending_guide = False
+        if pending_guide_block:
+            ch.is_guide = True
+            pending_guide_block = False
         if pending_force_singer:
             ch.force_singer_tag = True
             pending_force_singer = False

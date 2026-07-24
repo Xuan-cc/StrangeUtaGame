@@ -113,7 +113,14 @@ class AppSettings:
             "guide_symbol": "",
             "guide_count": 1,
             "guide_duration_ms": 1000,
+            "guide_reverse": False,
+            "guide_fill_gap": False,
             "scroll_mode": "auto",  # auto / always / never
+        },
+        "auto_guide": {
+            "min_gap_ms": 3000,
+            "defaults": None,
+            "window_geometry": "",
         },
         "auto_check": {
             "hiragana": True,

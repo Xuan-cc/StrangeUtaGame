@@ -374,6 +374,7 @@ class EditorInterface(QWidget):
 
         self.toolbar.delete_timestamps_selected_clicked.connect(self._on_delete_timestamps_selected)
         self.toolbar.auto_generate_interlude_guide_clicked.connect(self._on_auto_generate_interlude_guide)
+        self.toolbar.auto_insert_guide_clicked.connect(self._on_auto_insert_guide)
         self.toolbar.analyze_pinyin_clicked.connect(self._on_analyze_pinyin)
         self.toolbar.concat_sug_clicked.connect(self._on_concat_sug)
         self.toolbar.offset_changed.connect(self._on_offset_changed)
@@ -576,6 +577,9 @@ class EditorInterface(QWidget):
                 # 项目结构变更，波形选中句柄可能全部失效
                 if hasattr(self, "timeline"):
                     self.timeline.clear_tag_selection()
+                auto_dialog = getattr(self, "_auto_guide_dialog", None)
+                if auto_dialog is not None:
+                    auto_dialog.close()
                 self.set_project(self._store.project)
                 if self._mini_singer_manager is not None:
                     self._mini_singer_manager.set_project(self._store.project)
@@ -587,9 +591,15 @@ class EditorInterface(QWidget):
                 # 导入歌词/项目时可能自带时间戳，波形 timetag 也需刷新（此前只刷了 preview）
                 self._update_time_tags_display()
                 self._update_status()
+                auto_dialog = getattr(self, "_auto_guide_dialog", None)
+                if auto_dialog is not None:
+                    auto_dialog.mark_stale()
             elif change_type == "timetags":
                 self._schedule_time_tags_update()
                 self._update_status()
+                auto_dialog = getattr(self, "_auto_guide_dialog", None)
+                if auto_dialog is not None:
+                    auto_dialog.mark_stale()
             elif change_type == "settings":
                 self._apply_settings()
         except Exception as e:
@@ -3082,6 +3092,129 @@ class EditorInterface(QWidget):
             isClosable=True,
             position=InfoBarPosition.TOP,
             duration=4000,
+            parent=self,
+        )
+
+    def _on_auto_insert_guide(self):
+        """打开根据时间戳扫描的非模态自动导唱工具窗口。"""
+        if not self._project:
+            InfoBar.warning(
+                title=self.tr("无项目"),
+                content=self.tr("请先创建或打开项目"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+        try:
+            if self._auto_guide_dialog is not None and self._auto_guide_dialog.isVisible():
+                self._auto_guide_dialog.raise_()
+                self._auto_guide_dialog.activateWindow()
+                return
+        except (AttributeError, RuntimeError):
+            self._auto_guide_dialog = None
+
+        from .timing.auto_guide_dialog import AutoGuideDialog
+
+        dialog = AutoGuideDialog(self._project, self)
+        self._auto_guide_dialog = dialog
+        dialog.locate_requested.connect(self._locate_auto_guide_candidate)
+        dialog.execute_requested.connect(self._execute_auto_guide_candidates)
+        dialog.destroyed.connect(lambda: setattr(self, "_auto_guide_dialog", None))
+        dialog.show()
+
+    def _locate_auto_guide_candidate(self, line_idx: int, char_idx: int):
+        """在预览中定位候选字符，并把音频移到目标前 2 秒。"""
+        if not self._project or not (0 <= line_idx < len(self._project.sentences)):
+            return
+        sentence = self._project.sentences[line_idx]
+        if not (0 <= char_idx < len(sentence.characters)):
+            return
+        self._on_char_selected(line_idx, char_idx)
+        self.preview.set_focus_position(line_idx, char_idx)
+        self.preview.scroll_current_line_to_center()
+        ch = sentence.characters[char_idx]
+        if ch.all_global_timestamps:
+            self._on_seek(max(0, ch.all_global_timestamps[0] - 2000))
+
+    def _execute_auto_guide_candidates(self, items):
+        """预检并批量写入自动导唱；整批操作注册为一次撤销。"""
+        if not self._project or not items:
+            return
+        from .timing.auto_guide import apply_auto_guide_candidates
+        from .timing.auto_guide_dialog import AutoGuidePreflightDialog
+
+        preflight = AutoGuidePreflightDialog(self._project, items, self)
+        preflight.locate_requested.connect(self._locate_auto_guide_candidate)
+        if preflight.has_warnings:
+            if (
+                preflight.exec() != QDialog.DialogCode.Accepted
+                or not preflight.should_continue()
+            ):
+                return
+
+        before_sentences = deepcopy(self._project.sentences)
+        result = apply_auto_guide_candidates(self._project, items)
+        if result["inserted"] <= 0:
+            InfoBar.warning(
+                title=self.tr("未插入导唱"),
+                content=self.tr("所选候选均已失效或参数不可执行，请重新扫描。"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
+
+        command_manager = (
+            self._timing_service.command_manager if self._timing_service else None
+        )
+        if command_manager is not None:
+            after_sentences = deepcopy(self._project.sentences)
+            cmd = SentenceSnapshotCommand(
+                self._project,
+                before_sentences,
+                after_sentences,
+                self.tr("自动插入导唱符（{n} 处）").format(n=result["inserted"]),
+            )
+            cursor_pos = (self._current_line_idx, self.preview._current_char_idx)
+            cmd.undo_position = cursor_pos
+            cmd.redo_position = cursor_pos
+            command_manager.execute(cmd)
+
+        dialog = getattr(self, "_auto_guide_dialog", None)
+        if dialog is not None:
+            dialog.remember_first_executed(items)
+            dialog.close()
+
+        self._reapply_global_offset()
+        if self._timing_service:
+            self._timing_service.rebuild_global_checkpoints()
+        self.refresh_lyric_display()
+        self._update_time_tags_display()
+        self._update_status()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("lyrics")
+
+        InfoBar.success(
+            title=self.tr("自动导唱完成"),
+            content=self.tr(
+                "处理 {positions} 处，新增 {chars} 个字符，替换 {replaced} 处已有导唱，"
+                "清理 {todos} 个待办，跳过 {skipped} 处。"
+            ).format(
+                positions=result["inserted"],
+                chars=result["inserted_chars"],
+                replaced=result["replaced"],
+                todos=result["cleared_todos"],
+                skipped=result["skipped"],
+            ),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=5000,
             parent=self,
         )
 
