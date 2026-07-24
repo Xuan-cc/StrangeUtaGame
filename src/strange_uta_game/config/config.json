@@ -5,6 +5,7 @@
     "speed_slider_min": 0.2,
     "speed_slider_max": 2.0,
     "auto_play_on_load": false,
+    "pause_on_leave_timing": false,
     "hq_speed_change": true
   },
   "timing": {

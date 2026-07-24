@@ -586,6 +586,7 @@ class MainWindow(MSFluentWindow):
 
     def switchTo(self, interface):
         """切换标签页"""
+        self._pause_playback_when_leaving(interface)
         # 重置目标页面的 y 坐标，防止动画被打断时 widget 残留偏移，导致下次动画越来越快
         interface.move(interface.x(), 0)
         # 切换到打轴界面时暂停位置拉取，避免 60fps 刷新与切换动画竞争导致控件抖动
@@ -600,6 +601,34 @@ class MainWindow(MSFluentWindow):
             self.exportInterface._sync_default_output_dir()
         self._current_interface = interface
         super().switchTo(interface)
+
+    def _pause_playback_when_leaving(self, interface) -> None:
+        """按设置在离开打轴页时暂停正在播放的音乐。"""
+        # 只在确实离开打轴页时处理，避免重复切换或进入打轴页时误暂停。
+        if (
+            hasattr(self, "editorInterface")
+            and self._current_interface is self.editorInterface
+            and interface is not self.editorInterface
+            and self._pause_on_leave_timing_enabled()
+            and self._timing_service.is_playing()
+        ):
+            self.editorInterface._on_pause()
+
+    def _pause_on_leave_timing_enabled(self) -> bool:
+        """读取“离开打轴界面时暂停”设置（默认开启）。"""
+        try:
+            setting_iface = getattr(self, "settingInterface", None)
+            if setting_iface is not None:
+                return bool(
+                    setting_iface.get_settings().get(
+                        "audio.pause_on_leave_timing", True
+                    )
+                )
+            from strange_uta_game.frontend.settings.app_settings import AppSettings
+
+            return bool(AppSettings().get("audio.pause_on_leave_timing", True))
+        except Exception:
+            return True
 
     # ==================== 项目操作 ====================
 
