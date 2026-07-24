@@ -51,6 +51,16 @@ class PlaybackSubInterface(SubSettingInterface):
         self.card_auto_play = self._tr_register(
             SwitchSettingCard(FIF.PLAY, tr("自动播放"), tr("加载音频文件后自动开始播放"), parent=g),
             title_source="自动播放", content_source="加载音频文件后自动开始播放")
+        self.card_pause_on_leave = self._tr_register(
+            SwitchSettingCard(
+                FIF.PAUSE,
+                tr("离开打轴界面时暂停"),
+                tr("从打轴界面切换至其他页面时自动暂停音乐"),
+                parent=g,
+            ),
+            title_source="离开打轴界面时暂停",
+            content_source="从打轴界面切换至其他页面时自动暂停音乐",
+        )
         self.card_hq_speed = self._tr_register(
             SwitchSettingCard(FIF.SPEED_HIGH, tr("高质量倍速"), tr(self._HQ_SPEED_DESC), parent=g),
             title_source="高质量倍速", content_source=self._HQ_SPEED_DESC)
@@ -77,7 +87,8 @@ class PlaybackSubInterface(SubSettingInterface):
         )
         for c in [self.card_volume, self.card_speed, self.card_speed_min,
                   self.card_speed_max, self.card_fast_forward,
-                  self.card_rewind, self.card_auto_play, self.card_hq_speed,
+                  self.card_rewind, self.card_auto_play, self.card_pause_on_leave,
+                  self.card_hq_speed,
                   self.card_jump_before, self.card_scroll_mode]:
             g.addSettingCard(c)
         self.expandLayout.addWidget(g)
@@ -90,6 +101,7 @@ class PlaybackSubInterface(SubSettingInterface):
         self.card_fast_forward.value_changed.connect(self._notify_changed)
         self.card_rewind.value_changed.connect(self._notify_changed)
         self.card_auto_play.checked_changed.connect(self._notify_changed)
+        self.card_pause_on_leave.checked_changed.connect(self._notify_changed)
         self.card_hq_speed.checked_changed.connect(self._notify_changed)
         self.card_jump_before.value_changed.connect(self._notify_changed)
         self.card_scroll_mode.index_changed.connect(self._notify_changed)
@@ -105,6 +117,7 @@ class PlaybackSubInterface(SubSettingInterface):
         self.card_fast_forward.setValue(s.get("timing.fast_forward_ms", 5000))
         self.card_rewind.setValue(s.get("timing.rewind_ms", 5000))
         self.card_auto_play.setChecked(s.get("audio.auto_play_on_load", False))
+        self.card_pause_on_leave.setChecked(s.get("audio.pause_on_leave_timing", True))
         self.card_hq_speed.setChecked(s.get("audio.hq_speed_change", True))
         self.card_jump_before.setValue(s.get("timing.jump_before_ms", 3000))
         scroll_mode = s.get("timing.scroll_mode", "auto")
@@ -117,6 +130,7 @@ class PlaybackSubInterface(SubSettingInterface):
         s.set("audio.speed_slider_min", min_speed)
         s.set("audio.speed_slider_max", max_speed)
         s.set("audio.auto_play_on_load", self.card_auto_play.isChecked())
+        s.set("audio.pause_on_leave_timing", self.card_pause_on_leave.isChecked())
         s.set("audio.hq_speed_change", self.card_hq_speed.isChecked())
         s.set("timing.fast_forward_ms", self.card_fast_forward.value())
         s.set("timing.rewind_ms", self.card_rewind.value())
