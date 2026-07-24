@@ -9295,4 +9295,76 @@ KS側の設定が優先されます。</translation>
         <translation>削除</translation>
     </message>
 </context>
+<context>
+<name>EditorToolBar</name>
+<message><source>自动插入导唱符</source><translation>ガイド符を自動挿入</translation></message>
+</context>
+<context>
+<name>AutoGuideCandidateWidget</name>
+<message><source>定位到 Karaoke 预览中的目标字符</source><translation>カラオケプレビューで対象文字へ移動</translation></message>
+<message><source>项目首个</source><translation>プロジェクト先頭</translation></message>
+<message><source>导唱待办</source><translation>ガイド保留</translation></message>
+<message><source>已有导唱 {n} 字符</source><translation>既存ガイド：{n}文字</translation></message>
+<message><source>左边界未知</source><translation>左境界不明</translation></message>
+<message><source>空隙 {n}ms</source><translation>間隔 {n}ms</translation></message>
+<message><source>符号</source><translation>記号</translation></message>
+<message><source>数量</source><translation>数</translation></message>
+<message><source>时间</source><translation>時間</translation></message>
+<message><source>固定间隔</source><translation>固定間隔</translation></message>
+<message><source>补足间隔</source><translation>間隔を埋める</translation></message>
+<message><source>时间戳反向</source><translation>タイムスタンプを逆順</translation></message>
+<message><source>已有导唱</source><translation>既存ガイド</translation></message>
+<message><source>替换</source><translation>置換</translation></message>
+<message><source>追加</source><translation>追加</translation></message>
+<message><source>请输入导唱符</source><translation>ガイド符を入力してください</translation></message>
+<message><source>数量必须大于 0</source><translation>数は1以上にしてください</translation></message>
+<message><source>缺少目标时间戳，暂不可执行</source><translation>対象タイムスタンプがないため実行できません</translation></message>
+<message><source>补足间隔需要左边界</source><translation>間隔補完には左境界が必要です</translation></message>
+<message><source>左右边界顺序无效</source><translation>境界の順序が無効です</translation></message>
+<message><source>参数无效</source><translation>パラメータが無効です</translation></message>
+<message><source>未找到左边界，无法检查越界</source><translation>左境界が見つからないため超過を確認できません</translation></message>
+<message><source>超出左边界 {n}ms</source><translation>左境界を {n}ms 超過</translation></message>
+<message><source>{n} 个时间戳将限制到 00:00</source><translation>{n}個のタイムスタンプを00:00に制限します</translation></message>
+</context>
+<context>
+<name>AutoGuideDialog</name>
+<message><source>自动插入导唱符</source><translation>ガイド符を自動挿入</translation></message>
+<message><source>扫描设置</source><translation>スキャン設定</translation></message>
+<message><source>最小空隙</source><translation>最小間隔</translation></message>
+<message><source>重新扫描</source><translation>再スキャン</translation></message>
+<message><source>候选位置</source><translation>候補位置</translation></message>
+<message><source>全选可执行项</source><translation>実行可能項目を全選択</translation></message>
+<message><source>全部取消</source><translation>すべて解除</translation></message>
+<message><source>将第一项设置应用到全部</source><translation>先頭項目の設定をすべてに適用</translation></message>
+<message><source>插入所选候选</source><translation>選択した候補を挿入</translation></message>
+<message><source>关闭</source><translation>閉じる</translation></message>
+<message><source>共 {n} 个候选</source><translation>候補：{n}件</translation></message>
+<message><source>⚠ 当前仅有 {done}/{total} 行完成打轴，结果可能不完整。</source><translation>⚠ タイミング完了は{done}/{total}行です。結果が不完全な可能性があります。</translation></message>
+<message><source>打轴完成，可以执行自动导唱扫描。</source><translation>タイミングは完了しています。自動ガイドをスキャンできます。</translation></message>
+<message><source>⚠ 项目内容或时间戳已经变化，请重新扫描后再执行。</source><translation>⚠ プロジェクト内容またはタイムスタンプが変更されました。再スキャンしてください。</translation></message>
+<message><source>⚠ 项目内容或时间戳已经变化，候选已刷新，请重新确认。</source><translation>⚠ プロジェクトが変更されたため候補を更新しました。再確認してください。</translation></message>
+</context>
+<context>
+<name>AutoGuidePreflightDialog</name>
+<message><source>自动导唱执行确认</source><translation>自動ガイド挿入の確認</translation></message>
+<message><source>以下项目需要确认。点击候选条目可定位对应字符。</source><translation>次の項目を確認してください。候補をクリックすると対象文字へ移動します。</translation></message>
+<message><source>项目状态：仅有 {done}/{total} 行完成打轴</source><translation>プロジェクト状態：タイミング完了は{done}/{total}行です</translation></message>
+<message><source>找不到左边界，无法检查越界</source><translation>左境界が見つからないため超過を確認できません</translation></message>
+<message><source>导唱起点 {start}，左边界 {left}，越界 {overrun}ms</source><translation>ガイド開始 {start}、左境界 {left}、超過 {overrun}ms</translation></message>
+<message><source>{n} 个时间戳将限制到 00:00</source><translation>{n}個のタイムスタンプを00:00に制限します</translation></message>
+<message><source>返回修改</source><translation>編集に戻る</translation></message>
+<message><source>仍然执行</source><translation>そのまま実行</translation></message>
+</context>
+<context>
+<name>AutoGuideShared</name>
+<message><source>行 {line}/{line_total}: {preview} | 字 {char}/{char_total} | 「{text}」前</source><translation>行 {line}/{line_total}: {preview} | 文字 {char}/{char_total} | 「{text}」の前</translation></message>
+</context>
+<context>
+<name>EditorInterface</name>
+<message><source>未插入导唱</source><translation>ガイド符は挿入されませんでした</translation></message>
+<message><source>所选候选均已失效或参数不可执行，请重新扫描。</source><translation>選択した候補は無効または実行できません。再スキャンしてください。</translation></message>
+<message><source>自动插入导唱符（{n} 处）</source><translation>ガイド符を自動挿入（{n}箇所）</translation></message>
+<message><source>自动导唱完成</source><translation>自動ガイド完了</translation></message>
+<message><source>处理 {positions} 处，新增 {chars} 个字符，替换 {replaced} 处已有导唱，清理 {todos} 个待办，跳过 {skipped} 处。</source><translation>{positions}箇所を処理し、{chars}文字を追加、既存ガイド{replaced}箇所を置換、保留{todos}件を解除、{skipped}箇所をスキップしました。</translation></message>
+</context>
 </TS>

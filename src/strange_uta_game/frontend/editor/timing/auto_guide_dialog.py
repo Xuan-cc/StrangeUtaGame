@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import suppress
 from copy import deepcopy
 
-from PyQt6.QtCore import QByteArray, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QByteArray, QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QIntValidator
 from PyQt6.QtWidgets import (
     QDialog,
@@ -43,6 +43,7 @@ class AutoGuideCandidateWidget(FluentGroupBox):
 
     def __init__(
         self,
+        project,
         candidate: AutoGuideCandidate,
         params: AutoGuideParams,
         parent=None,
@@ -57,13 +58,8 @@ class AutoGuideCandidateWidget(FluentGroupBox):
         self.check = CheckBox("", self)
         self.check.setChecked(candidate.existing_count == 0)
         head.addWidget(self.check)
-        target_text = candidate.target.char.replace("\n", " ")
         self.location = PushButton(
-            self.tr("第{line}行 第{char}字「{text}」前").format(
-                line=candidate.sentence_idx + 1,
-                char=candidate.char_idx + 1,
-                text=target_text,
-            ),
+            _candidate_location_text(project, candidate),
             self,
         )
         self.location.setToolTip(self.tr("定位到 Karaoke 预览中的目标字符"))
@@ -339,7 +335,9 @@ class AutoGuideDialog(QDialog):
             params = deepcopy(
                 self._row_params.get(candidate.key, self.default_params)
             )
-            row = AutoGuideCandidateWidget(candidate, params, self.container)
+            row = AutoGuideCandidateWidget(
+                self.project, candidate, params, self.container
+            )
             row.locate_requested.connect(self.locate_requested)
             self.rows_layout.insertWidget(self.rows_layout.count() - 1, row)
             self.rows.append(row)
@@ -494,11 +492,7 @@ class AutoGuidePreflightDialog(QDialog):
 
         for candidate, params in items:
             check = candidate_preflight(candidate, params)
-            prefix = self.tr("第{line}行第{char}字「{text}」前").format(
-                line=candidate.sentence_idx + 1,
-                char=candidate.char_idx + 1,
-                text=candidate.target.char,
-            )
+            prefix = _candidate_location_text(project, candidate)
             details = []
             if candidate.left_ms is None:
                 details.append(self.tr("找不到左边界，无法检查越界"))
@@ -553,3 +547,24 @@ class AutoGuidePreflightDialog(QDialog):
 
     def should_continue(self) -> bool:
         return self._continue
+
+
+def _candidate_location_text(project, candidate: AutoGuideCandidate) -> str:
+    """沿用打轴界面底部信息栏的“行预览 + 字位置”描述口径。"""
+    line_total = len(project.sentences)
+    sentence = project.sentences[candidate.sentence_idx]
+    line_text = sentence.text.replace("\n", " ")
+    preview = line_text[:30] + "..." if len(line_text) > 30 else line_text
+    target_text = candidate.target.char.replace("\n", " ")
+    template = QCoreApplication.translate(
+        "AutoGuideShared",
+        "行 {line}/{line_total}: {preview} | 字 {char}/{char_total} | 「{text}」前",
+    )
+    return template.format(
+        line=candidate.sentence_idx + 1,
+        line_total=line_total,
+        preview=preview,
+        char=candidate.char_idx + 1,
+        char_total=len(sentence.characters),
+        text=target_text,
+    )

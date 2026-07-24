@@ -9294,4 +9294,76 @@ KS 来源的配置将优先覆盖同名设置。</translation>
         <translation>移除</translation>
     </message>
 </context>
+<context>
+<name>EditorToolBar</name>
+<message><source>自动插入导唱符</source><translation>自动插入导唱符</translation></message>
+</context>
+<context>
+<name>AutoGuideCandidateWidget</name>
+<message><source>定位到 Karaoke 预览中的目标字符</source><translation>定位到 Karaoke 预览中的目标字符</translation></message>
+<message><source>项目首个</source><translation>项目首个</translation></message>
+<message><source>导唱待办</source><translation>导唱待办</translation></message>
+<message><source>已有导唱 {n} 字符</source><translation>已有导唱 {n} 字符</translation></message>
+<message><source>左边界未知</source><translation>左边界未知</translation></message>
+<message><source>空隙 {n}ms</source><translation>空隙 {n}ms</translation></message>
+<message><source>符号</source><translation>符号</translation></message>
+<message><source>数量</source><translation>数量</translation></message>
+<message><source>时间</source><translation>时间</translation></message>
+<message><source>固定间隔</source><translation>固定间隔</translation></message>
+<message><source>补足间隔</source><translation>补足间隔</translation></message>
+<message><source>时间戳反向</source><translation>时间戳反向</translation></message>
+<message><source>已有导唱</source><translation>已有导唱</translation></message>
+<message><source>替换</source><translation>替换</translation></message>
+<message><source>追加</source><translation>追加</translation></message>
+<message><source>请输入导唱符</source><translation>请输入导唱符</translation></message>
+<message><source>数量必须大于 0</source><translation>数量必须大于 0</translation></message>
+<message><source>缺少目标时间戳，暂不可执行</source><translation>缺少目标时间戳，暂不可执行</translation></message>
+<message><source>补足间隔需要左边界</source><translation>补足间隔需要左边界</translation></message>
+<message><source>左右边界顺序无效</source><translation>左右边界顺序无效</translation></message>
+<message><source>参数无效</source><translation>参数无效</translation></message>
+<message><source>未找到左边界，无法检查越界</source><translation>未找到左边界，无法检查越界</translation></message>
+<message><source>超出左边界 {n}ms</source><translation>超出左边界 {n}ms</translation></message>
+<message><source>{n} 个时间戳将限制到 00:00</source><translation>{n} 个时间戳将限制到 00:00</translation></message>
+</context>
+<context>
+<name>AutoGuideDialog</name>
+<message><source>自动插入导唱符</source><translation>自动插入导唱符</translation></message>
+<message><source>扫描设置</source><translation>扫描设置</translation></message>
+<message><source>最小空隙</source><translation>最小空隙</translation></message>
+<message><source>重新扫描</source><translation>重新扫描</translation></message>
+<message><source>候选位置</source><translation>候选位置</translation></message>
+<message><source>全选可执行项</source><translation>全选可执行项</translation></message>
+<message><source>全部取消</source><translation>全部取消</translation></message>
+<message><source>将第一项设置应用到全部</source><translation>将第一项设置应用到全部</translation></message>
+<message><source>插入所选候选</source><translation>插入所选候选</translation></message>
+<message><source>关闭</source><translation>关闭</translation></message>
+<message><source>共 {n} 个候选</source><translation>共 {n} 个候选</translation></message>
+<message><source>⚠ 当前仅有 {done}/{total} 行完成打轴，结果可能不完整。</source><translation>⚠ 当前仅有 {done}/{total} 行完成打轴，结果可能不完整。</translation></message>
+<message><source>打轴完成，可以执行自动导唱扫描。</source><translation>打轴完成，可以执行自动导唱扫描。</translation></message>
+<message><source>⚠ 项目内容或时间戳已经变化，请重新扫描后再执行。</source><translation>⚠ 项目内容或时间戳已经变化，请重新扫描后再执行。</translation></message>
+<message><source>⚠ 项目内容或时间戳已经变化，候选已刷新，请重新确认。</source><translation>⚠ 项目内容或时间戳已经变化，候选已刷新，请重新确认。</translation></message>
+</context>
+<context>
+<name>AutoGuidePreflightDialog</name>
+<message><source>自动导唱执行确认</source><translation>自动导唱执行确认</translation></message>
+<message><source>以下项目需要确认。点击候选条目可定位对应字符。</source><translation>以下项目需要确认。点击候选条目可定位对应字符。</translation></message>
+<message><source>项目状态：仅有 {done}/{total} 行完成打轴</source><translation>项目状态：仅有 {done}/{total} 行完成打轴</translation></message>
+<message><source>找不到左边界，无法检查越界</source><translation>找不到左边界，无法检查越界</translation></message>
+<message><source>导唱起点 {start}，左边界 {left}，越界 {overrun}ms</source><translation>导唱起点 {start}，左边界 {left}，越界 {overrun}ms</translation></message>
+<message><source>{n} 个时间戳将限制到 00:00</source><translation>{n} 个时间戳将限制到 00:00</translation></message>
+<message><source>返回修改</source><translation>返回修改</translation></message>
+<message><source>仍然执行</source><translation>仍然执行</translation></message>
+</context>
+<context>
+<name>AutoGuideShared</name>
+<message><source>行 {line}/{line_total}: {preview} | 字 {char}/{char_total} | 「{text}」前</source><translation>行 {line}/{line_total}: {preview} | 字 {char}/{char_total} | 「{text}」前</translation></message>
+</context>
+<context>
+<name>EditorInterface</name>
+<message><source>未插入导唱</source><translation>未插入导唱</translation></message>
+<message><source>所选候选均已失效或参数不可执行，请重新扫描。</source><translation>所选候选均已失效或参数不可执行，请重新扫描。</translation></message>
+<message><source>自动插入导唱符（{n} 处）</source><translation>自动插入导唱符（{n} 处）</translation></message>
+<message><source>自动导唱完成</source><translation>自动导唱完成</translation></message>
+<message><source>处理 {positions} 处，新增 {chars} 个字符，替换 {replaced} 处已有导唱，清理 {todos} 个待办，跳过 {skipped} 处。</source><translation>处理 {positions} 处，新增 {chars} 个字符，替换 {replaced} 处已有导唱，清理 {todos} 个待办，跳过 {skipped} 处。</translation></message>
+</context>
 </TS>

@@ -105,11 +105,24 @@ class EditorToolBar(QFrame):
         self.btn_edit.setMenu(edit_menu)
         layout.addWidget(self.btn_edit)
 
-        self.btn_insert_guide = PushButton(tr("插入导唱符"), self)
+        self.btn_insert_guide = DropDownPushButton(tr("插入导唱符"), self)
         self.btn_insert_guide.setIcon(FIF.ADD)
         self.btn_insert_guide.setFixedHeight(32)
         self.btn_insert_guide.setMinimumWidth(110)
-        self.btn_insert_guide.clicked.connect(self.insert_guide_clicked.emit)
+        guide_menu = RoundMenu(parent=self.btn_insert_guide)
+        guide_menu.addAction(Action(
+            FIF.ADD,
+            tr("插入导唱符"),
+            self,
+            triggered=self.insert_guide_clicked.emit,
+        ))
+        guide_menu.addAction(Action(
+            FIF.SYNC,
+            tr("自动插入导唱符"),
+            self,
+            triggered=self.auto_insert_guide_clicked.emit,
+        ))
+        self.btn_insert_guide.setMenu(guide_menu)
         layout.addWidget(self.btn_insert_guide)
 
         layout.addSpacing(10)
@@ -177,7 +190,6 @@ class EditorToolBar(QFrame):
 
         ts_menu.addAction(Action(FIF.DELETE, tr("删除所选范围时间戳"), self, triggered=self.delete_timestamps_selected_clicked.emit))
         ts_menu.addSeparator()
-        ts_menu.addAction(Action(FIF.ADD, tr("自动插入导唱符"), self, triggered=self.auto_insert_guide_clicked.emit))
         ts_menu.addAction(Action(FIF.MUSIC, tr("自动生成间奏指引"), self, triggered=self.auto_generate_interlude_guide_clicked.emit))
         self.btn_timestamp.setMenu(ts_menu)
         layout.addWidget(self.btn_timestamp)

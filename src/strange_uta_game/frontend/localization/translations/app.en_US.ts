@@ -9293,4 +9293,76 @@ This usually means an incomplete install; please reinstall or contact the develo
         <translation>Remove</translation>
     </message>
 </context>
+<context>
+<name>EditorToolBar</name>
+<message><source>自动插入导唱符</source><translation>Auto-insert guide symbols</translation></message>
+</context>
+<context>
+<name>AutoGuideCandidateWidget</name>
+<message><source>定位到 Karaoke 预览中的目标字符</source><translation>Locate the target character in the Karaoke preview</translation></message>
+<message><source>项目首个</source><translation>First in project</translation></message>
+<message><source>导唱待办</source><translation>Guide pending</translation></message>
+<message><source>已有导唱 {n} 字符</source><translation>Existing guide: {n} characters</translation></message>
+<message><source>左边界未知</source><translation>Left boundary unknown</translation></message>
+<message><source>空隙 {n}ms</source><translation>Gap {n} ms</translation></message>
+<message><source>符号</source><translation>Symbol</translation></message>
+<message><source>数量</source><translation>Count</translation></message>
+<message><source>时间</source><translation>Timing</translation></message>
+<message><source>固定间隔</source><translation>Fixed interval</translation></message>
+<message><source>补足间隔</source><translation>Fill gap</translation></message>
+<message><source>时间戳反向</source><translation>Reverse timestamps</translation></message>
+<message><source>已有导唱</source><translation>Existing guide</translation></message>
+<message><source>替换</source><translation>Replace</translation></message>
+<message><source>追加</source><translation>Append</translation></message>
+<message><source>请输入导唱符</source><translation>Enter a guide symbol</translation></message>
+<message><source>数量必须大于 0</source><translation>Count must be greater than 0</translation></message>
+<message><source>缺少目标时间戳，暂不可执行</source><translation>Target timestamp is missing; cannot execute yet</translation></message>
+<message><source>补足间隔需要左边界</source><translation>Fill gap requires a left boundary</translation></message>
+<message><source>左右边界顺序无效</source><translation>Invalid boundary order</translation></message>
+<message><source>参数无效</source><translation>Invalid parameters</translation></message>
+<message><source>未找到左边界，无法检查越界</source><translation>Left boundary not found; overrun cannot be checked</translation></message>
+<message><source>超出左边界 {n}ms</source><translation>Exceeds left boundary by {n} ms</translation></message>
+<message><source>{n} 个时间戳将限制到 00:00</source><translation>{n} timestamps will be clamped to 00:00</translation></message>
+</context>
+<context>
+<name>AutoGuideDialog</name>
+<message><source>自动插入导唱符</source><translation>Auto-insert guide symbols</translation></message>
+<message><source>扫描设置</source><translation>Scan settings</translation></message>
+<message><source>最小空隙</source><translation>Minimum gap</translation></message>
+<message><source>重新扫描</source><translation>Rescan</translation></message>
+<message><source>候选位置</source><translation>Candidate positions</translation></message>
+<message><source>全选可执行项</source><translation>Select all executable</translation></message>
+<message><source>全部取消</source><translation>Clear selection</translation></message>
+<message><source>将第一项设置应用到全部</source><translation>Apply first item settings to all</translation></message>
+<message><source>插入所选候选</source><translation>Insert selected candidates</translation></message>
+<message><source>关闭</source><translation>Close</translation></message>
+<message><source>共 {n} 个候选</source><translation>{n} candidates</translation></message>
+<message><source>⚠ 当前仅有 {done}/{total} 行完成打轴，结果可能不完整。</source><translation>⚠ Only {done}/{total} lines are fully timed; results may be incomplete.</translation></message>
+<message><source>打轴完成，可以执行自动导唱扫描。</source><translation>Timing is complete. Auto-guide scan is ready.</translation></message>
+<message><source>⚠ 项目内容或时间戳已经变化，请重新扫描后再执行。</source><translation>⚠ Project content or timestamps changed. Rescan before executing.</translation></message>
+<message><source>⚠ 项目内容或时间戳已经变化，候选已刷新，请重新确认。</source><translation>⚠ Project content or timestamps changed. Candidates were refreshed; review them again.</translation></message>
+</context>
+<context>
+<name>AutoGuidePreflightDialog</name>
+<message><source>自动导唱执行确认</source><translation>Confirm auto-guide insertion</translation></message>
+<message><source>以下项目需要确认。点击候选条目可定位对应字符。</source><translation>The following items need confirmation. Click an item to locate its character.</translation></message>
+<message><source>项目状态：仅有 {done}/{total} 行完成打轴</source><translation>Project status: only {done}/{total} lines are fully timed</translation></message>
+<message><source>找不到左边界，无法检查越界</source><translation>Left boundary not found; overrun cannot be checked</translation></message>
+<message><source>导唱起点 {start}，左边界 {left}，越界 {overrun}ms</source><translation>Guide starts at {start}; left boundary {left}; overrun {overrun} ms</translation></message>
+<message><source>{n} 个时间戳将限制到 00:00</source><translation>{n} timestamps will be clamped to 00:00</translation></message>
+<message><source>返回修改</source><translation>Back to edit</translation></message>
+<message><source>仍然执行</source><translation>Execute anyway</translation></message>
+</context>
+<context>
+<name>AutoGuideShared</name>
+<message><source>行 {line}/{line_total}: {preview} | 字 {char}/{char_total} | 「{text}」前</source><translation>Line {line}/{line_total}: {preview} | Character {char}/{char_total} | Before “{text}”</translation></message>
+</context>
+<context>
+<name>EditorInterface</name>
+<message><source>未插入导唱</source><translation>No guide symbols inserted</translation></message>
+<message><source>所选候选均已失效或参数不可执行，请重新扫描。</source><translation>All selected candidates are stale or invalid. Please rescan.</translation></message>
+<message><source>自动插入导唱符（{n} 处）</source><translation>Auto-insert guide symbols ({n} positions)</translation></message>
+<message><source>自动导唱完成</source><translation>Auto-guide complete</translation></message>
+<message><source>处理 {positions} 处，新增 {chars} 个字符，替换 {replaced} 处已有导唱，清理 {todos} 个待办，跳过 {skipped} 处。</source><translation>Processed {positions} positions, added {chars} characters, replaced {replaced} existing guides, cleared {todos} pending markers, and skipped {skipped}.</translation></message>
+</context>
 </TS>
