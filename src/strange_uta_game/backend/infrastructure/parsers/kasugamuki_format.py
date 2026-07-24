@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Dict, List, Optional, Tuple
 
 from strange_uta_game.backend.domain.entities import Sentence
@@ -18,8 +19,7 @@ from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     format_timestamp,
 )
 from strange_uta_game.backend.infrastructure.parsers.romaji import (
-    detect_particle_part_indices,
-    romanize_ruby_parts,
+    romanize_sentence_to_self_ruby,
 )
 
 # 小假名中，拗音（ゃゅょ等）合并到前一拍；促音（っ）和长音（ー）各为一拍
@@ -200,8 +200,15 @@ def _linked_group_kana(group: List[Character]) -> str:
 def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
     """一行 → 春日向双注音格式（假名 + 罗马音）。"""
     chars = sentence.characters
-    particle_indices = detect_particle_part_indices(sentence)
-    part_map, char_start = _build_global_part_index(chars)
+    # Use the exact same sentence-level path as 注音管理 -> 转罗马音.  Work on
+    # a copy because exporting must not modify the open project.
+    romanized_sentence = deepcopy(sentence)
+    romanize_sentence_to_self_ruby(romanized_sentence)
+    romaji_by_char = {
+        i: [part.text for part in ch.ruby.parts]
+        for i, ch in enumerate(romanized_sentence.characters)
+        if ch.ruby
+    }
 
     segments: List[str] = []
     i = 0
@@ -211,15 +218,15 @@ def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
             group_start = i
             group, i = _collect_linked(chars, i)
             segments.append(
-                _linked_group_romaji(group, group_start, char_start, particle_indices)
+                _linked_group_romaji(group, group_start, romaji_by_char)
             )
         elif char.ruby:
             segments.append(
-                _char_ruby_romaji(char, i, char_start, particle_indices)
+                _char_ruby_romaji(char, romaji_by_char.get(i, []))
             )
             i += 1
         elif _is_kana_text(char.char):
-            segments.append(_char_self_ruby_romaji(char))
+            segments.append(_char_self_ruby_romaji(char, romaji_by_char.get(i, [])))
             i += 1
         else:
             # 非假名无注音 → 回退到单注音格式
@@ -234,9 +241,7 @@ def sentences_to_kasugamuki_romaji(sentences: List[Sentence]) -> str:
 
 def _char_ruby_romaji(
     char: Character,
-    char_idx: int,
-    char_start: Dict[int, int],
-    particle_indices: set,
+    romaji_list: List[str],
 ) -> str:
     assert char.ruby is not None
     ts_list = _get_ts_list(char)
@@ -244,17 +249,13 @@ def _char_ruby_romaji(
     kana_texts = [p.text for p in parts]
     kana_tagged = _build_tagged_parts(kana_texts, ts_list)
 
-    local_pi = _char_particle_indices(char_idx, parts, char_start, particle_indices)
-    romaji_list = romanize_ruby_parts(kana_texts, particle_indices=local_pi)
     romaji_tagged = _build_tagged_parts(romaji_list, ts_list)
 
     return f"{{{char.char}|{kana_tagged}>{romaji_tagged}}}{_format_sentence_end(char)}"
 
 
-def _char_self_ruby_romaji(char: Character) -> str:
+def _char_self_ruby_romaji(char: Character, romaji_list: List[str]) -> str:
     ts_list = _get_ts_list(char)
-    moras = _split_kana_moras(char.char)
-    romaji_list = romanize_ruby_parts(moras)
     romaji_tagged = _build_tagged_parts(romaji_list, ts_list)
     return f"{{{char.char}|>{romaji_tagged}}}{_format_sentence_end(char)}"
 
@@ -262,12 +263,11 @@ def _char_self_ruby_romaji(char: Character) -> str:
 def _linked_group_romaji(
     group: List[Character],
     group_start: int,
-    char_start: Dict[int, int],
-    particle_indices: set,
+    romaji_by_char: Dict[int, List[str]],
 ) -> str:
     return _linked_group_common(
         group, with_romaji=True,
-        char_start=char_start, particle_indices=particle_indices,
+        char_start={}, particle_indices=set(), romaji_by_char=romaji_by_char,
         group_start=group_start,
     )
 
@@ -279,6 +279,7 @@ def _linked_group_common(
     char_start: Dict[int, int],
     particle_indices: set,
     group_start: int,
+    romaji_by_char: Optional[Dict[int, List[str]]] = None,
 ) -> str:
     """处理连词组，合并连续假名字符的罗马音。"""
     # 先把 group 分成若干批次：连续的无 ruby 假名字符合并，其他各成一个批次
@@ -306,12 +307,14 @@ def _linked_group_common(
             if ch.ruby:
                 if with_romaji:
                     result_parts[batch_start] = _char_ruby_romaji(
-                        ch, char_idx, char_start, particle_indices,
+                        ch, (romaji_by_char or {}).get(char_idx, []),
                     )
                 else:
                     result_parts[batch_start] = _char_ruby_kana(ch)
             elif with_romaji and _is_kana_text(ch.char):
-                result_parts[batch_start] = _char_self_ruby_romaji(ch)
+                result_parts[batch_start] = _char_self_ruby_romaji(
+                    ch, (romaji_by_char or {}).get(char_idx, []),
+                )
             else:
                 result_parts[batch_start] = _char_plain(ch)
         else:
@@ -319,6 +322,8 @@ def _linked_group_common(
             _process_kana_batch(
                 batch_chars, batch_start, result_parts,
                 with_romaji=with_romaji,
+                group_start=group_start,
+                romaji_by_char=romaji_by_char,
             )
 
     return "".join(p for p in result_parts if p is not None)
@@ -330,6 +335,8 @@ def _process_kana_batch(
     result_parts: List[Optional[str]],
     *,
     with_romaji: bool,
+    group_start: int,
+    romaji_by_char: Optional[Dict[int, List[str]]],
 ) -> None:
     """连续假名字符：按字符粒度传入 romanize_ruby_parts，让其自行处理跨字符拗音拆分。
     然后每个字符各自拿到自己那部分 romaji。"""
@@ -337,7 +344,10 @@ def _process_kana_batch(
     char_kana_list = [ch.char for ch in batch]
 
     if with_romaji:
-        char_romaji_list = romanize_ruby_parts(char_kana_list)
+        char_romaji_list = [
+            "".join((romaji_by_char or {}).get(group_start + batch_start + i, []))
+            for i in range(len(batch))
+        ]
     else:
         char_romaji_list = char_kana_list
 

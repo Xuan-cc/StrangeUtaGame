@@ -323,6 +323,27 @@ def romanize_sentence_in_place(sentence) -> None:
         part.text = text
 
 
+def romanize_sentence_to_self_ruby(sentence) -> bool:
+    """Apply the editor's one-click romaji conversion to one sentence.
+
+    Bare single kana first receive self-ruby, then every ruby part is converted
+    together so cross-character sokuon/youon/long-vowel context is preserved.
+    Returns whether any self-ruby was added.
+    """
+    from strange_uta_game.backend.domain.models import Ruby, RubyPart
+
+    added_self_ruby = False
+    for ch in sentence.characters:
+        if ch.ruby or not is_self_romanizable_kana(ch.char):
+            continue
+        ch.ruby = Ruby(parts=[RubyPart(text=ch.char)])
+        ch.set_check_count(max(ch.check_count, 1), force=True)
+        added_self_ruby = True
+
+    romanize_sentence_in_place(sentence)
+    return added_self_ruby
+
+
 def romanize_project_to_self_ruby(project, progress_callback=None) -> int:
     """「全部转为罗马字注音」一次性操作。
 
@@ -340,29 +361,17 @@ def romanize_project_to_self_ruby(project, progress_callback=None) -> int:
     Returns:
         发生变化的句数。
     """
-    from strange_uta_game.backend.domain.models import Ruby, RubyPart
-
     changed = 0
     sentences = project.sentences
     total = len(sentences)
     for i, sentence in enumerate(sentences):
-        touched = False
-        for ch in sentence.characters:
-            if ch.ruby:
-                continue
-            if is_self_romanizable_kana(ch.char):
-                ch.ruby = Ruby(parts=[RubyPart(text=ch.char)])
-                # 经 setter 收口：check_count >= 2 时补占位符，维持 parts==cc 不变式。
-                ch.set_check_count(max(ch.check_count, 1), force=True)
-                touched = True
-
         def _join(sent) -> str:
             return "".join(
                 p.text for c in sent.characters if c.ruby for p in c.ruby.parts
             )
 
         before = _join(sentence)
-        romanize_sentence_in_place(sentence)
+        touched = romanize_sentence_to_self_ruby(sentence)
         if touched or before != _join(sentence):
             changed += 1
         if progress_callback is not None:
