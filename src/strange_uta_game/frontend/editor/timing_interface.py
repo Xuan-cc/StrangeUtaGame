@@ -1030,6 +1030,13 @@ class EditorInterface(QWidget):
     def set_project(self, project: Project):
         previous_project = self._project
         self._project = project
+        # 支持“先导入音频，再创建/导入歌词”的工作流。首次设置项目时音频
+        # 引擎会被保留，因此也要把引擎中的真实时长带入新项目。
+        if previous_project is None and self._timing_service:
+            self._sync_project_audio_duration(
+                self._timing_service.get_duration_ms(),
+                mark_dirty=False,
+            )
         # 获取AppSettings实例（与_apply_settings使用同一个）
         app_settings = None
         try:
@@ -3009,6 +3016,14 @@ class EditorInterface(QWidget):
         # 快照 before
         before_sentences = deepcopy(self._project.sentences)
 
+        # 后奏必须以当前媒体的真实结尾为边界。项目字段仅作为没有已加载
+        # 媒体时的兼容回退，不能覆盖引擎给出的最新时长。
+        live_audio_duration_ms = 0
+        if self._timing_service:
+            live_audio_duration_ms = self._timing_service.get_duration_ms()
+        if live_audio_duration_ms > 0:
+            self._sync_project_audio_duration(live_audio_duration_ms)
+
         result = execute_auto_interlude_guide(
             self._project,
             min_guide_time_s,
@@ -3018,6 +3033,7 @@ class EditorInterface(QWidget):
             new_line,
             front_margin_ms,
             back_margin_ms,
+            audio_duration_ms=live_audio_duration_ms or None,
         )
 
         inserted = result.get("inserted", 0)
@@ -4181,6 +4197,27 @@ class EditorInterface(QWidget):
         if getattr(self, "_audio_state_tooltip", None):
             self._audio_state_tooltip.setContent(stage)
 
+    def _sync_project_audio_duration(
+        self,
+        duration_ms: int,
+        *,
+        mark_dirty: bool = True,
+    ) -> bool:
+        """将音频引擎探测到的真实时长同步到当前项目。
+
+        所有受支持的音频格式最终都经过音频引擎；视频也会先提取音轨再由
+        同一引擎加载。因此这里是格式无关的统一同步点。
+        """
+        if not self._project:
+            return False
+        duration_ms = max(0, int(duration_ms or 0))
+        if duration_ms <= 0 or self._project.audio_duration_ms == duration_ms:
+            return False
+        self._project.audio_duration_ms = duration_ms
+        if mark_dirty and getattr(self, "_store", None):
+            self._store.mark_dirty()
+        return True
+
     def _on_audio_loaded(self, file_path: str) -> None:
         """音频后台加载完成（UI 线程）：刷新时长/波形/默认音量速度。"""
         if getattr(self, "_audio_state_tooltip", None):
@@ -4191,6 +4228,7 @@ class EditorInterface(QWidget):
 
         info = self._timing_service.get_audio_info() if self._timing_service else None
         if info:
+            self._sync_project_audio_duration(info.duration_ms)
             self.transport.set_duration(info.duration_ms)
             self.timeline.set_duration(info.duration_ms)
             self.preview.set_duration(info.duration_ms)

@@ -217,6 +217,7 @@ class FileLoader:
         if self._timing_service:
             info = self._timing_service.get_audio_info()
             if info:
+                self._editor._sync_project_audio_duration(info.duration_ms)
                 self._editor.transport.set_duration(info.duration_ms)
                 self._editor.timeline.set_duration(info.duration_ms)
                 self._editor.preview.set_duration(info.duration_ms)

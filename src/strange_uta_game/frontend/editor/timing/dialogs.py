@@ -2485,6 +2485,7 @@ def execute_auto_interlude_guide(
     new_line: bool,
     front_margin_ms: int,
     back_margin_ms: int,
+    audio_duration_ms: int | None = None,
 ) -> dict:
     """执行自动生成间奏指引，原地修改 project.sentences。
 
@@ -2492,7 +2493,11 @@ def execute_auto_interlude_guide(
         {"inserted": int, "skipped": int, "message": str}
     """
     min_guide_ms = int(min_guide_time_s * 1000)
-    audio_duration_ms = getattr(project, "audio_duration_ms", 0) or 0
+    # 优先使用当前音频引擎给出的实际时长。project.audio_duration_ms 是持久化
+    # 快照，旧项目以及“先导入音频、后创建项目”等路径中可能仍为 0 或已过期。
+    if audio_duration_ms is None:
+        audio_duration_ms = getattr(project, "audio_duration_ms", 0) or 0
+    audio_duration_ms = max(0, int(audio_duration_ms))
 
     if not project.sentences:
         return {"inserted": 0, "skipped": 0, "message": "项目中没有歌词行"}
