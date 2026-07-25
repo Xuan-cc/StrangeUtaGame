@@ -73,6 +73,37 @@ class TestSettingsProviderContract:
         assert any(e.get("word") == "漢字" for e in s.load_dictionary())
         assert any(e.get("word") == "漢字" for e in p.extra.get("dictionary", []))
 
+    def test_empty_provider_receives_packaged_dictionary_and_version(self):
+        p = MockProvider()
+        s = AppSettings(provider=p)
+
+        assert s.load_dictionary()
+        assert p.extra["dictionary"] == s.load_dictionary()
+        assert p.main["applied_dictionary_version"] == s.get("dictionary_version")
+
+    def test_current_version_preserves_intentionally_empty_dictionary(self):
+        p = MockProvider()
+        packaged_version = AppSettings(provider=p).get("dictionary_version")
+        p.main = {"applied_dictionary_version": packaged_version}
+        p.extra["dictionary"] = []
+
+        s = AppSettings(provider=p)
+
+        assert s.load_dictionary() == []
+
+    def test_provider_upgrade_keeps_custom_entries(self):
+        p = MockProvider()
+        p.main = {"applied_dictionary_version": 0}
+        p.extra["dictionary"] = [
+            {"enabled": True, "word": "custom-only", "reading": "custom"}
+        ]
+
+        s = AppSettings(provider=p)
+
+        assert any(e.get("word") == "custom-only" for e in s.load_dictionary())
+        assert len(s.load_dictionary()) > 1
+        assert p.main["applied_dictionary_version"] == s.get("dictionary_version")
+
     def test_singers_via_provider(self):
         p = MockProvider()
         s = AppSettings(provider=p)

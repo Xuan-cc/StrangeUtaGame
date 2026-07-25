@@ -430,8 +430,17 @@ class AppSettings:
                 loaded = {}
             if isinstance(loaded, dict):
                 self._deep_merge(self._settings, deepcopy(loaded))
+            try:
+                provider_dictionary_version = int(
+                    loaded.get("applied_dictionary_version", 0)
+                )
+            except (AttributeError, TypeError, ValueError):
+                provider_dictionary_version = 0
+            self._force_upgrade_dictionary_if_needed(provider_dictionary_version)
 
-    def _force_upgrade_dictionary_if_needed(self) -> None:
+    def _force_upgrade_dictionary_if_needed(
+        self, user_version_override: Optional[int] = None
+    ) -> None:
         """词典版本升级：比较内置词典版本号与用户已应用版本号。
 
         内置 config.json 含 ``dictionary_version``（整数），用户 config.json 含
@@ -460,7 +469,9 @@ class AppSettings:
 
         # 读用户已应用版本号（直接从用户 config.json 原始文件读，避免 merge 干扰）
         user_version = 0
-        if self._config_path.exists():
+        if user_version_override is not None:
+            user_version = user_version_override
+        elif self._config_path is not None and self._config_path.exists():
             try:
                 with open(self._config_path, "r", encoding="utf-8") as f:
                     user_cfg = json.load(f)
@@ -472,19 +483,15 @@ class AppSettings:
             return  # 已是最新版本
 
         # 加载内置词典和用户词典
-        packaged_dict_path = self._get_packaged_config_path("dictionary.json")
-        if not packaged_dict_path:
-            return
-        try:
-            with open(packaged_dict_path, "r", encoding="utf-8") as f:
-                packaged_entries = json.load(f)
-        except Exception as e:
-            print(f"Failed to read packaged dictionary: {e}")
+        packaged_entries = self._load_packaged_dictionary()
+        if not packaged_entries:
             return
 
         # 加载用户词典（如果存在）
         user_entries = []
-        if self._dict_path.exists():
+        if self._provider is not None or (
+            self._dict_path is not None and self._dict_path.exists()
+        ):
             try:
                 user_entries = self.load_dictionary()
             except Exception:
@@ -532,9 +539,34 @@ class AppSettings:
         # 清理旧标志位（兼容旧版）
         self._settings.pop("is_dictionary_real_sugdic", None)
         try:
-            self._save_json(self._config_path, self._settings)
+            if self._provider is not None:
+                self._dirty_paths.add("applied_dictionary_version")
+                self.save()
+            else:
+                self._save_json(self._config_path, self._settings)
         except Exception as e:
             print(f"Failed to write applied_dictionary_version: {e}")
+
+    def _load_packaged_dictionary(self) -> list:
+        """Load built-in entries independently of the active storage backend."""
+        packaged = self._get_packaged_config_path("dictionary.json")
+        if packaged:
+            try:
+                with open(packaged, "r", encoding="utf-8") as f:
+                    entries = json.load(f)
+                if isinstance(entries, list):
+                    return entries
+            except Exception as e:
+                print(f"Failed to read packaged dictionary: {e}")
+        try:
+            from strange_uta_game.backend.infrastructure.data.default_dictionary import (
+                DEFAULT_RL_DICT_TEXT,
+            )
+
+            return _parse_rl_dictionary(DEFAULT_RL_DICT_TEXT)
+        except Exception as e:
+            print(f"Failed to load fallback dictionary: {e}")
+            return []
 
     def _ensure_default_dictionary(self) -> None:
         """首次启动时，将内置 RL 字典固化为默认 dictionary.json。"""
