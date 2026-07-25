@@ -49,7 +49,7 @@ def test_sokuon_cross_part_context():
     service = AutoCheckService(analyzer, auto_check_flags=ROMAJI_FLAGS)
     sentence = Sentence.from_text("待って", "s1")
     service.apply_to_sentence(sentence)
-    assert _ruby_parts(sentence) == [["ma"], ["t"], ["te"]]
+    assert _ruby_parts(sentence) == [["ma"], ["tte"], [""]]
     assert [ch.check_count for ch in sentence.characters] == [1, 1, 1]
 
 

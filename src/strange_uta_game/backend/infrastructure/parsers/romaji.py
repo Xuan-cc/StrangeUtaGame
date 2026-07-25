@@ -160,8 +160,25 @@ def romanize_ruby_parts(
         if hira == "っ":
             next_romaji = _romaji_mora_at(flat, index + 1)
             prefix = _geminate_prefix(next_romaji)
-            result[part_idx] += prefix if prefix else "xtsu"
-            index += 1
+            if prefix and index + 1 < len(flat):
+                # A sokuon and its following mora form one pronunciation unit.
+                # Keep that unit on the sokuon's part and leave the consumed
+                # following part empty, so serializers produce e.g. ``tte``
+                # instead of separate ``t`` / ``te`` annotations.
+                result[part_idx] += prefix + next_romaji
+                prev_vowel = _last_vowel(next_romaji)
+                index += 2
+                if index < len(flat):
+                    _, maybe_small = flat[index]
+                    pair = (
+                        _kata_to_hira_char(flat[index - 1][1])
+                        + _kata_to_hira_char(maybe_small)
+                    )
+                    if pair in _DIGRAPHS:
+                        index += 1
+            else:
+                result[part_idx] += "xtsu"
+                index += 1
             continue
 
         if hira == "ー":
@@ -184,12 +201,9 @@ def romanize_ruby_parts(
             pair = hira + _kata_to_hira_char(next_ch)
             digraph = _DIGRAPHS.get(pair)
             if digraph is not None:
-                if next_part_idx == part_idx:
-                    result[part_idx] += digraph
-                else:
-                    head, tail = _split_digraph(digraph)
-                    result[part_idx] += head
-                    result[next_part_idx] += tail
+                # A digraph is one mora.  Store it on its leading part even
+                # when the small kana lives in the next RubyPart.
+                result[part_idx] += digraph
                 prev_vowel = _last_vowel(digraph)
                 index += 2
                 continue

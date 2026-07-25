@@ -24,10 +24,10 @@ class TestBasicKana:
 
 class TestSokuon:
     def test_sokuon_gemination(self):
-        assert romanize_ruby_parts(["ま", "っ", "て"]) == ["ma", "t", "te"]
+        assert romanize_ruby_parts(["ま", "っ", "て"]) == ["ma", "tte", ""]
 
     def test_sokuon_before_cha(self):
-        assert romanize_ruby_parts(["こ", "っ", "ち"]) == ["ko", "t", "chi"]
+        assert romanize_ruby_parts(["こ", "っ", "ち"]) == ["ko", "tchi", ""]
 
     def test_sokuon_isolated(self):
         assert romanize_ruby_parts(["っ"]) == ["xtsu"]
@@ -54,7 +54,7 @@ class TestN:
 
 class TestCrossPart:
     def test_cross_part_youon_split(self):
-        assert romanize_ruby_parts(["き", "ょ", "う"]) == ["ky", "o", "u"]
+        assert romanize_ruby_parts(["き", "ょ", "う"]) == ["kyo", "", "u"]
 
     def test_cross_part_youon_with_timing(self):
         assert romanize_ruby_parts(["きょ", "う"]) == ["kyo", "u"]
@@ -89,4 +89,4 @@ class TestEdgeCases:
         assert romanize_ruby_parts(["キャ", "キュ", "キョ"]) == ["kya", "kyu", "kyo"]
 
     def test_katakana_sokuon(self):
-        assert romanize_ruby_parts(["マ", "ッ", "テ"]) == ["ma", "t", "te"]
+        assert romanize_ruby_parts(["マ", "ッ", "テ"]) == ["ma", "tte", ""]
