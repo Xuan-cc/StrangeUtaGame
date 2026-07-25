@@ -93,7 +93,8 @@ def _geminate_prefix(next_romaji: str) -> str:
     if not lowered:
         return ""
     if lowered.startswith("ch"):
-        return "t"
+        # Modern/common Hepburn-style spelling: っち/っちゃ → cchi/ccha.
+        return "c"
     first = lowered[0]
     if first in _VOWELS or first == "n":
         return ""

@@ -27,7 +27,12 @@ class TestSokuon:
         assert romanize_ruby_parts(["ま", "っ", "て"]) == ["ma", "tte", ""]
 
     def test_sokuon_before_cha(self):
-        assert romanize_ruby_parts(["こ", "っ", "ち"]) == ["ko", "tchi", ""]
+        assert romanize_ruby_parts(["こ", "っ", "ち"]) == ["ko", "cchi", ""]
+
+    def test_sokuon_before_cha_digraph(self):
+        assert romanize_ruby_parts(["ま", "っ", "ち", "ゃ"]) == [
+            "ma", "ccha", "", "",
+        ]
 
     def test_sokuon_isolated(self):
         assert romanize_ruby_parts(["っ"]) == ["xtsu"]
