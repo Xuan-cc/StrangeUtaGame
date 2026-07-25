@@ -163,10 +163,10 @@ def romanize_ruby_parts(
             prefix = _geminate_prefix(next_romaji)
             if prefix and index + 1 < len(flat):
                 # A sokuon and its following mora form one pronunciation unit.
-                # Keep that unit on the sokuon's part and leave the consumed
-                # following part empty, so serializers produce e.g. ``tte``
-                # instead of separate ``t`` / ``te`` annotations.
-                result[part_idx] += prefix + next_romaji
+                # Store it on the affected following kana, not on the sokuon:
+                # こ・っ・ち -> ko / (empty) / cchi.
+                next_part_idx, _ = flat[index + 1]
+                result[next_part_idx] += prefix + next_romaji
                 prev_vowel = _last_vowel(next_romaji)
                 index += 2
                 if index < len(flat):

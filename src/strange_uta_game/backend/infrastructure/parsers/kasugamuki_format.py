@@ -233,6 +233,12 @@ def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
             )
             i += 1
         elif _is_kana_text(char.char):
+            if not any(romaji_by_char.get(i, [])):
+                # A consumed sokuon/small kana has no romaji annotation of its
+                # own.  Keep it as a plain timed character.
+                segments.append(_char_plain(char))
+                i += 1
+                continue
             mora_end = i + 1
             # The shared converter stores a cross-character digraph/sokuon on
             # its leading part and leaves consumed following parts empty.
@@ -288,7 +294,8 @@ def _char_self_ruby_romaji(char: Character, romaji_list: List[str]) -> str:
 
 
 def _self_kana_group_romaji(
-    group: List[Character], romaji_list: List[str]
+    group: List[Character],
+    romaji_list: List[str],
 ) -> str:
     base = "".join(ch.char for ch in group)
     romaji_tagged = _build_tagged_parts(romaji_list, _get_ts_list(group[0]))

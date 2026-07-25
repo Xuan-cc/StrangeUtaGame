@@ -24,14 +24,14 @@ class TestBasicKana:
 
 class TestSokuon:
     def test_sokuon_gemination(self):
-        assert romanize_ruby_parts(["ま", "っ", "て"]) == ["ma", "tte", ""]
+        assert romanize_ruby_parts(["ま", "っ", "て"]) == ["ma", "", "tte"]
 
     def test_sokuon_before_cha(self):
-        assert romanize_ruby_parts(["こ", "っ", "ち"]) == ["ko", "cchi", ""]
+        assert romanize_ruby_parts(["こ", "っ", "ち"]) == ["ko", "", "cchi"]
 
     def test_sokuon_before_cha_digraph(self):
         assert romanize_ruby_parts(["ま", "っ", "ち", "ゃ"]) == [
-            "ma", "ccha", "", "",
+            "ma", "", "ccha", "",
         ]
 
     def test_sokuon_isolated(self):
@@ -94,4 +94,4 @@ class TestEdgeCases:
         assert romanize_ruby_parts(["キャ", "キュ", "キョ"]) == ["kya", "kyu", "kyo"]
 
     def test_katakana_sokuon(self):
-        assert romanize_ruby_parts(["マ", "ッ", "テ"]) == ["ma", "tte", ""]
+        assert romanize_ruby_parts(["マ", "ッ", "テ"]) == ["ma", "", "tte"]
