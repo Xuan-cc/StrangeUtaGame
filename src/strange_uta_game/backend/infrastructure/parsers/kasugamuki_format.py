@@ -191,7 +191,14 @@ def _char_ruby_kana(char: Character) -> str:
 
 
 def _linked_group_kana(group: List[Character]) -> str:
-    return _linked_group_common(group, with_romaji=False, char_start={}, particle_indices=set(), group_start=0)
+    base = "".join(ch.char for ch in group)
+    tagged: List[str] = []
+    for ch in group:
+        if ch.ruby:
+            tagged.append(
+                _build_tagged_parts([part.text for part in ch.ruby.parts], _get_ts_list(ch))
+            )
+    return f"{{{base}|{''.join(tagged)}}}{_format_sentence_end(group[-1])}"
 
 
 # ── 双注音格式（带罗马音） ──
@@ -226,8 +233,28 @@ def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
             )
             i += 1
         elif _is_kana_text(char.char):
-            segments.append(_char_self_ruby_romaji(char, romaji_by_char.get(i, [])))
-            i += 1
+            mora_end = i + 1
+            # The shared converter stores a cross-character digraph/sokuon on
+            # its leading part and leaves consumed following parts empty.
+            while (
+                mora_end < len(chars)
+                and not chars[mora_end].ruby
+                and _is_kana_text(chars[mora_end].char)
+                and not any(romaji_by_char.get(mora_end, []))
+            ):
+                mora_end += 1
+            if mora_end > i + 1:
+                segments.append(
+                    _self_kana_group_romaji(
+                        chars[i:mora_end], romaji_by_char.get(i, [])
+                    )
+                )
+                i = mora_end
+            else:
+                segments.append(
+                    _char_self_ruby_romaji(char, romaji_by_char.get(i, []))
+                )
+                i += 1
         else:
             # 非假名无注音 → 回退到单注音格式
             segments.append(_char_plain(char))
@@ -260,15 +287,34 @@ def _char_self_ruby_romaji(char: Character, romaji_list: List[str]) -> str:
     return f"{{{char.char}|>{romaji_tagged}}}{_format_sentence_end(char)}"
 
 
+def _self_kana_group_romaji(
+    group: List[Character], romaji_list: List[str]
+) -> str:
+    base = "".join(ch.char for ch in group)
+    romaji_tagged = _build_tagged_parts(romaji_list, _get_ts_list(group[0]))
+    return f"{{{base}|>{romaji_tagged}}}{_format_sentence_end(group[-1])}"
+
+
 def _linked_group_romaji(
     group: List[Character],
     group_start: int,
     romaji_by_char: Dict[int, List[str]],
 ) -> str:
-    return _linked_group_common(
-        group, with_romaji=True,
-        char_start={}, particle_indices=set(), romaji_by_char=romaji_by_char,
-        group_start=group_start,
+    base = "".join(ch.char for ch in group)
+    kana_tagged: List[str] = []
+    romaji_tagged: List[str] = []
+    for local_idx, ch in enumerate(group):
+        ts_list = _get_ts_list(ch)
+        if ch.ruby:
+            kana_tagged.append(
+                _build_tagged_parts([part.text for part in ch.ruby.parts], ts_list)
+            )
+        romaji = romaji_by_char.get(group_start + local_idx, [])
+        if romaji:
+            romaji_tagged.append(_build_tagged_parts(romaji, ts_list))
+    return (
+        f"{{{base}|{''.join(kana_tagged)}>{''.join(romaji_tagged)}}}"
+        f"{_format_sentence_end(group[-1])}"
     )
 
 

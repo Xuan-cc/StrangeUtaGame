@@ -86,7 +86,7 @@ def test_sokuon_cross_char_context():
         Character(char="て", check_count=1, singer_id="s1"),
     ])
     romanize_project_to_self_ruby(_project(sent))
-    assert _parts(sent) == [["ma"], ["t"], ["te"]]
+    assert _parts(sent) == [["ma"], ["tte"], [""]]
 
 
 def test_idempotent_second_run_no_change():
