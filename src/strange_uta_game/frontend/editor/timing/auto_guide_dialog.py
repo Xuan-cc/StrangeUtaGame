@@ -127,6 +127,9 @@ class AutoGuideCandidateWidget(FluentGroupBox):
         self.reverse = CheckBox(self.tr("时间戳反向"), self)
         self.reverse.setChecked(params.reverse)
         advanced.addWidget(self.reverse)
+        self.new_line = CheckBox(self.tr("另起一行"), self)
+        self.new_line.setChecked(params.new_line)
+        advanced.addWidget(self.new_line)
         self.existing_action = None
         if candidate.existing_count:
             advanced.addWidget(CaptionLabel(self.tr("已有导唱"), self))
@@ -167,6 +170,7 @@ class AutoGuideCandidateWidget(FluentGroupBox):
             duration_ms=duration,
             fill_gap=self.mode.currentData() == "fill",
             reverse=self.reverse.isChecked(),
+            new_line=self.new_line.isChecked(),
             existing_action=(
                 self.existing_action.currentData()
                 if self.existing_action is not None
@@ -241,10 +245,13 @@ class AutoGuideDialog(QDialog):
                 "duration_ms": settings.get("timing.guide_duration_ms", 1000),
                 "fill_gap": settings.get("timing.guide_fill_gap", False),
                 "reverse": settings.get("timing.guide_reverse", False),
+                "new_line": False,
             }
         self.default_params = AutoGuideParams(**{
             k: auto_saved[k]
-            for k in ("symbol", "count", "duration_ms", "fill_gap", "reverse")
+            for k in (
+                "symbol", "count", "duration_ms", "fill_gap", "reverse", "new_line"
+            )
             if k in auto_saved
         })
 
@@ -394,6 +401,7 @@ class AutoGuideDialog(QDialog):
             row.mode.setCurrentIndex(1 if params.fill_gap else 0)
             row.duration.setText(str(params.duration_ms))
             row.reverse.setChecked(params.reverse)
+            row.new_line.setChecked(params.new_line)
 
     def _emit_execute(self):
         if self._scan_signature != self._project_signature():
@@ -439,6 +447,7 @@ class AutoGuideDialog(QDialog):
                 "duration_ms": first.duration_ms,
                 "fill_gap": first.fill_gap,
                 "reverse": first.reverse,
+                "new_line": first.new_line,
             },
         )
         self._settings.save()

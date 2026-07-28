@@ -9312,6 +9312,7 @@ KS 来源的配置将优先覆盖同名设置。</translation>
 <message><source>固定间隔</source><translation>固定间隔</translation></message>
 <message><source>补足间隔</source><translation>补足间隔</translation></message>
 <message><source>时间戳反向</source><translation>时间戳反向</translation></message>
+<message><source>另起一行</source><translation>另起一行</translation></message>
 <message><source>已有导唱</source><translation>已有导唱</translation></message>
 <message><source>替换</source><translation>替换</translation></message>
 <message><source>追加</source><translation>追加</translation></message>

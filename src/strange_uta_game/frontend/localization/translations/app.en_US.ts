@@ -9311,6 +9311,7 @@ This usually means an incomplete install; please reinstall or contact the develo
 <message><source>固定间隔</source><translation>Fixed interval</translation></message>
 <message><source>补足间隔</source><translation>Fill gap</translation></message>
 <message><source>时间戳反向</source><translation>Reverse timestamps</translation></message>
+<message><source>另起一行</source><translation>New line</translation></message>
 <message><source>已有导唱</source><translation>Existing guide</translation></message>
 <message><source>替换</source><translation>Replace</translation></message>
 <message><source>追加</source><translation>Append</translation></message>

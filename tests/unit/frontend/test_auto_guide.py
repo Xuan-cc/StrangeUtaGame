@@ -102,3 +102,51 @@ def test_fixed_interval_unknown_left_is_executable_but_fill_is_not():
     assert fixed["executable"] is True
     assert fixed["overrun_ms"] is None
     assert fill == {"executable": False, "reason": "missing_left"}
+
+
+def test_new_line_before_line_start_creates_independent_guide_sentence():
+    target = _ch("歌", 5000, todo=True)
+    project = _project([target])
+    candidate = scan_auto_guide_candidates(project, 3000)[0]
+
+    result = apply_auto_guide_candidates(
+        project,
+        [(
+            candidate,
+            AutoGuideParams(
+                symbol="●",
+                count=2,
+                duration_ms=1000,
+                new_line=True,
+            ),
+        )],
+    )
+
+    assert result["inserted"] == 1
+    assert [sentence.text for sentence in project.sentences] == ["●●", "歌"]
+    assert project.sentences[0].characters[-1].is_line_end is True
+    assert project.sentences[1].characters[0] is target
+    assert target.needs_guide is False
+
+
+def test_new_line_in_middle_splits_original_sentence_before_target():
+    before = _ch("前", 1000)
+    target = _ch("歌", 5000, todo=True)
+    after = _ch("後")
+    project = _project([before, target, after])
+    candidate = next(
+        c for c in scan_auto_guide_candidates(project, 999_999)
+        if c.target is target
+    )
+
+    apply_auto_guide_candidates(
+        project,
+        [(
+            candidate,
+            AutoGuideParams(symbol="●", new_line=True),
+        )],
+    )
+
+    assert [sentence.text for sentence in project.sentences] == ["前", "●", "歌後"]
+    assert all(sentence.characters[-1].is_line_end for sentence in project.sentences)
+    assert project.sentences[2].characters[0] is target

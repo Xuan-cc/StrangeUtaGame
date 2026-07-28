@@ -9313,6 +9313,7 @@ KS側の設定が優先されます。</translation>
 <message><source>固定间隔</source><translation>固定間隔</translation></message>
 <message><source>补足间隔</source><translation>間隔を埋める</translation></message>
 <message><source>时间戳反向</source><translation>タイムスタンプを逆順</translation></message>
+<message><source>另起一行</source><translation>新しい行</translation></message>
 <message><source>已有导唱</source><translation>既存ガイド</translation></message>
 <message><source>替换</source><translation>置換</translation></message>
 <message><source>追加</source><translation>追加</translation></message>

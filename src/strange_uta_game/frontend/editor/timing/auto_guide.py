@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from strange_uta_game.backend.domain import Character
+from strange_uta_game.backend.domain import Character, Sentence
 
 
 @dataclass
@@ -14,6 +14,7 @@ class AutoGuideParams:
     duration_ms: int = 1000
     fill_gap: bool = False
     reverse: bool = False
+    new_line: bool = False
     existing_action: str = "replace"  # replace / append
 
 
@@ -209,12 +210,19 @@ def apply_auto_guide_candidates(
         if not check["executable"]:
             skipped += 1
             continue
-        try:
-            sentence = project.sentences[candidate.sentence_idx]
-            target_idx = sentence.characters.index(candidate.target)
-        except (IndexError, ValueError):
+        located = next(
+            (
+                (si, sentence, ci)
+                for si, sentence in enumerate(project.sentences)
+                for ci, ch in enumerate(sentence.characters)
+                if ch is candidate.target
+            ),
+            None,
+        )
+        if located is None:
             skipped += 1
             continue
+        sentence_idx, sentence, target_idx = located
 
         if params.existing_action == "replace":
             start = target_idx
@@ -229,7 +237,28 @@ def apply_auto_guide_candidates(
         if not chars:
             skipped += 1
             continue
-        sentence.characters[target_idx:target_idx] = chars
+        if params.new_line:
+            chars[-1].is_line_end = True
+            guide_sentence = Sentence(
+                singer_id=candidate.target.singer_id or sentence.singer_id,
+                characters=chars,
+            )
+            if target_idx == 0:
+                project.sentences.insert(sentence_idx, guide_sentence)
+            else:
+                right_chars = sentence.characters[target_idx:]
+                del sentence.characters[target_idx:]
+                sentence.characters[-1].is_line_end = True
+                sentence.characters[-1].linked_to_next = False
+                right_chars[-1].is_line_end = True
+                right_sentence = Sentence(
+                    singer_id=candidate.target.singer_id or sentence.singer_id,
+                    characters=right_chars,
+                )
+                project.sentences.insert(sentence_idx + 1, guide_sentence)
+                project.sentences.insert(sentence_idx + 2, right_sentence)
+        else:
+            sentence.characters[target_idx:target_idx] = chars
         inserted_positions += 1
         inserted_chars += len(chars)
         if candidate.target.needs_guide:
