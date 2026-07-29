@@ -136,6 +136,9 @@ class ExportInterface(QWidget):
         # 放在 __init__ 而非 _init_ui，避免切语言重建时被清零。
         self._output_user_set = False
         self._init_ui()
+        # ExportInterface 本身不会在语言切换时销毁，只连接一次主题信号。
+        # _init_ui() 会被 LanguageChange 重复调用，不能在那里累积连接。
+        _theme.changed.connect(self._update_theme_style)
 
     def changeEvent(self, event):
         """切语言时整张导出页拆掉重建。保留输出路径/文件名/格式选中等用户状态。"""
@@ -351,8 +354,8 @@ class ExportInterface(QWidget):
         # 所有控件创建完毕后再填充格式列表（_populate_formats 会访问 btn_tags 等控件）
         self._populate_formats()
 
-        # 主题变化时刷新 QListWidget 和标题标签样式（二者不在 qfluentwidgets 管理中）
-        _theme.changed.connect(self._update_theme_style)
+        # 刷新 QListWidget 和标题标签样式（二者不在 qfluentwidgets 管理中）。
+        # 主题信号在 __init__ 中只连接一次；语言切换重建后在这里立即刷新新控件。
         self._update_theme_style()
 
     def _update_theme_style(self) -> None:

@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
 
 
 def test_export_settings_scroll_without_hiding_actions(qapp):
@@ -75,6 +75,33 @@ def test_export_settings_scroll_without_hiding_actions(qapp):
     assert page._settings_scroll.verticalScrollBar().maximum() > 0
     assert page.btn_export.isVisible()
     assert page.btn_export_to_next.isVisible()
+
+    page.close()
+
+
+def test_export_theme_signal_connects_only_once_across_language_rebuilds(qapp):
+    """语言切换重建 UI 后，一次主题变化仍只执行一次页面主题刷新。"""
+    from strange_uta_game.frontend.export.export_interface import ExportInterface
+    from strange_uta_game.frontend.theme import theme
+
+    class CountingExportInterface(ExportInterface):
+        def __init__(self):
+            self.theme_refresh_count = 0
+            super().__init__()
+
+        def _update_theme_style(self):
+            self.theme_refresh_count += 1
+            super()._update_theme_style()
+
+    page = CountingExportInterface()
+    assert page.theme_refresh_count == 1
+
+    page.changeEvent(QEvent(QEvent.Type.LanguageChange))
+    page.changeEvent(QEvent(QEvent.Type.LanguageChange))
+    assert page.theme_refresh_count == 3
+
+    theme.changed.emit()
+    assert page.theme_refresh_count == 4
 
     page.close()
 
