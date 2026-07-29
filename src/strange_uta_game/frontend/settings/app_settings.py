@@ -195,7 +195,8 @@ class AppSettings:
             "api_key": "",
             "model": "",
             "apply_user_dict": True,    # LLM 注音后是否仍应用用户词典
-            "timeout_sec": 60,
+            "timeout_sec": 180,
+            "total_timeout_sec": 600,
         },
         "nicokara_tags": {
             "title": "",

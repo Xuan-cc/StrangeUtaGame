@@ -1078,27 +1078,27 @@ Leave empty to disable, and automatically use the saved project / last loaded fi
 <context>
     <name>BatchGroupDialog</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="548" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="557" />
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="530" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="539" />
         <source>批量设置分组</source>
         <translation>Bulk set group</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="537" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="546" />
         <source>留空则清除分组</source>
         <translation>Empty = clear group</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="548" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="557" />
         <source>确定</source>
         <translation>OK</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="534" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="543" />
         <source>选择或输入分组名称（留空则清除分组）：</source>
         <translation>Pick or type a group name (empty = clear group):</translation>
     </message>
@@ -3739,7 +3739,7 @@ Zoom defaults to 100% (subtitle size); Zoom allows 10%~500%; Fix keeps original 
     <message>
         <location filename="src/strange_uta_game/frontend/export/export_interface.py" line="313" />
         <source>导出到下一步</source>
-        <translation type="unfinished" />
+        <translation>Export to Next Step</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/export/export_interface.py" line="860" />
@@ -7791,18 +7791,18 @@ This overwrites your current settings (user dict and singer presets are unaffect
 <context>
     <name>SingerColorPreviewPanel</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="942" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="951" />
         <source>已选中 {n} 位</source>
         <translation>{n} selected</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="913" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="946" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="922" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="955" />
         <source>未选中</source>
         <translation>Not selected</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="905" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="914" />
         <source>颜色预览</source>
         <translation>Color preview</translation>
     </message>
@@ -7810,112 +7810,112 @@ This overwrites your current settings (user dict and singer presets are unaffect
 <context>
     <name>SingerEditDialog</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="223" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="232" />
         <source>+ 添加颜色</source>
         <translation>+ Add color</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="176" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="185" />
         <source>从已有演唱者加载颜色…</source>
         <translation>Load color from existing singer…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="172" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="181" />
         <source>分组:</source>
         <translation>Group:</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="185" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="194" />
         <source>分色（最多5色）</source>
         <translation>Multi-color (up to 5)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="184" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="193" />
         <source>单色</source>
         <translation>Solid color</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="248" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="257" />
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="158" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="167" />
         <source>显示名称:</source>
         <translation>Display name:</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="489" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="498" />
         <source>暂无已用颜色</source>
         <translation>No colors used yet</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="132" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="141" />
         <source>添加演唱者</source>
         <translation>Add singer</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="331" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="340" />
         <source>点击选中此颜色位，然后从右侧面板选择颜色</source>
         <translation>Click this color slot, then pick a color from the panel on the right</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="162" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="171" />
         <source>留空为默认分组</source>
         <translation>Empty for default group</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="248" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="257" />
         <source>确定</source>
         <translation>OK</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="132" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="141" />
         <source>编辑演唱者</source>
         <translation>Edit singer</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="241" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="250" />
         <source>设为默认演唱者</source>
         <translation>Set as default singer</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="157" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="166" />
         <source>输入演唱者名称（留空自动编号）...</source>
         <translation>Singer name (empty = auto-numbered)...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="354" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="363" />
         <source>选择颜色 {n}</source>
         <translation>Choose color {n}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="204" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="213" />
         <source>选择颜色...</source>
         <translation>Choose color...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="460" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="469" />
         <source>项目已用颜色</source>
         <translation>Colors used in the project</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="228" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="237" />
         <source>预览：</source>
         <translation>Preview:</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="334" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="343" />
         <source>颜色 {n}</source>
         <translation>Color {n}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="178" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="187" />
         <source>颜色来源:</source>
         <translation>Color source:</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="194" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="203" />
         <source>颜色模式:</source>
         <translation>Color mode:</translation>
     </message>
@@ -7923,250 +7923,271 @@ This overwrites your current settings (user dict and singer presets are unaffect
 <context>
     <name>SingerManagerInterface</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1291" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1359" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1308" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1376" />
         <source>  [过滤中：{n} 项可见]</source>
         <translation>  [Filtering: {n} visible]</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1243" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1260" />
         <source> (已禁用)</source>
         <translation> (disabled)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1241" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1258" />
         <source> [默认]</source>
         <translation> [default]</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1288" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1357" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1305" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1374" />
         <source> — 已选中 {n} 位</source>
         <translation> — {n} selected</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1582" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1613" />
         <source> 等 {n} 位</source>
         <translation> +{n} more</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1110" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1119" />
         <source>上移</source>
         <translation>Move up</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1116" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1125" />
         <source>下移</source>
         <translation>Move down</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1141" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1150" />
         <source>从软件设置中加载已保存的演唱者预设到当前项目</source>
         <translation>Load saved singer preset from app settings into current project</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1139" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1148" />
         <source>从软件预设加载</source>
         <translation>Load from preset</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1131" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1140" />
         <source>保存为软件预设</source>
         <translation>Save as app preset</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1722" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1753" />
         <source>保存成功</source>
         <translation>Saved</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1542" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1573" />
         <source>修改失败</source>
         <translation>Modify failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1539" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1570" />
         <source>修改成功</source>
         <translation>Modified</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1025" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1202" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1034" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1219" />
         <source>全部</source>
         <translation>All</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1149" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1166" />
         <source>共 0 位演唱者</source>
         <translation>0 singers</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1285" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1354" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1302" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1371" />
         <source>共 {total} 位演唱者（{enabled} 位启用）</source>
         <translation>{total} singers ({enabled} enabled)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1023" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1032" />
         <source>分组:</source>
         <translation>Group:</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1069" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1078" />
         <source>删除</source>
         <translation>Delete</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1603" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1634" />
         <source>删除失败</source>
         <translation>Delete failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1607" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1638" />
         <source>删除成功</source>
         <translation>Deleted</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1791" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1822" />
         <source>加载成功</source>
         <translation>Loaded successfully</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1591" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1622" />
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1086" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1095" />
         <source>启用</source>
         <translation>Enabled</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1625" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1652" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1450" />
+        <source>复制成功</source>
+        <translation>Copied Successfully</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1154" />
+        <source>复制演唱者名称</source>
+        <translation>Copy Singer Names</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1656" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1683" />
         <source>完成</source>
         <translation>Done</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1134" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1143" />
         <source>将当前演唱者列表保存到软件设置，每次启动自动加载</source>
         <translation>Save current singer list to app settings; auto-load on startup</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1792" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1823" />
         <source>已从预设加载 {n} 位新演唱者</source>
         <translation>Loaded {n} new singers from preset</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1723" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1754" />
         <source>已保存 {n} 位演唱者预设到软件设置</source>
         <translation>Saved {n} singer presets to app settings</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1608" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1639" />
         <source>已删除 {n} 位演唱者</source>
         <translation>Deleted {n} singers</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1626" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1657" />
         <source>已启用 {n} 位演唱者</source>
         <translation>Enabled {n} singers</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1653" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1451" />
+        <source>已复制 {n} 位演唱者的名称</source>
+        <translation>Copied the names of {n} singers</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1684" />
         <source>已将 {n} 位演唱者设为分组 {label}</source>
         <translation>Set {n} singers to group {label}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1540" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1571" />
         <source>已更新演唱者: {name}</source>
         <translation>Singer updated: {name}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1495" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1526" />
         <source>已添加演唱者: {name}</source>
         <translation>Singer added: {name}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1626" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1657" />
         <source>已禁用 {n} 位演唱者</source>
         <translation>Disabled {n} singers</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1677" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1708" />
         <source>当前没有演唱者可保存</source>
         <translation>No singer to save</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1556" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1587" />
         <source>必须至少保留一个演唱者</source>
         <translation>Must keep at least one singer</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1018" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1157" />
+        <source>忽略分组和当前筛选，将项目中的全部演唱者名称复制为 JSON 数组</source>
+        <translation>Ignore groups and the current filter, and copy all singer names in the project as a JSON array</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1027" />
         <source>搜索演唱者名称...</source>
         <translation>Search singer name...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1619" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1647" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1650" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1678" />
         <source>操作失败</source>
         <translation>Operation failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1677" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1708" />
         <source>无法保存</source>
         <translation>Cannot save</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1556" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1567" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1587" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1598" />
         <source>无法删除</source>
         <translation>Cannot delete</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1738" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1769" />
         <source>无预设</source>
         <translation>No preset</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1216" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1729" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1233" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1445" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1760" />
         <source>未加载项目</source>
         <translation>No project loaded</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1237" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1254" />
         <source>未命名</source>
         <translation>Untitled</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1567" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1598" />
         <source>没有可用的转移目标</source>
         <translation>No transfer target available</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1058" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1067" />
         <source>添加</source>
         <translation>Add</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1497" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1528" />
         <source>添加失败</source>
         <translation>Add failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1494" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1525" />
         <source>添加成功</source>
         <translation>Added successfully</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1005" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1014" />
         <source>演唱者管理</source>
         <translation>Singer manager</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1586" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1617" />
         <source>确定要删除 {n} 位演唱者吗？
 
 {names}
@@ -8179,78 +8200,79 @@ This overwrites your current settings (user dict and singer presets are unaffect
 Their lyrics will be transferred to the singer you pick next.</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1585" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1616" />
         <source>确认批量删除</source>
         <translation>Confirm bulk delete</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1092" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1101" />
         <source>禁用</source>
         <translation>Disabled</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1011" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1020" />
         <source>管理演唱者：双击编辑；Ctrl/Shift 多选可批量操作；拖动可调整顺序。</source>
         <translation>Manage singers: double-click to edit; Ctrl/Shift for multi-select; drag to reorder.</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1590" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1621" />
         <source>继续</source>
         <translation>Continue</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1063" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1072" />
         <source>编辑</source>
         <translation>Edit</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1122" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1131" />
         <source>置底</source>
         <translation>Move to bottom</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1104" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1113" />
         <source>置顶</source>
         <translation>Move to top</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1078" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1087" />
         <source>设置分组</source>
         <translation>Set group</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1729" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1445" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1760" />
         <source>请先打开或创建一个项目</source>
         <translation>Please open or create a project first</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1603" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1634" />
         <source>请检查转移目标是否有效</source>
         <translation>Please check that the transfer target is valid</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1738" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1769" />
         <source>软件中没有保存的演唱者预设，请先保存</source>
         <translation>No saved singer preset; please save first</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1647" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1678" />
         <source>部分演唱者分组未能更新</source>
         <translation>Some singer groups could not be updated</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1620" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1651" />
         <source>部分演唱者未能启用</source>
         <translation>Some singers could not be enabled</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1620" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1651" />
         <source>部分演唱者状态未能更新</source>
         <translation>Some singer states could not be updated</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1204" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1651" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1221" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="1682" />
         <source>（无分组）</source>
         <translation>(no group)</translation>
     </message>
@@ -8258,100 +8280,100 @@ Their lyrics will be transferred to the singer you pick next.</translation>
 <context>
     <name>SingerPresetLoadDialog</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="820" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="829" />
         <source> 等 {n} 位</source>
         <translation> +{n} more</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="721" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="730" />
         <source>{name}  (已存在)</source>
         <translation>{name}  (already exists)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="600" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="609" />
         <source>从软件预设加载演唱者</source>
         <translation>Load singers from preset</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="863" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="872" />
         <source>保存预设时出错: {err}</source>
         <translation>Error saving preset: {err}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="652" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="661" />
         <source>全不选</source>
         <translation>Deselect all</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="648" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="657" />
         <source>全选</source>
         <translation>Select all</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="626" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="693" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="635" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="702" />
         <source>全部分组</source>
         <translation>All groups</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="624" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="633" />
         <source>分组:</source>
         <translation>Group:</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="826" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="835" />
         <source>删除</source>
         <translation>Delete</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="862" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="871" />
         <source>删除失败</source>
         <translation>Delete failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="858" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="867" />
         <source>删除成功</source>
         <translation>Deleted</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="667" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="676" />
         <source>删除选中演唱者</source>
         <translation>Delete selected singers</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="675" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="684" />
         <source>加载选中</source>
         <translation>Load selected</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="681" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="827" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="690" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="836" />
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="859" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="868" />
         <source>已删除 {n} 位演唱者预设</source>
         <translation>Deleted {n} singer presets</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="799" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="808" />
         <source>已选 {checked}/{total}</source>
         <translation>Selected {checked}/{total}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="834" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="843" />
         <source>无法访问设置</source>
         <translation>Cannot access settings</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="813" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="873" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="822" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="882" />
         <source>未选择</source>
         <translation>Not selected</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="825" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="834" />
         <source>确定要从预设中删除以下演唱者吗？
 
 {names}
@@ -8364,34 +8386,34 @@ Their lyrics will be transferred to the singer you pick next.</translation>
 This cannot be undone.</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="824" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="833" />
         <source>确认删除</source>
         <translation>Confirm delete</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="813" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="873" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="822" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="882" />
         <source>请至少选择一位演唱者</source>
         <translation>Please select at least one singer</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="620" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="629" />
         <source>输入名称搜索...</source>
         <translation>Type a name to search...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="618" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="627" />
         <source>过滤:</source>
         <translation>Filter:</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="834" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="843" />
         <source>错误</source>
         <translation>Error</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="630" />
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="697" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="639" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="706" />
         <source>（无分组）</source>
         <translation>(no group)</translation>
     </message>
@@ -8778,27 +8800,27 @@ Drag cards to reorder; edit offset/length/interval to generate a new SUG project
 <context>
     <name>TransferTargetDialog</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="587" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="596" />
         <source>取消</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="587" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="596" />
         <source>确定</source>
         <translation>OK</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="573" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="582" />
         <source>被删除演唱者的歌词将转移到以下演唱者：</source>
         <translation>Lyrics of removed singers will be transferred to:</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="566" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="575" />
         <source>选择转移目标</source>
         <translation>Choose transfer target</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="578" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="587" />
         <source>（默认）</source>
         <translation>(default)</translation>
     </message>
@@ -9598,7 +9620,7 @@ This usually means an incomplete install; please reinstall or contact the develo
 <context>
     <name>_ColorSwatch</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="81" />
+        <location filename="src/strange_uta_game/frontend/singer/singer_interface.py" line="90" />
         <source>点击设置颜色
 {color}</source>
         <translation>Click to set color

@@ -1463,5 +1463,10 @@
   "为中文歌词自动添加拼音注音": "Automatically add Pinyin annotations to Chinese lyrics",
   "拼接多个 SUG 项目": "Combine multiple SUG projects",
   "根据时间戳自动插入导唱符": "Automatically insert guide-vocal markers based on timestamps",
-  "根据时间戳自动生成间奏指引": "Automatically generate interlude guides based on timestamps"
+  "根据时间戳自动生成间奏指引": "Automatically generate interlude guides based on timestamps",
+  "导出到下一步": "Export to Next Step",
+  "复制成功": "Copied Successfully",
+  "复制演唱者名称": "Copy Singer Names",
+  "已复制 {n} 位演唱者的名称": "Copied the names of {n} singers",
+  "忽略分组和当前筛选，将项目中的全部演唱者名称复制为 JSON 数组": "Ignore groups and the current filter, and copy all singer names in the project as a JSON array"
 }

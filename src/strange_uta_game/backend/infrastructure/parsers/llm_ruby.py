@@ -245,7 +245,10 @@ class LLMRubyConfig:
     api_key: str = ""
     model: str = ""
     apply_user_dict: bool = True
-    timeout_sec: int = 60
+    # 流式请求连续多久没有收到任何数据才判定为断线。
+    timeout_sec: int = 180
+    # 即使服务端持续发送 thinking/keep-alive，也不能无限占用 worker。
+    total_timeout_sec: int = 600
 
     @classmethod
     def from_settings(cls, settings) -> "LLMRubyConfig":
@@ -257,7 +260,10 @@ class LLMRubyConfig:
             api_key=str(settings.get("llm_ruby.api_key", "") or "").strip(),
             model=str(settings.get("llm_ruby.model", "") or "").strip(),
             apply_user_dict=bool(settings.get("llm_ruby.apply_user_dict", True)),
-            timeout_sec=int(settings.get("llm_ruby.timeout_sec", 60) or 60),
+            timeout_sec=int(settings.get("llm_ruby.timeout_sec", 180) or 180),
+            total_timeout_sec=int(
+                settings.get("llm_ruby.total_timeout_sec", 600) or 600
+            ),
         )
 
     def is_complete(self) -> bool:
@@ -511,11 +517,14 @@ class LLMRubyClient:
                 "model": self._cfg.model,
                 "max_tokens": 8192,
                 "temperature": 0,
+                "stream": True,
                 "system": _SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": user_prompt}],
             }
             # Anthropic 参数稳定；仅 temperature 可能被个别模型拒绝，作为可选剥离项。
-            data = self._post_with_param_fallback(url, headers, body, ["temperature"])
+            data = self._post_with_param_fallback(
+                url, headers, body, ["temperature", "stream"]
+            )
             extracted = _extract_content(data, "anthropic")
         elif fmt == "responses":
             headers = {
@@ -527,10 +536,13 @@ class LLMRubyClient:
                 "instructions": _SYSTEM_PROMPT,
                 "input": user_prompt,
                 "temperature": 0,
+                "stream": True,
                 "text": {"format": {"type": "json_object"}},
             }
             # Responses API：text（结构化输出）与 temperature 在部分模型上不被支持。
-            data = self._post_with_param_fallback(url, headers, body, ["text", "temperature"])
+            data = self._post_with_param_fallback(
+                url, headers, body, ["text", "temperature", "stream"]
+            )
             extracted = _extract_content(data, "responses")
         else:
             # OpenAI Chat Completions（兼容）
@@ -541,6 +553,7 @@ class LLMRubyClient:
             body = {
                 "model": self._cfg.model,
                 "temperature": 0,
+                "stream": True,
                 "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": _SYSTEM_PROMPT},
@@ -550,7 +563,7 @@ class LLMRubyClient:
             # 不少兼容端点/推理模型不支持 response_format 或固定 temperature → 400。
             # 逐步剥离重试（_coerce_json 已能兜底解析非严格 JSON）。
             data = self._post_with_param_fallback(
-                url, headers, body, ["response_format", "temperature"]
+                url, headers, body, ["response_format", "temperature", "stream"]
             )
             extracted = _extract_content(data, "openai")
 
@@ -620,8 +633,9 @@ class LLMRubyClient:
                     url,
                     headers=headers,
                     json=body,
-                    timeout=self._cfg.timeout_sec,
+                    timeout=(15, self._cfg.timeout_sec),
                     proxies=self._proxies,
+                    stream=bool(body.get("stream")),
                 )
             except requests.exceptions.RequestException as e:
                 _dump_call(seq, "network_error", str(e))
@@ -638,6 +652,42 @@ class LLMRubyClient:
                 raise last_err from e
 
             elapsed_ms = int((time.time() - start) * 1000)
+            content_type = str(resp.headers.get("content-type", "")).lower() if hasattr(
+                resp, "headers"
+            ) else ""
+            is_stream = bool(body.get("stream")) and "text/event-stream" in content_type
+            if resp.status_code == 200 and is_stream:
+                try:
+                    try:
+                        text = self._consume_event_stream(resp, start)
+                    except requests.exceptions.RequestException as e:
+                        _dump_call(seq, "network_error", str(e))
+                        llm_log_event(
+                            "network_error", seq=seq, url=url,
+                            attempt=attempt + 1, error=str(e), streamed=True,
+                        )
+                        last_err = LLMRubyError(f"网络请求失败：{e}")
+                        if attempt < self._MAX_RETRIES:
+                            self._report(
+                                "流式响应中断，重试中"
+                                f"（{attempt + 2}/{self._MAX_RETRIES + 1}）…"
+                            )
+                            time.sleep(0.8 * (attempt + 1))
+                            continue
+                        raise last_err from e
+                finally:
+                    resp.close()
+                data = {"_stream_text": text}
+                _dump_call(seq, "response", data, redactor=self._redact)
+                llm_log_event(
+                    "response", seq=seq, url=url, attempt=attempt + 1,
+                    status=resp.status_code,
+                    elapsed_ms=int((time.time() - start) * 1000),
+                    streamed=True,
+                )
+                self._last_call_seq = seq
+                return data
+
             text = resp.text or ""
             # 响应体完整落盘（识别 JSON 则 pretty；非 JSON 原样 .txt；不再截断）
             _dump_call(seq, "response", text, redactor=self._redact)
@@ -670,6 +720,44 @@ class LLMRubyClient:
         assert last_err is not None
         raise last_err
 
+    def _consume_event_stream(self, resp, started_at: float) -> str:
+        """消费 OpenAI/Responses/Anthropic SSE，只累计最终答案文本。
+
+        reasoning/thinking 增量仅作为请求仍存活的信号，不保存也不交给解析器。
+        ``requests`` 的 read timeout 负责无数据超时；这里另设总时限。
+        """
+        chunks: List[str] = []
+        reasoning_reported = False
+        for raw_line in resp.iter_lines(decode_unicode=True):
+            if time.time() - started_at > self._cfg.total_timeout_sec:
+                raise LLMRubyError(
+                    f"LLM 请求超过总时限 {self._cfg.total_timeout_sec} 秒"
+                )
+            if not raw_line:
+                continue
+            line = raw_line.decode("utf-8", errors="replace") if isinstance(
+                raw_line, bytes
+            ) else str(raw_line)
+            if not line.startswith("data:"):
+                continue
+            payload = line[5:].strip()
+            if not payload or payload == "[DONE]":
+                continue
+            try:
+                event = json.loads(payload)
+            except ValueError:
+                continue
+
+            text_delta, is_reasoning = _extract_stream_delta(
+                event, self._cfg.api_format
+            )
+            if text_delta:
+                chunks.append(text_delta)
+            elif is_reasoning and not reasoning_reported:
+                self._report("模型正在推理…")
+                reasoning_reported = True
+        return "".join(chunks)
+
 
 # ──────────────────────────────────────────────
 # 响应解析（独立函数，便于单测）
@@ -679,6 +767,8 @@ class LLMRubyClient:
 def _extract_content(data: dict, fmt: str) -> str:
     """从 API 响应体取出模型输出文本（按接口格式）。"""
     try:
+        if isinstance(data.get("_stream_text"), str):
+            return data["_stream_text"]
         if fmt == "anthropic":
             # {"content":[{"type":"text","text":"..."}]}
             parts = data.get("content") or []
@@ -702,6 +792,34 @@ def _extract_content(data: dict, fmt: str) -> str:
         return choices[0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as e:
         raise LLMRubyError(f"响应结构异常：{e}") from e
+
+
+def _extract_stream_delta(data: dict, fmt: str) -> Tuple[str, bool]:
+    """返回 ``(最终文本增量, 是否为推理活动)``，不暴露推理内容。"""
+    if fmt == "anthropic":
+        delta = data.get("delta") or {}
+        delta_type = str(delta.get("type", ""))
+        if delta_type == "text_delta":
+            return (str(delta.get("text", "")), False)
+        return ("", delta_type == "thinking_delta")
+
+    if fmt == "responses":
+        event_type = str(data.get("type", ""))
+        if event_type == "response.output_text.delta":
+            return (str(data.get("delta", "")), False)
+        return ("", "reasoning" in event_type)
+
+    choices = data.get("choices") or []
+    if not choices:
+        return ("", False)
+    delta = choices[0].get("delta") or {}
+    content = delta.get("content")
+    if isinstance(content, str) and content:
+        return (content, False)
+    return (
+        "",
+        bool(delta.get("reasoning_content") or delta.get("reasoning")),
+    )
 
 
 def _coerce_json(text: str) -> dict:

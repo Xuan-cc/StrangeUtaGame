@@ -4,6 +4,8 @@
 解析、按行回退、缓存命中/未命中等行为。
 """
 
+import time
+
 import pytest
 
 from strange_uta_game.backend.infrastructure.parsers.llm_ruby import (
@@ -235,6 +237,56 @@ def test_extract_content_all_formats():
     assert _extract_content(responses, "responses") == "Z1Z2"
     # 便捷字段优先
     assert _extract_content({"output_text": "W"}, "responses") == "W"
+    assert _extract_content({"_stream_text": "streamed"}, "openai") == "streamed"
+
+
+def test_extract_stream_delta_ignores_reasoning_content():
+    from strange_uta_game.backend.infrastructure.parsers.llm_ruby import (
+        _extract_stream_delta,
+    )
+
+    assert _extract_stream_delta(
+        {"choices": [{"delta": {"reasoning_content": "private thought"}}]},
+        "openai",
+    ) == ("", True)
+    assert _extract_stream_delta(
+        {"choices": [{"delta": {"content": "{"}}]}, "openai"
+    ) == ("{", False)
+    assert _extract_stream_delta(
+        {"type": "response.reasoning_summary_text.delta", "delta": "thought"},
+        "responses",
+    ) == ("", True)
+    assert _extract_stream_delta(
+        {"type": "response.output_text.delta", "delta": "{}"}, "responses"
+    ) == ("{}", False)
+    assert _extract_stream_delta(
+        {"delta": {"type": "thinking_delta", "thinking": "thought"}},
+        "anthropic",
+    ) == ("", True)
+    assert _extract_stream_delta(
+        {"delta": {"type": "text_delta", "text": "{}"}}, "anthropic"
+    ) == ("{}", False)
+
+
+def test_consume_event_stream_reports_reasoning_without_collecting_it():
+    from strange_uta_game.backend.infrastructure.parsers.llm_ruby import LLMRubyClient
+
+    client = LLMRubyClient(
+        LLMRubyConfig(base_url="x", api_key="k", model="m", provider="openai")
+    )
+    progress = []
+    client.set_progress_callback(progress.append)
+
+    class _Resp:
+        @staticmethod
+        def iter_lines(decode_unicode=True):
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"secret"}}]}'
+            yield 'data: {"choices":[{"delta":{"content":"{\\"lines\\":"}}]}'
+            yield 'data: {"choices":[{"delta":{"content":"[]}"}}]}'
+            yield "data: [DONE]"
+
+    assert client._consume_event_stream(_Resp(), time.time()) == '{"lines":[]}'
+    assert progress == ["模型正在推理…"]
 
 
 # ──────────────────────────────────────────────
