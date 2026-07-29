@@ -53,6 +53,28 @@ def _make_sentence(text):
     )
 
 
+def test_fusawashii_dictionary_keeps_okurigana_outside_linked_kanji_block():
+    """相応し must group 相応, while the kana し remains literal."""
+    service = AutoCheckService(
+        ruby_analyzer=object(),
+        user_dictionary=[
+            {
+                "enabled": True,
+                "word": "相応し",
+                "reading": "{相応||ふ|さ|わ,}し",
+            }
+        ],
+    )
+    sent = _make_sentence("相応しい")
+
+    service._apply_user_dictionary_to_sentence(sent)
+
+    assert _serialize(sent.characters) == "{相応||ふ|さ|わ,}しい"
+    assert sent.characters[0].linked_to_next is True
+    assert sent.characters[1].linked_to_next is False
+    assert sent.characters[2].ruby is None
+
+
 class TestUpdateCheckpointsPreservesLinkedToNext:
     """回归：`update_checkpoints_for_project` 不得擦 linked_to_next。
 
