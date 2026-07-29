@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -728,6 +729,8 @@ class LLMRubyClient:
         """
         chunks: List[str] = []
         reasoning_reported = False
+        generation_started_at: Optional[float] = None
+        last_rate_report_at = 0.0
         for raw_line in resp.iter_lines(decode_unicode=True):
             if time.time() - started_at > self._cfg.total_timeout_sec:
                 raise LLMRubyError(
@@ -753,10 +756,31 @@ class LLMRubyClient:
             )
             if text_delta:
                 chunks.append(text_delta)
+                now = time.time()
+                if generation_started_at is None:
+                    generation_started_at = now
+                    last_rate_report_at = now
+                if now - last_rate_report_at >= 0.5:
+                    elapsed = max(now - generation_started_at, 0.05)
+                    estimated_tokens = _estimate_token_count("".join(chunks))
+                    self._report(
+                        "模型正在生成注音…"
+                        f"约 {estimated_tokens / elapsed:.1f} tokens/s"
+                    )
+                    last_rate_report_at = now
             elif is_reasoning and not reasoning_reported:
                 self._report("模型正在推理…")
                 reasoning_reported = True
-        return "".join(chunks)
+        result = "".join(chunks)
+        if generation_started_at is not None:
+            elapsed = max(time.time() - generation_started_at, 0.05)
+            estimated_tokens = _estimate_token_count(result)
+            self._report(
+                "LLM 返回完成："
+                f"约 {estimated_tokens:.0f} tokens，"
+                f"平均 {estimated_tokens / elapsed:.1f} tokens/s"
+            )
+        return result
 
 
 # ──────────────────────────────────────────────
@@ -820,6 +844,26 @@ def _extract_stream_delta(data: dict, fmt: str) -> Tuple[str, bool]:
         "",
         bool(delta.get("reasoning_content") or delta.get("reasoning")),
     )
+
+
+def _estimate_token_count(text: str) -> float:
+    """极轻量 token 估算：CJK/假名按 1，其余非空字符按 0.25。"""
+    cjk_like = 0
+    other = 0
+    for char in text:
+        if char.isspace():
+            continue
+        name = unicodedata.name(char, "")
+        if (
+            "CJK" in name
+            or "HIRAGANA" in name
+            or "KATAKANA" in name
+            or "HANGUL" in name
+        ):
+            cjk_like += 1
+        else:
+            other += 1
+    return float(cjk_like) + other / 4.0
 
 
 def _coerce_json(text: str) -> dict:

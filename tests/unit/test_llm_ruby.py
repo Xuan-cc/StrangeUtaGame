@@ -286,7 +286,19 @@ def test_consume_event_stream_reports_reasoning_without_collecting_it():
             yield "data: [DONE]"
 
     assert client._consume_event_stream(_Resp(), time.time()) == '{"lines":[]}'
-    assert progress == ["模型正在推理…"]
+    assert progress[0] == "模型正在推理…"
+    assert any("tokens/s" in message for message in progress)
+    assert progress[-1].startswith("LLM 返回完成：")
+
+
+def test_estimate_token_count_is_lightweight_and_cjk_aware():
+    from strange_uta_game.backend.infrastructure.parsers.llm_ruby import (
+        _estimate_token_count,
+    )
+
+    assert _estimate_token_count("日本語") == 3.0
+    assert _estimate_token_count("abcd") == 1.0
+    assert _estimate_token_count("日 abcd") == 2.0
 
 
 # ──────────────────────────────────────────────
