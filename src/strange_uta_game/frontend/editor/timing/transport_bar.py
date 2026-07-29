@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QEvent, QPoint, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QMouseEvent, QWheelEvent
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel
+from PyQt6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel
 from qfluentwidgets import (
     CaptionLabel,
-    FluentIcon as FIF,
     PrimaryToolButton,
     Slider,
     ToolButton,
+)
+from qfluentwidgets import (
+    FluentIcon as FIF,
 )
 from qfluentwidgets.components.widgets.slider import SliderHandle as _SliderHandle
 
@@ -209,9 +211,29 @@ class TransportBar(QFrame):
         self._duration_ms = ms
         self._update_label()
 
+    @staticmethod
+    def _left_mouse_button_is_down() -> bool:
+        """Return whether a real progress-slider drag can still be active."""
+        return bool(QApplication.mouseButtons() & Qt.MouseButton.LeftButton)
+
+    def _is_progress_drag_active(self) -> bool:
+        """Recover when qfluentwidgets loses the handle's release signal.
+
+        qfluentwidgets' custom SliderHandle emits sliderPressed/sliderReleased
+        itself and does not maintain QAbstractSlider.isSliderDown().  If the
+        handle loses mouse capture before emitting sliderReleased, the local
+        flag otherwise remains true forever and blocks every playback update.
+        """
+        if not self._is_dragging:
+            return False
+        if self._left_mouse_button_is_down():
+            return True
+        self._is_dragging = False
+        return False
+
     def set_position(self, ms: int):
         self._current_ms = ms
-        if self._duration_ms > 0 and not self._is_dragging:
+        if self._duration_ms > 0 and not self._is_progress_drag_active():
             self.slider_progress.setValue(int((ms / self._duration_ms) * 10000))
             self._update_label()
 
