@@ -249,6 +249,7 @@ class AppSettings:
                 "seek_forward": "X:short",
                 "speed_down": "Q:short",
                 "speed_up": "W:short",
+                "speed_reset": "",
                 "edit_ruby": "F2:short",
                 "add_checkpoint": "F5:short",
                 "remove_checkpoint": "F6:short",
@@ -281,6 +282,10 @@ class AppSettings:
                 "clear_all_checkpoints": "",
                 "quick_export": "",
                 "insert_space": "M:short",
+                "concat_sug": "",
+                "auto_insert_guide": "",
+                "analyze_pinyin": "",
+                "auto_generate_interlude_guide": "",
             },
             # 编辑模式：音乐暂停/停止时生效（以歌词/注音编辑为主）
             "edit_mode": {
@@ -292,6 +297,7 @@ class AppSettings:
                 "seek_forward": "X:short",
                 "speed_down": "Q:short",
                 "speed_up": "W:short",
+                "speed_reset": "",
                 "edit_ruby": "F2:short",
                 "add_checkpoint": "Space:short",
                 "remove_checkpoint": "Backspace:short",
@@ -326,6 +332,10 @@ class AppSettings:
                 "tag_now_extra_editor": "",
                 "quick_export": "",
                 "insert_space": "M:short",
+                "concat_sug": "",
+                "auto_insert_guide": "",
+                "analyze_pinyin": "",
+                "auto_generate_interlude_guide": "",
             },
         },
     }

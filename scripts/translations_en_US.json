@@ -1452,5 +1452,11 @@
   "请先添加至少一个SUG文件。": "Please add at least one SUG file first.",
   "拖拽调整顺序": "Drag to reorder",
   "移除": "Remove",
-  "格式: MM:SS.ms  或纯毫秒数": "Format: MM:SS.ms or milliseconds"
+  "格式: MM:SS.ms  或纯毫秒数": "Format: MM:SS.ms or milliseconds",
+  "恢复原始速度": "Restore Default Speed",
+  "将播放速度恢复为设置中的默认速度": "Restore playback to the default speed configured in Settings",
+  "为中文歌词自动添加拼音注音": "Automatically add Pinyin annotations to Chinese lyrics",
+  "拼接多个 SUG 项目": "Combine multiple SUG projects",
+  "根据时间戳自动插入导唱符": "Automatically insert guide-vocal markers based on timestamps",
+  "根据时间戳自动生成间奏指引": "Automatically generate interlude guides based on timestamps"
 }

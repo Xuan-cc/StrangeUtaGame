@@ -20,8 +20,8 @@ class _ResetHandle(_SliderHandle):
 
     def mouseDoubleClickEvent(self, event: QMouseEvent | None) -> None:
         p = self.parent()
-        if isinstance(p, WheelSpeedSlider) and p._default_value is not None:
-            p.setValue(p._default_value)
+        if isinstance(p, WheelSpeedSlider):
+            p.resetToDefault()
         if event is not None:
             event.accept()
 
@@ -50,6 +50,11 @@ class WheelSpeedSlider(Slider):
 
     def setDefaultValue(self, value: int) -> None:
         self._default_value = value
+
+    def resetToDefault(self) -> None:
+        """Reset through the same value-change path used by double-click."""
+        if self._default_value is not None:
+            self.setValue(self._default_value)
 
     def wheelEvent(self, event: QWheelEvent | None) -> None:
         if event is None:
@@ -314,6 +319,10 @@ class TransportBar(QFrame):
     def set_default_speed(self, pct: int) -> None:
         """Set the default speed value for double-click reset."""
         self.slider_speed.setDefaultValue(self._clamp_speed_pct(pct))
+
+    def reset_speed(self) -> None:
+        """Restore the configured default speed."""
+        self.slider_speed.resetToDefault()
 
     def set_default_volume(self, vol: int) -> None:
         """Set the default volume value for double-click reset."""

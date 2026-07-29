@@ -35,6 +35,7 @@ class ShortcutSubInterface(SubSettingInterface):
         ("stop", FIF.PAUSE, "停止", "停止播放", "S:short", "S:short", "both", None, None, False),
         ("speed_down", FIF.SPEED_OFF, "减速", "降低播放速度", "Q:short", "Q:short", "both", None, None, False),
         ("speed_up", FIF.SPEED_HIGH, "加速", "提高播放速度", "W:short", "W:short", "both", None, None, False),
+        ("speed_reset", FIF.SPEED_MEDIUM, "恢复原始速度", "将播放速度恢复为设置中的默认速度", "", "", "both", None, None, False),
         ("volume_up", FIF.VOLUME, "音量增大", "增大播放音量", "", "", "both", None, None, False),
         ("volume_down", FIF.MUTE, "音量减小", "减小播放音量", "", "", "both", None, None, False),
 
@@ -73,6 +74,7 @@ class ShortcutSubInterface(SubSettingInterface):
         ("modify_line", FIF.EDIT, "修改选中行", "打开修改选中行对话框", "", "", "both", None, None, False),
         ("bulk_change", FIF.EDIT, "批量变更", "打开批量变更对话框", "CTRL+H:short", "CTRL+H:short", "both", None, None, False),
         ("insert_guide", FIF.ADD, "插入导唱符", "打开插入导唱符对话框", "", "", "both", None, None, False),
+        ("auto_insert_guide", FIF.SYNC, "自动插入导唱符", "根据时间戳自动插入导唱符", "", "", "both", None, None, False),
         ("toggle_needs_guide", FIF.PIN, "切换导唱待办", "切换当前字符的导唱待办标记（在字符左上角显示半透明 ✚，提示稍后需要插入导唱符）", "", "", "both", None, None, False),
 
         # ── 自动注音 ──
@@ -83,6 +85,7 @@ class ShortcutSubInterface(SubSettingInterface):
         ("analyze_rubies_by_line_no_cp", FIF.SYNC, "按行注音分析（仅注音）", "仅分析当前行注音，但不更新节奏点", "", "", "both", None, None, False),
         ("analyze_rubies_selected_no_cp", FIF.SYNC, "注音分析所选字符（仅注音）", "仅分析选中字符注音，但不更新节奏点", "", "", "both", None, None, False),
         ("romanize_all", FIF.FONT, "全部转为罗马字", "将现有注音整体转为罗马字（不更新节奏点、不删除注音）", "", "", "both", None, None, False),
+        ("analyze_pinyin", FIF.FONT, "中文拼音注音", "为中文歌词自动添加拼音注音", "", "", "both", None, None, False),
         ("delete_rubies_by_type", FIF.DELETE, "按类型删除注音", "按类型删除注音对话框", "", "", "both", None, None, False),
 
         # ── 演唱者 ──
@@ -99,6 +102,7 @@ class ShortcutSubInterface(SubSettingInterface):
         ("delete_all_timestamps", FIF.DELETE, "删除所有时间戳", "删除项目中全部时间戳", "", "", "both", None, None, False),
         ("delete_all_timestamps_keep_head", FIF.DELETE, "删除所有时间戳（保留行首）", "删除全部时间戳，但保留每行行首时间戳", "", "", "both", None, None, False),
         ("delete_timestamps_selected", FIF.DELETE, "删除所选范围时间戳", "删除所选范围内的时间戳", "", "", "both", None, None, False),
+        ("auto_generate_interlude_guide", FIF.MUSIC, "自动生成间奏指引", "根据时间戳自动生成间奏指引", "", "", "both", None, None, False),
 
         # ── 文件与导出 ──
         ("new_project", FIF.ADD, "新建项目", "新建空白项目", "", "", "both", None, None, False),
@@ -106,6 +110,7 @@ class ShortcutSubInterface(SubSettingInterface):
         ("save_as", FIF.SAVE_AS, "项目另存为", "将当前项目另存为新文件", "", "", "both", None, None, False),
         ("load_audio", FIF.MUSIC, "加载音频", "加载音频文件", "", "", "both", None, None, False),
         ("load_lyrics", FIF.DOCUMENT, "加载歌词", "加载歌词文本文件", "", "", "both", None, None, False),
+        ("concat_sug", FIF.LINK, "多项目拼接", "拼接多个 SUG 项目", "", "", "both", None, None, False),
         ("open_fulltext", FIF.EDIT, "全文本编辑", "打开全文本编辑界面", "CTRL+T:short", "CTRL+T:short", "both", None, None, False),
         ("quick_export", FIF.SHARE, "快捷导出", "使用默认导出格式快速导出到文件", "", "", "both", None, None, False),
 

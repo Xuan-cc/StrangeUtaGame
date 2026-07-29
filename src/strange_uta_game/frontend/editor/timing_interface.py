@@ -659,6 +659,7 @@ class EditorInterface(QWidget):
             "seek_forward",
             "speed_down",
             "speed_up",
+            "speed_reset",
             "edit_ruby",
             "add_checkpoint",
             "remove_checkpoint",
@@ -714,6 +715,10 @@ class EditorInterface(QWidget):
             "save_as",
             "load_audio",
             "load_lyrics",
+            "concat_sug",
+            "auto_insert_guide",
+            "analyze_pinyin",
+            "auto_generate_interlude_guide",
         ]
         # 默认值兜底（当设置未写入新 schema 时使用）
         defaults = {
@@ -725,6 +730,7 @@ class EditorInterface(QWidget):
             "seek_forward": "X",
             "speed_down": "Q",
             "speed_up": "W",
+            "speed_reset": "",
             "edit_ruby": "F2",
             "add_checkpoint": "F4",
             "remove_checkpoint": "F5",
@@ -780,6 +786,10 @@ class EditorInterface(QWidget):
             "save_as": "",
             "load_audio": "",
             "load_lyrics": "",
+            "concat_sug": "",
+            "auto_insert_guide": "",
+            "analyze_pinyin": "",
+            "auto_generate_interlude_guide": "",
         }
 
         def _normalize_trigger(raw: str) -> str:
@@ -6221,6 +6231,8 @@ class EditorInterface(QWidget):
         elif action == "speed_up":
             v = self.transport.get_speed_value()
             self.transport.set_speed_value(v + 5)
+        elif action == "speed_reset":
+            self.transport.reset_speed()
         elif action == "volume_up":
             v = self.transport.slider_volume.value()
             self.transport.slider_volume.setValue(min(100, v + 5))
@@ -6350,6 +6362,14 @@ class EditorInterface(QWidget):
             self._on_load_audio()
         elif action == "load_lyrics":
             self._on_load_lyrics()
+        elif action == "concat_sug":
+            self._on_concat_sug()
+        elif action == "auto_insert_guide":
+            self._on_auto_insert_guide()
+        elif action == "analyze_pinyin":
+            self._on_analyze_pinyin()
+        elif action == "auto_generate_interlude_guide":
+            self._on_auto_generate_interlude_guide()
 
     def _prompt_if_needs_guide_pending(self) -> bool:
         """若项目中仍有 needs_guide 标记，弹窗让用户决定是否继续导出。
