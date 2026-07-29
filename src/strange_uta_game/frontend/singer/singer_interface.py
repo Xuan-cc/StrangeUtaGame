@@ -8,7 +8,10 @@
 - 顶部常驻搜索框过滤（过滤期间禁用拖放与顺序按钮，避免操作隐藏项）
 """
 
+import json
+
 from PyQt6.QtWidgets import (
+    QApplication,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -53,6 +56,12 @@ from strange_uta_game.backend.domain.entities import _compute_complement_color
 from strange_uta_game.frontend.theme import theme
 from strange_uta_game.frontend.fluent_widgets import dialog_button_row, message_question
 from strange_uta_game.frontend.window_sizing import fit_to_screen
+
+
+def build_singer_names_field(project: Optional[Project]) -> str:
+    """将项目中的全部演唱者名称序列化为紧凑 JSON 数组。"""
+    names = [singer.name for singer in project.singers] if project else []
+    return json.dumps(names, ensure_ascii=False, separators=(",", ":"))
 
 
 def _make_singer_icon(colors: List[str], w: int = 32, h: int = 18):
@@ -1142,6 +1151,14 @@ class SingerManagerInterface(QWidget):
         self.btn_load_preset.clicked.connect(self._on_load_preset)
         row2.addWidget(self.btn_load_preset)
 
+        self.btn_copy_names = PushButton(self.tr("复制演唱者名称"), self)
+        self.btn_copy_names.setIcon(FIF.COPY)
+        self.btn_copy_names.setToolTip(
+            self.tr("忽略分组和当前筛选，将项目中的全部演唱者名称复制为 JSON 数组")
+        )
+        self.btn_copy_names.clicked.connect(self._on_copy_singer_names)
+        row2.addWidget(self.btn_copy_names)
+
         row2.addStretch()
         layout.addLayout(row2)
 
@@ -1421,6 +1438,20 @@ class SingerManagerInterface(QWidget):
     def _on_group_filter_changed(self):
         self._group_filter = self.combo_group_filter.currentData() or ""
         self._refresh_list()
+
+    def _on_copy_singer_names(self):
+        """复制当前项目的全部演唱者 name；不受搜索和分组筛选影响。"""
+        if not self._project:
+            self._warn(self.tr("未加载项目"), self.tr("请先打开或创建一个项目"))
+            return
+
+        QApplication.clipboard().setText(build_singer_names_field(self._project))
+        self._info(
+            self.tr("复制成功"),
+            self.tr("已复制 {n} 位演唱者的名称").format(
+                n=len(self._project.singers)
+            ),
+        )
 
     # ==================== 拖放重排 ====================
 
