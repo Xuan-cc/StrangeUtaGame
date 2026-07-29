@@ -667,6 +667,7 @@ class EditorInterface(QWidget):
             "toggle_word_join",
             "volume_up",
             "volume_down",
+            "volume_reset",
             "nav_prev_line",
             "nav_next_line",
             "nav_prev_char",
@@ -738,6 +739,7 @@ class EditorInterface(QWidget):
             "toggle_word_join": "F3",
             "volume_up": "",
             "volume_down": "",
+            "volume_reset": "",
             "nav_prev_line": "UP",
             "nav_next_line": "DOWN",
             "nav_prev_char": "LEFT",
@@ -6239,6 +6241,8 @@ class EditorInterface(QWidget):
         elif action == "volume_down":
             v = self.transport.slider_volume.value()
             self.transport.slider_volume.setValue(max(0, v - 5))
+        elif action == "volume_reset":
+            self.transport.reset_volume()
         elif action == "nav_prev_line":
             self._on_nav_line(-1)
         elif action == "nav_next_line":

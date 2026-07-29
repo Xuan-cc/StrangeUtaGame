@@ -35,9 +35,10 @@ class ShortcutSubInterface(SubSettingInterface):
         ("stop", FIF.PAUSE, "停止", "停止播放", "S:short", "S:short", "both", None, None, False),
         ("speed_down", FIF.SPEED_OFF, "减速", "降低播放速度", "Q:short", "Q:short", "both", None, None, False),
         ("speed_up", FIF.SPEED_HIGH, "加速", "提高播放速度", "W:short", "W:short", "both", None, None, False),
-        ("speed_reset", FIF.SPEED_MEDIUM, "恢复原始速度", "将播放速度恢复为设置中的默认速度", "", "", "both", None, None, False),
+        ("speed_reset", FIF.SPEED_MEDIUM, "恢复默认速度", "将播放速度恢复为设置中的默认速度；双击速度条也可恢复", "", "", "both", None, None, False),
         ("volume_up", FIF.VOLUME, "音量增大", "增大播放音量", "", "", "both", None, None, False),
         ("volume_down", FIF.MUTE, "音量减小", "减小播放音量", "", "", "both", None, None, False),
+        ("volume_reset", FIF.VOLUME, "恢复默认音量", "将播放音量恢复为设置中的默认音量；双击音量条也可恢复", "", "", "both", None, None, False),
 
         # ── 导航与跳转 ──
         ("nav_prev_line", FIF.UP, "上一行", "移动到上一歌词行", "UP:short", "UP:short", "both", None, None, False),
@@ -209,8 +210,8 @@ class ShortcutSubInterface(SubSettingInterface):
         本方法返回值无意义、调用一次即可。"""
         tr = self.tr
         # title（按 _SHORTCUT_ACTIONS 顺序，缺译时按 source 显示）
-        tr("播放/暂停"); tr("停止"); tr("减速"); tr("加速")
-        tr("音量增大"); tr("音量减小"); tr("上一行"); tr("下一行")
+        tr("播放/暂停"); tr("停止"); tr("减速"); tr("加速"); tr("恢复默认速度")
+        tr("音量增大"); tr("音量减小"); tr("恢复默认音量"); tr("上一行"); tr("下一行")
         tr("上一字符"); tr("下一字符")
         tr("切换字内节奏点（反向）"); tr("时间戳+步长"); tr("时间戳-步长")
         tr("切换字内节奏点")
@@ -219,7 +220,7 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("打轴键（编辑模式）"); tr("打轴键 Extra（编辑模式）")
         tr("后退"); tr("前进"); tr("删除当前时间戳并回滚")
         tr("增加节奏点"); tr("删除节奏点"); tr("切换句尾")
-        tr("批量变更"); tr("修改所选字符"); tr("插入导唱符")
+        tr("批量变更"); tr("修改所选字符"); tr("插入导唱符"); tr("自动插入导唱符")
         tr("切换导唱待办"); tr("修改选中行")
         tr("注音分析"); tr("按行注音分析"); tr("注音分析所选字符")
         tr("全文本编辑"); tr("按类型删除注音")
@@ -229,17 +230,21 @@ class ShortcutSubInterface(SubSettingInterface):
         # 新增：工具栏功能对应的可设置快捷键 title（默认留空）
         tr("注音分析（仅注音）"); tr("按行注音分析（仅注音）")
         tr("注音分析所选字符（仅注音）"); tr("全部转为罗马字")
+        tr("中文拼音注音")
         tr("演唱者管理")
         tr("补全时间戳"); tr("分离符号时间戳")
         tr("调整原始时间戳"); tr("按行调整原始时间戳"); tr("调整所选字符原始时间戳")
         tr("删除所有时间戳"); tr("删除所有时间戳（保留行首）"); tr("删除所选范围时间戳")
-        tr("新建项目"); tr("加载项目"); tr("项目另存为"); tr("加载音频"); tr("加载歌词")
+        tr("自动生成间奏指引")
+        tr("新建项目"); tr("加载项目"); tr("项目另存为"); tr("加载音频"); tr("加载歌词"); tr("多项目拼接")
         tr("撤销"); tr("重做"); tr("保存"); tr("复制字符")
         tr("粘贴"); tr("插入换行"); tr("合并上一行"); tr("删除字符")
         # content
         tr("切换播放和暂停"); tr("停止播放")
         tr("降低播放速度"); tr("提高播放速度")
+        tr("将播放速度恢复为设置中的默认速度；双击速度条也可恢复")
         tr("增大播放音量"); tr("减小播放音量")
+        tr("将播放音量恢复为设置中的默认音量；双击音量条也可恢复")
         tr("移动到上一歌词行"); tr("移动到下一歌词行")
         tr("在当前行内移动到上一个字符；若已在首字符则跳到上一行末字符")
         tr("在当前行内移动到下一个字符；若已在末字符则跳到下一行首字符")
@@ -264,7 +269,7 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("切换当前字符的句尾标记")
         tr("切换当前字符的句尾标记（默认 句号）")
         tr("打开批量变更对话框"); tr("打开修改所选字符对话框")
-        tr("打开插入导唱符对话框")
+        tr("打开插入导唱符对话框"); tr("根据时间戳自动插入导唱符")
         tr("切换当前字符的导唱待办标记（在字符左上角显示半透明 ✚，提示稍后需要插入导唱符）")
         tr("打开修改选中行对话框")
         tr("自动分析全部注音"); tr("仅分析当前行的注音")
@@ -289,8 +294,10 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("删除项目中全部时间戳")
         tr("删除全部时间戳，但保留每行行首时间戳")
         tr("删除所选范围内的时间戳")
+        tr("根据时间戳自动生成间奏指引")
         tr("新建空白项目"); tr("打开已有项目文件"); tr("将当前项目另存为新文件")
-        tr("加载音频文件"); tr("加载歌词文本文件")
+        tr("加载音频文件"); tr("加载歌词文本文件"); tr("拼接多个 SUG 项目")
+        tr("为中文歌词自动添加拼音注音")
         tr("撤销操作"); tr("重做操作"); tr("保存项目")
         tr("复制选中字符的完整信息")
         tr("无歌词时粘贴整批歌词文本；已有歌词时在光标处插入（复制的字符或纯文本）")

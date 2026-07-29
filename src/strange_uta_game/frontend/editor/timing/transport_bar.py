@@ -327,3 +327,7 @@ class TransportBar(QFrame):
     def set_default_volume(self, vol: int) -> None:
         """Set the default volume value for double-click reset."""
         self.slider_volume.setDefaultValue(max(0, min(100, vol)))
+
+    def reset_volume(self) -> None:
+        """Restore the configured default volume."""
+        self.slider_volume.resetToDefault()
