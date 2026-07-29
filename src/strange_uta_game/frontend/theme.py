@@ -121,6 +121,26 @@ class ThemeColors:
         return QColor("#FF6B6B")
 
     @property
+    def mode_edit_bg(self) -> QColor:
+        """编辑模式指示器背景色"""
+        return QColor("#3E3E3E" if self._is_dark else "#E0E0E0")
+
+    @property
+    def mode_edit_text(self) -> QColor:
+        """编辑模式指示器文字色"""
+        return QColor("#E6E6E6" if self._is_dark else "#444444")
+
+    @property
+    def mode_timing_bg(self) -> QColor:
+        """打轴模式指示器背景色"""
+        return QColor("#FFD54F")
+
+    @property
+    def mode_timing_text(self) -> QColor:
+        """打轴模式指示器文字色"""
+        return QColor("#333333")
+
+    @property
     def timetag_nonmonotonic(self) -> QColor:
         """非单调时间戳警告色（时序回退提示）"""
         return QColor("#CC44FF" if self._is_dark else "#9922CC")

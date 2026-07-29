@@ -137,6 +137,9 @@ class EditorInterface(QWidget):
         self._key_map = {}  # key_string -> action_name, populated by _apply_settings
         self._settings_loaded = False  # 配置是否已加载成功
         self._last_pause_char: str = ""  # 跟踪停顿符变更，用于实时迁移 ruby parts
+        # 滚动模式：auto / always / never（由按钮循环切换，持久化到 config）
+        # 在创建 UI 前初始化，确保统一主题刷新入口构造期间即可安全调用。
+        self._scroll_mode: str = "auto"
         # 长按/短按支持
         self._long_press_timer = QTimer(self)
         self._long_press_timer.setSingleShot(True)
@@ -171,10 +174,6 @@ class EditorInterface(QWidget):
         self._time_tags_update_timer.setSingleShot(True)
         self._time_tags_update_timer.setInterval(33)
         self._time_tags_update_timer.timeout.connect(self._update_time_tags_display)
-
-        # 滚动模式：auto / always / never（由按钮循环切换，持久化到 config）
-        self._scroll_mode: str = "auto"
-        self._update_scroll_mode_btn_style()
 
         # 自动滚动状态机：用户交互挂起 → 播放到达新行 + 3s 无交互后恢复
         self._auto_scroll_suspended: bool = False
@@ -453,10 +452,6 @@ class EditorInterface(QWidget):
 
         # 左下角模式指示器（#8：区分音乐播放/暂停模式）
         self.lbl_mode = QLabel(self.tr("模式：编辑"))
-        self.lbl_mode.setStyleSheet(
-            "font-size: 12px; padding: 2px 8px; border-radius: 4px;"
-            "background-color: #e0e0e0; color: #444;"
-        )
         bottom.addWidget(self.lbl_mode)
 
         self.btn_tag = PrimaryPushButton(self.tr("打轴 (Space)"), self)
@@ -481,14 +476,12 @@ class EditorInterface(QWidget):
             "不滚动 — 完全停用自动滚动"
         ))
         self.btn_scroll_mode.clicked.connect(self._on_cycle_scroll_mode)
-        theme.changed.connect(self._update_scroll_mode_btn_style)
         bottom.addWidget(self.btn_scroll_mode)
 
         bottom.addStretch()
 
         # 快捷键提示（动态跟随设置）
         self.lbl_shortcut_hint = QLabel("")
-        self.lbl_shortcut_hint.setStyleSheet(f"font-size: 11px; color: {theme.text_hint.name()};")
         bottom.addWidget(self.lbl_shortcut_hint)
 
         layout.addLayout(bottom)
@@ -502,22 +495,38 @@ class EditorInterface(QWidget):
         # 状态重译。
         self._status_state: str = "ready"
         self.lbl_status = QLabel(self.tr("就绪"))
-        self.lbl_status.setStyleSheet(f"font-size: 12px; color: {theme.text_primary.name()};")
         status.addWidget(self.lbl_status)
         status.addStretch()
         # 行号/字符/时间戳信息（#5：从打轴栏移到此处，与播放状态一同显示）
         self.lbl_line_info = QLabel(self.tr("当前行: -"))
-        self.lbl_line_info.setStyleSheet(f"font-size: 12px; color: {theme.text_primary.name()};")
         status.addWidget(self.lbl_line_info)
         status.addStretch()
         self.lbl_progress = QLabel(self.tr("行: 0/0 | 进度: 0%"))
-        self.lbl_progress.setStyleSheet(f"font-size: 12px; color: {theme.text_primary.name()};")
         status.addWidget(self.lbl_progress)
         # 待添加导唱符计数：项目中所有 needs_guide=True 的字符数
         self.lbl_needs_guide = QLabel("")
-        self.lbl_needs_guide.setStyleSheet(f"font-size: 12px; color: {theme.accent_warning.name()};")
         status.addWidget(self.lbl_needs_guide)
         layout.addLayout(status)
+
+        # 原生 QLabel 的内联颜色不会被 QApplication palette 或 Fluent 主题
+        # 覆盖，因此统一在主题变化时重写全部底部样式。
+        theme.changed.connect(self._apply_theme_styles)
+        self._apply_theme_styles()
+
+    def _apply_theme_styles(self) -> None:
+        """刷新打轴页底部所有依赖主题的内联样式。"""
+        self.lbl_shortcut_hint.setStyleSheet(
+            f"font-size: 11px; color: {theme.text_hint.name()};"
+        )
+        common = f"font-size: 12px; color: {theme.text_primary.name()};"
+        self.lbl_status.setStyleSheet(common)
+        self.lbl_line_info.setStyleSheet(common)
+        self.lbl_progress.setStyleSheet(common)
+        self.lbl_needs_guide.setStyleSheet(
+            f"font-size: 12px; color: {theme.accent_warning.name()};"
+        )
+        self._update_mode_indicator()
+        self._update_scroll_mode_btn_style()
 
     def set_timing_service(self, timing_service: TimingService):
         """接入 TimingService 并完成全部回调/信号接线。
@@ -4479,7 +4488,8 @@ class EditorInterface(QWidget):
             self.lbl_mode.setText(self.tr("模式：打轴"))
             self.lbl_mode.setStyleSheet(
                 "font-size: 12px; padding: 2px 8px; border-radius: 4px;"
-                "background-color: #ffd54f; color: #333; font-weight: bold;"
+                f"background-color: {theme.mode_timing_bg.name()};"
+                f" color: {theme.mode_timing_text.name()}; font-weight: bold;"
             )
             if hasattr(self, "_key_map_timing_short"):
                 self._key_map_short = self._key_map_timing_short
@@ -4489,7 +4499,8 @@ class EditorInterface(QWidget):
             self.lbl_mode.setText(self.tr("模式：编辑"))
             self.lbl_mode.setStyleSheet(
                 "font-size: 12px; padding: 2px 8px; border-radius: 4px;"
-                "background-color: #e0e0e0; color: #444;"
+                f"background-color: {theme.mode_edit_bg.name()};"
+                f" color: {theme.mode_edit_text.name()};"
             )
             if hasattr(self, "_key_map_edit_short"):
                 self._key_map_short = self._key_map_edit_short

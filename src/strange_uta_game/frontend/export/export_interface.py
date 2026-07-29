@@ -6,6 +6,7 @@ Nicokara 格式支持演唱者过滤和演唱者标签插入。
 
 from PyQt6.QtWidgets import (
     QWidget,
+    QLayout,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -205,9 +206,41 @@ class ExportInterface(QWidget):
         right_label = SubtitleLabel(self.tr("导出设置"))
         right_layout.addWidget(right_label)
 
+        # 设置项可能因格式和演唱者数量显著增高。只让中间设置区滚动，
+        # 保持标题与底部导出按钮始终可见。
+        self._settings_scroll = ScrollArea()
+        self._settings_scroll.setWidgetResizable(True)
+        self._settings_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._settings_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._settings_scroll.setObjectName("exportSettingsScroll")
+        self._settings_scroll.setStyleSheet(
+            "#exportSettingsScroll { border: none; background: transparent; }"
+        )
+        self._settings_scroll.viewport().setAutoFillBackground(False)
+        self._settings_scroll.viewport().setStyleSheet("background: transparent;")
+
+        self._settings_widget = QWidget()
+        self._settings_widget.setObjectName("exportSettingsContent")
+        self._settings_widget.setAutoFillBackground(False)
+        self._settings_widget.setStyleSheet(
+            "QWidget#exportSettingsContent { background: transparent; }"
+        )
+        self._settings_layout = QVBoxLayout(self._settings_widget)
+        self._settings_layout.setContentsMargins(0, 0, 6, 0)
+        self._settings_layout.setSpacing(15)
+        self._settings_layout.setSizeConstraint(
+            QLayout.SizeConstraint.SetMinAndMaxSize
+        )
+        self._settings_scroll.setWidget(self._settings_widget)
+        right_layout.addWidget(self._settings_scroll, 1)
+
         # 输出路径
         path_label = CaptionLabel(self.tr("输出路径"))
-        right_layout.addWidget(path_label)
+        self._settings_layout.addWidget(path_label)
 
         path_row = QHBoxLayout()
         self.line_output = LineEdit()
@@ -219,22 +252,22 @@ class ExportInterface(QWidget):
         btn_browse.setIcon(FIF.FOLDER)
         btn_browse.clicked.connect(self._on_browse)
         path_row.addWidget(btn_browse)
-        right_layout.addLayout(path_row)
+        self._settings_layout.addLayout(path_row)
 
         # 文件名
         fname_label = CaptionLabel(self.tr("文件名（不含扩展名）"))
-        right_layout.addWidget(fname_label)
+        self._settings_layout.addWidget(fname_label)
 
         self.line_filename = LineEdit()
         self.line_filename.setPlaceholderText("untitled")
-        right_layout.addWidget(self.line_filename)
+        self._settings_layout.addWidget(self.line_filename)
 
         # Nicokara 标签设置按钮（仅 Nicokara 格式显示）
         self.btn_tags = PushButton(self.tr("Nicokara 标签设置..."), self)
         self.btn_tags.setIcon(FIF.TAG)
         self.btn_tags.clicked.connect(self._on_nicokara_tags)
         self.btn_tags.hide()
-        right_layout.addWidget(self.btn_tags)
+        self._settings_layout.addWidget(self.btn_tags)
 
         # 演唱者选择区域（仅 Nicokara 格式显示）
         self._singer_group = FluentGroupBox(self.tr("演唱者过滤"))
@@ -249,21 +282,11 @@ class ExportInterface(QWidget):
         self._singer_checkbox_container = QVBoxLayout(self._singer_checkbox_widget)
         self._singer_checkbox_container.setContentsMargins(0, 0, 0, 0)
         self._singer_checkbox_container.setSpacing(6)
-
-        self._singer_scroll_area = ScrollArea()
-        self._singer_scroll_area.setWidgetResizable(True)
-        self._singer_scroll_area.setMaximumHeight(120)
-        self._singer_scroll_area.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        self._singer_checkbox_container.setSizeConstraint(
+            QLayout.SizeConstraint.SetMinAndMaxSize
         )
-        self._singer_scroll_area.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded
-        )
-        self._singer_scroll_area.setWidget(self._singer_checkbox_widget)
-        # 断开 autoFillBackground 对系统 QPalette 的依赖
-        self._singer_scroll_area.viewport().setAutoFillBackground(False)
         self._singer_checkbox_widget.setAutoFillBackground(False)
-        singer_group_layout.addWidget(self._singer_scroll_area)
+        singer_group_layout.addWidget(self._singer_checkbox_widget)
 
         self._chk_insert_singer_tags = CheckBox(self.tr("插入【演唱者名】标签"))
         self._chk_insert_singer_tags.setToolTip(
@@ -290,12 +313,13 @@ class ExportInterface(QWidget):
         self._btn_emoji_config.hide()
 
         self._singer_group.hide()
-        right_layout.addWidget(self._singer_group)
-        right_layout.addWidget(self._chk_insert_singer_tags)
-        right_layout.addWidget(self._chk_insert_singer_each_line)
-        right_layout.addWidget(self._btn_emoji_config)
-
-        right_layout.addStretch()
+        self._settings_layout.addWidget(self._singer_group)
+        self._settings_layout.addWidget(self._chk_insert_singer_tags)
+        self._settings_layout.addWidget(self._chk_insert_singer_each_line)
+        self._settings_layout.addWidget(self._btn_emoji_config)
+        # widgetResizable 会把内容 widget 撑到视口高度。显式用末尾 stretch
+        # 吸收富余空间，避免 LineEdit 等 Preferred/Expanding 控件被纵向拉开。
+        self._settings_layout.addStretch(1)
 
         # 导出按钮。宿主联动入口只在 embedded 模式显示；两个按钮使用相同
         # stretch，始终各占可用宽度的一半。
@@ -432,6 +456,14 @@ class ExportInterface(QWidget):
             self._btn_emoji_config.setVisible(is_nicokara)
             if is_nicokara:
                 self._refresh_singer_checkboxes()
+            self._update_settings_geometry()
+
+    def _update_settings_geometry(self) -> None:
+        """让动态显隐/增删的设置项立即更新外层滚动区域的内容高度。"""
+        self._settings_layout.invalidate()
+        self._settings_layout.activate()
+        self._settings_widget.updateGeometry()
+        self._settings_scroll.updateGeometry()
 
     def set_project(self, project: Project):
         self._project = project
@@ -541,6 +573,7 @@ class ExportInterface(QWidget):
         self._singer_checkboxes.clear()
 
         if not self._project:
+            self._update_settings_geometry()
             return
 
         used_singer_ids = set()
@@ -588,8 +621,7 @@ class ExportInterface(QWidget):
             setCustomStyleSheet(chk, _singer_qss, _singer_qss)
             self._singer_checkbox_container.addWidget(chk)
             self._singer_checkboxes.append(chk)
-
-        self._singer_checkbox_container.addStretch(1)
+        self._update_settings_geometry()
 
     def _get_selected_singer_ids(self) -> Optional[Set[str]]:
         """获取勾选的演唱者 ID 集合，如果没有勾选任何则返回 None（表示全部）"""
