@@ -518,6 +518,17 @@ class SingerEditDialog(QDialog):
             self._color = color
             self._refresh_solid_swatch()
 
+    # ── 安全关闭 ──────────────────────────────────────────────────────────
+
+    def done(self, result):
+        combo = getattr(self, "combo_group", None)
+        if combo is not None:
+            menu = getattr(combo, "_completerMenu", None)
+            if menu is not None:
+                menu.close()
+            combo.setCompleter(None)
+        super().done(result)
+
     # ── 数据获取 ──────────────────────────────────────────────────────────
 
     def get_data(self) -> dict:
@@ -557,6 +568,15 @@ class BatchGroupDialog(QDialog):
             self, ok_text=self.tr("确定"), cancel_text=self.tr("取消")
         )
         layout.addLayout(button_row)
+
+    def done(self, result):
+        combo = getattr(self, "combo", None)
+        if combo is not None:
+            menu = getattr(combo, "_completerMenu", None)
+            if menu is not None:
+                menu.close()
+            combo.setCompleter(None)
+        super().done(result)
 
     def get_group(self) -> str:
         return self.combo.text().strip()
