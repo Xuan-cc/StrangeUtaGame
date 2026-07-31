@@ -316,15 +316,19 @@ class AutoCheckService:
         self._flags = auto_check_flags or {}
         self._romanize_ruby = bool(self._flags.get("romanize_ruby", False))
         self._annotate_katakana_with_english = annotate_katakana_with_english
-        # 用户词典：保留词典数组顺序（上方条目优先级最高）。
-        # 在 apply_to_sentence 末尾以子串严格匹配方式覆盖 Character[]，
+        # 用户词典：按 word 长度降序排列（最长匹配优先），
+        # 同长度条目保持原始数组顺序。在 apply_to_sentence 末尾
+        # 以子串严格匹配方式覆盖 Character[]，
         # 因此本字段仅用于 Phase 5 覆盖，不再参与 analyze_sentence 阶段。
         raw = user_dictionary or []
-        self._dict: List[Tuple[str, str]] = [
+        _dict_entries = [
             (e["word"], e["reading"])
             for e in raw
             if e.get("enabled", True) and e.get("word") and e.get("reading")
         ]
+        # 稳定排序：按 word 长度降序，同长度保持用户定义顺序
+        _dict_entries.sort(key=lambda x: len(x[0]), reverse=True)
+        self._dict: List[Tuple[str, str]] = _dict_entries
         # pykakasi 用于无约束分区的参考读音
         self._pykakasi_conv = None
         try:
@@ -2169,7 +2173,7 @@ class AutoCheckService:
         """Phase 5：把用户词典以子串严格匹配方式覆盖到 sentence.characters 上。
 
         语义：
-          - 词典按数组顺序枚举（上方条目优先级最高）；
+          - 词典按 word 长度降序排列（最长匹配优先），同长度保持数组顺序；
           - 对每条 ``(word, reading)``，在 ``sentence`` 字面 ``"".join(c.char ...)``
             上扫描所有不重叠的出现位置；
           - 字符位置若已被更高优先级词条锁定，则跳过；
