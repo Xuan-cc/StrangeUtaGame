@@ -57,7 +57,7 @@ def _export_sentence_end_ts(char: Character) -> Optional[int]:
 
 def format_timestamp(ms: int) -> str:
     """毫秒 → MM:SS:cc"""
-    total_cs = round(ms / 10)
+    total_cs = ms // 10
     minutes = total_cs // 6000
     seconds = (total_cs % 6000) // 100
     centis = total_cs % 100

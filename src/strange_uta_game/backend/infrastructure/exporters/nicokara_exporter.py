@@ -32,8 +32,7 @@ def _format_nicokara_ts(timestamp_ms: int, offset_ms: int = 0) -> str:
         格式化后的字符串，如 [00:12:34]
     """
     timestamp_ms = max(0, timestamp_ms + offset_ms)
-    # 四舍五入到厘秒，再提取各分量（避免 995ms→100cs 溢出）
-    total_cs = round(timestamp_ms / 10)
+    total_cs = timestamp_ms // 10
     minutes = total_cs // 6000
     seconds = (total_cs % 6000) // 100
     centiseconds = total_cs % 100
