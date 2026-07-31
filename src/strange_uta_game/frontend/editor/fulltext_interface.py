@@ -365,7 +365,8 @@ class DeleteRubyByTypeDialog(QDialog):
         (CharType.LONG_VOWEL, "長音符号（ー、～等）"),
         (CharType.SOKUON, "促音（っ/ッ）"),
         (CharType.OTHER, "その他（♪等特殊符号）"),
-        (CharType.SPACE, "空格"),
+        (CharType.SPACE, "半角空格"),
+        (CharType.FULL_SPACE, "全角空格"),
     ]
 
     _TYPE_NAME_MAP: dict = {
@@ -380,6 +381,7 @@ class DeleteRubyByTypeDialog(QDialog):
         CharType.SOKUON: "sokuon",
         CharType.OTHER: "other",
         CharType.SPACE: "space",
+        CharType.FULL_SPACE: "full_space",
     }
 
     _NAME_TYPE_MAP = {v: k for k, v in _TYPE_NAME_MAP.items()}

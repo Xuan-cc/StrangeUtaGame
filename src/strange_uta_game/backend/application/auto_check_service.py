@@ -65,7 +65,7 @@ _RUBY_ALLOWED_TYPES = {
 }
 
 # 字符类型 → 标志键映射（用于标志过滤器，提取为模块级常量避免循环内重复构造）
-# 注意：CharType.SPACE 不在此表中，空格由 _apply_flags_filter 单独处理
+# 注意：CharType.SPACE / CharType.FULL_SPACE 不在此表中，空格由 _apply_flags_filter 单独处理
 # （需要同时读取 space_after_* 三个子选项，逻辑与其他类型不同）
 _TYPE_FLAG_MAP: Dict[CharType, str] = {
     CharType.HIRAGANA: "hiragana",
@@ -1150,7 +1150,7 @@ class AutoCheckService:
 
             # 空格：主开关 + 上下文子选项共同决定是否打 CP（set-to-1 语义）
             # 须先于通用 _TYPE_FLAG_MAP 检查处理，因为空格逻辑与其他类型不同
-            if ct == CharType.SPACE:
+            if ct in (CharType.SPACE, CharType.FULL_SPACE):
                 if not self._flags.get("space", True) or i == 0:
                     # 主开关关闭，或行首空格：不打 CP
                     check_counts[i] = 0
@@ -2790,6 +2790,7 @@ _RUBY_TYPE_NAME_MAP: Dict[str, CharType] = {
     "sokuon": CharType.SOKUON,
     "other": CharType.OTHER,
     "space": CharType.SPACE,
+    "full_space": CharType.FULL_SPACE,
 }
 
 _SMALL_HIRAGANA = set("ぁぃぅぇぉゃゅょゎ")

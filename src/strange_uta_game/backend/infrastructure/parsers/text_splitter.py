@@ -21,7 +21,8 @@ class CharType(Enum):
     ALPHABET = auto()  # 英文字母
     NUMBER = auto()  # 数字
     SYMBOL = auto()  # 符号
-    SPACE = auto()  # 空格
+    SPACE = auto()  # 半角空格（U+0020 等 ASCII 空白）
+    FULL_SPACE = auto()  # 全角空格（U+3000，表意文字空格）
     OTHER = auto()  # 其他
 
 
@@ -77,7 +78,11 @@ def get_char_type(char: str) -> CharType:
     if char.isdigit():
         return CharType.NUMBER
 
-    # 空格
+    # 全角空格（U+3000 IDEOGRAPHIC SPACE）与半角空格分开
+    if char == "\u3000":
+        return CharType.FULL_SPACE
+
+    # 半角空格（U+0020 等 ASCII 空白）
     if char.isspace():
         return CharType.SPACE
 
@@ -142,21 +147,27 @@ class JapaneseSplitter(TextSplitter):
 
         chars = []
         prev_was_space = False
+        saw_full_space_in_seq = False
 
         for char in text:
             char_type = get_char_type(char)
 
-            # 处理空格
-            if char_type == CharType.SPACE:
+            # 处理空格（半角/全角）
+            if char_type in (CharType.SPACE, CharType.FULL_SPACE):
                 if self.merge_spaces:
+                    if char_type == CharType.FULL_SPACE:
+                        saw_full_space_in_seq = True
                     if not prev_was_space:
-                        chars.append(" ")
+                        chars.append("\u3000" if saw_full_space_in_seq else " ")
                         prev_was_space = True
+                    elif saw_full_space_in_seq and chars and chars[-1] == " ":
+                        chars[-1] = "\u3000"
                 else:
                     chars.append(char)
                 continue
 
             prev_was_space = False
+            saw_full_space_in_seq = False
 
             # 根据配置决定是否拆分长音
             if char_type == CharType.LONG_VOWEL and not self.split_long_vowel:
@@ -208,18 +219,25 @@ class EnglishSplitter(TextSplitter):
 
         chars = []
         prev_was_space = False
+        saw_full_space_in_seq = False
 
         for char in text:
             if char.isspace():
+                is_full = char == "\u3000"
                 if self.merge_spaces:
+                    if is_full:
+                        saw_full_space_in_seq = True
                     if not prev_was_space:
-                        chars.append(" ")
+                        chars.append("\u3000" if saw_full_space_in_seq else " ")
                         prev_was_space = True
+                    elif saw_full_space_in_seq and chars and chars[-1] == " ":
+                        chars[-1] = "\u3000"
                 else:
                     chars.append(char)
                 continue
 
             prev_was_space = False
+            saw_full_space_in_seq = False
             chars.append(char)
 
         return chars
@@ -364,8 +382,8 @@ def split_text(text: str, config: SplitConfig = None) -> Tuple[List[str], List[i
         elif char_type == CharType.ALPHABET:
             # 英文字母通常 1 个
             check_counts.append(1)
-        elif char_type == CharType.SPACE:
-            # 空格 0 个
+        elif char_type in (CharType.SPACE, CharType.FULL_SPACE):
+            # 半角/全角空格 0 个
             check_counts.append(0)
         else:
             # 其他默认 1 个

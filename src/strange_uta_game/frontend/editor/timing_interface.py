@@ -3929,7 +3929,7 @@ class EditorInterface(QWidget):
                     # 真实的句尾时间戳。
                     is_at_end = next_ts is None and all(
                         chars[ci].check_count == 0
-                        and get_char_type(chars[ci].char) == CharType.SPACE
+                        and get_char_type(chars[ci].char) in (CharType.SPACE, CharType.FULL_SPACE)
                         for ci in range(segment_end, total_chars)
                     )
 

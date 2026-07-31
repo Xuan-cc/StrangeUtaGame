@@ -14,6 +14,14 @@ from strange_uta_game.backend.domain import Sentence, Character, Ruby, RubyPart
 
 logger = logging.getLogger(__name__)
 
+# ASCII 半角空白字符集（用于 .strip() 时保留全角空格 U+3000）
+_HALF_WS = " \t\n\r\f\v"
+
+
+def _cjk_strip(s: str) -> str:
+    """去除 ASCII 空白字符，保留全角空格（U+3000）。"""
+    return s.strip(_HALF_WS)
+
 
 class ParseError(Exception):
     """解析错误"""
@@ -148,7 +156,7 @@ class TXTParser(LyricParser):
         lines = []
 
         for line_text in content.split("\n"):
-            line_text = line_text.strip()
+            line_text = _cjk_strip(line_text)
 
             # 跳过空行
             if not line_text:
@@ -206,7 +214,7 @@ class LRCParser(LyricParser):
         lines = []
 
         for line_text in content.split("\n"):
-            line_text = line_text.strip()
+            line_text = _cjk_strip(line_text)
 
             if not line_text:
                 continue
@@ -276,14 +284,14 @@ class LRCParser(LyricParser):
             else:
                 # 逐行格式：提取最后一个时间标签后的文本作为歌词
                 last_match = matches[-1]
-                lyric_text = line_text[last_match.end() :].strip()
+                lyric_text = _cjk_strip(line_text[last_match.end():])
 
                 if not lyric_text:
                     # 尝试提取时间标签之间的文本: [start]歌词[end]
                     if len(matches) >= 2:
                         first_end = matches[0].end()
                         last_start = matches[-1].start()
-                        lyric_text = line_text[first_end:last_start].strip()
+                        lyric_text = _cjk_strip(line_text[first_end:last_start])
                     if not lyric_text:
                         continue
 
@@ -315,7 +323,7 @@ class LRCParser(LyricParser):
         first_match = matches[0]
         if first_match.start() > 0:
             # 如果第一个时间标签前有内容，检查内容长度
-            prefix = line_text[: first_match.start()].strip()
+            prefix = _cjk_strip(line_text[: first_match.start()])
             if len(prefix) > 0:
                 return False
 
@@ -324,7 +332,7 @@ class LRCParser(LyricParser):
         # 简单判断：如果时间标签数量 > 2 且文本中包含多个时间标签，认为是逐字格式
         text_without_tags = self.TIME_TAG_PATTERN.sub("", line_text)
         # 移除空白后的纯文本长度
-        clean_text = text_without_tags.strip()
+        clean_text = _cjk_strip(text_without_tags)
 
         # 如果时间标签数量接近或大于文本长度，认为是逐字格式
         return len(matches) >= 3
@@ -379,7 +387,7 @@ class LRCParser(LyricParser):
                     char_idx += 1
 
         raw_text = "".join(lyric_chars)
-        lyric_text = raw_text.strip()
+        lyric_text = _cjk_strip(raw_text)
 
         # 去除前导空白后重新计算索引
         leading_spaces = len(raw_text) - len(raw_text.lstrip())
@@ -465,7 +473,7 @@ class LRCParser(LyricParser):
                     tag_assigned = True
                 char_idx += 1
 
-        lyric_text = "".join(lyric_chars).strip()
+        lyric_text = _cjk_strip("".join(lyric_chars))
 
         # 去除前导空白后重新计算索引
         leading_spaces = len("".join(lyric_chars)) - len("".join(lyric_chars).lstrip())
@@ -504,12 +512,12 @@ class UtatenRubyParser(LyricParser):
 
     @staticmethod
     def is_utaten_format(content: str) -> bool:
-        return any(line.strip() == UTATEN_RUBY_MARKER for line in content.splitlines())
+        return any(_cjk_strip(line) == UTATEN_RUBY_MARKER for line in content.splitlines())
 
     def parse(self, content: str) -> List[ParsedLine]:
         lines: List[ParsedLine] = []
         for raw_line in content.lstrip("\ufeff").splitlines():
-            line_text = raw_line.strip()
+            line_text = _cjk_strip(raw_line)
             if not line_text:
                 continue
             if line_text == UTATEN_RUBY_MARKER or self.METADATA_PATTERN.match(line_text):
@@ -554,7 +562,7 @@ class UtatenRubyParser(LyricParser):
                     if parts:
                         ruby_map[start_idx] = (parts, len(text_part))
             i = close + 1
-        return ParsedLine(text="".join(raw_chars).strip(), timetags=[], ruby_map=ruby_map)
+        return ParsedLine(text=_cjk_strip("".join(raw_chars)), timetags=[], ruby_map=ruby_map)
 
 
 class NicokaraParser:
@@ -647,7 +655,7 @@ class NicokaraParser:
         for raw_line in raw_lines:
             # 去掉行尾 \r（Windows 换行），但保留有意义的 trailing 空格作为 body 排版
             raw_line = raw_line.rstrip("\r")
-            stripped = raw_line.strip()
+            stripped = _cjk_strip(raw_line)
 
             # 解析 @Ruby 元数据
             ruby_match = self.RUBY_PATTERN.match(stripped) if stripped else None
@@ -833,7 +841,7 @@ class NicokaraParser:
 
         # 注意：仅做空判断，不能 strip 掉尾随空格（行末空格是用户有意保留的排版/停顿）
         raw = "".join(lyric_chars)
-        text = raw.strip()
+        text = _cjk_strip(raw)
         if not text:
             # 纯空格 + ts 的"停顿行"（如 `[ts1] [ts2]`）：
             # - 若包含 ts，保留为含 1 个空格字符的 Sentence，携带起始 ts + 行末释放 ts，
