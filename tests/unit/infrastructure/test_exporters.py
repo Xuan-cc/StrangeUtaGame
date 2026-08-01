@@ -286,6 +286,13 @@ class TestASSDirectExporter:
 class TestNicokaraExporter:
     """测试 Nicokara 导出器"""
 
+    def test_timestamp_truncates_sub_centisecond_remainder(self):
+        from strange_uta_game.backend.infrastructure.exporters.nicokara_exporter import (
+            _format_nicokara_ts,
+        )
+
+        assert _format_nicokara_ts(19) == "[00:00:01]"
+
     def test_export_basic(self):
         """测试基本导出：单字符时间戳使用 [MM:SS:CC] 冒号格式"""
         project = Project()

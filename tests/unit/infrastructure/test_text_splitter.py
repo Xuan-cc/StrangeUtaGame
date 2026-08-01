@@ -53,6 +53,10 @@ class TestGetCharType:
     def test_number(self):
         assert get_char_type("1") == CharType.NUMBER
 
+    def test_full_width_space_has_distinct_type(self):
+        assert get_char_type(" ") == CharType.SPACE
+        assert get_char_type("\u3000") == CharType.FULL_SPACE
+
     def test_decorative_and_operator_symbols(self):
         # 装饰符号（♪♥★）与运算符（+ - * & ^ = ~ |）均归为符号；
         # 注音删除分类与节奏点生成无关，装饰符号一并算符号。
@@ -83,6 +87,12 @@ class TestJapaneseSplitter:
         result = splitter.split("赤い  花")  # 两个空格
         assert result == ["赤", "い", " ", "花"]
 
+    def test_merge_spaces_preserves_full_width_space(self):
+        splitter = JapaneseSplitter(merge_spaces=True)
+
+        assert splitter.split("赤い\u3000花") == ["赤", "い", "\u3000", "花"]
+        assert splitter.split("赤い \u3000 花") == ["赤", "い", "\u3000", "花"]
+
 
 class TestEnglishSplitter:
     """测试英文拆分器"""
@@ -97,6 +107,11 @@ class TestEnglishSplitter:
         result = splitter.split("Hello  World")
         assert "  " not in result
         assert " " in result
+
+    def test_merge_spaces_preserves_full_width_space(self):
+        splitter = EnglishSplitter(merge_spaces=True)
+
+        assert splitter.split("Hello \u3000 World") == [*"Hello", "\u3000", *"World"]
 
 
 class TestAutoSplitter:

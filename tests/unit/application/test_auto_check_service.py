@@ -390,6 +390,19 @@ class TestBlankLineLineStartEndGuard:
             assert not c.is_line_end, "空行 update 后不应 is_line_end"
             assert not c.is_sentence_end, "空行 update 后不应 is_sentence_end"
 
+    def test_full_width_space_uses_space_checkpoint_flags(self):
+        flags = {
+            "space": True,
+            "space_after_japanese": True,
+        }
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags=flags)
+        sentence = Sentence.from_text("あ\u3000", "s1")
+
+        results = service.analyze_sentence(sentence)
+
+        assert results[1].char == "\u3000"
+        assert results[1].check_count == 1
+
 
 class TestFallbackSplitPeelKana:
     """连词回退：头尾假名剥离策略（_fallback_split_peel_kana）"""
@@ -690,7 +703,7 @@ class TestLinkedMemberNotReAnnotated:
 
 class TestEnglishWordCheckpoints:
     """批 18 #9：英文词组节奏点规则
-    - 多字母英文词：首字 cp=1，中间字母 cp=0，末字母自动标 is_sentence_end
+    - 多字母英文词：每个音节起始字母 cp=1，其余字母 cp=0，末字母标 is_sentence_end
     - 适用于自动分析节奏点路径（apply_to_sentence / analyze_sentence）
     - 同时覆盖 e2k 命中（Hello/Happy/honey/day）和 fallback（Heyyyyy）两条分支
     """
@@ -701,14 +714,16 @@ class TestEnglishWordCheckpoints:
         service.apply_to_sentence(sentence)
         return sentence.characters
 
-    def _assert_word_rule(self, chars, start: int, end: int, label: str):
-        """断言 chars[start:end] 满足 首=1cp/中=0/末=is_sentence_end 规则"""
-        assert chars[start].check_count == 1, (
-            f"{label}: 首字 '{chars[start].char}' 应 cp=1, 实际 {chars[start].check_count}"
-        )
-        for i in range(start + 1, end):
-            assert chars[i].check_count == 0, (
-                f"{label}: 字 '{chars[i].char}' (idx={i}) 应 cp=0, 实际 {chars[i].check_count}"
+    def _assert_word_rule(
+        self, chars, start: int, end: int, label: str, syllable_offsets=(0,)
+    ):
+        """断言 chars[start:end] 仅在各音节起点设置 checkpoint。"""
+        expected = {start + offset for offset in syllable_offsets}
+        for i in range(start, end):
+            expected_count = 1 if i in expected else 0
+            assert chars[i].check_count == expected_count, (
+                f"{label}: 字 '{chars[i].char}' (idx={i}) 应 cp={expected_count}, "
+                f"实际 {chars[i].check_count}"
             )
         assert chars[end - 1].is_sentence_end, (
             f"{label}: 末字 '{chars[end - 1].char}' 应 is_sentence_end=True"
@@ -717,13 +732,13 @@ class TestEnglishWordCheckpoints:
     def test_hello_world(self):
         """Hello world：两词均按规则；e2k 命中分支"""
         chars = self._apply("Hello world")
-        self._assert_word_rule(chars, 0, 5, "Hello")
+        self._assert_word_rule(chars, 0, 5, "Hello", (0, 3))
         self._assert_word_rule(chars, 6, 11, "world")
 
     def test_hello_comma_world(self):
         """Hello, world：comma 在 'o' 之后，'o' 仍应 is_sentence_end"""
         chars = self._apply("Hello, world")
-        self._assert_word_rule(chars, 0, 5, "Hello")
+        self._assert_word_rule(chars, 0, 5, "Hello", (0, 3))
         # comma idx=5，space idx=6，world idx=7..11
         self._assert_word_rule(chars, 7, 12, "world")
 
@@ -740,9 +755,9 @@ class TestEnglishWordCheckpoints:
         text = "今日はHappy honey day"
         chars = self._apply(text)
         # 'Happy' = idx 3..8
-        self._assert_word_rule(chars, 3, 8, "Happy")
+        self._assert_word_rule(chars, 3, 8, "Happy", (0, 3))
         # 'honey' = idx 9..14
-        self._assert_word_rule(chars, 9, 14, "honey")
+        self._assert_word_rule(chars, 9, 14, "honey", (0, 3))
         # 'day' = idx 15..18
         self._assert_word_rule(chars, 15, 18, "day")
 
@@ -751,10 +766,10 @@ class TestEnglishWordCheckpoints:
         text = "One apple one day, doctor go away."
         chars = self._apply(text)
         self._assert_word_rule(chars, 0, 3, "One")
-        self._assert_word_rule(chars, 4, 9, "apple")
+        self._assert_word_rule(chars, 4, 9, "apple", (0, 2))
         self._assert_word_rule(chars, 10, 13, "one")
         self._assert_word_rule(chars, 14, 17, "day")
-        self._assert_word_rule(chars, 19, 25, "doctor")
+        self._assert_word_rule(chars, 19, 25, "doctor", (0, 3))
         self._assert_word_rule(chars, 26, 28, "go")
         self._assert_word_rule(chars, 29, 33, "away")
 

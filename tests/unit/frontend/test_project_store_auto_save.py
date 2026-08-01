@@ -21,6 +21,7 @@ def test_auto_save_is_deferred_while_predicate_is_true(monkeypatch):
         lambda *args, **kwargs: calls.append((args, kwargs)),
     )
 
+    store._auto_save_timer.start()
     store._do_auto_save()
 
     assert calls == []

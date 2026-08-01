@@ -23,6 +23,11 @@ def _cjk_strip(s: str) -> str:
     return s.strip(_HALF_WS)
 
 
+def _cjk_lstrip(s: str) -> str:
+    """仅去除左侧 ASCII 空白字符，保留全角空格（U+3000）。"""
+    return s.lstrip(_HALF_WS)
+
+
 class ParseError(Exception):
     """解析错误"""
 
@@ -369,7 +374,7 @@ class LRCParser(LyricParser):
             chars = line_text[start_pos:end_pos]
 
             # 末尾时间戳后无文字 → 句尾释放点（仅在最后一个 tag 后才认为是 line_end）
-            if not chars.strip() and i == len(matches) - 1 and timetags:
+            if not _cjk_strip(chars) and i == len(matches) - 1 and timetags:
                 line_end_ts = timestamp_ms
                 continue
 
@@ -390,7 +395,7 @@ class LRCParser(LyricParser):
         lyric_text = _cjk_strip(raw_text)
 
         # 去除前导空白后重新计算索引
-        leading_spaces = len(raw_text) - len(raw_text.lstrip())
+        leading_spaces = len(raw_text) - len(_cjk_lstrip(raw_text))
         if leading_spaces > 0:
             timetags = [
                 (ci - leading_spaces, ts) for ci, ts in timetags if ci >= leading_spaces
@@ -458,7 +463,7 @@ class LRCParser(LyricParser):
 
             chars = line_text[start_pos:end_pos]
 
-            if not chars.strip():
+            if not _cjk_strip(chars):
                 # 尾部空标签 = 句尾释放点（仅最后一个 angle tag 算 line_end）
                 if i == len(angle_matches) - 1 and timetags:
                     line_end_ts = timestamp_ms
@@ -468,15 +473,16 @@ class LRCParser(LyricParser):
             tag_assigned = False
             for ch in chars:
                 lyric_chars.append(ch)
-                if not tag_assigned:
+                if not tag_assigned and not ch.isspace():
                     timetags.append((char_idx, timestamp_ms))
                     tag_assigned = True
                 char_idx += 1
 
-        lyric_text = _cjk_strip("".join(lyric_chars))
+        raw_text = "".join(lyric_chars)
+        lyric_text = _cjk_strip(raw_text)
 
         # 去除前导空白后重新计算索引
-        leading_spaces = len("".join(lyric_chars)) - len("".join(lyric_chars).lstrip())
+        leading_spaces = len(raw_text) - len(_cjk_lstrip(raw_text))
         if leading_spaces > 0:
             timetags = [
                 (ci - leading_spaces, ts) for ci, ts in timetags if ci >= leading_spaces

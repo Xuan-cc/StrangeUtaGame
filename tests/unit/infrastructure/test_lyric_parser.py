@@ -109,6 +109,28 @@ class TestLRCParser:
         assert result[0].text == "一闪一闪"
         assert result[0].timetags == [(0, 6540)]
 
+    def test_word_by_word_preserves_leading_full_width_space_alignment(self):
+        parser = LRCParser()
+        content = "[00:00.000]\u3000[00:01.000]春[00:02.000]"
+
+        result = parser.parse(content)
+
+        assert len(result) == 1
+        assert result[0].text == "\u3000春"
+        assert result[0].timetags == [(1, 1000)]
+        assert result[0].line_end_ts == 2000
+
+    def test_enhanced_lrc_preserves_full_width_space_and_alignment(self):
+        parser = LRCParser()
+        content = "[00:00.000]<00:00.000>\u3000春<00:01.000>\u3000<00:02.000>日<00:03.000>"
+
+        result = parser.parse(content)
+
+        assert len(result) == 1
+        assert result[0].text == "\u3000春\u3000日"
+        assert result[0].timetags == [(1, 0), (3, 2000)]
+        assert result[0].line_end_ts == 3000
+
 
 class TestLyricParserFactory:
     """测试解析器工厂"""

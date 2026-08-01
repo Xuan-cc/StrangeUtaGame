@@ -35,14 +35,17 @@ class TestTSMRenderCacheBasic:
     def test_empty_before_source(self):
         c = TSMRenderCache()
         assert c.get(1.0) is None
-        assert c.has(1.5) is False
+        assert c.get(1.5) is None
 
-    def test_one_x_direct(self):
+    def test_one_x_source_is_available_after_mp3_roundtrip(self):
         c = TSMRenderCache()
         pcm = _make_pcm()
         c.set_source("a.wav", pcm, 22050)
         ret = c.get(1.0)
-        assert ret is pcm  # 1.0x 直通，无拷贝
+        assert ret is not None
+        assert ret.dtype == np.float32
+        assert ret.shape[1] == pcm.shape[1]
+        assert abs(ret.shape[0] / c._sample_rate - pcm.shape[0] / 22050) < 0.1
 
     def test_render_blocking_get_then_cached(self):
         c = TSMRenderCache()
@@ -70,6 +73,7 @@ class TestTSMRenderCacheBasic:
 
     def test_lru_evicts_oldest(self):
         c = TSMRenderCache()
+        c._MAX_MEM_CACHE = 3
         pcm = _make_pcm(seconds=0.1)
         c.set_source("a.wav", pcm, 22050)
 
@@ -90,7 +94,11 @@ class TestTSMRenderCacheBasic:
             assert ev.wait(timeout=15)
 
         # LRU 只保留 3，最早的 0.75 被踢
-        assert c.get(0.75) is None
+        with c._mem_cache_lock:
+            assert 0.75 not in c._memory_cache
+            assert len(c._memory_cache) <= c._MAX_MEM_CACHE
+        # 内存淘汰不删除磁盘缓存，仍可按需重新载入。
+        assert c.get(0.75) is not None
         assert c.get(1.25) is not None
         assert c.get(1.5) is not None
         assert c.get(1.75) is not None

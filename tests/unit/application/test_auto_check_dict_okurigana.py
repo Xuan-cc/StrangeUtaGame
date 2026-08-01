@@ -75,6 +75,25 @@ def test_fusawashii_dictionary_keeps_okurigana_outside_linked_kanji_block():
     assert sent.characters[2].ruby is None
 
 
+def test_user_dictionary_prefers_longest_overlapping_word():
+    service = AutoCheckService(
+        ruby_analyzer=object(),
+        user_dictionary=[
+            {"enabled": True, "word": "東京", "reading": "{東京||みじ,かい}"},
+            {"enabled": True, "word": "東京都", "reading": "{東京都||とう,きょう,と}"},
+        ],
+    )
+    sent = _make_sentence("東京都")
+
+    service._apply_user_dictionary_to_sentence(sent)
+
+    assert service._dict == [
+        ("東京都", "{東京都||とう,きょう,と}"),
+        ("東京", "{東京||みじ,かい}"),
+    ]
+    assert _serialize(sent.characters) == "{東京都||とう,きょう,と}"
+
+
 class TestUpdateCheckpointsPreservesLinkedToNext:
     """回归：`update_checkpoints_for_project` 不得擦 linked_to_next。
 

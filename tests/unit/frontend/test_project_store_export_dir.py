@@ -1,7 +1,7 @@
 """ProjectStore.export_dir 优先级测试。
 
 导出专用目录与 working_dir 的关键差异：用户显式设置的
-export.default_export_dir 优先于音频/歌词，仅次于已保存项目目录。
+export.default_export_dir 优先于已保存项目目录和音频/歌词目录。
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ def _patch_settings(monkeypatch, *, default_export_dir="", last_export_dir=""):
     )
 
 
-def test_saved_project_dir_wins_over_default_export_dir(monkeypatch, tmp_path):
+def test_default_export_dir_wins_over_saved_project_dir(monkeypatch, tmp_path):
     _ = _app()
     proj_dir = tmp_path / "proj"
     proj_dir.mkdir()
@@ -46,8 +46,8 @@ def test_saved_project_dir_wins_over_default_export_dir(monkeypatch, tmp_path):
     store._project = object()
     store._save_path = str(proj_dir / "song.sug")
 
-    # 已正式保存的项目目录优先级最高
-    assert store.export_dir == str(proj_dir)
+    # 显式指定的导出目录优先级最高
+    assert store.export_dir == str(default_dir)
 
 
 def test_default_export_dir_wins_over_audio_dir(monkeypatch, tmp_path):

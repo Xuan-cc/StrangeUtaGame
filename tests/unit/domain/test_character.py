@@ -72,11 +72,11 @@ class TestCharacter:
         assert ruby.timestamps == [1000, 1500]
         assert ruby.singer_id == "s1"
 
-    def test_add_timestamp_sorts(self):
+    def test_add_timestamp_appends_in_checkpoint_order(self):
         ch = Character(char="a")
         ch.add_timestamp(2000)
         ch.add_timestamp(1000)
-        assert ch.timestamps == [1000, 2000]
+        assert ch.timestamps == [2000, 1000]
 
     def test_add_timestamp_at_index(self):
         ch = Character(char="a", check_count=3)
