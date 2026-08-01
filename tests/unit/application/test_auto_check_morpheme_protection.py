@@ -15,7 +15,7 @@ pair 派生出的所有 RubyResult 的共同 morpheme 范围；analyze_sentence 
 ``char_to_morpheme``；Phase 5 用它做 partial-overlap 判定，而不再依赖会被 Step 3
 擦掉的 linked_to_next。
 
-这些用例需 WinRT 可用（Windows + 日语 IME），不可用时跳过。
+这些用例使用固定形态素分析结果，避免把单元测试绑定到系统 IME 状态。
 """
 
 from __future__ import annotations
@@ -26,15 +26,28 @@ from strange_uta_game.backend.application import AutoCheckService
 from strange_uta_game.backend.domain import Sentence
 from strange_uta_game.backend.domain.models import Character
 from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
-    WinRTAnalyzer,
+    KanaDistributingAnalyzer,
 )
 
 
-def _analyzer():
-    try:
-        return WinRTAnalyzer()
-    except Exception:
-        return None
+class _ContextReadingAnalyzer(KanaDistributingAnalyzer):
+    """为保护逻辑提供稳定的上下文读音和形态素边界。"""
+
+    _PAIRS = {
+        "一日": [("一日", "ついたち")],
+        "日々": [("日々", "ひび")],
+        "ある日": [("ある日", "あるひ")],
+        "毎日": [("毎日", "まいにち")],
+        "日付": [("日付", "ひづけ")],
+        "一日中": [("一日", "ついたち"), ("中", "じゅう")],
+        "日々頑張る": [("日々", "ひび"), ("頑張る", "がんばる")],
+    }
+
+    def _get_pairs(self, text):
+        return self._PAIRS[text]
+
+    def get_reading(self, text):
+        return "".join(reading for _, reading in self._get_pairs(text))
 
 
 def _make_sentence(text: str) -> Sentence:
@@ -64,11 +77,8 @@ class TestUserDictSingleKanjiDoesNotBreakMorpheme:
 
     @pytest.fixture
     def svc(self):
-        ana = _analyzer()
-        if ana is None:
-            pytest.skip("WinRT JapanesePhoneticAnalyzer 不可用")
         return AutoCheckService(
-            ruby_analyzer=ana, auto_check_flags={},
+            ruby_analyzer=_ContextReadingAnalyzer(), auto_check_flags={},
             user_dictionary=_USER_DICT_HI_NICHI,
         )
 

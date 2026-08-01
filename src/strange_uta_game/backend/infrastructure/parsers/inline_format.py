@@ -96,11 +96,7 @@ def encode_check_n(
 
 def decode_check_n(n_str: str) -> Tuple[int, bool, bool]:
     """解码 N 字符串到 (check_count, is_line_end, is_sentence_end)。"""
-    # 旧格式把句尾编码为 ``e`` 后缀；新格式使用独立的 [10|ts]
-    # 标记。继续接受旧格式，避免历史工程无法导入。
-    is_sentence_end = n_str.endswith("e")
-    if is_sentence_end:
-        n_str = n_str[:-1]
+    is_sentence_end = False
     is_line_end = False
     if len(n_str) >= 2 and n_str.endswith("0"):
         is_line_end = True
@@ -358,29 +354,26 @@ def _single_char_to_normal_node(char: Character) -> str:
     """
     display_char = REST_CHAR if char.is_rest else char.char
 
-    # 无 CP 的字符（如空格）通常直接输出；行尾标记仍需编码。
+    # 无 CP 的字符（如空格）直接输出
     if char.check_count == 0:
-        prefix = "[00]" if char.is_line_end else ""
         # 检查是否有句尾标记
         if char.is_sentence_end:
             _se = _export_sentence_end_ts(char)
             if _se is not None:
-                return f"{prefix}{display_char}[10|{format_timestamp(_se)}]"
+                return f"{display_char}[10|{format_timestamp(_se)}]"
             else:
-                return f"{prefix}{display_char}[10]"
-        return f"{prefix}{display_char}"
+                return f"{display_char}[10]"
+        return display_char
 
     char_parts: List[str] = []
 
-    # 主时间戳（一个字符可以有多个 checkpoint）。
+    # 主时间戳
     _ts_list = _export_timestamps(char)
-    encoded_n = encode_check_n(char.check_count, char.is_line_end)
-    for cp_idx in range(char.check_count):
-        if cp_idx < len(_ts_list):
-            ts = format_timestamp(_ts_list[cp_idx])
-            char_parts.append(f"[{encoded_n}|{ts}]" if cp_idx == 0 else f"[{ts}]")
-        elif cp_idx == 0:
-            char_parts.append(f"[{encoded_n}]")
+    if _ts_list:
+        ts = _ts_list[0]
+        char_parts.append(f"[1|{format_timestamp(ts)}]")
+    else:
+        char_parts.append("[1]")
 
     # 字符本身
     char_parts.append(display_char)
@@ -433,13 +426,11 @@ def _single_char_to_ruby_node(char: Character) -> str:
             mora_portions.append(portion_str)
 
         inner = "".join(mora_portions)
-        encoded_n = encode_check_n(count, char.is_line_end)
-        result = f"{{{display}|[{encoded_n}|{inner}}}"
+        result = f"{{{display}|[{count}|{inner}}}"
     else:
         # 无时间戳的情况: {display|[count]ruby}
         ruby_text = "".join(ruby_segments[:count])
-        encoded_n = encode_check_n(count, char.is_line_end)
-        result = f"{{{display}|[{encoded_n}]{ruby_text}}}"
+        result = f"{{{display}|[{count}]{ruby_text}}}"
 
     # 句尾标记
     if char.is_sentence_end:
@@ -463,7 +454,35 @@ def _linked_group_to_normal_node(group: List[Character]) -> str:
     - 有 CP 无时间戳: [1]char[1]char...
     - 句尾字符后面加 [10|ts] 或 [10]
     """
-    return "".join(_single_char_to_normal_node(c) for c in group)
+    # 无 CP 的字符组直接输出
+    if all(c.check_count == 0 for c in group):
+        return "".join(REST_CHAR if c.is_rest else c.char for c in group)
+
+    parts: List[str] = []
+    for i, c in enumerate(group):
+        display_char = REST_CHAR if c.is_rest else c.char
+
+        if c.check_count > 0:
+            # 有 CP 的字符
+            _ts_list = _export_timestamps(c)
+            if _ts_list:
+                ts = _ts_list[0]
+                parts.append(f"[1|{format_timestamp(ts)}]{display_char}")
+            else:
+                parts.append(f"[1]{display_char}")
+        else:
+            # 无 CP 的字符
+            parts.append(display_char)
+
+        # 句尾标记（无论是否有 CP）
+        if c.is_sentence_end:
+            _se = _export_sentence_end_ts(c)
+            if _se is not None:
+                parts.append(f"[10|{format_timestamp(_se)}]")
+            else:
+                parts.append("[10]")
+
+    return "".join(parts)
 
 
 def _linked_group_to_ruby_node(group: List[Character]) -> str:
@@ -493,13 +512,11 @@ def _linked_group_to_ruby_node(group: List[Character]) -> str:
                     # 第一个时间戳前没有 [
                     if cp_idx == 0:
                         # 写入各自正确的 char_count
-                        encoded_n = encode_check_n(char_count, c.is_line_end)
-                        part_str += f"[{encoded_n}|{format_timestamp(ts)}]"
+                        part_str += f"[{char_count}|{format_timestamp(ts)}]"
                     else:
                         part_str += f"[{format_timestamp(ts)}]"
                 elif cp_idx == 0:
-                    encoded_n = encode_check_n(char_count, c.is_line_end)
-                    part_str += f"[{encoded_n}]"
+                    part_str += f"[{char_count}]"
 
                 if cp_idx < len(ruby_segments):
                     part_str += ruby_segments[cp_idx]
@@ -515,17 +532,15 @@ def _linked_group_to_ruby_node(group: List[Character]) -> str:
                 if cp_idx < len(_ts_list):
                     ts = _ts_list[cp_idx]
                     if cp_idx == 0:
-                        encoded_n = encode_check_n(c.check_count, c.is_line_end)
-                        portion_parts.append(f"[{encoded_n}|{format_timestamp(ts)}]")
+                        portion_parts.append(f"[{c.check_count}|{format_timestamp(ts)}]")
                     else:
                         portion_parts.append(f"[{format_timestamp(ts)}]")
                 elif cp_idx == 0:
-                    encoded_n = encode_check_n(c.check_count, c.is_line_end)
-                    portion_parts.append(f"[{encoded_n}]")
+                    portion_parts.append(f"[{c.check_count}]")
             ruby_portions.append("".join(portion_parts))
         else:
             # 无注音的字符，输出空的分隔符
-            ruby_portions.append("[00]" if c.is_line_end else "")
+            ruby_portions.append("")
 
     # 用 ＋ 分隔各字符
     inner = RUBY_SEP.join(ruby_portions)
@@ -661,9 +676,34 @@ def from_inline_text(text: str, singer_id: str) -> Sentence:
         if seg_type == "ruby":
             _parse_ruby_group(seg_content, characters, singer_id)
         else:
-            # 普通解析器会根据 tag 后是否紧跟字符区分 [10] 行尾节点与
-            # ruby 后无字符的独立句尾标记。
-            _parse_plain_segment(seg_content, characters, singer_id)
+            # 检查是否是 ruby 组后面的句尾标记 [10|ts] 或 [10]
+            if characters and seg_content.startswith("[10"):
+                # 尝试解析为句尾标记
+                m_ts = _TAG_RE.match(seg_content)
+                m_no_ts = _TAG_NO_TS_RE.match(seg_content)
+
+                if m_ts and m_ts.group(1) == "10":
+                    # [10|ts] 格式
+                    ts_ms = parse_timestamp(m_ts.group(2))
+                    last_char = characters[-1]
+                    last_char.is_sentence_end = True
+                    last_char.sentence_end_ts = ts_ms
+                    # 继续处理剩余内容
+                    remaining = seg_content[m_ts.end():]
+                    if remaining:
+                        _parse_plain_segment(remaining, characters, singer_id)
+                elif m_no_ts and m_no_ts.group(1) == "10":
+                    # [10] 格式
+                    last_char = characters[-1]
+                    last_char.is_sentence_end = True
+                    # 继续处理剩余内容
+                    remaining = seg_content[m_no_ts.end():]
+                    if remaining:
+                        _parse_plain_segment(remaining, characters, singer_id)
+                else:
+                    _parse_plain_segment(seg_content, characters, singer_id)
+            else:
+                _parse_plain_segment(seg_content, characters, singer_id)
 
     # 设置 linked_to_next
     # 连词组规则：
@@ -768,18 +808,16 @@ def _parse_ruby_group(
         # 第一个 token 的 N 是 count（1-9）
         first_n_str = tokens[0][0]
         if first_n_str is not None:
-            count, is_line_end, legacy_sentence_end = decode_check_n(first_n_str)
+            count = int(first_n_str)
             count = min(count, 9)
         else:
             count = len(tokens)
-            is_line_end = False
-            legacy_sentence_end = False
 
         # 收集时间戳和 ruby 文本
         all_timestamps: List[int] = []
         ruby_text_parts: List[str] = []
         sentence_end_ts = None
-        is_sentence_end = legacy_sentence_end
+        is_sentence_end = False
 
         for token_n, ts_ms, seg_text in tokens:
             # 检查是否是句尾标记 [10|ts] 或 [10]
@@ -802,7 +840,7 @@ def _parse_ruby_group(
             check_count=count,
             timestamps=timestamps,
             sentence_end_ts=sentence_end_ts,
-            is_line_end=is_line_end,
+            is_line_end=False,
             is_sentence_end=is_sentence_end,
             singer_id=singer_id,
         )

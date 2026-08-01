@@ -5,22 +5,17 @@ fallback），该 phase 在 dictionary annotated 化重构后被 Phase 5
 「用户词典直接覆盖整段 Character[]」取代，相应用例已整体删除。
 """
 
-import pytest
-
 from strange_uta_game.backend.application import AutoCheckService
 from strange_uta_game.backend.domain import Sentence
 from strange_uta_game.backend.domain.models import Character
 from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
-    WinRTAnalyzer,
+    SudachiAnalyzer,
 )
 
 
 def _get_sudachi():
-    """真实注音分析器（WinRT IME 主引擎）；不可用返回 None 触发 skip。"""
-    try:
-        return WinRTAnalyzer()
-    except Exception:
-        return None
+    """返回测试使用的跨平台真实注音分析器。"""
+    return SudachiAnalyzer()
 
 
 def _serialize(chars):
@@ -104,15 +99,14 @@ class TestUpdateCheckpointsPreservesLinkedToNext:
     """
 
     def setup_method(self):
-        if _get_sudachi() is None:
-            pytest.skip("WinRT 注音引擎不可用")
+        self.analyzer = _get_sudachi()
 
     def test_update_checkpoints_preserves_kawaii_linked_chain(self):
         """`可愛い + かわい,,い`：analyze 后 update_checkpoints 不得断链。"""
         from strange_uta_game.backend.domain.project import Project
 
         service = AutoCheckService(
-            ruby_analyzer=_get_sudachi(),
+            ruby_analyzer=self.analyzer,
             user_dictionary=[
                 {"enabled": True, "word": "可愛い", "reading": "かわい,,い"}
             ],
@@ -165,10 +159,6 @@ class TestKanaSingleCheckpointCap:
     典型场景：`ロミオ + e2k(Ro,me,o)` 之前被 split_into_moras 按字符误计为
     2/2/1，应封顶为 1/1/1。
     """
-
-    def setup_method(self):
-        if _get_sudachi() is None:
-            pytest.skip("WinRT 注音引擎不可用")
 
     def test_katakana_with_e2k_english_reading_caps_to_one(self):
         """`ロミオ → Ro,me,o`（e2k 用户词典模拟）：cp 必须 1/1/1。"""
@@ -246,10 +236,6 @@ class TestKanjiEmptyRubyZeroCheckpoint:
     后续汉字读音压在首字上）。此前 update_checkpoints_from_rubies 对
     `not char.ruby` 的汉字 continue 跳过，保留默认 cp=1，导致连词块内错误多拍。
     """
-
-    def setup_method(self):
-        if _get_sudachi() is None:
-            pytest.skip("WinRT 注音引擎不可用")
 
     def test_linked_block_empty_ruby_kanji_cp_zero(self):
         """`今日（きょう）` update_checkpoints 后 日.cp 必须 = 0。

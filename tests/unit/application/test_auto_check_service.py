@@ -83,15 +83,12 @@ class TestMergeNRubyParts:
 
 
 def _get_sudachi_analyzer():
-    """获取真实注音分析器（WinRT IME 主引擎）；不可用返回 None（测试 skip）。"""
+    """获取跨平台的真实注音分析器。"""
     from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
-        WinRTAnalyzer,
+        SudachiAnalyzer,
     )
 
-    try:
-        return WinRTAnalyzer()
-    except Exception:
-        return None
+    return SudachiAnalyzer()
 
 
 class TestAutoCheckService:
@@ -190,9 +187,6 @@ class TestA3RootCauseEmptyRubyGroup:
     def test_ookusora_raw_no_empty_group_exception(self):
         """A.3 端到端：自动分析"大空" 不应抛异常，且每个 part.text 非空"""
         analyzer = _get_sudachi_analyzer()
-        if analyzer is None:
-            pytest.skip("WinRT 注音引擎不可用，跳过集成测试")
-
         service = AutoCheckService(analyzer)
         sentence = Sentence.from_text("大空", "s1")
 
@@ -207,9 +201,6 @@ class TestA3RootCauseEmptyRubyGroup:
     def test_ookusora_linked_no_empty_group_exception(self):
         """A.3 端到端：自动分析"{大|おお}{空|そら}" 不应抛异常"""
         analyzer = _get_sudachi_analyzer()
-        if analyzer is None:
-            pytest.skip("WinRT 注音引擎不可用，跳过集成测试")
-
         from strange_uta_game.backend.infrastructure.parsers.inline_format import (
             from_inline_text,
         )
@@ -512,8 +503,6 @@ class TestLibraryBlockFallbackLinking:
     def test_kawaii_library_block_links_kanji(self):
         """可愛い：无音读字典条目，回退到 fallback，可+愛 连词"""
         analyzer = _get_sudachi_analyzer()
-        if analyzer is None:
-            pytest.skip("WinRT 注音引擎不可用")
         service = AutoCheckService(analyzer)
         sentence = Sentence.from_text("可愛い", "s1")
         service.apply_to_sentence(sentence)
@@ -530,8 +519,6 @@ class TestLibraryBlockFallbackLinking:
     def test_daibouken_dict_path_links_all(self):
         """大冒険（字典逗号分隔路径）：读音已拆分，不连词"""
         analyzer = _get_sudachi_analyzer()
-        if analyzer is None:
-            pytest.skip("WinRT 注音引擎不可用")
         service = AutoCheckService(analyzer)
         sentence = Sentence.from_text("大冒険", "s1")
         service.apply_to_sentence(sentence)
@@ -552,8 +539,6 @@ class TestLibraryBlockFallbackLinking:
         整串读音倒灌「逆」而「光」误落回单字训读 ひかり。
         """
         analyzer = _get_sudachi_analyzer()
-        if analyzer is None:
-            pytest.skip("WinRT 注音引擎不可用")
         service = AutoCheckService(analyzer)
         sentence = Sentence.from_text("逆光", "s1")
         service.apply_to_sentence(sentence)

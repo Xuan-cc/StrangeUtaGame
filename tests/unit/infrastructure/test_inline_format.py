@@ -88,13 +88,6 @@ class TestCheckN:
         assert decode_check_n("10") == (1, True, False)
         assert decode_check_n("20") == (2, True, False)
 
-    def test_decode_sentence_end(self):
-        assert decode_check_n("1e") == (1, False, True)
-        assert decode_check_n("2e") == (2, False, True)
-
-    def test_decode_line_end_and_sentence_end(self):
-        assert decode_check_n("10e") == (1, True, True)
-
     def test_roundtrip(self):
         for count in [1, 2, 3]:
             for le in [True, False]:
@@ -238,7 +231,7 @@ class TestToInlineText:
         result = to_inline_text(sentence)
         assert result == "[1|00:15:76]な"
 
-    def test_line_end_char(self):
+    def test_normal_char_export_does_not_encode_line_end(self):
         sentence = _make_sentence(
             "x",
             characters=[
@@ -252,7 +245,7 @@ class TestToInlineText:
             ],
         )
         result = to_inline_text(sentence)
-        assert result == "[10|00:10:00]x"
+        assert result == "[1|00:10:00]x"
 
     def test_sentence_end_char(self):
         sentence = _make_sentence(
@@ -271,7 +264,7 @@ class TestToInlineText:
         result = to_inline_text(sentence)
         assert result == "[1|00:10:00]x[10|00:12:00]"
 
-    def test_multi_checkpoint_char(self):
+    def test_normal_char_export_uses_first_checkpoint(self):
         sentence = _make_sentence(
             "x",
             characters=[
@@ -281,8 +274,7 @@ class TestToInlineText:
             ],
         )
         result = to_inline_text(sentence)
-        assert "[2|00:01:00]" in result
-        assert "[00:02:00]" in result
+        assert result == "[1|00:01:00]x"
 
     def test_ruby_single_char(self):
         sentence = _make_sentence(
@@ -315,7 +307,7 @@ class TestToInlineText:
             ],
         )
         result = to_inline_text(sentence)
-        assert result == "[10|00:16:50]▨"
+        assert result == "[1|00:16:50]▨"
 
 
 # ──────────────────────────────────────────────
@@ -341,7 +333,7 @@ class TestFromInlineText:
         assert sentence.characters[0].check_count == 1
 
     def test_sentence_end(self):
-        sentence = from_inline_text("[1e|00:10:00][00:12:00]x", singer_id="s1")
+        sentence = from_inline_text("[1|00:10:00]x[10|00:12:00]", singer_id="s1")
         assert sentence.characters[0].is_sentence_end is True
         assert sentence.characters[0].is_line_end is False
         assert sentence.characters[0].check_count == 1
@@ -435,7 +427,6 @@ class TestRoundtrip:
         assert len(restored.characters) == len(original.characters)
         for r, o in zip(restored.characters, original.characters):
             assert r.check_count == o.check_count
-            assert r.is_line_end == o.is_line_end
             assert r.is_sentence_end == o.is_sentence_end
             assert r.timestamps == o.timestamps
 
@@ -465,7 +456,7 @@ class TestRoundtrip:
         assert restored.characters[0].is_sentence_end is True
         assert restored.characters[0].is_line_end is False
         assert restored.characters[0].sentence_end_ts == 1500
-        assert restored.characters[1].is_line_end is True
+        assert restored.characters[1].is_line_end is False
 
     def test_ruby_roundtrip(self):
         original = _make_sentence(

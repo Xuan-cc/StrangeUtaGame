@@ -33,8 +33,8 @@ def _window(*, enabled: bool = True, playing: bool = True):
     return window, editor
 
 
-def test_pause_on_leave_is_enabled_by_default():
-    assert AppSettings.DEFAULT_SETTINGS["audio"]["pause_on_leave_timing"] is True
+def test_pause_on_leave_is_disabled_by_default():
+    assert AppSettings.DEFAULT_SETTINGS["audio"]["pause_on_leave_timing"] is False
 
 
 def test_leaving_timing_pauses_playing_audio():

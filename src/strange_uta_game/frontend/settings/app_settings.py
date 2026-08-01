@@ -80,7 +80,7 @@ class AppSettings:
             "speed_slider_min": 0.2,
             "speed_slider_max": 1.0,
             "auto_play_on_load": False,
-            "pause_on_leave_timing": True,
+            "pause_on_leave_timing": False,
             # 高质量音频变速：开启用离线 TSM 预渲染（变速不变调、无爆音，占用 .cache
             # 磁盘缓存）；关闭仅用原版 BASS 实时变速（零缓存，但可能爆音）。
             "hq_speed_change": True,
