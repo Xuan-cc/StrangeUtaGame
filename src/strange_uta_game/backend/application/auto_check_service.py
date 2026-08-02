@@ -2864,6 +2864,9 @@ def delete_rubies_by_type_names(
         return 0
 
     extended = set(ct_selected)
+    if "space" in type_names or "full_space" in type_names:
+        # 配置层只展示一个“空格”选项；兼容预发布版本的 full_space 键。
+        extended.update((CharType.SPACE, CharType.FULL_SPACE))
     if CharType.HIRAGANA in ct_selected:
         extended.add(CharType.SOKUON)
 

@@ -365,8 +365,7 @@ class DeleteRubyByTypeDialog(QDialog):
         (CharType.LONG_VOWEL, "長音符号（ー、～等）"),
         (CharType.SOKUON, "促音（っ/ッ）"),
         (CharType.OTHER, "その他（♪等特殊符号）"),
-        (CharType.SPACE, "半角空格"),
-        (CharType.FULL_SPACE, "全角空格"),
+        (CharType.SPACE, "空格"),
     ]
 
     _TYPE_NAME_MAP: dict = {
@@ -381,7 +380,6 @@ class DeleteRubyByTypeDialog(QDialog):
         CharType.SOKUON: "sokuon",
         CharType.OTHER: "other",
         CharType.SPACE: "space",
-        CharType.FULL_SPACE: "full_space",
     }
 
     _NAME_TYPE_MAP = {v: k for k, v in _TYPE_NAME_MAP.items()}
@@ -407,6 +405,9 @@ class DeleteRubyByTypeDialog(QDialog):
         # 确定默认选中项（片假名两个子类型默认均不启用）
         if initial_types is not None:
             default_set = {self._NAME_TYPE_MAP[n] for n in initial_types if n in self._NAME_TYPE_MAP}
+            # 兼容 1.4.5 预发布版本曾保存的独立全角空格选项。
+            if "full_space" in initial_types:
+                default_set.add(CharType.SPACE)
         else:
             default_set = {CharType.HIRAGANA}
 
@@ -1131,6 +1132,9 @@ class RubyInterface(QWidget):
         delete_kata_eng = "katakana_english_ruby" in selected
 
         extended = set(ct_selected)
+        if CharType.SPACE in ct_selected:
+            # UI 中空格是一个选项，半角/全角按同一类型处理。
+            extended.add(CharType.FULL_SPACE)
         if CharType.HIRAGANA in ct_selected:
             extended.add(CharType.SOKUON)  # 平假名选中时同时处理促音っ
 

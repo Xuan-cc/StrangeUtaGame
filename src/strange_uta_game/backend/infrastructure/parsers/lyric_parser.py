@@ -373,8 +373,11 @@ class LRCParser(LyricParser):
             # 提取字符
             chars = line_text[start_pos:end_pos]
 
-            # 末尾时间戳后无文字 → 句尾释放点（仅在最后一个 tag 后才认为是 line_end）
-            if not _cjk_strip(chars) and i == len(matches) - 1 and timetags:
+            # 末尾时间戳后只有空白（含全角空格）仍表示句尾释放点。
+            # 行中间的全角空格继续作为歌词字符保留。
+            if i == len(matches) - 1 and timetags and (
+                not chars or chars.isspace()
+            ):
                 line_end_ts = timestamp_ms
                 continue
 
@@ -463,10 +466,15 @@ class LRCParser(LyricParser):
 
             chars = line_text[start_pos:end_pos]
 
+            # 末尾增强标签后只有空白（含全角空格）仍是句尾释放点，
+            # 不把尾随排版空格变成歌词；中间的全角空格仍保留。
+            if i == len(angle_matches) - 1 and timetags and (
+                not chars or chars.isspace()
+            ):
+                line_end_ts = timestamp_ms
+                continue
+
             if not _cjk_strip(chars):
-                # 尾部空标签 = 句尾释放点（仅最后一个 angle tag 算 line_end）
-                if i == len(angle_matches) - 1 and timetags:
-                    line_end_ts = timestamp_ms
                 continue
 
             # 为第一个非空白字符添加时间标签

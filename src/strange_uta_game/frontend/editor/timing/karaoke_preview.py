@@ -208,9 +208,8 @@ def _ink_bounds(fm: QFontMetrics, text: str) -> tuple[int, int]:
     Qt 的 ``tightBoundingRect`` 返回紧贴墨水的最小包围盒：
     - x 可能为负（字形墨水越过 origin 左侧，例如斜体 ``f``）；
     - width 一般 ≤ ``horizontalAdvance(text)``，但极少数斜体场景可能略大；
-    - 对空白字符（U+0020 / NBSP / Tab）通常返回零宽 → 此处保留为 (0, 0)。
-    - 全角空格（U+3000）在上游通过 advance width 赋予 ink_w，此处仍可能返回零宽，
-      由调用方兜底处理。
+    - 对空白字符（U+0020 / U+3000 / NBSP / Tab）通常返回零宽 → 此处保留为 (0, 0)，
+      由调用方跳过 wipe 绘制。
 
     返回为 int；底层 Qt API 已是 int。
     """
@@ -218,6 +217,13 @@ def _ink_bounds(fm: QFontMetrics, text: str) -> tuple[int, int]:
         return (0, 0)
     rect = fm.tightBoundingRect(text)
     return (int(rect.x()), int(rect.width()))
+
+
+def _wipe_ink_bounds(fm: QFontMetrics, text: str) -> tuple[int, int]:
+    """返回 wipe 使用的墨水边界；所有空白字符只占排版宽度，不参与 wipe。"""
+    if text.isspace():
+        return (0, 0)
+    return _ink_bounds(fm, text)
 
 
 class KaraokePreview(QWidget):
@@ -1643,11 +1649,7 @@ class KaraokePreview(QWidget):
         for ci, ch in enumerate(chars):
             char_w = main_fm.horizontalAdvance(ch) if ch != ' ' else avg_char_w
             char_widths.append(char_w)
-            ink_off, ink_w = _ink_bounds(main_fm, ch)
-            # 全角空格（U+3000）：tightBoundingRect 返回零宽，但应渲染为 2ch 宽
-            if ch == "\u3000" and ink_w == 0:
-                ink_w = char_w
-                ink_off = 0
+            ink_off, ink_w = _wipe_ink_bounds(main_fm, ch)
             char_ink_offsets.append(ink_off)
             char_ink_widths.append(ink_w)
 
@@ -2873,9 +2875,8 @@ class KaraokePreview(QWidget):
                                 ch, char_colors, _line_ink_top, _line_ink_bottom,
                             )
                             painter.restore()
-                        # ink_w == 0（半角空格/NBSP/Tab 等零宽空白）：
+                        # ink_w == 0（半角/全角空格/NBSP/Tab 等零宽空白）：
                         # 没有可见墨水，跳过 clip 绘制，wipe 期间保持 base_color 即可。
-                        # 注：全角空格（U+3000）已在上游赋予 advance width 作为 ink_w。
                     else:
                         # 未唱 → 基色（命中指引时改用过渡色）
                         if _g_alpha is not None:

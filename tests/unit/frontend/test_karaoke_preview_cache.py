@@ -17,6 +17,10 @@ def qapp():
     yield app
 
 
+def test_full_width_space_is_skipped_by_wipe():
+    assert preview_module._wipe_ink_bounds(None, "\u3000") == (0, 0)
+
+
 def _char(text: str, ruby: str, *, linked: bool = False) -> Character:
     ch = Character(
         char=text,

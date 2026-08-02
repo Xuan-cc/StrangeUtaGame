@@ -394,6 +394,23 @@ class TestBlankLineLineStartEndGuard:
         assert results[1].char == "\u3000"
         assert results[1].check_count == 1
 
+    def test_space_ruby_type_removes_half_and_full_width_spaces(self):
+        from strange_uta_game.backend.application.auto_check_service import (
+            delete_rubies_by_type_names,
+        )
+        from strange_uta_game.backend.domain import Project
+        from strange_uta_game.backend.domain.models import Ruby, RubyPart
+
+        sentence = Sentence.from_text(" \u3000", "s1")
+        for char in sentence.characters:
+            char.set_ruby(Ruby(parts=[RubyPart(text="^")]))
+        project = Project(sentences=[sentence])
+
+        removed = delete_rubies_by_type_names(project, ["space"])
+
+        assert removed == 2
+        assert all(char.ruby is None for char in sentence.characters)
+
 
 class TestFallbackSplitPeelKana:
     """连词回退：头尾假名剥离策略（_fallback_split_peel_kana）"""

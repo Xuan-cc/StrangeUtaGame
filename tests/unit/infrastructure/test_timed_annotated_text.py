@@ -119,6 +119,30 @@ def test_encode_bare_char_check_count_zero():
     assert _enc(chars) == " "
 
 
+def test_full_width_space_roundtrip_is_lossless():
+    chars = [
+        _plain_char("春", timestamps=[1000]),
+        _plain_char("\u3000", check_count=0),
+        _plain_char("日", timestamps=[2000]),
+    ]
+
+    line1, line2, decoded = _roundtrip(chars)
+
+    assert line1 == "[00:01.00]春\u3000[00:02.00]日"
+    assert line2 == line1
+    assert [c.char for c in decoded] == ["春", "\u3000", "日"]
+    assert [c.check_count for c in decoded] == [1, 0, 1]
+    assert [c.timestamps for c in decoded] == [[1000], [], [2000]]
+
+
+def test_full_width_space_after_timestamp_behaves_like_normal_space():
+    half, _ = parse_timed_line("[00:01.00] 春")
+    full, _ = parse_timed_line("[00:01.00]\u3000春")
+
+    assert [c.check_count for c in full] == [c.check_count for c in half] == [1, 0]
+    assert [c.timestamps for c in full] == [c.timestamps for c in half] == [[1000], []]
+
+
 def test_encode_plain_kana_no_ts_uses_placeholder():
     chars = [_plain_char("あ", check_count=1, timestamps=[])]
     assert _enc(chars) == "[T]あ"
