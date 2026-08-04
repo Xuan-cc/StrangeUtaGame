@@ -402,7 +402,11 @@ class DictionarySubInterface(SubSettingInterface):
         if self._settings_ref is None:
             return
         doc = self._settings_ref.load_network_dictionary()
-        cache_path = str(self._settings_ref._network_dict_path)
+        cache_path = (
+            str(self._settings_ref._network_dict_path)
+            if self._settings_ref._network_dict_path is not None
+            else None
+        )
         dialog = NetworkDictionaryDialog(doc, cache_path=cache_path, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_doc = dialog.get_doc()

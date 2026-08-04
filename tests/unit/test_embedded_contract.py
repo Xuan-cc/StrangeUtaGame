@@ -111,6 +111,48 @@ class TestSettingsProviderContract:
         assert any(x.get("name") == "歌手A" for x in s.load_singer_presets())
         assert any(x.get("name") == "歌手A" for x in p.extra.get("singers", []))
 
+    def test_network_dictionary_auto_update_via_provider(self, monkeypatch):
+        from strange_uta_game.backend.infrastructure import network_dictionary
+
+        p = MockProvider()
+        p.main = {
+            "network_dictionary": {
+                "enabled": True,
+                "auto_update": {
+                    "enabled": True,
+                    "interval_value": 1,
+                    "interval_unit": "week",
+                },
+                "last_auto_update_at": 0,
+                "source_order": ["local", "custom"],
+                "sources": [
+                    {
+                        "id": "custom",
+                        "name": "测试源",
+                        "url": "https://example.invalid/dictionary.json",
+                        "enabled": True,
+                    }
+                ],
+            }
+        }
+
+        def fake_update(doc):
+            source = next(s for s in doc["sources"] if s["id"] == "custom")
+            source["entries"] = [{"word": "漢字", "reading": "かんじ"}]
+            source["last_fetched"] = 123
+            return (["测试源: 1 条"], [])
+
+        monkeypatch.setattr(network_dictionary, "auto_update_enabled_sources", fake_update)
+
+        ok, failed, ran = AppSettings(provider=p).maybe_auto_update_network_dictionary()
+
+        assert (ok, failed, ran) == (["测试源: 1 条"], [], True)
+        assert p.extra["network"]["custom"]["entries"] == [
+            {"word": "漢字", "reading": "かんじ"}
+        ]
+        assert p.main["network_dictionary"]["auto_update"]["enabled"] is True
+        assert p.main["network_dictionary"]["last_auto_update_at"] > 0
+
     def test_deepcopy_isolation(self):
         p = MockProvider()
         s = AppSettings(provider=p)
@@ -306,6 +348,36 @@ class TestEmbeddedUIContract:
 
         assert MainWindow.project_save_finished is not None
         assert MainWindow.project_save_failed is not None
+
+    def test_network_auto_update_scheduler_uses_default_provider(
+        self, monkeypatch, reset_default_provider
+    ):
+        import threading
+
+        from strange_uta_game.frontend.main_window import MainWindow
+
+        p = MockProvider()
+        AppSettings.set_default_provider(p)
+        seen_providers = []
+
+        monkeypatch.setattr(
+            AppSettings,
+            "maybe_auto_update_network_dictionary",
+            lambda settings: seen_providers.append(settings._provider),
+        )
+
+        class ImmediateThread:
+            def __init__(self, *, target, **_kwargs):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr(threading, "Thread", ImmediateThread)
+
+        MainWindow._schedule_network_dict_auto_update(SimpleNamespace())
+
+        assert seen_providers == [p]
 
 
 class TestStandaloneNoRegression:

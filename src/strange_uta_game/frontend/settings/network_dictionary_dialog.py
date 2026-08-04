@@ -310,7 +310,7 @@ class NetworkDictionaryDialog(QDialog):
     总开关（``enabled``）由外部 SwitchSettingCard 控制，这里只显示状态。
     """
 
-    def __init__(self, doc: Dict[str, Any], cache_path: str = "", parent=None):
+    def __init__(self, doc: Dict[str, Any], cache_path: str | None = "", parent=None):
         super().__init__(parent)
         self.setWindowTitle(self.tr("网络读音词典"))
         fit_min_size(self, 760, 600)
@@ -329,10 +329,18 @@ class NetworkDictionaryDialog(QDialog):
         title.setFont(ui_font(14))
         layout.addWidget(title)
 
+        if cache_path is None:
+            cache_description = self.tr("条目缓存：由宿主管理")
+        elif cache_path:
+            cache_description = self.tr("条目缓存文件：{path}").format(path=cache_path)
+        else:
+            cache_description = self.tr(
+                "条目缓存：network_dictionary.json（与 config.json 同目录）"
+            )
+
         desc_lines = [
             self.tr("lookup 时按下方「字典源优先级」自顶向下遍历，每源内自顶向下首个命中即停。"),
-            self.tr("条目缓存文件：{path}").format(path=cache_path) if cache_path
-                else self.tr("条目缓存：network_dictionary.json（与 config.json 同目录）"),
+            cache_description,
             self.tr("总开关「启用网络词典」位于设置卡片，本对话框仅编辑源列表与条目。"),
         ]
         desc = QLabel("\n".join(desc_lines))

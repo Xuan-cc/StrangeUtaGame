@@ -969,12 +969,18 @@ class AppSettings:
 
         Provider 模式下 meta 仍走 self.set / self.save（由 provider 接管），
         cache 写入宿主的 ``lyrics_timing_network_dictionary`` namespace。
+
+        ``network_dictionary`` 下还包含 ``auto_update`` 与
+        ``last_auto_update_at`` 等非源配置；保存源元数据时必须保留这些字段。
         """
         from strange_uta_game.backend.infrastructure.network_dictionary import (
             split_meta_and_cache,
         )
         meta, cache = split_meta_and_cache(doc)
-        self.set("network_dictionary", meta)
+        existing_meta = self.get("network_dictionary", {})
+        settings_meta = deepcopy(existing_meta) if isinstance(existing_meta, dict) else {}
+        settings_meta.update(meta)
+        self.set("network_dictionary", settings_meta)
         self.save()  # 立即落盘 meta 到 config.json
         if self._provider is not None:
             self._provider.save_extra("network", deepcopy(cache))
@@ -988,9 +994,8 @@ class AppSettings:
         ``last_auto_update_at`` 已超过 ``(interval_value, interval_unit)``。
         ``force=True`` 时无视条件强制执行（"立即同步"按钮可用）。
 
-        Provider 模式下短路返回（无 cache 文件可写、宿主自管网络词典
-        namespace）。MainWindow 在 embedded 模式下不会调度本方法（PR #6A
-        已跳过启动期定时器），这里再做一次防御。
+        Provider 模式与 standalone 使用同一更新流程；cache 分别由 provider
+        namespace 与 ``network_dictionary.json`` 持久化。
 
         非阻塞建议：调用方在后台线程中调用本方法（HTTP 慢，UI 线程不可阻塞）。
 
@@ -1001,10 +1006,6 @@ class AppSettings:
             ``(ok_msgs, fail_msgs, ran)``：成功/失败消息列表 + 是否真的执行了拉取。
             未到期 / 未启用 / ``enabled=False`` → ``ran=False`` 且 msgs 为空。
         """
-        if self._provider is not None:
-            # Embedded mode: 宿主管网络词典 namespace，本方法 noop。
-            return ([], [], False)
-
         from strange_uta_game.backend.infrastructure.network_dictionary import (
             auto_update_enabled_sources,
             is_auto_update_due,

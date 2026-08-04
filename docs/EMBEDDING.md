@@ -96,7 +96,7 @@ class SettingsProvider(Protocol):
 **跳过**（`if not self._embedded`）：
 - 窗口几何持久化（`_win_settings`、几何定时器、resize/change 存盘）
 - 全局 Ctrl+S 快捷键注册（改由宿主转发 `trigger_save`）
-- 启动期定时器：崩溃恢复弹窗、应用 updater 自检、网络词典自动更新
+- 启动期定时器：崩溃恢复弹窗、应用 updater 自检
 - `_init_window` 的全局主题 / 标题 / 尺寸 / 居中（只保留 widget 本地背景兜底）
 - `closeEvent` 的 `QApplication.quit()`（embedded 下会杀掉宿主进程）
 - **全局主题写入**：`SettingsInterface._apply_theme_setting` 在 embedded 下直接
@@ -110,9 +110,10 @@ class SettingsProvider(Protocol):
 - `_path_card`：配置文件位置卡片（embedded 下配置走宿主，无文件目录概念）
 - `card_theme`：主题选择卡（embedded 下主题归宿主"界面"设置独占）
 
-**noop / 空返回**（provider 模式）：
-- `load/save_dictionary`、`load/save_singer_presets`、`load/save_network_dictionary` 的文件部分（走 `load_extra/save_extra`）
-- `maybe_auto_update_network_dictionary`
+**改走 provider**（不访问 standalone 文件）：
+- `load/save_dictionary`、`load/save_singer_presets`、`load/save_network_dictionary`（走 `load_extra/save_extra`）
+- 网络词典启动自动更新仍会调度；`maybe_auto_update_network_dictionary` 通过
+  provider 读取源配置并写回 cache namespace 与更新时间戳。
 
 ## 6. 宿主侧职责（工作台，分离后**不**跟 SUG 走）
 

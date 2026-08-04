@@ -11,10 +11,11 @@
 from __future__ import annotations
 
 import pytest
-from PyQt6.QtWidgets import QTableWidgetSelectionRange
+from PyQt6.QtWidgets import QLabel, QTableWidgetSelectionRange
 
 from strange_uta_game.frontend.settings.dictionary_dialog import DictionaryEditDialog
 from strange_uta_game.frontend.settings.network_dictionary_dialog import (
+    NetworkDictionaryDialog,
     NetworkSourceEntriesDialog,
 )
 
@@ -134,3 +135,11 @@ class TestAdd:
         # 新空行置顶，原 5 行全部恢复可见
         assert _visible_rows(dlg) == [0, 1, 2, 3, 4, 5]
         assert dlg._table.item(0, 1).text() == ""
+
+
+def test_network_dictionary_dialog_shows_host_managed_cache(qapp):
+    dialog = NetworkDictionaryDialog({"sources": []}, cache_path=None)
+
+    labels = [label.text() for label in dialog.findChildren(QLabel)]
+    assert any("条目缓存：由宿主管理" in text for text in labels)
+    assert all("None" not in text for text in labels)

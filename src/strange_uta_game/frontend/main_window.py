@@ -165,15 +165,17 @@ class MainWindow(MSFluentWindow):
 
         self._report_progress(95, self.tr("正在完成初始化..."))
 
-        # 启动期定时器 —— standalone 专用：
+        # 启动期定时器：
         # - 闪退恢复弹窗会抢宿主焦点，embedded 跳过；
         # - 应用 updater 由宿主统一管理，embedded 跳过；
-        # - 网络词典更新理论上 embedded 也可保留，但本期先一并跳过，由
-        #   宿主显式调度（保持本模块"嵌入后零启动副作用"）。
+        # - 网络词典更新只读写 SettingsProvider 管理的 namespace，embedded
+        #   可安全保留；HTTP 拉取仍在 daemon 线程执行，不阻塞宿主 UI。
         if not self._embedded:
             # 延迟启动期检查：先闪退恢复，完成后再检查更新/词典更新，
             # 避免两个模态弹窗同时弹出导致无法操作。
             QTimer.singleShot(500, self._startup_checks)
+        else:
+            QTimer.singleShot(500, self._schedule_network_dict_auto_update)
 
         # 由 updater 流程主动设置；closeEvent 检测到此标志即 bypass dirty 弹窗，
         # 走"兜底保存 + 直接退出"路径。
