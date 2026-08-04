@@ -5,6 +5,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtWidgets import QApplication
 
 from strange_uta_game.backend.domain import Character, Project, Ruby, RubyPart, Sentence, Singer
@@ -217,3 +218,75 @@ def test_invalidate_dependents_extends_to_list_boundary(qapp, monkeypatch):
     delta = _versions_after_invalidate(preview, 0)
 
     assert delta == {0: 1, 1: 1, 2: 1}
+
+
+def _plain_project(line_count: int, chars_per_line: int) -> Project:
+    singer = Singer(name="default", is_default=True)
+    sentences = [
+        Sentence(
+            singer_id=singer.id,
+            characters=[
+                Character(char="长", check_count=0, singer_id=singer.id)
+                for _ in range(chars_per_line)
+            ],
+        )
+        for _ in range(line_count)
+    ]
+    return Project(singers=[singer], sentences=sentences)
+
+
+class _WheelEvent:
+    def __init__(self, delta: int, modifiers=Qt.KeyboardModifier.NoModifier):
+        self._delta = delta
+        self._modifiers = modifiers
+        self.accepted = False
+
+    def modifiers(self):
+        return self._modifiers
+
+    def angleDelta(self):
+        return QPoint(0, self._delta)
+
+    def accept(self):
+        self.accepted = True
+
+
+def test_horizontal_scrollbar_only_appears_for_overflow(qapp, monkeypatch):
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.resize(320, 400)
+    preview.show()
+    preview.set_project(_plain_project(line_count=1, chars_per_line=40))
+
+    assert preview._horizontal_scrollbar.isVisible()
+    assert preview._horizontal_scrollbar.maximum() > 0
+
+    preview.resize(4000, 400)
+
+    assert not preview._horizontal_scrollbar.isVisible()
+    assert preview._horizontal_scrollbar.value() == 0
+
+
+def test_alt_wheel_scrolls_horizontally_without_using_vertical_scroll(
+    qapp, monkeypatch
+):
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.resize(320, 400)
+    preview.show()
+    preview.set_project(_plain_project(line_count=8, chars_per_line=40))
+
+    horizontal_before = preview._horizontal_scrollbar.value()
+    vertical_before = preview._scroll_center_line
+    alt_wheel = _WheelEvent(-120, Qt.KeyboardModifier.AltModifier)
+    preview.wheelEvent(alt_wheel)
+
+    assert alt_wheel.accepted
+    assert preview._horizontal_scrollbar.value() > horizontal_before
+    assert preview._scroll_center_line == vertical_before
+
+    horizontal_after_alt = preview._horizontal_scrollbar.value()
+    preview.wheelEvent(_WheelEvent(-120))
+
+    assert preview._horizontal_scrollbar.value() == horizontal_after_alt
+    assert preview._scroll_center_line == vertical_before + 1

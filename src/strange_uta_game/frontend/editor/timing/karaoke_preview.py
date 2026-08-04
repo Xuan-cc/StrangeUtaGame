@@ -22,6 +22,7 @@ from PyQt6.QtGui import (
     QPainterPath,
     QPaintEvent,
     QPen,
+    QWheelEvent,
 )
 
 from strange_uta_game.frontend.font_utils import DEFAULT_FONT_FAMILY, ui_font
@@ -226,6 +227,25 @@ def _wipe_ink_bounds(fm: QFontMetrics, text: str) -> tuple[int, int]:
     return _ink_bounds(fm, text)
 
 
+class _AltWheelScrollBar(QScrollBar):
+    """A horizontal scrollbar that leaves an unmodified wheel to its parent."""
+
+    def wheelEvent(self, event: QWheelEvent | None) -> None:  # noqa: N802
+        if event is None:
+            return
+        if event.modifiers() & Qt.KeyboardModifier.AltModifier:
+            angle = event.angleDelta()
+            delta = angle.y() or angle.x()
+            if delta:
+                steps = delta / 120.0
+                self.setValue(
+                    int(round(self.value() - steps * self.singleStep()))
+                )
+            event.accept()
+        else:
+            event.ignore()
+
+
 class KaraokePreview(QWidget):
     """多行歌词预览，带逐字高亮、注音显示和滚动支持。
 
@@ -380,6 +400,20 @@ class KaraokePreview(QWidget):
         self._scrollbar.setPageStep(self._SCROLL_SCALE * 5)     # 点击轨道 = 5行
         self._SCROLLBAR_WIDTH = 14
 
+        # 底部横向滚动条：仅当实际排版超出文本视口时出现。普通滚轮仍归
+        # 纵向歌词浏览使用；Alt+滚轮才改变此滚动条。
+        self._horizontal_scrollbar = _AltWheelScrollBar(
+            Qt.Orientation.Horizontal, self
+        )
+        self._horizontal_scrollbar.setVisible(False)
+        self._horizontal_scrollbar.setSingleStep(40)
+        self._horizontal_scrollbar.valueChanged.connect(
+            self._on_horizontal_scrollbar_changed
+        )
+        self._HORIZONTAL_SCROLLBAR_HEIGHT = 14
+        self._horizontal_max_shift = 0
+        self._horizontal_layout_dirty = True
+
         # 监听主题变化，触发重绘
         theme.changed.connect(self.update)
 
@@ -453,9 +487,13 @@ class KaraokePreview(QWidget):
 
     def set_playing(self, playing: bool):
         """由外部同步播放状态，用于决定 paintEvent 是否旁路缓存。"""
+        was_playing = self._is_playing
         self._is_playing = bool(playing)
         if playing:
             self._build_line_switch_points()
+        if was_playing != self._is_playing:
+            self._mark_horizontal_layout_dirty()
+            self.update()
 
     def _build_line_switch_points(self):
         """构建换行时间点快照，记录每个时间点应切换到哪一行。"""
@@ -510,6 +548,8 @@ class KaraokePreview(QWidget):
     def set_auto_scroll_enabled(self, enabled: bool):
         """设置是否启用自动滚动功能。特殊场景可关闭。"""
         self._auto_scroll_enabled = bool(enabled)
+        self._mark_horizontal_layout_dirty()
+        self.update()
 
     def set_scroll_mode(self, mode: str):
         """设置滚动模式：auto（操作后挂起 6 秒）/ always（始终滚动）/ never（不滚动）。"""
@@ -520,18 +560,23 @@ class KaraokePreview(QWidget):
             self._auto_scroll_enabled = True
             if mode == "always":
                 self._auto_scroll_suspended = False
+        self._mark_horizontal_layout_dirty()
+        self.update()
 
     def _suspend_auto_scroll(self):
         """用户交互时挂起自动滚动，通知外部停止 cooldown timer。"""
         if self._scroll_mode == "always":
             return
         self._auto_scroll_suspended = True
+        self._mark_horizontal_layout_dirty()
         self.user_interaction_during_auto_scroll.emit()
 
     def resume_auto_scroll(self):
         """恢复自动滚动：将视口同步到当前播放行（不改变编辑光标）。"""
         self._auto_scroll_suspended = False
+        self._mark_horizontal_layout_dirty()
         self._scroll_to_line(self._last_auto_scroll_line_idx)
+        self.update()
 
     def set_duration(self, duration_ms: int):
         """设置音频总时长（用于行尾非句尾时的wipe右边界）"""
@@ -560,6 +605,8 @@ class KaraokePreview(QWidget):
             self._prewarm_all_sentences()
         self._update_scrollbar_range()
         self._sync_scrollbar_to_scroll_center()
+        self._mark_horizontal_layout_dirty()
+        self._update_horizontal_scrollbar_range()
         self.request_repaint()
 
     def set_focus_position(self, line_idx:int = 0,char_idx: int = 0):
@@ -587,6 +634,7 @@ class KaraokePreview(QWidget):
             return
         self._current_line_idx = line_idx
         self._current_char_idx = char_idx
+        self._mark_horizontal_layout_dirty()
         # 播放中：视口居中受滚动模式/挂起状态管控（set_current_time_ms 统一负责视口）
         # 非播放（手动导航）：始终居中
         if not self._is_playing or (self._auto_scroll_enabled and not self._auto_scroll_suspended):
@@ -701,6 +749,7 @@ class KaraokePreview(QWidget):
             if target_line_idx is not None:
                 if target_line_idx != self._last_auto_scroll_line_idx:
                     self._last_auto_scroll_line_idx = target_line_idx
+                    self._mark_horizontal_layout_dirty()
                     self.auto_scroll_line_changed.emit()
                     if not self._auto_scroll_suspended:
                         self._scroll_to_line(target_line_idx)
@@ -803,6 +852,7 @@ class KaraokePreview(QWidget):
             alignment = "center"
         if self._alignment != alignment:
             self._alignment = alignment
+            self._mark_horizontal_layout_dirty()
             self.update()
 
     def set_alignment_margin(self, margin: int):
@@ -814,6 +864,7 @@ class KaraokePreview(QWidget):
         margin = max(0, min(500, margin))
         if self._alignment_margin != margin:
             self._alignment_margin = margin
+            self._mark_horizontal_layout_dirty()
             self.update()
 
     def set_font_sizes(self, base_size: int, current_line_size: int = 0, ruby_size: int = 10, cp_size: int = 8, line_height_factor: float = 1.20, ruby_spacing: int = 4, main_font: str = DEFAULT_FONT_FAMILY, ruby_font: str = DEFAULT_FONT_FAMILY, cp_spacing: int = 4):
@@ -872,6 +923,8 @@ class KaraokePreview(QWidget):
         self._line_versions.clear()
         self._global_version += 1
         self._update_scrollbar_range()
+        self._mark_horizontal_layout_dirty()
+        self._update_horizontal_scrollbar_range()
         self.update()
 
     def set_checkpoint_markers(self, markers: dict[str, str]):
@@ -881,6 +934,7 @@ class KaraokePreview(QWidget):
         self._sentence_cache.clear()
         self._line_versions.clear()
         self._global_version += 1
+        self._mark_horizontal_layout_dirty()
         self.update()
 
     def set_needs_guide_style(self, symbol: str, size: int) -> None:
@@ -905,11 +959,13 @@ class KaraokePreview(QWidget):
         # 变为有句子），需同步刷新滚动条的可见性与 range；否则滚动条会一直停留在
         # 初始的隐藏状态，直到某次 resize/主题切换才被动显示。
         self._update_scrollbar_range()
+        self._mark_horizontal_layout_dirty()
         self.update()
 
     def _invalidate_line(self, line_idx: int):
         """使特定行的缓存失效（用于行内数据改变时）"""
         self._line_versions[line_idx] = self._line_versions.get(line_idx, 0) + 1
+        self._mark_horizontal_layout_dirty()
         self.update()
 
     @staticmethod
@@ -987,6 +1043,7 @@ class KaraokePreview(QWidget):
         line_indices = set(self._line_versions.keys()) | set(self._sentence_cache.keys())
         for line_idx in line_indices:
             self._line_versions[line_idx] = self._line_versions.get(line_idx, 0) + 1
+        self._mark_horizontal_layout_dirty()
         self.update()
 
     # ---- 窗口大小变化 ----
@@ -1003,16 +1060,29 @@ class KaraokePreview(QWidget):
             h = self.height() if self.height() > 0 else 600
             self._visible_lines = max(3, min(15, int(h / line_h)))
             self._update_scrollbar_range()
+            self._mark_horizontal_layout_dirty()
+            self._update_horizontal_scrollbar_range()
             self.update()
-        # 滚动条靠右放置，占满高度
-        scroll_w = getattr(self, '_SCROLLBAR_WIDTH', 14)
-        self._scrollbar.setGeometry(self.width() - scroll_w, 0, scroll_w, self.height())
+        self._update_scrollbar_geometry()
 
     # ---- 滚动 ----
 
     def wheelEvent(self, a0):
-        """鼠标滚轮滚动浏览歌词"""
+        """普通滚轮纵向浏览歌词；Alt+滚轮横向浏览长行。"""
         if not a0 or not self._project or not self._project.sentences:
+            return
+        if a0.modifiers() & Qt.KeyboardModifier.AltModifier:
+            if self._horizontal_scrollbar.isVisible():
+                angle = a0.angleDelta()
+                delta = angle.y() or angle.x()
+                if delta:
+                    steps = delta / 120.0
+                    value = self._horizontal_scrollbar.value()
+                    step = self._horizontal_scrollbar.singleStep()
+                    self._horizontal_scrollbar.setValue(
+                        int(round(value - steps * step))
+                    )
+                    a0.accept()
             return
         self._suspend_auto_scroll()
         delta = a0.angleDelta().y()
@@ -1024,6 +1094,108 @@ class KaraokePreview(QWidget):
         )
         self._sync_scrollbar_to_scroll_center()
         self.update()
+
+    def _on_horizontal_scrollbar_changed(self, _value: int):
+        self.update()
+
+    def _mark_horizontal_layout_dirty(self) -> None:
+        self._horizontal_layout_dirty = True
+
+    def _effective_current_line(self) -> int:
+        if (
+            self._is_playing
+            and self._auto_scroll_enabled
+            and not self._auto_scroll_suspended
+            and self._last_auto_scroll_line_idx >= 0
+        ):
+            return self._last_auto_scroll_line_idx
+        return self._current_line_idx
+
+    def _line_start_x(self, total_text_width: int, left: int, right: int) -> int:
+        available_width = right - left
+        if self._alignment == "left":
+            return left + self._alignment_margin
+        if self._alignment == "right":
+            return right - total_text_width - self._alignment_margin
+        return left + (available_width - total_text_width) // 2
+
+    def _horizontal_shift(self) -> int:
+        if not self._horizontal_scrollbar.isVisible():
+            return 0
+        return self._horizontal_max_shift - self._horizontal_scrollbar.value()
+
+    def _update_scrollbar_geometry(self) -> None:
+        scroll_w = getattr(self, "_SCROLLBAR_WIDTH", 14)
+        horizontal_h = (
+            self._HORIZONTAL_SCROLLBAR_HEIGHT
+            if self._horizontal_scrollbar.isVisible()
+            else 0
+        )
+        self._scrollbar.setGeometry(
+            self.width() - scroll_w, 0, scroll_w, self.height() - horizontal_h
+        )
+        self._horizontal_scrollbar.setGeometry(
+            0,
+            self.height() - self._HORIZONTAL_SCROLLBAR_HEIGHT,
+            self.width() - (scroll_w if self._scrollbar.isVisible() else 0),
+            self._HORIZONTAL_SCROLLBAR_HEIGHT,
+        )
+
+    def _update_horizontal_scrollbar_range(self) -> None:
+        """Show the bottom scrollbar iff any currently rendered line overflows."""
+        self._horizontal_layout_dirty = False
+        bar = self._horizontal_scrollbar
+        old_shift = self._horizontal_shift()
+
+        if not self._project or not self._project.sentences:
+            bar.blockSignals(True)
+            bar.setRange(0, 0)
+            bar.setValue(0)
+            bar.setVisible(False)
+            bar.blockSignals(False)
+            self._horizontal_max_shift = 0
+            self._update_scrollbar_geometry()
+            return
+
+        left = self._line_number_margin + 5
+        right = self.width() - (
+            self._SCROLLBAR_WIDTH if self._scrollbar.isVisible() else 0
+        )
+        if right <= left:
+            return
+
+        min_x = left
+        max_right = right
+        effective_current = self._effective_current_line()
+        for idx, sentence in enumerate(self._project.sentences):
+            is_current = idx == effective_current
+            fm = self._fm_current if is_current else self._fm_context
+            render_data = self._get_sentence_render_data(
+                idx, sentence, fm, "cur" if is_current else "ctx"
+            )
+            width = int(render_data["total_text_width"])
+            start_x = self._line_start_x(width, left, right)
+            min_x = min(min_x, start_x)
+            max_right = max(max_right, start_x + width)
+
+        min_shift = min(0, right - max_right)
+        max_shift = max(0, left - min_x)
+        span = max_shift - min_shift
+        self._horizontal_max_shift = max_shift
+
+        bar.blockSignals(True)
+        if span <= 0:
+            bar.setRange(0, 0)
+            bar.setValue(0)
+            bar.setVisible(False)
+            self._horizontal_max_shift = 0
+        else:
+            bar.setRange(0, span)
+            bar.setPageStep(max(1, right - left))
+            bar.setValue(max(0, min(span, max_shift - old_shift)))
+            bar.setVisible(True)
+        bar.blockSignals(False)
+        self._update_scrollbar_geometry()
 
     def _on_scrollbar_changed(self, value: int):
         """滚动条拖动 → 更新视口中央行索引"""
@@ -2249,6 +2421,9 @@ class KaraokePreview(QWidget):
         },
     )
     def paintEvent(self, a0: Optional[QPaintEvent]):
+        if self._horizontal_layout_dirty:
+            self._update_horizontal_scrollbar_range()
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -2304,14 +2479,7 @@ class KaraokePreview(QWidget):
         last_visible = min(total - 1, int(self._scroll_center_line + half_visible))
 
         # 播放+自动滚动时，用播放行做视觉高亮，不污染编辑光标
-        effective_current = (
-            self._last_auto_scroll_line_idx
-            if self._is_playing
-            and self._auto_scroll_enabled
-            and not self._auto_scroll_suspended
-            and self._last_auto_scroll_line_idx >= 0
-            else self._current_line_idx
-        )
+        effective_current = self._effective_current_line()
 
         _norm_sel = self.get_normalized_selection() if self._focus_char_idx >= 0 else None
         _draw_focus_selection = (
@@ -2424,16 +2592,10 @@ class KaraokePreview(QWidget):
             text_area_left = self._line_number_margin + 5  # 行号区域右侧留 5px 间距
             sb_w = self._SCROLLBAR_WIDTH if self._scrollbar.isVisible() else 0
             text_area_right = w - sb_w  # 文本区域右边界，为滚动条留出空间
-            available_width = text_area_right - text_area_left
-
-            if self._alignment == "left":
-                start_x = text_area_left + self._alignment_margin
-            elif self._alignment == "right":
-                start_x = text_area_right - total_text_width - self._alignment_margin
-                # 确保不覆盖行号区域
-                start_x = max(start_x, text_area_left)
-            else:  # center
-                start_x = text_area_left + (available_width - total_text_width) // 2
+            start_x = self._line_start_x(
+                total_text_width, text_area_left, text_area_right
+            )
+            start_x += self._horizontal_shift()
 
             curr_x = start_x
 
