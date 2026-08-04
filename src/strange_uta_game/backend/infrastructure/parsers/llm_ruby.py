@@ -229,10 +229,22 @@ _OUTPUT_SCHEMA_HINT = (
 
 # 片假名外来语 → 英文标注规则（仅在 annotate_katakana_with_english 开启时追加）
 _ENGLISH_KATAKANA_RULE = (
-    "(5) 英語由来の外来語のカタカナ語（例：ギター→guitar、コンピューター→computer、"
-    "メロディー→melody）は、読み r に元の英単語の綴り（小文字）を入れる。"
-    "英語に対応しないカタカナ（擬音語・和製語・人名など、例：ドキドキ・コタツ）は"
-    "通常どおりカタカナ/平仮名の読みを返し、英語にしないこと。"
+    "【カタカナから英語を推定する追加規則】"
+    "英語由来だと文脈から十分に判断できるカタカナ語には、元の英単語の綴りを小文字で付ける。"
+    "一つの英単語は必ず一つの連語ブロック ``{カタカナ語||...}`` にまとめ、"
+    "英語の対応部分ごとに別々の ``{...}`` ブロックへ分割してはいけない。"
+    "読み区は原文のカタカナ文字数と同数のカンマ区切りにし、英語の綴りの断片を、"
+    "対応すると判断できるカタカナ文字の位置へできるだけ割り当てる。対応しない小書き文字・長音・"
+    "促音などの位置は空欄でよく、全位置へ無理に割り当てない。"
+    "例：``コンピューター`` → ``{コンピューター||com,,pu,,,ter,}``、"
+    "``アイスクリーム`` → ``{アイスクリーム||i,,ce,c,rea,,m}``、"
+    "``メロディー`` → ``{メロディー||me,lo,dy,,}``、"
+    "``ギター`` → ``{ギター||gui,tar,}``。"
+    "英単語全体を先頭位置へまとめず、対応を判断できる綴り断片は可能な限り"
+    "対応する位置へ分配すること。ただし、小書き文字・長音・促音など対応のない位置を"
+    "空欄にするのは正しく、全位置を埋める必要はない。"
+    "英語に対応しないカタカナ（擬音語・和製語・人名など）や英語由来か不確かな語は、"
+    "原文のまま残して英語を捏造しないこと。"
 )
 
 
@@ -907,7 +919,8 @@ def _annotated_to_pairs(text: str) -> Tuple[Pairs, str]:
 
     Pairs 编码：
     - 多字块、所有字读音非空 → ``(原文, [r1, r2, ...])`` 数组形（下游加 morpheme_span）；
-    - 多字块、含尾随空读音 → ``(原文, "拼接读音")`` 字符串形（首字承载、其余连词）；
+    - 多字块、含尾随空读音 → 通常为 ``(原文, "拼接读音")`` 字符串形；
+      片假名英文则保留含空项的数组，维持默认词典的逐位置分配语义；
     - 单字块 → ``(原文, 读音)`` 字符串形（独立 morpheme，无 Phase 5 保护）；
     - 块外字符 → 每字 ``(c, c)`` 自注音。
 
@@ -945,8 +958,16 @@ def _annotated_to_pairs(text: str) -> Tuple[Pairs, str]:
                     pairs.append(
                         (text_part, per_char_clean[0] if per_char_clean else text_part)
                     )
-                elif len(per_char_clean) == len(text_part) and all(per_char_clean):
-                    # 多字干净逐字 → 数组形（保留 morpheme_span 给 Phase 5 保护）
+                elif len(per_char_clean) == len(text_part) and (
+                    all(per_char_clean)
+                    # 默认词典风格的片假名英文允许空位置，必须保留数组中的
+                    # 位置关系，不能像日语熟字训那样拼回整串。
+                    or (
+                        is_all_katakana(text_part)
+                        and is_english_reading("".join(per_char_clean))
+                    )
+                ):
+                    # 多字干净逐字，或带空位的片假名英文 → 数组形
                     pairs.append((text_part, list(per_char_clean)))
                 else:
                     # 含尾随空 / 段数不符 → 拼成字符串走整块分配
@@ -1161,7 +1182,7 @@ class LLMRubyAnalyzer(KanaDistributingAnalyzer):
         2. reading 是数组且每元素非空 → LLM 已自分到字，直接逐字 emit RubyResult
            （绕过本地 ``_distribute_morpheme_reading`` 与 ``_split_by_kanji_dict`` 启发式），
            同时为多字 surface 标 ``morpheme_span`` 让 Phase 5 享有连词组保护。
-        3. 其余（reading 为字符串、或数组含空元素表示连词）→ 拼成字符串复用
+        3. 其余（reading 为字符串、或日文数组含空元素表示连词）→ 拼成字符串复用
            基类 :meth:`_results_from_pairs` 的逐字/逐块假名分配。
         """
         results: List[RubyResult] = []
@@ -1172,6 +1193,27 @@ class LLMRubyAnalyzer(KanaDistributingAnalyzer):
             mspan: Optional[Tuple[int, int]] = (
                 (start, end) if end - start > 1 else None
             )
+
+            # 默认词典的片假名英文格式是一整个连词块，英文拼写片段按原文字符
+            # 位置用逗号分配，允许空段：{コンボ||com,,bo}。这里必须在通用的
+            # clean per-char list 路径之前截获，否则全非空数组会被拆成独立块，
+            # 含空数组又会在下方 join 后丢失位置信息。
+            if (
+                self._annotate_katakana_with_english
+                and isinstance(reading, list)
+                and len(reading) == len(surface)
+                and is_all_katakana(surface)
+                and is_english_reading("".join(reading))
+            ):
+                results.append(
+                    RubyResult(
+                        text=surface, reading=",".join(reading),
+                        start_idx=start, end_idx=end,
+                        morpheme_span=mspan,
+                    )
+                )
+                pos = end
+                continue
 
             # 路径 2：LLM 直接给出每字读音（无空元素表示连词）
             if (

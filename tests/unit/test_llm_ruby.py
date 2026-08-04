@@ -116,6 +116,16 @@ def test_annotated_to_pairs_mora_within_char_concatenates():
     assert pairs == [("大冒険", ["だい", "ぼう", "けん"])]
 
 
+def test_annotated_to_pairs_preserves_katakana_english_empty_positions():
+    """默认词典式英文空段保留位置，不退化成无分段的整词字符串。"""
+    annotated = "{コンピューター||com,,pu,,,ter,}"
+    pairs, raw = _annotated_to_pairs(annotated)
+    assert raw == "コンピューター"
+    assert pairs == [
+        ("コンピューター", ["com", "", "pu", "", "", "ter", ""])
+    ]
+
+
 def test_annotated_to_pairs_short_form():
     """短形：`{赤|あか}` / `{愛|あ|い}`。"""
     pairs, _ = _annotated_to_pairs("{赤|あか}")
@@ -745,6 +755,27 @@ def test_analyzer_emits_katakana_english_block_when_enabled(monkeypatch):
     assert (results[0].start_idx, results[0].end_idx) == (0, 3)
 
 
+def test_analyzer_preserves_dictionary_style_katakana_english_segments(monkeypatch):
+    """LLM 的逐位置英文片段保持为一个连词块，空段不能被拼掉。"""
+    cfg = LLMRubyConfig(enabled=True, base_url="http://x", api_key="k", model="m")
+    analyzer = LLMRubyAnalyzer(
+        cfg, lines=["コンピューター"], fallback=_SelfAnalyzer(),
+        annotate_katakana_with_english=True,
+    )
+    monkeypatch.setattr(
+        analyzer._client, "annotate_lines",
+        lambda lines: (
+            {0: [("コンピューター", ["com", "", "pu", "", "", "ter", ""])]},
+            None,
+        ),
+    )
+    results = analyzer.analyze("コンピューター")
+    assert len(results) == 1
+    assert results[0].text == "コンピューター"
+    assert results[0].reading == "com,,pu,,,ter,"
+    assert results[0].morpheme_span == (0, 7)
+
+
 def test_analyzer_ignores_english_when_disabled(monkeypatch):
     """开关关闭：即便返回英文读音，片假名也按假名逐字处理（英文被丢弃）。"""
     cfg = LLMRubyConfig(enabled=True, base_url="http://x", api_key="k", model="m")
@@ -767,8 +798,14 @@ def test_prompt_includes_english_rule_only_when_enabled():
     cfg = LLMRubyConfig(base_url="x", api_key="k", model="m")
     on = LLMRubyClient(cfg, annotate_english=True)._build_user_prompt(["ギター"])
     off = LLMRubyClient(cfg, annotate_english=False)._build_user_prompt(["ギター"])
-    assert "guitar" in on  # 规则示例
-    assert "guitar" not in off
+    assert "gui,tar" in on  # 规则示例
+    assert "gui,tar" not in off
+    assert "{コンピューター||com,,pu,,,ter,}" in on
+    assert "{アイスクリーム||i,,ce,c,rea,,m}" in on
+    assert "{ギター||gui,tar,}" in on
+    assert "英単語全体を先頭位置へまとめず" in on
+    assert "一つの連語ブロック" in on
+    assert "全位置へ無理に割り当てない" in on
 
 
 def test_prompt_contains_split_vs_jukujikun_rule():
@@ -1022,6 +1059,46 @@ def test_autocheck_renders_katakana_english_block():
     assert chars[0].linked_to_next and chars[1].linked_to_next
     assert chars[1].ruby is None and chars[2].ruby is None
     assert chars[1].check_count == 0 and chars[2].check_count == 0
+
+
+def test_autocheck_renders_segmented_katakana_english_as_one_linked_block():
+    """默认词典式英文片段分配到部分片假名，同时保持整个词为一个连词块。"""
+    from strange_uta_game.backend.application import AutoCheckService
+    from strange_uta_game.backend.domain import Sentence
+    from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
+        sentence_to_annotated_line,
+    )
+    from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import RubyResult
+
+    class _SegmentedKataEngAnalyzer:
+        def analyze(self, text):
+            return [RubyResult(
+                text="コンピューター", reading="com,,pu,,,ter,",
+                start_idx=0, end_idx=7, morpheme_span=(0, 7),
+            )]
+
+        def get_reading(self, text):
+            return text
+
+    svc = AutoCheckService(
+        _SegmentedKataEngAnalyzer(),
+        auto_check_flags={"katakana": True},
+        annotate_katakana_with_english=True,
+    )
+    sentence = Sentence.from_text("コンピューター", "s1")
+    svc.apply_to_sentence(sentence)
+    chars = sentence.characters
+
+    assert [
+        "".join(p.text for p in ch.ruby.parts) if ch.ruby else ""
+        for ch in chars
+    ] == ["com", "", "pu", "", "", "ter", ""]
+    assert [ch.check_count for ch in chars] == [1, 0, 1, 0, 0, 1, 0]
+    assert all(ch.linked_to_next for ch in chars[:-1])
+    assert not chars[-1].linked_to_next
+    assert sentence_to_annotated_line(chars) == (
+        "{コンピューター||com,,pu,,,ter,}"
+    )
 
 
 def test_config_is_complete():

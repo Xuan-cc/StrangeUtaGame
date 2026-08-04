@@ -133,6 +133,25 @@ def _is_word_inner(c: str) -> bool:
     return (c.isascii() and c.isalpha()) or c in ("'", "\u2019")
 
 
+def _split_segmented_english_reading(
+    reading: str, expected_parts: int
+) -> Optional[List[str]]:
+    """解析默认词典风格的片假名英文分段。
+
+    例如 ``com,,bo`` 对应 ``コンボ`` 的三个字符位置。空段表示该片假名
+    仍属于同一连词块，但不单独承载英文片段。返回 ``None`` 表示这不是合法的
+    英文分段格式；无逗号的 ``computer`` 继续走整词首字承载的兼容路径。
+    """
+    if expected_parts < 2 or "," not in (reading or ""):
+        return None
+    parts = [part.strip() for part in reading.split(",")]
+    if len(parts) != expected_parts:
+        return None
+    if not is_english_reading("".join(parts)):
+        return None
+    return parts
+
+
 def _parse_dict_reading(reading: str, expected_word: str) -> Optional[
     Tuple[List[List[str]], List[int]]
 ]:
@@ -1495,7 +1514,12 @@ class AutoCheckService:
         katakana_english_covered: set = set()
         if self._annotate_katakana_with_english:
             for block_id, result in enumerate(ruby_results):
-                if is_all_katakana(result.text) and is_english_reading(result.reading):
+                segmented = _split_segmented_english_reading(
+                    result.reading, result.end_idx - result.start_idx
+                )
+                if is_all_katakana(result.text) and (
+                    is_english_reading(result.reading) or segmented is not None
+                ):
                     block_source[block_id] = "katakana_english"
                     katakana_english_covered |= set(
                         range(result.start_idx, result.end_idx)
@@ -1510,12 +1534,19 @@ class AutoCheckService:
         char_to_dist_block: Dict[int, int] = {}
         for block_id, result in enumerate(ruby_results):
             block_len = result.end_idx - result.start_idx
-            # 片假名外来语块：整词连词，首字承载英文读音，其余字符无 ruby 但同块连词。
+            # 片假名外来语块：保持一个连词块。默认词典风格的逗号分段把英文
+            # 片段放到对应片假名位置；整词英文兼容格式仍由首字承载。
             if block_source.get(block_id) == "katakana_english":
+                english_parts = _split_segmented_english_reading(
+                    result.reading, block_len
+                )
                 for idx in range(result.start_idx, result.end_idx):
                     if idx >= len(chars):
                         break
-                    if idx == result.start_idx:
+                    pos = idx - result.start_idx
+                    if english_parts is not None and english_parts[pos]:
+                        char_to_ruby_raw[idx] = english_parts[pos]
+                    elif english_parts is None and idx == result.start_idx:
                         char_to_ruby_raw[idx] = result.reading.strip()
                     char_to_block[idx] = block_id
                 continue
@@ -1737,11 +1768,25 @@ class AutoCheckService:
             # 批 17 #1: 英文词组 fallback 块——首字母=1 cp、其他字母=0 cp
             # 必须在 `result.text == result.reading` 短路之前处理
             # （fallback 的 text 与 reading 完全相同，否则会被跳过保留默认每字母=1）
-            if block_source.get(block_id) in ("english_fallback", "katakana_english"):
-                # 整词首字 = 1 cp，其余字符 = 0（与英文词组一致）
+            if block_source.get(block_id) == "english_fallback":
+                # 英文词组 fallback：整词首字 = 1 cp，其余字符 = 0。
                 for idx in range(result.start_idx, result.end_idx):
                     if idx < len(check_counts):
                         check_counts[idx] = 1 if idx == result.start_idx else 0
+                continue
+            if block_source.get(block_id) == "katakana_english":
+                english_parts = _split_segmented_english_reading(
+                    result.reading, result.end_idx - result.start_idx
+                )
+                for idx in range(result.start_idx, result.end_idx):
+                    if idx >= len(check_counts):
+                        break
+                    pos = idx - result.start_idx
+                    check_counts[idx] = (
+                        1 if english_parts is not None and english_parts[pos]
+                        else 1 if english_parts is None and pos == 0
+                        else 0
+                    )
                 continue
             if result.text == result.reading:
                 continue  # 假名/符号/空格等读音与原文相同，不更新
