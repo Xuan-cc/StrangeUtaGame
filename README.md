@@ -111,7 +111,7 @@
 <tr>
 <td align="center" width="50%">
   <a href="assets/shot-export.png"><img src="assets/shot-export.png" width="100%" alt="导出 · Export" /></a><br/>
-  <sub><b>导出 · 11 种歌词格式</b><br/>LRC×3 / KRA / TXT / SRT / txt2ass / ASS / Nicokara×2 / RL</sub>
+  <sub><b>导出 · 13 种歌词格式</b><br/>LRC×3 / KRA / TXT / SRT / txt2ass / ASS / Nicokara×2 / RL / 春日向注音 / Kirakara</sub>
 </td>
 <td align="center" width="50%">
   <a href="assets/shot-settings.png"><img src="assets/shot-settings.png" width="100%" alt="设置 · Settings" /></a><br/>
@@ -148,9 +148,9 @@
 <tr>
   <td align="center">📤</td>
   <td>
-    <b>11 种歌词格式导出 / Eleven export formats</b><br/>
-    <sub><b>LRC</b>（增强型 / 逐行 / 逐字）· <b>KRA</b> · <b>TXT</b> · <b>SRT</b> · <b>txt2ass</b> · <b>ASS</b> · <b>Nicokara</b> · <b>Nicokara（带注音）</b> · <b>RL 编辑模式</b> —— Aegisub、NicokaraMaker、RhythmicaLyrics 工作流无缝衔接。<br/>
-    LRC (enhanced / per-line / per-word), KRA, TXT, SRT, txt2ass, ASS, Nicokara, Nicokara-with-furigana, RL edit-mode. Plays nice with Aegisub, NicokaraMaker and RhythmicaLyrics.</sub>
+    <b>13 种歌词格式导出 / Thirteen export formats</b><br/>
+    <sub><b>LRC</b>（增强型 / 逐行 / 逐字）· <b>KRA</b> · <b>TXT</b> · <b>SRT</b> · <b>txt2ass</b> · <b>ASS</b> · <b>Nicokara</b> · <b>Nicokara（带注音）</b> · <b>RL 编辑模式</b> · <b>春日向注音</b> · <b>Kirakara</b> —— Aegisub、NicokaraMaker、RhythmicaLyrics 工作流无缝衔接。<br/>
+    LRC (enhanced / per-line / per-word), KRA, TXT, SRT, txt2ass, ASS, Nicokara, Nicokara-with-furigana, RL edit-mode, Kasugamuki and Kirakara. Plays nice with Aegisub, NicokaraMaker and RhythmicaLyrics.</sub>
   </td>
 </tr>
 <tr>
@@ -165,7 +165,7 @@
   <td align="center">🇯🇵</td>
   <td>
     <b>自动注音（多引擎 + LLM + 罗马音） / Auto-furigana (multi-engine + LLM + romaji)</b><br/>
-    <sub>主引擎 <b>WinRT JapanesePhoneticAnalyzer</b>（main 变体）/ <b>SudachiPy</b>（noWinIME·mac 变体），辅以 <code>pykakasi</code> + 本地/联网词典；可选 <b>LLM 注音</b>（自配 API，失败自动回退）；支持<b>一键转罗马音</b>与「仅注音」模式；按平假名/片假名/汉字/字母/数字 分类启停，自动补全句首句尾、促音、长音、括号、英文音节等规则。<br/>
+    <sub>主引擎 <b>WinRT JapanesePhoneticAnalyzer</b>（main 变体）/ <b>SudachiPy</b>（noWinIME·mac 变体），辅以 <code>pykakasi</code> + 本地/联网词典；可在 <b>设置 → 读音词典 → LLM 注音</b> 启用 LLM 并配置 API；支持<b>一键转罗马音</b>与「仅注音」模式；按平假名/片假名/汉字/字母/数字分类启停，自动补全句首句尾、促音、长音、括号、英文音节等规则。片假名英文注音开关位于 <b>设置 → 读音词典 → 根据用户词典给片假名标注英文</b>。<br/>
     Primary engine is <b>WinRT JapanesePhoneticAnalyzer</b> (main build) or <b>SudachiPy</b> (noWinIME/mac); <code>pykakasi</code> + local/online dictionaries fall in behind. Optional <b>LLM-based furigana</b> (bring-your-own API, auto-fallback) and <b>one-click romaji</b>. Per-category toggles plus rules for sokuon, long vowel, parentheses, English syllables …</sub>
   </td>
 </tr>
@@ -275,6 +275,19 @@
 </tr>
 </table>
 
+### 🧭 常用功能入口 / Where to find settings
+
+| 功能 / Feature | 入口或设置位置 / Location | 说明 / Notes |
+|---|---|---|
+| 播放区间锁定 / Playback range locks | **设置 → 快捷键 → 锁定播放起点 / 锁定播放终点** | 默认按键为 <kbd>[</kbd> / <kbd>]</kbd>；再次触发可取消锁定。 |
+| 播放头居中模式 / Centered playhead | **设置 → 打轴 → 波形时间标签 → 播放头居中模式** | 默认关闭；开启后播放头固定在时间轴中央。 |
+| Karaoke 实时预览 / Live preview | **设置 → 界面** | 进入该页面后自动显示；拖动标题可移动，拖动边缘可缩放。 |
+| 软件界面字体 / Interface font | **设置 → 界面 → 界面设定 → 界面字体** | 留空时按界面语言自动选择，修改后立即应用。 |
+| Karaoke 预览横向滚动 / Horizontal preview scrolling | **Karaoke 预览区域** | 内容超宽时自动显示横向滚动条；也可按住 <kbd>Alt</kbd> 滚动鼠标滚轮。 |
+| 最近打开的项目 / Recent projects | **打轴界面 → 文件管理 → 最近打开的文件** | 最多显示 10 条记录，可在同一菜单中清空。 |
+| F2 注音快捷编辑 / Quick ruby editor | **设置 → 快捷键 → 注音编辑** | 默认 <kbd>F2</kbd>；可编辑注音并设置与下一字符连词。 |
+| Kirakara 导出 / Kirakara export | **导出 → 导出格式 → Kirakara** | 选择后可设置“导出罗马音”和演唱者；默认格式可在 **设置 → 导出 → 默认导出格式** 中修改。 |
+
 <!-- ───────────────────────────── 安装 ───────────────────────────── -->
 
 ## 📦 安装与运行 / Installation
@@ -351,8 +364,8 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
 
 ## ⌨️ 键位说明 / Hotkeys
 
-> ✅ 以下来自 <code>config.json → shortcuts.timing_mode</code> 真实默认值，可在 **设置 → 快捷键** 中重新映射。  
-> *Defaults below are pulled from <code>config.json → shortcuts.timing_mode</code>. Remap any of them under <b>Settings → Hotkeys</b>.*
+> ✅ 以下为打轴模式的默认键位，可在 **设置 → 快捷键** 中重新映射。
+> *These are the default Timing Mode bindings. Remap them under <b>Settings → Hotkeys</b>.*
 
 <div align="center">
 
@@ -362,7 +375,7 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
 </tr>
 <tr>
   <td>播放 / 暂停 · Play / Pause</td>
-  <td align="center"><kbd>D</kbd></td>
+  <td align="center"><kbd>A</kbd></td>
   <td>音频与光标同步控制</td>
 </tr>
 <tr>
@@ -381,9 +394,19 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
   <td>0.2× ~ 2.0×，变速不变调</td>
 </tr>
 <tr>
+  <td>恢复默认速度 · Reset speed</td>
+  <td align="center"><kbd>E</kbd></td>
+  <td>也可双击速度条</td>
+</tr>
+<tr>
   <td>音量 − / + · Volume − / +</td>
-  <td align="center"><kbd>Ctrl</kbd>+<kbd>W</kbd> &nbsp; <kbd>Ctrl</kbd>+<kbd>Q</kbd></td>
-  <td>默认步进 ±5%</td>
+  <td align="center">未绑定</td>
+  <td>可在快捷键设置中按需绑定</td>
+</tr>
+<tr>
+  <td>锁定播放起点 / 终点 · Lock range start / end</td>
+  <td align="center"><kbd>[</kbd> &nbsp; <kbd>]</kbd></td>
+  <td>再次按下取消锁定，操作支持撤销</td>
 </tr>
 
 <tr>
@@ -391,7 +414,7 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
 </tr>
 <tr>
   <td><b>打轴 · Mark timestamp (now)</b></td>
-  <td align="center"><kbd>Space</kbd></td>
+  <td align="center"><kbd>D</kbd> / <kbd>F</kbd> / <kbd>Space</kbd></td>
   <td>打轴模式下：在当前字打节奏点</td>
 </tr>
 <tr>
@@ -401,7 +424,7 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
 </tr>
 <tr>
   <td>句尾标记切换 · Toggle line-end</td>
-  <td align="center"><kbd>.</kbd></td>
+  <td align="center"><kbd>2</kbd></td>
   <td>句尾「●」标记</td>
 </tr>
 <tr>
@@ -416,7 +439,7 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
 </tr>
 <tr>
   <td>增加 / 减少节奏点 · Add / Remove checkpoint</td>
-  <td align="center"><kbd>[</kbd> &nbsp; <kbd>]</kbd></td>
+  <td align="center"><kbd>1</kbd> &nbsp; <kbd>3</kbd></td>
   <td>用于字内多重 check</td>
 </tr>
 <tr>
@@ -460,7 +483,7 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
 <tr>
   <td>编辑注音 · Edit ruby (furigana)</td>
   <td align="center"><kbd>F2</kbd></td>
-  <td>编辑当前字注音</td>
+  <td>编辑当前字注音，并可设置与下一字符连词</td>
 </tr>
 <tr>
   <td>切换连字 · Toggle word-join</td>
@@ -552,8 +575,8 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
 </tr>
 </table>
 
-<sub>💡 还有一个独立的 <b>编辑模式（Edit Mode）</b>：与打轴模式仅 <kbd>Space</kbd> / <kbd>Backspace</kbd> 行为差异 —— 编辑模式下用于增减节奏点而不是打轴时间戳。<br/>
-<i>There is also a separate <b>Edit Mode</b> — only <kbd>Space</kbd> / <kbd>Backspace</kbd> differ: they add/remove checkpoints rather than marking timestamps.</i></sub>
+<sub>💡 还有一个独立的 <b>编辑模式（Edit Mode）</b>：其中 <kbd>Space</kbd> / <kbd>Backspace</kbd> / <kbd>.</kbd> 分别用于增加节奏点、删除节奏点和切换句尾；上表列出的是音乐播放时使用的打轴模式键位。<br/>
+<i>Edit Mode uses <kbd>Space</kbd> / <kbd>Backspace</kbd> / <kbd>.</kbd> to add a checkpoint, remove one, and toggle the line end. The table above lists the Timing Mode bindings used during playback.</i></sub>
 
 </div>
 
