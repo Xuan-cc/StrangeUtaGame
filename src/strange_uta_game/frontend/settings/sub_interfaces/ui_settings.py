@@ -142,12 +142,14 @@ class UISubInterface(SubSettingInterface):
         available_height = max(1, viewport_height - margin * 2)
         width = min(680, max(420, int(viewport_width * 0.46)), available_width)
         height = min(340, max(280, int(viewport_height * 0.38)), available_height)
-        self.preview.setGeometry(
-            max(margin, viewport_width - width - margin),
-            margin,
-            width,
-            height,
-        )
+        self.preview.resize(width, height)
+        if self.preview.user_positioned:
+            self.preview.clamp_to_parent()
+        else:
+            self.preview.move(
+                max(margin, viewport_width - width - margin),
+                margin,
+            )
         self.preview.raise_()
 
     def resizeEvent(self, event):
@@ -219,7 +221,7 @@ class UISubInterface(SubSettingInterface):
             needs_guide_symbol=(self.card_needs_guide_symbol.value() or "✚").strip()
             or "✚",
             needs_guide_size=self.card_needs_guide_size.value(),
-            checkpoint_marker=markers.get("cp_first_timed", "▶"),
+            checkpoint_markers=markers,
         )
 
     def load_settings(self, s):
