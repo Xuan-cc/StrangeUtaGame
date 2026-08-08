@@ -80,6 +80,8 @@ class WaveformDisplay(QWidget):
         super().__init__(parent)
         self._duration_ms = 0
         self._current_ms = 0
+        self._range_start_ms: Optional[int] = None
+        self._range_end_ms: Optional[int] = None
         # 时间标签列表（含模型句柄）；label 仅在该字符第一个 checkpoint 时非空
         self._time_tags: List[TimeTag] = []
         self._warning_time_tags: List[TimeTag] = []
@@ -160,6 +162,13 @@ class WaveformDisplay(QWidget):
         self._duration_ms = ms
         # 时长变化后重新 clamp，避免旧滚动位置超出新范围
         self._scroll_position = self._clamp_scroll(self._scroll_position)
+        self.update()
+
+    def set_playback_range(
+        self, start_ms: Optional[int], end_ms: Optional[int]
+    ) -> None:
+        self._range_start_ms = start_ms
+        self._range_end_ms = end_ms
         self.update()
 
     def _suspend_auto_scroll(self) -> None:
@@ -581,6 +590,9 @@ class WaveformDisplay(QWidget):
 
         self._draw_time_grid(painter, w, h, visible_start_ms, visible_end_ms)
         self._draw_waveform(painter, w, h)
+        self._draw_playback_range(
+            painter, w, h, visible_start_ms, visible_duration_ms
+        )
         self._draw_time_tags(painter, w, h, visible_start_ms, visible_end_ms)
         self._draw_playhead(painter, w, h, visible_start_ms, visible_duration_ms)
         self._draw_drag_badge(painter, w, h, visible_start_ms, visible_duration_ms)
@@ -635,6 +647,52 @@ class WaveformDisplay(QWidget):
         # 中心线
         painter.setPen(QPen(theme.waveform_line, 1))
         painter.drawLine(0, mid_y, w, mid_y)
+
+    def _draw_playback_range(
+        self,
+        painter: QPainter,
+        w: int,
+        h: int,
+        visible_start_ms: float,
+        visible_duration_ms: float,
+    ) -> None:
+        """Shade playback-excluded areas and draw the locked A/B boundaries."""
+        if visible_duration_ms <= 0:
+            return
+        visible_end_ms = visible_start_ms + visible_duration_ms
+
+        shade = QColor(theme.waveform_bg)
+        shade.setAlpha(150)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(shade))
+
+        if self._range_start_ms is not None:
+            start_x = self._ts_to_x(
+                self._range_start_ms, visible_start_ms, visible_duration_ms, w
+            )
+            if self._range_start_ms > visible_start_ms:
+                painter.drawRect(0, 0, min(w, max(0, start_x)), h)
+        if self._range_end_ms is not None:
+            end_x = self._ts_to_x(
+                self._range_end_ms, visible_start_ms, visible_duration_ms, w
+            )
+            if self._range_end_ms < visible_end_ms:
+                painter.drawRect(max(0, min(w, end_x)), 0, w, h)
+
+        def draw_boundary(ms: Optional[int], color, label: str) -> None:
+            if ms is None or not (visible_start_ms <= ms <= visible_end_ms):
+                return
+            x = self._ts_to_x(ms, visible_start_ms, visible_duration_ms, w)
+            painter.setPen(QPen(color, 3))
+            painter.drawLine(x, 0, x, h)
+            painter.setBrush(QBrush(color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(QRect(max(0, x - 8), 1, 16, 15), 3, 3)
+            painter.setPen(theme.waveform_bg)
+            painter.drawText(QRect(max(0, x - 8), 1, 16, 15), Qt.AlignmentFlag.AlignCenter, label)
+
+        draw_boundary(self._range_start_ms, theme.status_complete, "A")
+        draw_boundary(self._range_end_ms, theme.accent_warning, "B")
 
     @staticmethod
     def _format_ruby_label(ruby_text: str) -> str:
@@ -1088,6 +1146,11 @@ class TimelineWidget(QWidget):
 
     def set_position(self, ms: int):
         self.waveform_display.set_position(ms)
+
+    def set_playback_range(
+        self, start_ms: Optional[int], end_ms: Optional[int]
+    ) -> None:
+        self.waveform_display.set_playback_range(start_ms, end_ms)
 
     def set_time_tags(self, tags: List[Tuple[int, str, int, int, int, bool, Optional[str]]]):
         self.waveform_display.set_time_tags(tags)

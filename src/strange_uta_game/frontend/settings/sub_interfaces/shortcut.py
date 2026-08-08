@@ -47,6 +47,8 @@ class ShortcutSubInterface(SubSettingInterface):
         ("nav_next_char", FIF.RIGHT_ARROW, "下一字符", "在当前行内移动到下一个字符；若已在末字符则跳到下一行首字符", "RIGHT:short", "RIGHT:short", "both", None, None, False),
         ("seek_back", FIF.LEFT_ARROW, "后退", "后退跳转【仅打轴模式】", "Z:short", "", "timing_only", None, None, False),
         ("seek_forward", FIF.CHEVRON_RIGHT, "前进", "前进跳转【仅打轴模式】", "X:short", "", "timing_only", None, None, False),
+        ("lock_playback_start", FIF.PIN, "锁定播放起点", "在当前播放位置锁定区间起点；再次触发则取消，可撤销", "[:short", "[:short", "both", None, None, False),
+        ("lock_playback_end", FIF.PIN, "锁定播放终点", "在当前播放位置锁定区间终点；再次触发则取消，可撤销", "]:short", "]:short", "both", None, None, False),
 
         # ── 打轴与时间戳微调 ──
         ("tag_now", FIF.PLAY, "打轴键", "打轴操作的按键【仅打轴模式】", "D:short,F:short", "", "timing_only", None, None, False),

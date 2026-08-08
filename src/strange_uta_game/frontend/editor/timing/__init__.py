@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from .bulk_change_dialog import BulkChangeDialog
-from .commands import SentenceSnapshotCommand, _SentenceSnapshotCommand
+from .commands import PlaybackRangeCommand, SentenceSnapshotCommand, _SentenceSnapshotCommand
 from .dialogs import (
     CharEditDialog,
     CompleteTimestampDialog,
@@ -22,6 +22,7 @@ from .transport_bar import TransportBar
 
 __all__ = [
     "SentenceSnapshotCommand",
+    "PlaybackRangeCommand",
     "_SentenceSnapshotCommand",
     "TransportBar",
     "EditorToolBar",

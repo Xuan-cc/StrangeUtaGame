@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QEvent, QPoint, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QMouseEvent, QWheelEvent
+from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPolygon, QWheelEvent
 from PyQt6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel
 from qfluentwidgets import (
     CaptionLabel,
@@ -15,6 +15,60 @@ from qfluentwidgets import (
     FluentIcon as FIF,
 )
 from qfluentwidgets.components.widgets.slider import SliderHandle as _SliderHandle
+
+from strange_uta_game.frontend.theme import theme
+
+
+class PlaybackRangeSlider(Slider):
+    """Progress slider with start/end playback-range markers."""
+
+    def __init__(self, orientation: Qt.Orientation, parent=None):
+        super().__init__(orientation, parent)
+        self._range_start_value: int | None = None
+        self._range_end_value: int | None = None
+
+    def set_range_markers(
+        self, start_value: int | None, end_value: int | None
+    ) -> None:
+        self._range_start_value = start_value
+        self._range_end_value = end_value
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        span = self.maximum() - self.minimum()
+        if span <= 0:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        left = 7
+        usable = max(1, self.width() - left * 2)
+
+        def marker_x(value: int) -> int:
+            ratio = (value - self.minimum()) / span
+            return left + int(max(0.0, min(1.0, ratio)) * usable)
+
+        if self._range_start_value is not None:
+            x = marker_x(self._range_start_value)
+            color = theme.status_complete
+            painter.setPen(QPen(color, 2))
+            painter.drawLine(x, 2, x, self.height() - 2)
+            painter.setBrush(color)
+            painter.drawPolygon(QPolygon([
+                QPoint(x - 5, 1), QPoint(x + 5, 1), QPoint(x, 7)
+            ]))
+
+        if self._range_end_value is not None:
+            x = marker_x(self._range_end_value)
+            color = theme.accent_warning
+            painter.setPen(QPen(color, 2))
+            painter.drawLine(x, 2, x, self.height() - 2)
+            painter.setBrush(color)
+            bottom = self.height() - 1
+            painter.drawPolygon(QPolygon([
+                QPoint(x - 5, bottom), QPoint(x + 5, bottom), QPoint(x, bottom - 6)
+            ]))
 
 
 class _ResetHandle(_SliderHandle):
@@ -85,6 +139,8 @@ class TransportBar(QFrame):
         super().__init__(parent)
         self._duration_ms = 0
         self._current_ms = 0
+        self._range_start_ms: int | None = None
+        self._range_end_ms: int | None = None
         self._is_playing = False
         self._is_dragging = False
         # 速度滑块拖动中：拖动期间只更新标签，松手（sliderReleased）才应用速度，
@@ -102,6 +158,8 @@ class TransportBar(QFrame):
                 "duration": self._duration_ms,
                 "current": self._current_ms,
                 "playing": self._is_playing,
+                "range_start": self._range_start_ms,
+                "range_end": self._range_end_ms,
             }
             detach_layout_for_rebuild(self)
             self._init_ui()
@@ -109,6 +167,7 @@ class TransportBar(QFrame):
             self.set_duration(saved["duration"])
             self.set_position(saved["current"])
             self.set_playing(saved["playing"])
+            self.set_playback_range(saved["range_start"], saved["range_end"])
         super().changeEvent(event)
 
     def _init_ui(self):
@@ -131,13 +190,14 @@ class TransportBar(QFrame):
         self.lbl_time.setMinimumWidth(140)
         layout.addWidget(self.lbl_time)
 
-        self.slider_progress = Slider(Qt.Orientation.Horizontal, self)
+        self.slider_progress = PlaybackRangeSlider(Qt.Orientation.Horizontal, self)
         self.slider_progress.setRange(0, 10000)
         self.slider_progress.setValue(0)
         self.slider_progress.clicked.connect(self._on_slider_clicked)
         self.slider_progress.sliderPressed.connect(self._on_slider_pressed)
         self.slider_progress.sliderMoved.connect(self._on_slider_moved)
         self.slider_progress.sliderReleased.connect(self._on_seek)
+        self._sync_range_markers()
         layout.addWidget(self.slider_progress, stretch=1)
 
         layout.addWidget(CaptionLabel(self.tr("速度")))
@@ -209,7 +269,29 @@ class TransportBar(QFrame):
 
     def set_duration(self, ms: int):
         self._duration_ms = ms
+        self._sync_range_markers()
         self._update_label()
+
+    def set_playback_range(
+        self, start_ms: int | None, end_ms: int | None
+    ) -> None:
+        self._range_start_ms = start_ms
+        self._range_end_ms = end_ms
+        self._sync_range_markers()
+
+    def _sync_range_markers(self) -> None:
+        if not hasattr(self, "slider_progress"):
+            return
+
+        def to_value(ms: int | None) -> int | None:
+            if ms is None or self._duration_ms <= 0:
+                return None
+            ratio = max(0.0, min(1.0, ms / self._duration_ms))
+            return int(round(ratio * 10000))
+
+        self.slider_progress.set_range_markers(
+            to_value(self._range_start_ms), to_value(self._range_end_ms)
+        )
 
     @staticmethod
     def _left_mouse_button_is_down() -> bool:

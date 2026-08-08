@@ -13,12 +13,39 @@ class _FakeTimingService:
         self.seeked_ms = ms
 
 
+class _FakeRangeTimingService(_FakeTimingService):
+    def __init__(self, position_ms: int) -> None:
+        super().__init__()
+        self.position_ms = position_ms
+        self.played = False
+
+    def is_playing(self) -> bool:
+        return False
+
+    def get_duration_ms(self) -> int:
+        return 10_000
+
+    def get_position_ms(self) -> int:
+        return self.position_ms
+
+    def play(self) -> None:
+        self.played = True
+
+
 class _FakePositionWidget:
     def __init__(self) -> None:
         self.position_ms = None
+        self.duration_ms = None
+        self.playing = None
 
     def set_position(self, ms: int) -> None:
         self.position_ms = ms
+
+    def set_duration(self, ms: int) -> None:
+        self.duration_ms = ms
+
+    def set_playing(self, playing: bool) -> None:
+        self.playing = playing
 
 
 class _FakePreview:
@@ -26,9 +53,17 @@ class _FakePreview:
         self.current_time_ms = None
         self.invalidated_lines = []
         self.dependents_invalidated_for = []
+        self.duration_ms = None
+        self.playing = None
 
     def set_current_time_ms(self, ms: int) -> None:
         self.current_time_ms = ms
+
+    def set_duration(self, ms: int) -> None:
+        self.duration_ms = ms
+
+    def set_playing(self, playing: bool) -> None:
+        self.playing = playing
 
     def _invalidate_line(self, line_idx: int) -> None:
         self.invalidated_lines.append(line_idx)
@@ -92,3 +127,106 @@ def test_timetag_added_delegates_dependent_invalidation_to_preview():
     assert preview.invalidated_lines == []  # editor 不再直接逐行 invalidate
     assert editor.time_tags_scheduled is True
     assert editor.status_updated is True
+
+
+def test_play_starts_from_locked_start_when_position_is_outside_range():
+    timing_service = _FakeRangeTimingService(position_ms=8_000)
+    position_widgets = [_FakePositionWidget(), _FakePositionWidget()]
+    preview = _FakePreview()
+    preview.set_playing = lambda playing: None
+    preview._last_auto_scroll_line_idx = -1
+    preview._auto_scroll_suspended = False
+    transport = position_widgets[0]
+    timeline = position_widgets[1]
+    transport.set_playing = lambda playing: None
+    timeline.set_playing = lambda playing: None
+    editor = SimpleNamespace(
+        _timing_service=timing_service,
+        _playback_range_start_ms=2_000,
+        _playback_range_end_ms=6_000,
+        transport=transport,
+        timeline=timeline,
+        preview=preview,
+        _position_poll_timer=SimpleNamespace(start=lambda: None),
+        _auto_scroll_cooldown_timer=SimpleNamespace(stop=lambda: None),
+        _auto_scroll_suspended=False,
+        _auto_scroll_new_line_reached=False,
+        _status_state="paused",
+        lbl_status=SimpleNamespace(setText=lambda text: None),
+        tr=lambda text: text,
+        _update_mode_indicator=lambda: None,
+        _show_runtime_error=lambda text: None,
+    )
+
+    EditorInterface._on_play(editor)
+
+    assert timing_service.seeked_ms == 2_000
+    assert timing_service.played is True
+    assert transport.position_ms == 2_000
+    assert timeline.position_ms == 2_000
+    assert preview.current_time_ms == 2_000
+
+
+def test_poll_pauses_exactly_at_locked_end_at_1_5x_speed():
+    class Engine:
+        playing = True
+
+        def is_playing(self) -> bool:
+            return self.playing
+
+    engine = Engine()
+
+    class TimingService:
+        _audio_engine = engine
+        seeked_ms = None
+        paused = False
+
+        def get_position_ms(self) -> int:
+            return 6_250
+
+        def get_duration_ms(self) -> int:
+            return 10_000
+
+        def get_speed(self) -> float:
+            return 1.5
+
+        def seek(self, ms: int) -> None:
+            self.seeked_ms = ms
+
+        def pause(self) -> None:
+            self.paused = True
+            engine.playing = False
+
+    service = TimingService()
+    transport = _FakePositionWidget()
+    timeline = _FakePositionWidget()
+    preview = _FakePreview()
+    editor = SimpleNamespace(
+        _timing_service=service,
+        _playback_range_end_ms=6_000,
+        _last_polled_duration_ms=None,
+        transport=transport,
+        timeline=timeline,
+        preview=preview,
+        y=lambda: 0,
+        _position_poll_timer=SimpleNamespace(stop=lambda: None),
+        _auto_scroll_cooldown_timer=SimpleNamespace(stop=lambda: None),
+        _auto_scroll_suspended=False,
+        _auto_scroll_new_line_reached=False,
+        _status_state="playing",
+        lbl_status=SimpleNamespace(setText=lambda text: None),
+        tr=lambda text: text,
+        _update_mode_indicator=lambda: None,
+        _validate_all_timestamps=lambda: None,
+    )
+    editor._on_pause = lambda: EditorInterface._on_pause(editor)
+
+    EditorInterface._poll_audio_position(editor)
+
+    assert service.seeked_ms == 6_000
+    assert service.get_speed() == 1.5
+    assert service.paused is True
+    assert transport.position_ms == 6_000
+    assert timeline.position_ms == 6_000
+    assert preview.current_time_ms == 6_000
+    assert editor._status_state == "range_finished"

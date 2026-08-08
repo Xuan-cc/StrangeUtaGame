@@ -1470,5 +1470,16 @@
   "复制成功": "Copied Successfully",
   "复制演唱者名称": "Copy Singer Names",
   "已复制 {n} 位演唱者的名称": "Copied the names of {n} singers",
-  "忽略分组和当前筛选，将项目中的全部演唱者名称复制为 JSON 数组": "Ignore groups and the current filter, and copy all singer names in the project as a JSON array"
+  "忽略分组和当前筛选，将项目中的全部演唱者名称复制为 JSON 数组": "Ignore groups and the current filter, and copy all singer names in the project as a JSON array",
+  "锁定播放起点": "Lock Playback Start",
+  "锁定播放终点": "Lock Playback End",
+  "在当前播放位置锁定区间起点；再次触发则取消，可撤销": "Lock the range start at the current playback position; trigger again to clear it; undo is supported",
+  "在当前播放位置锁定区间终点；再次触发则取消，可撤销": "Lock the range end at the current playback position; trigger again to clear it; undo is supported",
+  "锁定播放区间起点": "Lock Playback Range Start",
+  "锁定播放区间终点": "Lock Playback Range End",
+  "取消播放区间起点": "Clear Playback Range Start",
+  "取消播放区间终点": "Clear Playback Range End",
+  "无法锁定播放区间": "Cannot Lock Playback Range",
+  "终点必须晚于起点": "The end must be later than the start",
+  "已到达锁定终点": "Reached Locked Playback End"
 }

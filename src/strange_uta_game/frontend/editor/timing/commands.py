@@ -7,9 +7,44 @@
 
 from __future__ import annotations
 
-from strange_uta_game.backend.application.commands import SentenceSnapshotCommand
+from typing import Callable
+
+from strange_uta_game.backend.application.commands import (
+    Command,
+    SentenceSnapshotCommand,
+)
+
+
+class PlaybackRangeCommand(Command):
+    """Apply an undoable change to the editor's transient playback range."""
+
+    def __init__(
+        self,
+        apply_state: Callable[[int | None, int | None], None],
+        old_state: tuple[int | None, int | None],
+        new_state: tuple[int | None, int | None],
+        description: str,
+    ) -> None:
+        self._apply_state = apply_state
+        self._old_state = old_state
+        self._new_state = new_state
+        self._description = description
+
+    def execute(self) -> None:
+        self._apply_state(*self._new_state)
+
+    def undo(self) -> None:
+        self._apply_state(*self._old_state)
+
+    @property
+    def description(self) -> str:
+        return self._description
 
 # 历史下划线命名兼容别名：新代码请直接使用 ``SentenceSnapshotCommand``。
 _SentenceSnapshotCommand = SentenceSnapshotCommand
 
-__all__ = ["SentenceSnapshotCommand", "_SentenceSnapshotCommand"]
+__all__ = [
+    "PlaybackRangeCommand",
+    "SentenceSnapshotCommand",
+    "_SentenceSnapshotCommand",
+]

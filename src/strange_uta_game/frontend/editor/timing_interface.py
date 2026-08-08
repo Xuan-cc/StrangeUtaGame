@@ -85,6 +85,7 @@ from .timing import (
     KaraokePreview,
     MiniSingerManager,
     ModifyCharacterDialog,
+    PlaybackRangeCommand,
     SentenceSnapshotCommand,
     TimelineWidget,
     TransportBar,
@@ -134,6 +135,8 @@ class EditorInterface(QWidget):
         self._last_position_update_time = 0.0  # 60fps UI 节流
         self._fast_forward_ms = 5000
         self._rewind_ms = 5000
+        self._playback_range_start_ms: Optional[int] = None
+        self._playback_range_end_ms: Optional[int] = None
         self._key_map = {}  # key_string -> action_name, populated by _apply_settings
         self._settings_loaded = False  # 配置是否已加载成功
         self._last_pause_char: str = ""  # 跟踪停顿符变更，用于实时迁移 ruby parts
@@ -266,6 +269,7 @@ class EditorInterface(QWidget):
         if state == "paused":   return self.tr("已暂停")
         if state == "stopped":  return self.tr("已停止")
         if state == "finished": return self.tr("播放完毕")
+        if state == "range_finished": return self.tr("已到达锁定终点")
         return self.tr("就绪")
 
     def _init_keysound(self) -> None:
@@ -669,6 +673,8 @@ class EditorInterface(QWidget):
             "stop",
             "seek_back",
             "seek_forward",
+            "lock_playback_start",
+            "lock_playback_end",
             "speed_down",
             "speed_up",
             "speed_reset",
@@ -741,6 +747,8 @@ class EditorInterface(QWidget):
             "stop": "S:short",
             "seek_back": "Z:short",
             "seek_forward": "X:short",
+            "lock_playback_start": "[:short",
+            "lock_playback_end": "]:short",
             "speed_down": "Q:short",
             "speed_up": "W:short",
             "speed_reset": "E:short",
@@ -1145,6 +1153,7 @@ class EditorInterface(QWidget):
         避免旧项目的波形/时长/缓存残留造成用户误解。
         """
         self.release_resources()
+        self._reset_playback_range()
 
         self.transport.set_duration(0)
         self.transport.set_position(0)
@@ -4517,6 +4526,99 @@ class EditorInterface(QWidget):
                 self._key_map_short = self._key_map_edit_short
                 self._key_map_long = self._key_map_edit_long
                 self._key_map = self._key_map_edit_short
+    def _apply_playback_range(
+        self, start_ms: Optional[int], end_ms: Optional[int]
+    ) -> None:
+        """Apply transient playback bounds and refresh both range displays."""
+        self._playback_range_start_ms = start_ms
+        self._playback_range_end_ms = end_ms
+        self.transport.set_playback_range(start_ms, end_ms)
+        self.timeline.set_playback_range(start_ms, end_ms)
+
+    def _reset_playback_range(self) -> None:
+        self._apply_playback_range(None, None)
+
+    def _execute_playback_range_change(
+        self,
+        start_ms: Optional[int],
+        end_ms: Optional[int],
+        description: str,
+    ) -> None:
+        old_state = (
+            self._playback_range_start_ms,
+            self._playback_range_end_ms,
+        )
+        new_state = (start_ms, end_ms)
+        if old_state == new_state:
+            return
+        command = PlaybackRangeCommand(
+            self._apply_playback_range, old_state, new_state, description
+        )
+        manager = (
+            self._timing_service.command_manager if self._timing_service else None
+        )
+        if manager is not None:
+            manager.execute(command)
+        else:
+            command.execute()
+
+    def _toggle_playback_range_start(self) -> None:
+        if not self._timing_service:
+            return
+        if self._playback_range_start_ms is not None:
+            self._execute_playback_range_change(
+                None,
+                self._playback_range_end_ms,
+                self.tr("取消播放区间起点"),
+            )
+            return
+        position_ms = self._timing_service.get_position_ms()
+        if (
+            self._playback_range_end_ms is not None
+            and position_ms >= self._playback_range_end_ms
+        ):
+            self._show_invalid_playback_range()
+            return
+        self._execute_playback_range_change(
+            position_ms,
+            self._playback_range_end_ms,
+            self.tr("锁定播放区间起点"),
+        )
+
+    def _toggle_playback_range_end(self) -> None:
+        if not self._timing_service:
+            return
+        if self._playback_range_end_ms is not None:
+            self._execute_playback_range_change(
+                self._playback_range_start_ms,
+                None,
+                self.tr("取消播放区间终点"),
+            )
+            return
+        position_ms = self._timing_service.get_position_ms()
+        if (
+            self._playback_range_start_ms is not None
+            and position_ms <= self._playback_range_start_ms
+        ):
+            self._show_invalid_playback_range()
+            return
+        self._execute_playback_range_change(
+            self._playback_range_start_ms,
+            position_ms,
+            self.tr("锁定播放区间终点"),
+        )
+
+    def _show_invalid_playback_range(self) -> None:
+        InfoBar.warning(
+            title=self.tr("无法锁定播放区间"),
+            content=self.tr("终点必须晚于起点"),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self,
+        )
+
         # 刷新快捷键提示（按新模式取文本）
         if hasattr(self, "_shortcut_actions_timing"):
             self._update_shortcut_hint(
@@ -4529,7 +4631,7 @@ class EditorInterface(QWidget):
     def _on_play(self):
         if self._timing_service:
             try:
-                # 播放完毕后再次点击播放：检测 EOF（PAUSED 且位置恰好在末尾）。
+                # 播放完毕或当前位置在锁定区间之外时，从有效区间起点播放。
                 # 此时 _last_reported_ms == _duration_ms，get_position_ms 也返回 duration。
                 # 需要先 seek(0) 重置 _last_reported_ms 和 BASS 位置，再 play()；
                 # 否则 get_display_position_ms 的单调性保护会让位置卡在 duration，
@@ -4537,11 +4639,18 @@ class EditorInterface(QWidget):
                 if not self._timing_service.is_playing():
                     dur = self._timing_service.get_duration_ms()
                     pos = self._timing_service.get_position_ms()
-                    if dur > 0 and pos >= dur:
-                        self._timing_service.seek(0)
-                        self.transport.set_position(0)
-                        self.timeline.set_position(0)
-                        self.preview.set_current_time_ms(0)
+                    start = self._playback_range_start_ms
+                    end = self._playback_range_end_ms
+                    outside_range = (
+                        (start is not None and pos < start)
+                        or (end is not None and pos >= end)
+                    )
+                    if dur > 0 and (pos >= dur or outside_range):
+                        target = start if start is not None else 0
+                        self._timing_service.seek(target)
+                        self.transport.set_position(target)
+                        self.timeline.set_position(target)
+                        self.preview.set_current_time_ms(target)
                 self._timing_service.play()
                 self.transport.set_playing(True)
                 self.preview.set_playing(True)
@@ -6249,6 +6358,10 @@ class EditorInterface(QWidget):
                 dur = self._timing_service.get_duration_ms()
                 speed = self._timing_service.get_speed()
                 self._on_seek(min(dur, cur + int(self._fast_forward_ms * speed)))
+        elif action == "lock_playback_start":
+            self._toggle_playback_range_start()
+        elif action == "lock_playback_end":
+            self._toggle_playback_range_end()
         elif action == "speed_down":
             v = self.transport.get_speed_value()
             self.transport.set_speed_value(v - 5)
@@ -6987,6 +7100,14 @@ class EditorInterface(QWidget):
         engine = self._timing_service._audio_engine
         position_ms = self._timing_service.get_position_ms()
         duration_ms = self._timing_service.get_duration_ms()
+        reached_locked_end = (
+            engine.is_playing()
+            and self._playback_range_end_ms is not None
+            and position_ms >= self._playback_range_end_ms
+        )
+        if reached_locked_end:
+            position_ms = self._playback_range_end_ms
+            self._timing_service.seek(position_ms)
 
         # 页面切换动画期间（self.y() != 0）跳过 UI 重绘，避免与动画争抢导致控件抖动。
         # 位置读取和播放结束检测不受影响，不影响打轴精度。
@@ -6999,6 +7120,12 @@ class EditorInterface(QWidget):
             self.transport.set_position(position_ms)
             self.timeline.set_position(position_ms)
             self.preview.set_current_time_ms(position_ms)
+
+        if reached_locked_end:
+            self._on_pause()
+            self._status_state = "range_finished"
+            self.lbl_status.setText(self.tr("已到达锁定终点"))
+            return
 
         # 检测播放结束（位置到达末尾或引擎已停止）
         if not engine.is_playing():
