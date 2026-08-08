@@ -6784,6 +6784,13 @@ class EditorInterface(QWidget):
             a0.accept()
             return
 
+        # 同一物理按下产生的系统自动重复事件不得重新开始长按手势。
+        # Qt 在自动重复时会成对发送 release/press；若重启定时器，
+        # release 会被误判为短按，并且长按动作也可能被重复触发。
+        if action_long is not None and a0.isAutoRepeat():
+            a0.ignore()
+            return
+
         # 只有 short 绑定：立即执行，保留 isAutoRepeat 行为
         if action_short is not None and action_long is None:
             self._execute_action(action_short, key)
@@ -6882,6 +6889,12 @@ class EditorInterface(QWidget):
             a0.accept()
             return
 
+        # Qt 自动重复的中间 release 不是用户真正抬键，必须在
+        # 短按判定之前过滤，否则长按期间会连续执行 short 动作。
+        if a0.isAutoRepeat():
+            a0.ignore()
+            return
+
         # 长按/短按释放处理
         if self._pending_press_key == key_upper and self._long_press_timer.isActive():
             # 定时器仍在运行 = 短按（300ms 内释放）
@@ -6896,10 +6909,6 @@ class EditorInterface(QWidget):
             return
 
         # 长按已超时，pending 已被 _on_long_press_timeout 清除，忽略释放
-        if a0.isAutoRepeat():
-            a0.ignore()
-            return
-
         super().keyReleaseEvent(a0)
 
     def _qt_key_to_name(
