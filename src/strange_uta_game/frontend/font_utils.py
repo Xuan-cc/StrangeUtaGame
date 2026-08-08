@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QFontDatabase, QFontMetrics
 
 
@@ -106,8 +107,24 @@ def ui_font_families(language_code: str | None = None) -> list[str]:
     return available
 
 
-def _apply_application_ui_font() -> None:
-    """将当前 UI 字体链应用到 QApplication。"""
+def _apply_application_ui_font(previous_families: list[str] | None = None) -> None:
+    """将当前 UI 字体链应用到 Qt 与 QFluentWidgets。
+
+    QFluentWidgets 会给控件显式设置自己的字体，单独调用
+    ``QApplication.setFont`` 无法覆盖它；因此还要同步其全局字体配置，并刷新
+    已创建且仍使用旧 UI 字体链的显式字体控件。
+    """
+    families = ui_font_families()
+    old_fluent_families: list[str] = []
+    try:
+        from qfluentwidgets import fontFamilies, setFontFamilies
+
+        old_fluent_families = fontFamilies()
+        setFontFamilies(families)
+    except Exception:
+        # 字体工具也会在不安装 qfluentwidgets 的最小环境中使用。
+        pass
+
     # 延迟导入避免仅使用字体测量工具时强制创建/依赖 QApplication。
     from PyQt6.QtWidgets import QApplication
 
@@ -115,23 +132,37 @@ def _apply_application_ui_font() -> None:
     if app is None:
         return
     font = QFont(app.font())
-    font.setFamilies(ui_font_families())
+    font.setFamilies(families)
     app.setFont(font)
+
+    managed_chains = [old_fluent_families]
+    if previous_families:
+        managed_chains.append(previous_families)
+    for widget in app.allWidgets():
+        if not widget.testAttribute(Qt.WidgetAttribute.WA_SetFont):
+            continue
+        current = widget.font()
+        if current.families() not in managed_chains:
+            continue
+        current.setFamilies(families)
+        widget.setFont(current)
 
 
 def set_ui_font_override(family: str | None) -> str:
     """设置用户选择的 UI 字体并返回实际覆盖值；空串表示按语言自动选择。"""
     global _ui_font_override
+    previous_families = ui_font_families()
     _ui_font_override = resolve_ui_font_override(family)
-    _apply_application_ui_font()
+    _apply_application_ui_font(previous_families)
     return _ui_font_override
 
 
 def set_ui_language(language_code: str) -> None:
     """更新 UI 字体语言，并保留用户字体覆盖设置。"""
     global _active_ui_language
+    previous_families = ui_font_families()
     _active_ui_language = language_code
-    _apply_application_ui_font()
+    _apply_application_ui_font(previous_families)
 
 
 def ui_font(point_size: int, weight: QFont.Weight = QFont.Weight.Normal) -> QFont:

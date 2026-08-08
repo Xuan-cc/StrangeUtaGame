@@ -6180,32 +6180,32 @@ OFF にすると .cache 占有が小さく、切替も即時ですが、音割�
 <context>
     <name>RubyEditPopup</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="56" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="57" />
         <source>回车保存，Esc 取消</source>
         <translation>Enterで保存、Escでキャンセル</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="55" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="56" />
         <source>注音</source>
         <translation>ルビ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="99" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="101" />
         <source>点击取消与下一个字的链接</source>
         <translation>クリックして次の文字とのリンクを解除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="101" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="103" />
         <source>点击链接下一个字</source>
         <translation>クリックして次の文字をリンク</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="96" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="98" />
         <source>行末字符不能链接下一字</source>
         <translation>行末の文字は次の文字にリンクできません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="94" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/ruby_popup.py" line="95" />
         <source>链接</source>
         <translation>リンク</translation>
     </message>
@@ -9004,202 +9004,202 @@ KS側の設定が優先されます。</translation>
 <context>
     <name>UISubInterface</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="118" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="119" />
         <source>Checkpoint 字符设定</source>
         <translation>Checkpoint 文字設定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="89" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="90" />
         <source>Checkpoint节奏点标记的字体像素大小</source>
         <translation>Checkpoint リズム点マーカーのフォントピクセルサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="84" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="85" />
         <source>Ruby注音与主文字之间的垂直间距</source>
         <translation>ルビと本文の垂直間隔</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="79" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="80" />
         <source>Ruby注音的字体像素大小</source>
         <translation>ルビのフォントピクセルサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="58" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="59" />
         <source>主文字字体</source>
         <translation>本文フォント</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="41" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="42" />
         <source>主题</source>
         <translation>テーマ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="64" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="65" />
         <source>卡拉OK预览 Ruby 注音字体（节奏点标记跟随界面字体）</source>
         <translation>カラオケプレビューのルビフォント（リズム点マーカーは UI フォントに連動）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="112" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="113" />
         <source>卡拉OK预览中歌词文本的水平对齐方式（左对齐时注意行号区域不被覆盖）</source>
         <translation>カラオケプレビュー歌詞の水平揃え（左揃え時は行番号領域に注意）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="59" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="60" />
         <source>卡拉OK预览主文字（当前行/上下文行）字体，取自系统已安装字体；同时用于全文本编辑的字宽统计</source>
         <translation>カラオケプレビュー本文（現在行/前後行）フォント。システム導入済みフォントから選択。全文編集の文字幅計測にも使用</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="113" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="114" />
         <source>右对齐</source>
         <translation>右揃え</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="68" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="69" />
         <source>基础字体大小</source>
         <translation>基本フォントサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="135" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="136" />
         <source>导唱待办标记大小</source>
         <translation>ガイド符 TODO マーカーサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="129" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="130" />
         <source>导唱待办标记符号</source>
         <translation>ガイド符 TODO マーカー記号</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="136" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="137" />
         <source>导唱待办标记符号的字体像素大小</source>
         <translation>ガイド符 TODO マーカー記号のフォントピクセルサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="113" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="114" />
         <source>居中对齐</source>
         <translation>中央揃え</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="105" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="106" />
         <source>左/右对齐时页边距</source>
         <translation>左右揃え時の余白</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="113" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="114" />
         <source>左对齐</source>
         <translation>左揃え</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="106" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="107" />
         <source>左对齐或右对齐时歌词与窗口边缘的间距</source>
         <translation>左右揃え時の歌詞とウィンドウ端の余白</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="50" />
-        <source>应用菜单、按钮和对话框字体；留空时按界面语言自动选择，重启后完整生效</source>
-        <translation>アプリのメニュー、ボタン、ダイアログに使うフォント。空欄なら UI 言語に合わせて自動選択し、再起動後に完全適用されます</translation>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="51" />
+        <source>应用菜单、按钮和对话框字体；留空时按界面语言自动选择，选择后立即应用</source>
+        <translation>アプリのメニュー、ボタン、ダイアログに使うフォント。空欄なら UI 言語に合わせて自動選択し、選択後すぐに適用されます</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="73" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="74" />
         <source>当前行字体大小</source>
         <translation>現在行のフォントサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="74" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="75" />
         <source>当前高亮行的字体像素大小（放大效果）</source>
         <translation>ハイライト行のフォントピクセルサイズ（拡大効果）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="130" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="131" />
         <source>标记某字符前需要插入导唱符时显示的符号（叠加在字符左上角，红色半透明）</source>
         <translation>ガイド符挿入が必要な文字を示す記号（文字左上に半透明赤で重ねる）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="111" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="112" />
         <source>歌词对齐方式</source>
         <translation>歌詞揃え方式</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="83" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="84" />
         <source>注音与主文字间距</source>
         <translation>ルビと本文の間隔</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="63" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="64" />
         <source>注音字体</source>
         <translation>ルビフォント</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="78" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="79" />
         <source>注音字体大小</source>
         <translation>ルビフォントサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="43" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="44" />
         <source>浅色</source>
         <translation>ライト</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="43" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="44" />
         <source>深色</source>
         <translation>ダーク</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="49" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="50" />
         <source>界面字体</source>
         <translation>UI フォント</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="38" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="39" />
         <source>界面设定</source>
         <translation>インターフェース設定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="43" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="44" />
         <source>自动</source>
         <translation>自動</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="119" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="120" />
         <source>自定义节奏点标记的显示字符（首节奏点 / 后续 / 句尾，已打轴 / 未打轴）</source>
         <translation>リズム点マーカー表示文字をカスタマイズ（先頭/後続/句末、タグ済/未タグ）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="93" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="94" />
         <source>节奏点与主文字间距</source>
         <translation>リズム点と本文の間隔</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="88" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="89" />
         <source>节奏点标记大小</source>
         <translation>リズム点マーカーサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="94" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="95" />
         <source>节奏点标记顶端与主文字底部的垂直间距（增大避免大字号时被文字遮挡）</source>
         <translation>リズム点マーカー上端と本文底部の垂直間隔（大フォント時のマスクを回避）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="99" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="100" />
         <source>行间距系数</source>
         <translation>行間係数</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="100" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="101" />
         <source>行高 = (当前行字体 + 注音 + 注音间距 + 节奏点)高度 × 系数</source>
         <translation>行高 = (現在行フォント + ルビ + ルビ間隔 + リズム点) 高さ × 係数</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="122" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="123" />
         <source>设置字符</source>
         <translation>文字を設定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="42" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="43" />
         <source>选择界面主题，或设为自动跟随系统切换</source>
         <translation>インターフェーステーマを選択、または自動でシステム追従</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="69" />
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="70" />
         <source>非当前行的歌词字体像素大小</source>
         <translation>非現在行の歌詞フォントピクセルサイズ</translation>
     </message>

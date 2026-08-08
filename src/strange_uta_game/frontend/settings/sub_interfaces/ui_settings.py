@@ -9,6 +9,7 @@ from strange_uta_game.frontend.font_utils import (
     DEFAULT_FONT_FAMILY,
     resolve_font_family,
     resolve_ui_font_override,
+    set_ui_font_override,
 )
 
 from ..cards import ComboSettingCard, DoubleSpinSettingCard, FontSettingCard, SpinSettingCard, TextSettingCard
@@ -47,12 +48,12 @@ class UISubInterface(SubSettingInterface):
             FontSettingCard(
                 FIF.FONT,
                 tr("界面字体"),
-                tr("应用菜单、按钮和对话框字体；留空时按界面语言自动选择，重启后完整生效"),
+                tr("应用菜单、按钮和对话框字体；留空时按界面语言自动选择，选择后立即应用"),
                 parent=g,
                 allow_auto=True,
             ),
             title_source="界面字体",
-            content_source="应用菜单、按钮和对话框字体；留空时按界面语言自动选择，重启后完整生效",
+            content_source="应用菜单、按钮和对话框字体；留空时按界面语言自动选择，选择后立即应用",
         )
         self.card_main_font = self._tr_register(
             FontSettingCard(FIF.FONT, tr("主文字字体"),
@@ -193,8 +194,9 @@ class UISubInterface(SubSettingInterface):
             self._notify_changed()
 
     def connect_signals(self):
-        # UI 字体不参与歌词预览；仅标记设置已变更并等待重启完整应用。
-        self.card_interface_font.value_changed.connect(self._notify_changed)
+        self.card_interface_font.value_changed.connect(
+            self._on_interface_font_changed
+        )
         for signal in (
             self.card_theme.index_changed,
             self.card_main_font.value_changed,
@@ -212,6 +214,17 @@ class UISubInterface(SubSettingInterface):
             self.card_needs_guide_size.value_changed,
         ):
             signal.connect(self._on_preview_setting_changed)
+
+    def _on_interface_font_changed(self, family: str) -> None:
+        """立即保存并热应用 UI 字体；嵌入模式由宿主管理全局字体。"""
+        if self._settings_ref is None:
+            return
+        if getattr(self._settings_ref, "_provider", None) is not None:
+            return
+        effective = set_ui_font_override(family)
+        self.card_interface_font.setValue(effective)
+        self._settings_ref.set("ui.interface_font", effective)
+        self._settings_ref.save()
 
     def _on_preview_setting_changed(self, *_args):
         self._refresh_preview()

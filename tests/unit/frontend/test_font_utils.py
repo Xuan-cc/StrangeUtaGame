@@ -47,15 +47,26 @@ def test_language_manager_updates_application_font(qapp, monkeypatch):
 
 
 def test_user_override_precedes_language_font_and_keeps_fallbacks(qapp, monkeypatch):
+    from qfluentwidgets import PushButton
+
     monkeypatch.setattr(
         "strange_uta_game.frontend.font_utils.QFontDatabase.families",
         lambda: ["Custom UI", "Yu Gothic UI", "Segoe UI"],
     )
     try:
         set_ui_language("ja_JP")
+        existing_fluent_button = PushButton("existing")
         assert set_ui_font_override("custom ui") == "Custom UI"
         assert ui_font(10).families()[:2] == ["Custom UI", "Yu Gothic UI"]
         assert qapp.font().families()[:2] == ["Custom UI", "Yu Gothic UI"]
+        assert existing_fluent_button.font().families()[:2] == [
+            "Custom UI",
+            "Yu Gothic UI",
+        ]
+        assert PushButton("new").font().families()[:2] == [
+            "Custom UI",
+            "Yu Gothic UI",
+        ]
 
         assert set_ui_font_override("missing font") == ""
         assert ui_font(10).families()[0] == "Yu Gothic UI"

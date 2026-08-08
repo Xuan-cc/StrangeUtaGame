@@ -13,6 +13,8 @@ from strange_uta_game.frontend.settings.cards import FontSettingCard
 class _SettingsStub:
     def __init__(self, values):
         self.values = values
+        self.save_count = 0
+        self._provider = None
 
     def get(self, path, default=None):
         return self.values.get(path, default)
@@ -20,8 +22,11 @@ class _SettingsStub:
     def set(self, path, value):
         self.values[path] = value
 
+    def save(self):
+        self.save_count += 1
 
-def test_ui_settings_preview_loads_and_tracks_controls(qapp):
+
+def test_ui_settings_preview_loads_and_tracks_controls(qapp, monkeypatch):
     from strange_uta_game.frontend.settings.sub_interfaces.ui_settings import (
         UISubInterface,
     )
@@ -54,6 +59,15 @@ def test_ui_settings_preview_loads_and_tracks_controls(qapp):
 
     values = page.preview.preview_values
     assert page.card_interface_font.value() == interface_family
+    applied_fonts: list[str] = []
+    monkeypatch.setattr(
+        "strange_uta_game.frontend.settings.sub_interfaces.ui_settings.set_ui_font_override",
+        lambda family: applied_fonts.append(family) or family,
+    )
+    page._on_interface_font_changed(interface_family)
+    assert applied_fonts == [interface_family]
+    assert settings.save_count == 1
+    assert settings.values["ui.interface_font"] == interface_family
     page.collect_settings(settings)
     assert settings.values["ui.interface_font"] == interface_family
     assert values["font_size"] == 16

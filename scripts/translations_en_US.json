@@ -953,7 +953,7 @@
   "界面主题": "UI Theme",
   "界面设定": "Interface settings",
   "界面语言": "Interface language",
-  "应用菜单、按钮和对话框字体；留空时按界面语言自动选择，重启后完整生效": "Font for application menus, buttons, and dialogs; leave blank to choose automatically for the interface language. Fully applied after restart",
+  "应用菜单、按钮和对话框字体；留空时按界面语言自动选择，选择后立即应用": "Font for application menus, buttons, and dialogs; leave blank to choose automatically for the interface language. Applied immediately after selection",
   "按界面语言自动选择": "Choose automatically for the interface language",
   "留空=同前画像": "Empty = same as previous image",
   "留空为默认分组": "Empty for default group",
