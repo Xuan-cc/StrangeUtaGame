@@ -25,6 +25,7 @@ from .manager import (
     Language,
     PSEUDO_LANGUAGE_CODE,
     install_translators,
+    language_by_code,
     localization,
     resolve_auto_language,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "PSEUDO_LANGUAGE_CODE",
     "detach_layout_for_rebuild",
     "install_translators",
+    "language_by_code",
     "localization",
     "resolve_auto_language",
 ]

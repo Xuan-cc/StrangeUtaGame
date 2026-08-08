@@ -17,6 +17,7 @@ from strange_uta_game.frontend.localization import (
     DEFAULT_LANGUAGE,
     PSEUDO_LANGUAGE_CODE,
     install_translators,
+    language_by_code,
     localization,
 )
 
@@ -38,6 +39,9 @@ class TestLanguageRegistry:
     def test_native_names_unique(self):
         names = [l.native_name for l in AVAILABLE_LANGUAGES]
         assert len(names) == len(set(names))
+
+    def test_language_lookup_is_public(self):
+        assert language_by_code("ja_JP").code == "ja_JP"
 
 
 class TestPseudoTranslator:
