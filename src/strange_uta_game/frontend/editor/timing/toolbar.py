@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel
 from qfluentwidgets import (
@@ -29,6 +31,8 @@ class EditorToolBar(QFrame):
     save_as_clicked = pyqtSignal()
     new_project_clicked = pyqtSignal()
     load_project_clicked = pyqtSignal()
+    recent_project_clicked = pyqtSignal(str)
+    clear_recent_projects_clicked = pyqtSignal()
     load_audio_clicked = pyqtSignal()
     load_lyrics_clicked = pyqtSignal()
     bulk_change_clicked = pyqtSignal()
@@ -64,6 +68,7 @@ class EditorToolBar(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._recent_project_paths: list[str] = []
         self.setFixedHeight(40)
         self._init_ui()
 
@@ -78,17 +83,7 @@ class EditorToolBar(QFrame):
         self.btn_load.setIcon(FIF.FOLDER)
         self.btn_load.setFixedHeight(32)
         self.btn_load.setMinimumWidth(110)
-        load_menu = RoundMenu(parent=self.btn_load)
-        load_menu.addAction(Action(FIF.ADD, tr("新建项目"), self, triggered=self.new_project_clicked.emit))
-        load_menu.addAction(Action(FIF.FOLDER, tr("加载项目"), self, triggered=self.load_project_clicked.emit))
-        load_menu.addAction(Action(FIF.SAVE, tr("保存项目"), self, triggered=self.save_clicked.emit))
-        load_menu.addAction(Action(FIF.SAVE_AS, tr("项目另存为"), self, triggered=self.save_as_clicked.emit))
-        load_menu.addSeparator()
-        load_menu.addAction(Action(FIF.MUSIC, tr("加载音频"), self, triggered=self.load_audio_clicked.emit))
-        load_menu.addAction(Action(FIF.DOCUMENT, tr("加载歌词"), self, triggered=self.load_lyrics_clicked.emit))
-        load_menu.addSeparator()
-        load_menu.addAction(Action(FIF.LINK, tr("多项目拼接"), self, triggered=self.concat_sug_clicked.emit))
-        self.btn_load.setMenu(load_menu)
+        self.btn_load.setMenu(self._create_load_menu())
         layout.addWidget(self.btn_load)
 
         layout.addSpacing(10)
@@ -209,6 +204,67 @@ class EditorToolBar(QFrame):
         layout.addWidget(self.edit_offset)
 
         layout.addStretch()
+
+    def _create_load_menu(self) -> RoundMenu:
+        """按当前最近项目列表创建文件菜单。"""
+        tr = self.tr
+        load_menu = RoundMenu(parent=self.btn_load)
+        load_menu.addAction(Action(FIF.ADD, tr("新建项目"), self, triggered=self.new_project_clicked.emit))
+        load_menu.addAction(Action(FIF.FOLDER, tr("加载项目"), self, triggered=self.load_project_clicked.emit))
+        self._recent_menu = RoundMenu(tr("最近打开的文件"), load_menu)
+        self._recent_menu.setIcon(FIF.HISTORY)
+        self._rebuild_recent_menu()
+        load_menu.addMenu(self._recent_menu)
+        load_menu.addAction(Action(FIF.SAVE, tr("保存项目"), self, triggered=self.save_clicked.emit))
+        load_menu.addAction(Action(FIF.SAVE_AS, tr("项目另存为"), self, triggered=self.save_as_clicked.emit))
+        load_menu.addSeparator()
+        load_menu.addAction(Action(FIF.MUSIC, tr("加载音频"), self, triggered=self.load_audio_clicked.emit))
+        load_menu.addAction(Action(FIF.DOCUMENT, tr("加载歌词"), self, triggered=self.load_lyrics_clicked.emit))
+        load_menu.addSeparator()
+        load_menu.addAction(Action(FIF.LINK, tr("多项目拼接"), self, triggered=self.concat_sug_clicked.emit))
+        return load_menu
+
+    def _rebuild_recent_menu(self) -> None:
+        """原地刷新最近项目子菜单，不替换文件菜单或工具栏。"""
+        recent_menu = self._recent_menu
+        old_actions = list(recent_menu.actions())
+        recent_menu.clear()
+        for action in old_actions:
+            action.deleteLater()
+
+        if self._recent_project_paths:
+            for file_path in self._recent_project_paths:
+                path = Path(file_path)
+                action = Action(
+                    FIF.DOCUMENT,
+                    f"{path.name}  —  {path.parent}",
+                    recent_menu,
+                )
+                action.setToolTip(file_path)
+                action.triggered.connect(
+                    lambda checked=False, p=file_path: self.recent_project_clicked.emit(p)
+                )
+                recent_menu.addAction(action)
+            recent_menu.addSeparator()
+            recent_menu.addAction(Action(
+                FIF.DELETE,
+                self.tr("清除最近打开记录"),
+                recent_menu,
+                triggered=self.clear_recent_projects_clicked.emit,
+            ))
+        else:
+            empty_action = Action(self.tr("暂无最近打开的文件"), recent_menu)
+            empty_action.setEnabled(False)
+            recent_menu.addAction(empty_action)
+
+    def set_recent_projects(self, paths: list[str]) -> None:
+        """更新最近项目列表，仅原地刷新最近项目子菜单。"""
+        normalized = [str(path) for path in paths]
+        if normalized == self._recent_project_paths:
+            return
+        self._recent_project_paths = normalized
+        if hasattr(self, "_recent_menu"):
+            self._rebuild_recent_menu()
 
     def changeEvent(self, event):
         """切语言时整条工具栏拆掉重建。"""

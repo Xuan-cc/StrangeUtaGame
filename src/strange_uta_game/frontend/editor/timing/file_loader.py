@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,6 +30,9 @@ if TYPE_CHECKING:
 
 class FileLoader:
     """文件加载管理器 — 处理项目/音频/歌词的加载"""
+
+    _RECENT_PROJECTS_KEY = "recent_projects"
+    _MAX_RECENT_PROJECTS = 10
 
     _AUDIO_EXTENSIONS = {
         ".mp3", ".wav", ".flac", ".ogg",
@@ -98,6 +102,94 @@ class FileLoader:
         settings = AppSettings()
         settings.set("export.last_export_dir", parent_dir)
         settings.save()
+
+    def _get_app_settings(self) -> AppSettings:
+        """优先使用设置界面的共享实例，避免旧内存稍后覆盖磁盘。"""
+        try:
+            setting_iface = self._editor._get_setting_interface()
+            if setting_iface is not None:
+                return setting_iface.get_settings()
+        except Exception:
+            pass
+        return AppSettings()
+
+    @staticmethod
+    def _recent_path_key(file_path: str) -> str:
+        """生成适合当前平台的路径去重键。"""
+        return os.path.normcase(os.path.abspath(file_path))
+
+    def recent_projects(self) -> list[str]:
+        """读取最近项目，过滤重复、无效类型及已不存在的文件。"""
+        settings = self._get_app_settings()
+        stored_paths = settings.get(self._RECENT_PROJECTS_KEY, [])
+        raw_paths = stored_paths if isinstance(stored_paths, list) else []
+
+        paths: list[str] = []
+        seen: set[str] = set()
+        for value in raw_paths:
+            if not isinstance(value, str) or not value.strip():
+                continue
+            path = str(Path(value).expanduser().absolute())
+            key = self._recent_path_key(path)
+            if (
+                key in seen
+                or Path(path).suffix.lower() != ".sug"
+                or not Path(path).is_file()
+            ):
+                continue
+            seen.add(key)
+            paths.append(path)
+            if len(paths) >= self._MAX_RECENT_PROJECTS:
+                break
+
+        if paths != stored_paths:
+            settings.set(self._RECENT_PROJECTS_KEY, paths)
+            settings.save()
+        return paths
+
+    def _record_recent_project(self, file_path: str) -> None:
+        """把成功打开的项目移到最近列表首位。"""
+        path = str(Path(file_path).expanduser().absolute())
+        key = self._recent_path_key(path)
+        paths = [
+            existing for existing in self.recent_projects()
+            if self._recent_path_key(existing) != key
+        ]
+        paths.insert(0, path)
+        paths = paths[:self._MAX_RECENT_PROJECTS]
+
+        settings = self._get_app_settings()
+        settings.set(self._RECENT_PROJECTS_KEY, paths)
+        settings.save()
+        if hasattr(self._editor, "toolbar"):
+            self._editor.toolbar.set_recent_projects(paths)
+
+    def clear_recent_projects(self) -> None:
+        """清空最近打开记录并立即刷新菜单。"""
+        settings = self._get_app_settings()
+        settings.set(self._RECENT_PROJECTS_KEY, [])
+        settings.save()
+        if hasattr(self._editor, "toolbar"):
+            self._editor.toolbar.set_recent_projects([])
+
+    def open_recent_project(self, file_path: str) -> None:
+        """从最近列表打开项目；文件失效时清理菜单记录。"""
+        if not Path(file_path).is_file():
+            # recent_projects 会过滤并持久化失效路径。
+            paths = self.recent_projects()
+            if hasattr(self._editor, "toolbar"):
+                self._editor.toolbar.set_recent_projects(paths)
+            InfoBar.warning(
+                title=self._editor.tr("文件不存在"),
+                content=self._editor.tr("最近打开的项目已被移动或删除。"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self._editor,
+            )
+            return
+        self.load_project(file_path)
 
     def prompt_load_project(self):
         """弹出文件选择框加载项目"""
@@ -401,6 +493,7 @@ class FileLoader:
             self._editor.set_project(project)
 
         self._apply_project_extras(file_path)
+        self._record_recent_project(file_path)
 
         if self._project_on_success:
             cb = self._project_on_success
