@@ -22,7 +22,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
-from PyQt6.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QRect, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QKeyEvent
 from PyQt6.QtWidgets import (
     QApplication,
@@ -78,6 +78,7 @@ from strange_uta_game.frontend.fluent_widgets import (
 from .line_interface import LineDetailDialog
 from .timing import (
     CharEditDialog,
+    CharacterSnapshotCommand,
     CompleteTimestampDialog,
     EditorToolBar,
     FileLoader,
@@ -86,6 +87,7 @@ from .timing import (
     MiniSingerManager,
     ModifyCharacterDialog,
     PlaybackRangeCommand,
+    RubyEditPopup,
     SentenceSnapshotCommand,
     TimelineWidget,
     TransportBar,
@@ -4974,50 +4976,79 @@ class EditorInterface(QWidget):
         self._update_line_info()
 
     def _on_char_edit_requested(self, line_idx: int, char_idx: int):
-        """F2 键弹出注音编辑对话框"""
-        if not self._project or line_idx >= len(self._project.sentences):
+        """F2: show a compact ruby editor above the focused character."""
+        if not self._project or not 0 <= line_idx < len(self._project.sentences):
             return
         sentence = self._project.sentences[line_idx]
-        if char_idx >= len(sentence.chars):
+        if not 0 <= char_idx < len(sentence.chars):
             return
 
-        before_sentences = deepcopy(self._project.sentences)
+        before_character = deepcopy(sentence.characters[char_idx])
 
-        dialog = CharEditDialog(sentence, char_idx, self)
-        dialog.exec()
+        def _toggle_link_from_popup() -> None:
+            nonlocal before_character
+            self._toggle_word_join_single(line_idx, char_idx)
+            # The F3-compatible action owns its own undo command. If ruby is
+            # saved afterwards, its undo snapshot must preserve this new link.
+            before_character = deepcopy(
+                self._project.sentences[line_idx].characters[char_idx]
+            )
+
+        dialog = RubyEditPopup(
+            sentence.characters[char_idx],
+            can_link_next=char_idx < len(sentence.characters) - 1,
+            parent=self,
+            link_toggle_callback=_toggle_link_from_popup,
+        )
+        anchor = self.preview.character_global_rect(line_idx, char_idx)
+        if anchor is None:
+            self.preview.repaint()
+            anchor = self.preview.character_global_rect(line_idx, char_idx)
+        if anchor is None:
+            preview_top_left = self.preview.mapToGlobal(self.preview.rect().topLeft())
+            anchor = QRect(preview_top_left, self.preview.rect().size())
+        dialog.show_above(anchor)
         if dialog.was_modified():
-            command_manager = None
-            if self._timing_service:
-                command_manager = self._timing_service.command_manager
+            command_manager = (
+                self._timing_service.command_manager
+                if self._timing_service
+                else None
+            )
             if command_manager is not None:
-                after_sentences = deepcopy(self._project.sentences)
-                # 用连词范围的起始字符描述
-                word_start, word_end = sentence.get_word_char_range(char_idx)
-                if word_end - word_start > 1:
-                    desc = f"编辑连词（第 {line_idx + 1} 句 第 {word_start + 1}-{word_end} 字）"
-                else:
-                    desc = f"编辑字符（第 {line_idx + 1} 句 第 {char_idx + 1} 字）"
-                cmd = SentenceSnapshotCommand(
+                desc = f"编辑注音（第 {line_idx + 1} 句 第 {char_idx + 1} 字）"
+                cmd = CharacterSnapshotCommand(
                     self._project,
-                    before_sentences,
-                    after_sentences,
+                    line_idx,
+                    char_idx,
+                    before_character,
+                    sentence.characters[char_idx],
                     desc,
                 )
-                cursor_pos = (self._current_line_idx, self.preview._current_char_idx)
-                cmd.undo_position = cursor_pos
-                cmd.redo_position = cursor_pos
                 command_manager.execute(cmd)
 
-            self._reapply_global_offset()
-            if self._timing_service:
-                self._timing_service.rebuild_global_checkpoints()
-            self.preview._update_display()
-            self._update_time_tags_display()
-            self._update_status()
-            if hasattr(self, "_store") and self._store:
-                self._store.notify("rubies")
-                self._store.notify("checkpoints")
-                self._store.notify("lyrics")
+            InfoBar.success(
+                title=self.tr("注音已更新"),
+                content=self.tr("已应用「{char}」的注音").format(
+                    char=sentence.chars[char_idx]
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=1400,
+                parent=self,
+            )
+            QTimer.singleShot(
+                0, lambda li=line_idx: self._finish_inline_ruby_edit(li)
+            )
+
+    def _finish_inline_ruby_edit(self, line_idx: int) -> None:
+        """Refresh only ruby consumers after the popup has visually closed."""
+        if not self._project or not 0 <= line_idx < len(self._project.sentences):
+            return
+        self.preview._update_display()
+        self._update_time_tags_display()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("rubies")
 
     def _add_checkpoint(self):
         """F4 增加当前字符节奏点 (+1)。"""
@@ -5586,16 +5617,25 @@ class EditorInterface(QWidget):
 
         ch = sentence.characters[char_idx]
         new_linked = not ch.linked_to_next
-
-        def _mutate():
-            ch.linked_to_next = new_linked
-            return (line_idx, char_idx, 0, "checkpoints")
-
-        self._execute_structural_edit(
-            "连词" if new_linked else "取消连词",
-            _mutate,
-            move_cp=False,
+        before_character = deepcopy(ch)
+        ch.linked_to_next = new_linked
+        command_manager = (
+            self._timing_service.command_manager if self._timing_service else None
         )
+        if command_manager is not None:
+            command_manager.execute(
+                CharacterSnapshotCommand(
+                    self._project,
+                    line_idx,
+                    char_idx,
+                    before_character,
+                    ch,
+                    "连词" if new_linked else "取消连词",
+                )
+            )
+        self.preview._update_display()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("rubies")
 
         InfoBar.success(
             title=self.tr("连词") if new_linked else self.tr("取消连词"),

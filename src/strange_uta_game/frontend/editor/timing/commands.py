@@ -7,12 +7,60 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Callable
 
 from strange_uta_game.backend.application.commands import (
     Command,
     SentenceSnapshotCommand,
 )
+from strange_uta_game.backend.domain import Character, Project
+
+
+class CharacterSnapshotCommand(Command):
+    """Undo one-character edits without copying the entire lyric project."""
+
+    def __init__(
+        self,
+        project: Project,
+        line_idx: int,
+        char_idx: int,
+        before: Character,
+        after: Character,
+        description: str,
+    ) -> None:
+        self._project = project
+        self._line_idx = line_idx
+        self._char_idx = char_idx
+        self._before = deepcopy(before)
+        self._after = deepcopy(after)
+        self._description = description
+        self._initial_execute = True
+
+    def _apply(self, state: Character) -> None:
+        if not 0 <= self._line_idx < len(self._project.sentences):
+            return
+        sentence = self._project.sentences[self._line_idx]
+        if not 0 <= self._char_idx < len(sentence.characters):
+            return
+        sentence.characters[self._char_idx] = deepcopy(state)
+        self._project._update_timestamp()
+
+    def execute(self) -> None:
+        # Callers mutate the live character before registering the command.
+        # Preserve its identity on initial registration; redo applies a copy.
+        if self._initial_execute:
+            self._initial_execute = False
+            self._project._update_timestamp()
+            return
+        self._apply(self._after)
+
+    def undo(self) -> None:
+        self._apply(self._before)
+
+    @property
+    def description(self) -> str:
+        return self._description
 
 
 class PlaybackRangeCommand(Command):
@@ -44,6 +92,7 @@ class PlaybackRangeCommand(Command):
 _SentenceSnapshotCommand = SentenceSnapshotCommand
 
 __all__ = [
+    "CharacterSnapshotCommand",
     "PlaybackRangeCommand",
     "SentenceSnapshotCommand",
     "_SentenceSnapshotCommand",

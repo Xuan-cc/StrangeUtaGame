@@ -507,6 +507,13 @@ class KaraokePreview(QWidget):
                 self._line_switch_points.append((ts, idx))
         self._line_switch_points.sort()
 
+    def character_global_rect(self, line_idx: int, char_idx: int) -> QRect | None:
+        """Return a rendered character hitbox in global screen coordinates."""
+        for rect, hit_line, hit_char in self._char_hitboxes:
+            if hit_line == line_idx and hit_char == char_idx:
+                return QRect(self.mapToGlobal(rect.topLeft()), rect.size())
+        return None
+
     def set_disable_click_jump(self, disable: bool):
         """设置是否禁用单击跳转功能。"""
         self._disable_click_jump = bool(disable)

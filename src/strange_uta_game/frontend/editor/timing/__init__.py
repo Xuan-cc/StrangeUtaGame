@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from .bulk_change_dialog import BulkChangeDialog
-from .commands import PlaybackRangeCommand, SentenceSnapshotCommand, _SentenceSnapshotCommand
+from .commands import CharacterSnapshotCommand, PlaybackRangeCommand, SentenceSnapshotCommand, _SentenceSnapshotCommand
 from .dialogs import (
     CharEditDialog,
     CompleteTimestampDialog,
@@ -15,6 +15,7 @@ from .dialogs import (
 )
 from .file_loader import FileLoader
 from .karaoke_preview import KaraokePreview
+from .ruby_popup import RubyEditPopup
 from .singer_manager_window import MiniSingerManager
 from .timeline_widget import TimelineWidget
 from .toolbar import EditorToolBar
@@ -22,12 +23,14 @@ from .transport_bar import TransportBar
 
 __all__ = [
     "SentenceSnapshotCommand",
+    "CharacterSnapshotCommand",
     "PlaybackRangeCommand",
     "_SentenceSnapshotCommand",
     "TransportBar",
     "EditorToolBar",
     "FileLoader",
     "KaraokePreview",
+    "RubyEditPopup",
     "MiniSingerManager",
     "TimelineWidget",
     "ModifyCharacterDialog",
