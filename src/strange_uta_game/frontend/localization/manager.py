@@ -291,6 +291,9 @@ class LocalizationManager:
         if app is None:
             # 极少见——直接更新内部状态以便后续 install_translators 用。
             self._current = lang
+            self._effective_code = effective.code
+            from strange_uta_game.frontend.font_utils import set_ui_language
+            set_ui_language(effective.code)
             return lang
 
         # ── 卸载旧的 translator ─────────────────────────────────────
@@ -345,6 +348,10 @@ class LocalizationManager:
         # 实际生效的真实语言，用 self.effective_code 读取。
         self._current = lang
         self._effective_code = effective.code
+        # 翻译语言与界面字体保持一致。应用级字体负责普通/继承字体的控件，
+        # ui_font() 则确保显式指定字号的新控件也使用同一套语言字体链。
+        from strange_uta_game.frontend.font_utils import set_ui_language
+        set_ui_language(effective.code)
         self.language_changed.emit(lang.code)
         return lang
 

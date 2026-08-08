@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from PyQt6.QtCore import Qt, QCoreApplication
-from PyQt6.QtGui import QFont
+from strange_uta_game.frontend.font_utils import ui_font
 
 
 def _tr(s: str) -> str:
@@ -139,9 +139,9 @@ class _ProxyStatusCard(SettingCard):
             parent,
         )
         self.btn_detect = PushButton(_tr("自动检测"), self)
-        self.btn_detect.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_detect.setFont(ui_font(10))
         self.btn_test = PushButton(_tr("测试连通性"), self)
-        self.btn_test.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_test.setFont(ui_font(10))
         self.hBoxLayout.addWidget(self.btn_detect, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addWidget(self.btn_test, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)

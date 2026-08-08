@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from PyQt6.QtCore import QCoreApplication, QUrl
-from PyQt6.QtGui import QDesktopServices, QFont
+from PyQt6.QtGui import QDesktopServices
+from strange_uta_game.frontend.font_utils import ui_font
 
 
 def _tr(s: str) -> str:
@@ -99,7 +100,7 @@ class UpdateAvailableDialog(MessageBoxBase):
         body_view.setReadOnly(True)
         body_view.setMinimumHeight(260)
         body_view.setMinimumWidth(560)
-        body_view.setFont(QFont("Microsoft YaHei", 10))
+        body_view.setFont(ui_font(10))
 
         if len(all_releases) > 1:
             sections: List[str] = []

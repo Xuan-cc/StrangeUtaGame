@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional
 
 from PyQt6.QtCore import Qt, QCoreApplication, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QFont
+from strange_uta_game.frontend.font_utils import ui_font
 from PyQt6.QtWidgets import QWidget
 from qfluentwidgets import (
     FluentIcon as FIF,
@@ -130,7 +130,7 @@ class _SourceOrderCard(SettingCard):
             parent,
         )
         self.btn_edit = PushButton(_tr("编辑顺序"), self)
-        self.btn_edit.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_edit.setFont(ui_font(10))
         self.btn_edit.setMinimumWidth(110)
         self.hBoxLayout.addWidget(self.btn_edit, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
@@ -173,7 +173,7 @@ class _CheckNowCard(SettingCard):
             parent,
         )
         self.btn = PushButton(_tr("检查更新"), self)
-        self.btn.setFont(QFont("Microsoft YaHei", 10))
+        self.btn.setFont(ui_font(10))
         self.btn.setMinimumWidth(120)
         self.hBoxLayout.addWidget(self.btn, 0, Qt.AlignmentFlag.AlignRight)
         self.hBoxLayout.addSpacing(16)
