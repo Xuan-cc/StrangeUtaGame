@@ -27,6 +27,7 @@ from strange_uta_game.backend.application import CommandManager, TimingService
 from strange_uta_game.backend.domain import Project
 from strange_uta_game.frontend.project_store import ProjectStore
 from strange_uta_game.frontend.theme import theme
+from strange_uta_game.frontend.dialog_policy import install_non_modal_dialog_policy
 from strange_uta_game.frontend.fluent_widgets import message_choice, message_question
 from strange_uta_game.frontend.window_sizing import (
     center_on_screen,
@@ -59,6 +60,12 @@ class MainWindow(MSFluentWindow):
     project_save_failed = pyqtSignal(str)
 
     def __init__(self, embedded: bool = False, settings_provider=None, progress_callback=None):
+        # 嵌入模式不经过仓库根目录的 main.py，因此在主窗口入口也安装一次。
+        # 安装函数可重复调用，确保 standalone / embedded 的所有弹窗行为一致。
+        app = QApplication.instance()
+        if app is not None:
+            install_non_modal_dialog_policy(app)
+
         # ⚠ 必须在 super().__init__() 之前赋值！MSFluentWindow 初始化
         # 过程中可能触发 resizeEvent / changeEvent，那些 handler 会调
         # _schedule_geometry_save / _save_window_geometry / _restore_window_geometry

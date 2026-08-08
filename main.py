@@ -58,6 +58,12 @@ class SUGApplication(QApplication):
 # 创建应用实例
 app = SUGApplication(sys.argv)
 
+# 所有弹窗都作为普通窗口显示：即使调用方使用 QDialog.exec() 等待返回值，
+# 也不禁用主窗口或其他弹窗，避免多个模态窗口互相争抢导致无法操作。
+from strange_uta_game.frontend.dialog_policy import install_non_modal_dialog_policy
+
+install_non_modal_dialog_policy(app)
+
 # 确定图标路径（后续多次使用）
 _icon_path = (
     Path(__file__).parent / "src" / "strange_uta_game" / "resource" / "icon.ico"

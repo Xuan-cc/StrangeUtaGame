@@ -100,7 +100,8 @@ class CalibrationDialog(QDialog):
         self._click_audio = self._generate_click()
 
         self.setWindowTitle(self.tr("Offset 校准"))
-        self.setModal(True)
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        self.setModal(False)
         fit_to_screen(self, 880, 420)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
