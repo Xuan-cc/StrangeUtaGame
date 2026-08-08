@@ -761,7 +761,7 @@ class TestNicokaraTagsRoundTrip:
             "Album": "テストアルバム",
             "TaggingBy": "tester",
             "SilencemSec": "500",
-            "Offset": "1000",  # 应被跳过
+            "Offset": "+1000",  # 原样保留到 custom
             "FooBar": "baz",  # 未知 → custom
             "Hello": "World",  # 未知 → custom
         }
@@ -774,13 +774,54 @@ class TestNicokaraTagsRoundTrip:
         assert tags.get("tagging_by") == "tester"
         assert tags.get("silence_ms") == 500
 
-        # @Offset 跳过：不在 tags 也不在 custom
+        # @Offset 与其他自定义标签一样保留，便于查看和 round-trip
         custom = tags.get("custom") or []
-        assert all("Offset" not in c for c in custom), custom
+        assert "@Offset=+1000" in custom
 
         # 未知键完整保留 @Key=Value
         assert "@FooBar=baz" in custom
         assert "@Hello=World" in custom
+
+    def test_detected_nicokara_syncs_offset_and_custom_tags(self):
+        """Nicokara LRC 的 @Offset/未知标签应进入 @Custom 列表。"""
+        from strange_uta_game.frontend.editor.timing.lyric_loader import (
+            parse_lyric_content,
+        )
+
+        class _Settings:
+            def __init__(self):
+                self.tags = None
+
+            def set(self, key, value):
+                if key == "nicokara_tags":
+                    self.tags = value
+
+            def save(self):
+                pass
+
+        class _SettingInterface:
+            def __init__(self):
+                self.settings = _Settings()
+
+            def get_settings(self):
+                return self.settings
+
+        setting_iface = _SettingInterface()
+        content = (
+            "[00:00:10]【sv1】あ[00:00:20]\n"
+            "@Offset=-250\n"
+            "@FooBar=baz\n"
+        )
+
+        _, is_nicokara, _, _ = parse_lyric_content(
+            content,
+            "singer_1",
+            setting_iface=setting_iface,
+        )
+
+        assert is_nicokara is True
+        custom = setting_iface.settings.tags.get("custom") or []
+        assert custom == ["@Offset=-250", "@FooBar=baz"]
 
     def test_sync_overwrites_previous_tags_K(self, tmp_path, monkeypatch):
         """覆盖式：第二次同步完全替换前次写入，无合并。"""

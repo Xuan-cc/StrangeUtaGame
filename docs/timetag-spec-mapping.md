@@ -24,7 +24,7 @@
 | **A** | 时间戳 `[MM:SS:CC]` 每段必须 2 位 | 接受 `\d{1,2}:\d{2}:\d{2}`（含 1 位分钟段） | **已落地（宽松+warning）** | 必须 | `NICOKARA_TS_PATTERN` 保留宽松匹配；新增 `NICOKARA_TS_STRICT_PATTERN`；`parse()` 入口对违规第 1 段计数 + `logger.warning` |
 | B | 时间戳上限 `[99:59:99]` = 5,999,990ms | 不校验上限 | 未实装 | 可选 | Stage A 不实装；溢出由下游导出器自然 wrap |
 | C | 拡張 ts `zz` 单位 = 10ms (厘秒, cs) | 已按 cs 解析 | ✓ 已合规 | 推荐 | `LRCParser` / `NicokaraParser` 均 `int(cc) * 10` |
-| D | `@Offset` 单位 = 毫秒 (ms) | 由 `Project.offset_ms` 承载 | ✓ 已合规 | 推荐 | `lyric_loader._sync_nicokara_metadata_to_settings` 跳过 `@Offset`，避免双重写入 |
+| D | `@Offset` 单位 = 毫秒 (ms) | 导入时保留到 `tags["custom"]` | ✓ 已合规 | 推荐 | 保留源 LRC 标签，便于在 @Custom 中查看并 round-trip |
 | E | `@Title` / `@Artist` / `@Album` | 已支持读写 | ✓ 已合规 | ✓ | `known_map` 映射到 `tags["title/artist/album"]` |
 | F | `@TaggingBy` | 已支持读写 | ✓ 已合规 | ✓ | `tags["tagging_by"]` |
 | **G** | @Ruby 适用区间 `[t1, t2]` 左闭右闭（`pos_start ≤ t ≤ pos_end`） | 末端使用 `>=`（左闭右开） | **已修正** | 必须 | `lyric_parser.py:1027` `>=` → `>`；docstring 同步 |
@@ -74,7 +74,7 @@
 - 映射规则：
   - `Title / Artist / Album / TaggingBy` → `tags["title/artist/album/tagging_by"]`
   - `SilencemSec` → `tags["silence_ms"] (int)`，转换失败 fallback 到 custom
-  - `Offset` → 跳过（由 `Project.offset_ms` 承载）
+  - `Offset` → `tags["custom"]`（保留原始 `@Offset=...` 行）
   - 其他全部 → `tags["custom"]` list，元素形如 `"@Key=Value"`
 - 覆盖式：每次导入完全替换 `AppSettings.nicokara_tags`（用户语义：「每次写入项目都换」）
 - 写入失败静默吞掉（`except Exception: pass`），不阻断导入；exporter 侧 fallback 仍能用旧值
