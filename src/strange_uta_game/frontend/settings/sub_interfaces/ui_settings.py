@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import QTimer, Qt
 from qfluentwidgets import FluentIcon as FIF, PushButton, SettingCard, SettingCardGroup
 
 from strange_uta_game.frontend.font_utils import DEFAULT_FONT_FAMILY, resolve_font_family
 
 from ..cards import ComboSettingCard, DoubleSpinSettingCard, FontSettingCard, SpinSettingCard, TextSettingCard
 from ..checkpoint_marker_dialog import CheckpointMarkerDialog
+from ..ui_preview import InterfacePreview
 from .base import SubSettingInterface
 
 
@@ -25,6 +25,12 @@ class UISubInterface(SubSettingInterface):
 
     def _init_ui(self):
         tr = self.tr
+        # 预览直接挂在 viewport 上，而不是 scrollWidget 中：设置列表滚动时它仍固定
+        # 在右上角。浮层不接收鼠标事件，不会挡住下方卡片的操作。
+        self.preview = InterfacePreview(self.viewport(), floating=True)
+        self.preview.show()
+        QTimer.singleShot(0, self._position_preview)
+
         g = SettingCardGroup(tr("界面设定"), self.scrollWidget)
         self._tr_register(g, title_source="界面设定")
         self.card_theme = self._tr_register(
@@ -127,6 +133,33 @@ class UISubInterface(SubSettingInterface):
             g.addSettingCard(c)
         self.expandLayout.addWidget(g)
 
+    def _position_preview(self):
+        viewport = self.viewport()
+        margin = 18
+        viewport_width = viewport.width()
+        viewport_height = viewport.height()
+        available_width = max(1, viewport_width - margin * 2)
+        available_height = max(1, viewport_height - margin * 2)
+        width = min(680, max(420, int(viewport_width * 0.46)), available_width)
+        height = min(340, max(280, int(viewport_height * 0.38)), available_height)
+        self.preview.setGeometry(
+            max(margin, viewport_width - width - margin),
+            margin,
+            width,
+            height,
+        )
+        self.preview.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "preview"):
+            self._position_preview()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if hasattr(self, "preview"):
+            self._position_preview()
+
     def _on_open_checkpoint_markers(self):
         if self._settings_ref is None:
             return
@@ -136,24 +169,58 @@ class UISubInterface(SubSettingInterface):
             markers = dialog.get_markers()
             self._settings_ref.set("ui.checkpoint_markers", markers)
             self._settings_ref.save()
+            self._refresh_preview()
             # 通知外层
             self._notify_changed()
 
     def connect_signals(self):
-        self.card_theme.index_changed.connect(self._notify_changed)
-        self.card_main_font.value_changed.connect(self._notify_changed)
-        self.card_ruby_font.value_changed.connect(self._notify_changed)
-        self.card_font_size.value_changed.connect(self._notify_changed)
-        self.card_current_line_font_size.value_changed.connect(self._notify_changed)
-        self.card_ruby_size.value_changed.connect(self._notify_changed)
-        self.card_ruby_spacing.value_changed.connect(self._notify_changed)
-        self.card_cp_size.value_changed.connect(self._notify_changed)
-        self.card_cp_spacing.value_changed.connect(self._notify_changed)
-        self.card_line_height_factor.value_changed.connect(self._notify_changed)
-        self.card_alignment_margin.value_changed.connect(self._notify_changed)
-        self.card_lyrics_alignment.index_changed.connect(self._notify_changed)
-        self.card_needs_guide_symbol.value_changed.connect(self._notify_changed)
-        self.card_needs_guide_size.value_changed.connect(self._notify_changed)
+        for signal in (
+            self.card_theme.index_changed,
+            self.card_main_font.value_changed,
+            self.card_ruby_font.value_changed,
+            self.card_font_size.value_changed,
+            self.card_current_line_font_size.value_changed,
+            self.card_ruby_size.value_changed,
+            self.card_ruby_spacing.value_changed,
+            self.card_cp_size.value_changed,
+            self.card_cp_spacing.value_changed,
+            self.card_line_height_factor.value_changed,
+            self.card_alignment_margin.value_changed,
+            self.card_lyrics_alignment.index_changed,
+            self.card_needs_guide_symbol.value_changed,
+            self.card_needs_guide_size.value_changed,
+        ):
+            signal.connect(self._on_preview_setting_changed)
+
+    def _on_preview_setting_changed(self, *_args):
+        self._refresh_preview()
+        self._notify_changed()
+
+    def _refresh_preview(self):
+        markers = (
+            self._settings_ref.get("ui.checkpoint_markers", {})
+            if self._settings_ref is not None
+            else {}
+        )
+        self.preview.set_preview_values(
+            main_font=self.card_main_font.value(),
+            ruby_font=self.card_ruby_font.value(),
+            font_size=self.card_font_size.value(),
+            current_line_font_size=self.card_current_line_font_size.value(),
+            ruby_size=self.card_ruby_size.value(),
+            ruby_spacing=self.card_ruby_spacing.value(),
+            cp_size=self.card_cp_size.value(),
+            cp_spacing=self.card_cp_spacing.value(),
+            line_height_factor=self.card_line_height_factor.value(),
+            alignment_margin=self.card_alignment_margin.value(),
+            alignment={0: "left", 1: "center", 2: "right"}.get(
+                self.card_lyrics_alignment.currentIndex(), "center"
+            ),
+            needs_guide_symbol=(self.card_needs_guide_symbol.value() or "✚").strip()
+            or "✚",
+            needs_guide_size=self.card_needs_guide_size.value(),
+            checkpoint_marker=markers.get("cp_first_timed", "▶"),
+        )
 
     def load_settings(self, s):
         self._settings_ref = s
@@ -179,6 +246,7 @@ class UISubInterface(SubSettingInterface):
         self.card_lyrics_alignment.setCurrentIndex(alignment_idx)
         self.card_needs_guide_symbol.setValue(s.get("ui.needs_guide_symbol", "✚"))
         self.card_needs_guide_size.setValue(s.get("ui.needs_guide_size", 12))
+        self._refresh_preview()
 
     def collect_settings(self, s):
         s.set("ui.theme", {0: "auto", 1: "light", 2: "dark"}.get(self.card_theme.currentIndex(), "auto"))
