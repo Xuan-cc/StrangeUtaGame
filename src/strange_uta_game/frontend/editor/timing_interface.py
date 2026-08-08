@@ -1998,6 +1998,11 @@ class EditorInterface(QWidget):
                     move_cp=getattr(cmd, "move_cp", True),
                 )
             else:
+                # Non-structural commands (for example timestamp edits) mutate the
+                # project in place.  Refresh the preview as well as the waveform;
+                # otherwise its per-sentence render cache keeps showing pre-undo data
+                # until an unrelated cursor/line change invalidates the display.
+                self.refresh_lyric_display()
                 self._update_time_tags_display()
                 self._apply_checkpoint_position(self._timing_service.get_current_position())
                 self._update_status()
@@ -2015,6 +2020,9 @@ class EditorInterface(QWidget):
                     move_cp=getattr(cmd, "move_cp", True),
                 )
             else:
+                # Keep redo symmetric with undo so cached timestamp/checkpoint
+                # rendering is visible immediately.
+                self.refresh_lyric_display()
                 self._update_time_tags_display()
                 self._apply_checkpoint_position(self._timing_service.get_current_position())
                 self._update_status()
