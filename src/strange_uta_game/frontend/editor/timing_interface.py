@@ -4531,6 +4531,15 @@ class EditorInterface(QWidget):
                 self._key_map_short = self._key_map_edit_short
                 self._key_map_long = self._key_map_edit_long
                 self._key_map = self._key_map_edit_short
+        # 刷新快捷键提示（按新模式取文本）
+        if hasattr(self, "_shortcut_actions_timing"):
+            self._update_shortcut_hint(
+                self._shortcut_actions_timing,
+                getattr(self, "_shortcut_actions_edit", None),
+            )
+
+    # ==================== 播放控制 ====================
+
     def _apply_playback_range(
         self, start_ms: Optional[int], end_ms: Optional[int]
     ) -> None:
@@ -4623,15 +4632,6 @@ class EditorInterface(QWidget):
             duration=2000,
             parent=self,
         )
-
-        # 刷新快捷键提示（按新模式取文本）
-        if hasattr(self, "_shortcut_actions_timing"):
-            self._update_shortcut_hint(
-                self._shortcut_actions_timing,
-                getattr(self, "_shortcut_actions_edit", None),
-            )
-
-    # ==================== 播放控制 ====================
 
     def _on_play(self):
         if self._timing_service:
