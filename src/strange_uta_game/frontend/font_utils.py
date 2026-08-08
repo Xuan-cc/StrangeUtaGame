@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import sys
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QFontDatabase, QFontMetrics
 
 
@@ -117,35 +116,50 @@ def _apply_application_ui_font(previous_families: list[str] | None = None) -> No
     families = ui_font_families()
     old_fluent_families: list[str] = []
     try:
-        from qfluentwidgets import fontFamilies, setFontFamilies
+        import qfluentwidgets
 
-        old_fluent_families = fontFamilies()
-        setFontFamilies(families)
+        old_fluent_families = qfluentwidgets.fontFamilies()
+        set_fluent_font_families = qfluentwidgets.setFontFamilies
     except Exception:
         # 字体工具也会在不安装 qfluentwidgets 的最小环境中使用。
-        pass
+        set_fluent_font_families = None
 
     # 延迟导入避免仅使用字体测量工具时强制创建/依赖 QApplication。
-    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtWidgets import QApplication, QWidget
 
     app = QApplication.instance()
     if app is None:
+        if set_fluent_font_families is not None:
+            set_fluent_font_families(families)
         return
-    font = QFont(app.font())
-    font.setFamilies(families)
-    app.setFont(font)
 
     managed_chains = [old_fluent_families]
     if previous_families:
         managed_chains.append(previous_families)
+    managed_primary_families = {
+        chain[0].casefold() for chain in managed_chains if chain
+    }
+
+    # 必须在修改 QApplication / Fluent 全局字体前先记录控件。父控件收到
+    # FontChange 时会立即改变子控件的继承字体，如果边修改边筛选，遍历顺序靠后的
+    # QLabel、LineEdit 等子控件就可能被漏掉，随后又被自身样式恢复为旧字体。
+    managed_widgets: list[tuple[QWidget, QFont]] = []
     for widget in app.allWidgets():
-        if not widget.testAttribute(Qt.WidgetAttribute.WA_SetFont):
-            continue
-        current = widget.font()
-        if current.families() not in managed_chains:
-            continue
-        current.setFamilies(families)
-        widget.setFont(current)
+        current = QFont(widget.font())
+        current_families = current.families()
+        if current_families and current_families[0].casefold() in managed_primary_families:
+            managed_widgets.append((widget, current))
+
+    if set_fluent_font_families is not None:
+        set_fluent_font_families(families)
+
+    font = QFont(app.font())
+    font.setFamilies(families)
+    app.setFont(font)
+
+    for widget, widget_font in managed_widgets:
+        widget_font.setFamilies(families)
+        widget.setFont(widget_font)
 
 
 def set_ui_font_override(family: str | None) -> str:

@@ -47,7 +47,8 @@ def test_language_manager_updates_application_font(qapp, monkeypatch):
 
 
 def test_user_override_precedes_language_font_and_keeps_fallbacks(qapp, monkeypatch):
-    from qfluentwidgets import PushButton
+    from PyQt6.QtWidgets import QLabel, QLineEdit, QWidget
+    from qfluentwidgets import FluentIcon, PushButton, SettingCard, SettingCardGroup
 
     monkeypatch.setattr(
         "strange_uta_game.frontend.font_utils.QFontDatabase.families",
@@ -56,10 +57,37 @@ def test_user_override_precedes_language_font_and_keeps_fallbacks(qapp, monkeypa
     try:
         set_ui_language("ja_JP")
         existing_fluent_button = PushButton("existing")
+        other_page = QWidget()
+        other_page_label = QLabel("Other page label", other_page)
+        other_page_input = QLineEdit(other_page)
+        settings_group = SettingCardGroup("Settings")
+        settings_card = SettingCard(
+            FluentIcon.SETTING,
+            "Child title",
+            "Child content",
+            settings_group,
+        )
+        settings_group.addSettingCard(settings_card)
         assert set_ui_font_override("custom ui") == "Custom UI"
         assert ui_font(10).families()[:2] == ["Custom UI", "Yu Gothic UI"]
         assert qapp.font().families()[:2] == ["Custom UI", "Yu Gothic UI"]
         assert existing_fluent_button.font().families()[:2] == [
+            "Custom UI",
+            "Yu Gothic UI",
+        ]
+        assert settings_card.titleLabel.font().families()[:2] == [
+            "Custom UI",
+            "Yu Gothic UI",
+        ]
+        assert settings_card.contentLabel.font().families()[:2] == [
+            "Custom UI",
+            "Yu Gothic UI",
+        ]
+        assert other_page_label.font().families()[:2] == [
+            "Custom UI",
+            "Yu Gothic UI",
+        ]
+        assert other_page_input.font().families()[:2] == [
             "Custom UI",
             "Yu Gothic UI",
         ]
