@@ -234,8 +234,35 @@ def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
             i += 1
         elif _is_kana_text(char.char):
             if not any(romaji_by_char.get(i, [])):
-                # A consumed sokuon/small kana has no romaji annotation of its
-                # own.  Keep it as a plain timed character.
+                # Romanization stores a sokuon's combined pronunciation on the
+                # affected following kana.  It is still one pronunciation unit,
+                # so keep the sokuon and that mora in the same export block.
+                if (
+                    char.char in ("っ", "ッ")
+                    and i + 1 < len(chars)
+                    and not chars[i + 1].ruby
+                    and _is_kana_text(chars[i + 1].char)
+                    and any(romaji_by_char.get(i + 1, []))
+                ):
+                    mora_end = i + 2
+                    while (
+                        mora_end < len(chars)
+                        and not chars[mora_end].ruby
+                        and _is_kana_text(chars[mora_end].char)
+                        and not any(romaji_by_char.get(mora_end, []))
+                    ):
+                        mora_end += 1
+                    segments.append(
+                        _self_kana_group_romaji(
+                            chars[i:mora_end],
+                            romaji_by_char.get(i + 1, []),
+                            romaji_char_index=1,
+                        )
+                    )
+                    i = mora_end
+                    continue
+
+                # Other consumed/unsupported kana has no annotation of its own.
                 segments.append(_char_plain(char))
                 i += 1
                 continue
@@ -246,6 +273,7 @@ def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
                 mora_end < len(chars)
                 and not chars[mora_end].ruby
                 and _is_kana_text(chars[mora_end].char)
+                and chars[mora_end].char not in ("っ", "ッ")
                 and not any(romaji_by_char.get(mora_end, []))
             ):
                 mora_end += 1
@@ -296,9 +324,13 @@ def _char_self_ruby_romaji(char: Character, romaji_list: List[str]) -> str:
 def _self_kana_group_romaji(
     group: List[Character],
     romaji_list: List[str],
+    *,
+    romaji_char_index: int = 0,
 ) -> str:
     base = "".join(ch.char for ch in group)
-    romaji_tagged = _build_tagged_parts(romaji_list, _get_ts_list(group[0]))
+    romaji_tagged = _build_tagged_parts(
+        romaji_list, _get_ts_list(group[romaji_char_index])
+    )
     return f"{{{base}|>{romaji_tagged}}}{_format_sentence_end(group[-1])}"
 
 

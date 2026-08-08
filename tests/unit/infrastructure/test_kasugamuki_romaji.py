@@ -23,7 +23,7 @@ def test_export_uses_editor_sentence_level_romaji_context_without_mutating_sourc
     result = sentence_to_kasugamuki_romaji(sentence)
 
     # The sokuon and its following kana are one pronunciation unit.
-    assert result == "{待|ま>ma}っ{て|>tte}"
+    assert result == "{待|ま>ma}{って|>tte}"
     assert sentence.characters[0].ruby.parts[0].text == "ま"
     assert sentence.characters[1].ruby is None
     assert sentence.characters[2].ruby is None
@@ -60,7 +60,7 @@ def test_export_keeps_digraph_in_one_romaji_annotation():
     assert sentence_to_kasugamuki_romaji(sentence) == "{きゃ|>kya}"
 
 
-def test_sokuon_is_plain_and_keeps_its_own_timestamp():
+def test_sokuon_links_to_following_kana_and_romaji_uses_following_timestamp():
     sentence = Sentence(
         singer_id="s1",
         characters=[
@@ -73,9 +73,21 @@ def test_sokuon_is_plain_and_keeps_its_own_timestamp():
         ],
     )
 
-    assert sentence_to_kasugamuki_romaji(sentence) == (
-        "[00:00:10]っ{て|>[00:00:20]tte}"
+    assert sentence_to_kasugamuki_romaji(sentence) == "{って|>[00:00:20]tte}"
+
+
+def test_katakana_sokuon_links_to_following_digraph():
+    sentence = Sentence(
+        singer_id="s1",
+        characters=[
+            Character(char="マ", check_count=1, singer_id="s1"),
+            Character(char="ッ", check_count=1, singer_id="s1"),
+            Character(char="チ", check_count=1, singer_id="s1"),
+            Character(char="ャ", check_count=1, singer_id="s1"),
+        ],
     )
+
+    assert sentence_to_kasugamuki_romaji(sentence) == "{マ|>ma}{ッチャ|>ccha}"
 
 
 def test_linked_word_is_wrapped_as_one_kasugamuki_block():
