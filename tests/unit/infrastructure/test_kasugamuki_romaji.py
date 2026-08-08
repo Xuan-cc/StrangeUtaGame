@@ -113,3 +113,25 @@ def test_linked_word_is_wrapped_as_one_kasugamuki_block():
 
     assert sentence_to_kasugamuki(sentence) == "{明日|あした}"
     assert sentence_to_kasugamuki_romaji(sentence) == "{明日|あした>ashita}"
+
+
+def test_linked_words_without_ruby_are_not_wrapped_in_export_blocks():
+    sentence = Sentence.from_text("Over the rainbow", "s1")
+    for start, end in ((1, 4), (6, 8), (10, 17)):
+        for index in range(start, end - 1):
+            sentence.characters[index].linked_to_next = True
+
+    assert sentence_to_kasugamuki(sentence) == "Over the rainbow"
+    assert sentence_to_kasugamuki_romaji(sentence) == "Over the rainbow"
+
+
+def test_plain_linked_group_keeps_each_character_timestamp():
+    sentence = Sentence.from_text("abc", "s1")
+    for index, char in enumerate(sentence.characters):
+        char.timestamps = [100 + index * 100]
+    sentence.characters[0].linked_to_next = True
+    sentence.characters[1].linked_to_next = True
+
+    expected = "[00:00:10]a[00:00:20]b[00:00:30]c"
+    assert sentence_to_kasugamuki(sentence) == expected
+    assert sentence_to_kasugamuki_romaji(sentence) == expected

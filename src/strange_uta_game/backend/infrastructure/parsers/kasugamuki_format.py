@@ -198,7 +198,10 @@ def _linked_group_kana(group: List[Character]) -> str:
             tagged.append(
                 _build_tagged_parts([part.text for part in ch.ruby.parts], _get_ts_list(ch))
             )
-    return f"{{{base}|{''.join(tagged)}}}{_format_sentence_end(group[-1])}"
+    annotation = "".join(tagged)
+    if not annotation:
+        return "".join(_char_plain(ch) for ch in group)
+    return f"{{{base}|{annotation}}}{_format_sentence_end(group[-1])}"
 
 
 # ── 双注音格式（带罗马音） ──
@@ -351,8 +354,12 @@ def _linked_group_romaji(
         romaji = romaji_by_char.get(group_start + local_idx, [])
         if romaji:
             romaji_tagged.append(_build_tagged_parts(romaji, ts_list))
+    kana_annotation = "".join(kana_tagged)
+    romaji_annotation = "".join(romaji_tagged)
+    if not kana_annotation and not romaji_annotation:
+        return "".join(_char_plain(ch) for ch in group)
     return (
-        f"{{{base}|{''.join(kana_tagged)}>{''.join(romaji_tagged)}}}"
+        f"{{{base}|{kana_annotation}>{romaji_annotation}}}"
         f"{_format_sentence_end(group[-1])}"
     )
 
