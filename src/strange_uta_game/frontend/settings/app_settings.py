@@ -344,7 +344,7 @@ class AppSettings:
                 "cycle_checkpoint": "ALT+RIGHT:short",
                 "cycle_checkpoint_prev": "ALT+LEFT:short",
                 "clear_all_checkpoints": "CTRL+\\:short",
-                "toggle_line_end": "2:short",
+                "toggle_line_end": ".:short",
                 "timestamps_to_sentence_end": "P:short",
                 "edit_ruby": "F2:short",
                 "toggle_word_join": "F3:short",

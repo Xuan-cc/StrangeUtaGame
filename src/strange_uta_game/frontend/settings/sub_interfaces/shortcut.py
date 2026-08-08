@@ -66,7 +66,7 @@ class ShortcutSubInterface(SubSettingInterface):
         ("cycle_checkpoint", FIF.SYNC, "切换字内节奏点", "在当前字符的多个节奏点之间循环切换（Alt+→）", "ALT+RIGHT:short", "ALT+RIGHT:short", "both", None, None, False),
         ("cycle_checkpoint_prev", FIF.SYNC, "切换字内节奏点（反向）", "在当前字符的多个节奏点之间反向循环切换（Alt+←）", "ALT+LEFT:short", "ALT+LEFT:short", "both", None, None, False),
         ("clear_all_checkpoints", FIF.DELETE, "清除所有节奏点", "删除当前字符全部节奏点并取消句尾标记（cc=0，is_sentence_end=False）", "CTRL+\\:short", "CTRL+\\:short", "both", None, None, False),
-        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记", "2:short", "2:short", "split", "切换当前字符的句尾标记（默认 2）", "切换当前字符的句尾标记（默认 2）", False),
+        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记", "2:short", ".:short", "split", "切换当前字符的句尾标记（默认 2）", "切换当前字符的句尾标记（默认句号）", False),
         ("timestamps_to_sentence_end", FIF.TAG, "时间戳转句尾", "取消所有节奏点、清除时间戳并标记为句尾", "P:short", "P:short", "both", None, None, False),
 
         # ── 字符与行编辑 ──
