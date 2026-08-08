@@ -1008,23 +1008,42 @@ class WaveformDisplay(QWidget):
             return
 
         delta = a0.angleDelta().y()
-        new_zoom = self._zoom_factor * (1.2 if delta > 0 else 1 / 1.2)
-        new_zoom = max(1.0, min(100.0, new_zoom))
+        if delta == 0:
+            a0.ignore()
+            return
 
-        if new_zoom != self._zoom_factor:
-            mouse_ratio = a0.position().x() / self.width()
-            visible_start = self._scroll_position
-            visible_duration = 1.0 / self._zoom_factor
-            audio_position = visible_start + mouse_ratio * visible_duration
+        if a0.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            new_zoom = self._zoom_factor * (1.2 if delta > 0 else 1 / 1.2)
+            new_zoom = max(1.0, min(100.0, new_zoom))
 
-            self._zoom_factor = new_zoom
-            new_visible_duration = 1.0 / self._zoom_factor
-            self._scroll_position = self._clamp_scroll(
-                audio_position - mouse_ratio * new_visible_duration)
+            if new_zoom != self._zoom_factor:
+                mouse_ratio = a0.position().x() / max(1, self.width())
+                visible_start = self._scroll_position
+                visible_duration = 1.0 / self._zoom_factor
+                audio_position = visible_start + mouse_ratio * visible_duration
 
-            self.zoom_changed.emit(self._zoom_factor)
-            self.scroll_position_changed.emit(self._scroll_position)
-            self.update()
+                self._suspend_auto_scroll()
+                self._zoom_factor = new_zoom
+                new_visible_duration = 1.0 / self._zoom_factor
+                self._scroll_position = self._clamp_scroll(
+                    audio_position - mouse_ratio * new_visible_duration)
+
+                self.zoom_changed.emit(self._zoom_factor)
+                self.scroll_position_changed.emit(self._scroll_position)
+                self.update()
+        else:
+            # 一格滚轮平移可见窗口的 10%；向上滚回到更早时间，向下滚到更晚时间。
+            wheel_steps = delta / 120.0
+            new_scroll = self._clamp_scroll(
+                self._scroll_position - wheel_steps / (self._zoom_factor * 10.0)
+            )
+            if new_scroll != self._scroll_position:
+                self._suspend_auto_scroll()
+                self._scroll_position = new_scroll
+                self.scroll_position_changed.emit(self._scroll_position)
+                self.update()
+
+        a0.accept()
 
 
 # ──────────────────────────────────────────────
@@ -1252,7 +1271,7 @@ class TimelineWidget(QWidget):
         zoom = self._slider_to_zoom(value)
         self.waveform_display.set_zoom(zoom)
         self.zoom_label.setText(f"{zoom:.1f}x")
-        # set_zoom 不发 zoom_changed 信号（仅 Alt+滚轮缩放才发），故缩放滑条
+        # set_zoom 不发 zoom_changed 信号（仅 Ctrl+滚轮缩放才发），故缩放滑条
         # 改变后需在此显式刷新滚动条 pageStep/range，使滑块长度跟随缩放比例。
         self._update_scroll_bar_metrics()
 

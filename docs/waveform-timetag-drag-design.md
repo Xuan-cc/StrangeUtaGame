@@ -16,7 +16,7 @@
     返回 `(ts, char, id(ch), ruby_text)`，`id(ch)` 仅用于"同字首个 checkpoint 去重显示"。
   - `WaveformDisplay.set_time_tags()`（`frontend/editor/timing/timeline_widget.py:137`）消费 `char_id`
     后丢弃，最终存为 `_time_tags: List[(ts, label, ruby)]`，**无法反查到 `(line, char, cp)`**。
-- 鼠标语义已占满：左键单击=seek，左键拖动=pan，滚轮=zoom
+- 鼠标语义已占满：左键单击=seek，左键拖动=pan，滚轮=pan，Ctrl+滚轮=zoom
   （`timeline_widget.py:397-465`）。
 - 显示值 ≠ 存储值：波形显示的是 `global = timestamps[i] + _global_offset_ms`；
   存储/导出用的是 raw `Character.timestamps[]`。`_global_offset_ms` 是**项目级单一值**，
@@ -85,7 +85,7 @@
   - 命中把手但未拖动 → 发 `tag_clicked(line, char, cp, is_end)` + 选中（Ctrl 则多选切换）+
     `seek_requested(ts)`；
   - 未命中把手且未平移 → 原 seek。
-- 拖拽期间临时忽略 wheel-zoom（避免映射漂移）。
+- 拖拽期间临时忽略 Ctrl+wheel zoom（避免映射漂移）。
 
 选中态样式（见 §4）；选中集在外部数据变更时清空（见 §3.5）。
 
