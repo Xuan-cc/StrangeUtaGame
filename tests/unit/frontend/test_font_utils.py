@@ -47,12 +47,19 @@ def test_language_manager_updates_application_font(qapp, monkeypatch):
 
 
 def test_user_override_precedes_language_font_and_keeps_fallbacks(qapp, monkeypatch):
-    from PyQt6.QtWidgets import QLabel, QLineEdit, QWidget
-    from qfluentwidgets import FluentIcon, PushButton, SettingCard, SettingCardGroup
+    from PyQt6.QtWidgets import QLabel, QLineEdit, QTableWidget, QToolTip, QWidget
+    from qfluentwidgets import (
+        Action,
+        FluentIcon,
+        PushButton,
+        RoundMenu,
+        SettingCard,
+        SettingCardGroup,
+    )
 
     monkeypatch.setattr(
         "strange_uta_game.frontend.font_utils.QFontDatabase.families",
-        lambda: ["Custom UI", "Yu Gothic UI", "Segoe UI"],
+        lambda: ["Arial", "Yu Gothic UI", "Segoe UI"],
     )
     try:
         set_ui_language("ja_JP")
@@ -60,6 +67,10 @@ def test_user_override_precedes_language_font_and_keeps_fallbacks(qapp, monkeypa
         other_page = QWidget()
         other_page_label = QLabel("Other page label", other_page)
         other_page_input = QLineEdit(other_page)
+        other_page_table = QTableWidget(0, 2, other_page)
+        other_page_table.setHorizontalHeaderLabels(["First", "Second"])
+        existing_menu = RoundMenu(parent=other_page)
+        existing_menu.addAction(Action("Menu action"))
         settings_group = SettingCardGroup("Settings")
         settings_card = SettingCard(
             FluentIcon.SETTING,
@@ -68,31 +79,38 @@ def test_user_override_precedes_language_font_and_keeps_fallbacks(qapp, monkeypa
             settings_group,
         )
         settings_group.addSettingCard(settings_card)
-        assert set_ui_font_override("custom ui") == "Custom UI"
-        assert ui_font(10).families()[:2] == ["Custom UI", "Yu Gothic UI"]
-        assert qapp.font().families()[:2] == ["Custom UI", "Yu Gothic UI"]
+        assert set_ui_font_override("arial") == "Arial"
+        assert ui_font(10).families()[:2] == ["Arial", "Yu Gothic UI"]
+        assert qapp.font().families()[:2] == ["Arial", "Yu Gothic UI"]
         assert existing_fluent_button.font().families()[:2] == [
-            "Custom UI",
+            "Arial",
             "Yu Gothic UI",
         ]
-        assert settings_card.titleLabel.font().families()[:2] == [
-            "Custom UI",
-            "Yu Gothic UI",
-        ]
-        assert settings_card.contentLabel.font().families()[:2] == [
-            "Custom UI",
-            "Yu Gothic UI",
-        ]
+        assert "font: 14px 'Arial','Yu Gothic UI'" in settings_card.styleSheet()
+        assert "font: 11px 'Arial','Yu Gothic UI'" in settings_card.styleSheet()
         assert other_page_label.font().families()[:2] == [
-            "Custom UI",
+            "Arial",
             "Yu Gothic UI",
         ]
         assert other_page_input.font().families()[:2] == [
-            "Custom UI",
+            "Arial",
+            "Yu Gothic UI",
+        ]
+        assert other_page_table.horizontalHeader().font().families()[:2] == [
+            "Arial",
+            "Yu Gothic UI",
+        ]
+        assert QToolTip.font().families()[:2] == ["Arial", "Yu Gothic UI"]
+        assert existing_menu.view.font().families()[:2] == [
+            "Arial",
             "Yu Gothic UI",
         ]
         assert PushButton("new").font().families()[:2] == [
-            "Custom UI",
+            "Arial",
+            "Yu Gothic UI",
+        ]
+        assert RoundMenu().view.font().families()[:2] == [
+            "Arial",
             "Yu Gothic UI",
         ]
 

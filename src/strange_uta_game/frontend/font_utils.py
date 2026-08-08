@@ -36,6 +36,7 @@ DEFAULT_FONT_FAMILY = _platform_default_font_family()
 
 _active_ui_language = "zh_CN"
 _ui_font_override = ""
+_managed_ui_primary_families: set[str] = set()
 
 
 def _ui_font_candidates(language_code: str) -> tuple[str, ...]:
@@ -117,15 +118,18 @@ def _apply_application_ui_font(previous_families: list[str] | None = None) -> No
     old_fluent_families: list[str] = []
     try:
         import qfluentwidgets
+        from qfluentwidgets.common.style_sheet import updateStyleSheet
 
         old_fluent_families = qfluentwidgets.fontFamilies()
         set_fluent_font_families = qfluentwidgets.setFontFamilies
+        update_fluent_style_sheet = updateStyleSheet
     except Exception:
         # 字体工具也会在不安装 qfluentwidgets 的最小环境中使用。
         set_fluent_font_families = None
+        update_fluent_style_sheet = None
 
     # 延迟导入避免仅使用字体测量工具时强制创建/依赖 QApplication。
-    from PyQt6.QtWidgets import QApplication, QWidget
+    from PyQt6.QtWidgets import QApplication, QToolTip, QWidget
 
     app = QApplication.instance()
     if app is None:
@@ -133,12 +137,16 @@ def _apply_application_ui_font(previous_families: list[str] | None = None) -> No
             set_fluent_font_families(families)
         return
 
+    from strange_uta_game.frontend.fluent_tooltips import install_fluent_tooltips
+
+    install_fluent_tooltips(app)
+
     managed_chains = [old_fluent_families]
     if previous_families:
         managed_chains.append(previous_families)
-    managed_primary_families = {
+    _managed_ui_primary_families.update(
         chain[0].casefold() for chain in managed_chains if chain
-    }
+    )
 
     # 必须在修改 QApplication / Fluent 全局字体前先记录控件。父控件收到
     # FontChange 时会立即改变子控件的继承字体，如果边修改边筛选，遍历顺序靠后的
@@ -147,19 +155,30 @@ def _apply_application_ui_font(previous_families: list[str] | None = None) -> No
     for widget in app.allWidgets():
         current = QFont(widget.font())
         current_families = current.families()
-        if current_families and current_families[0].casefold() in managed_primary_families:
+        if (
+            current_families
+            and current_families[0].casefold() in _managed_ui_primary_families
+        ):
             managed_widgets.append((widget, current))
 
     if set_fluent_font_families is not None:
         set_fluent_font_families(families)
+        if update_fluent_style_sheet is not None:
+            update_fluent_style_sheet(lazy=False)
 
     font = QFont(app.font())
     font.setFamilies(families)
     app.setFont(font)
 
+    tooltip_font = QFont(QToolTip.font())
+    tooltip_font.setFamilies(families)
+    QToolTip.setFont(tooltip_font)
+
     for widget, widget_font in managed_widgets:
         widget_font.setFamilies(families)
         widget.setFont(widget_font)
+
+    _managed_ui_primary_families.add(families[0].casefold())
 
 
 def set_ui_font_override(family: str | None) -> str:
