@@ -530,17 +530,44 @@ class Theme(QObject):
         application 级样式表；因此这里用 ``app.setStyleSheet`` 设置的全局规则
         只会命中没有自管理 QSS 的原生控件，不会污染任何 Fluent 控件。
 
-        当前仅保留 QScrollBar：timeline / karaoke 预览把它当作独立数值滑条使用
-        （自定义 range/value），而 Fluent ScrollBar 必须依附 QAbstractScrollArea，
-        无法直接替换；故只能用全局 QSS 让其在深色模式下不再呈现白色原生外观。
-        其余原生控件（QGroupBox / QMessageBox / QDialogButtonBox 按钮等）已统一
-        改用 Fluent 控件接管，不在此处理。
+        QScrollBar：timeline / karaoke 预览把它当作独立数值滑条使用（自定义
+        range/value），而 Fluent ScrollBar 必须依附 QAbstractScrollArea，无法直接替换。
+        QToolTip / QHeaderView：Windows 10 的原生样式不会可靠采用 ToolTipBase、
+        ToolTipText 及表头 palette role，因此需要 QSS 兜底，避免深色模式下仍显示白底。
+        其余原生控件（QGroupBox / QMessageBox / QDialogButtonBox 按钮等）已统一改用
+        Fluent 控件接管，不在此处理。
         """
         dark = self.colors.is_dark
         # 滚动条滑块：深色用半透明白、浅色用半透明黑，hover 加深
         handle = "rgba(255, 255, 255, 0.28)" if dark else "rgba(0, 0, 0, 0.28)"
         handle_hover = "rgba(255, 255, 255, 0.45)" if dark else "rgba(0, 0, 0, 0.45)"
+        tooltip_bg = "#2D2D2D" if dark else "#FFFFDC"
+        tooltip_text = "#FFFFFF" if dark else "#000000"
+        tooltip_border = "#555555" if dark else "#A0A0A0"
+        header_bg = "#2D2D2D" if dark else "#F0F0F0"
+        header_hover = "#3E3E3E" if dark else "#E5E5E5"
+        header_text = "#CCCCCC" if dark else "#333333"
+        header_border = "#3E3E3E" if dark else "#DDDDDD"
         return f"""
+        /* ── Win10 原生悬浮提示（palette 的 ToolTipBase/Text 在该平台不可靠）── */
+        QToolTip {{
+            color: {tooltip_text};
+            background-color: {tooltip_bg};
+            border: 1px solid {tooltip_border};
+            padding: 4px;
+        }}
+
+        /* ── 原生表格表头（应用演唱者、按行设置演唱者等对话框）── */
+        QHeaderView::section {{
+            color: {header_text};
+            background-color: {header_bg};
+            border: none;
+            border-right: 1px solid {header_border};
+            border-bottom: 1px solid {header_border};
+            padding: 4px;
+        }}
+        QHeaderView::section:hover {{ background-color: {header_hover}; }}
+
         /* ── 原生滚动条（波形 timeline / karaoke 预览的独立滑条）── */
         QScrollBar:vertical, QScrollBar:horizontal {{
             background: transparent;
