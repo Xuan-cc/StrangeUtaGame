@@ -21,6 +21,7 @@
     "waveform_tag_edit_enabled": true,
     "waveform_tag_char_enabled": true,
     "waveform_tag_ruby_enabled": true,
+    "waveform_center_playhead_enabled": false,
     "disable_click_jump": false,
     "hide_hitbox_highlights": false,
     "preview_guide_enabled": false,

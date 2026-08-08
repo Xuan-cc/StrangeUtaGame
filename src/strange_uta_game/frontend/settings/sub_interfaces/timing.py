@@ -73,6 +73,11 @@ class TimingSubInterface(SubSettingInterface):
                 tr("在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式"), parent=g_wave),
             title_source="波形时间标签拖拽",
             content_source="在波形区把时间标签作为可拖动对象：单击把手选中并跳转、拖动把手改时间、Ctrl 多选批量平移；关闭则恢复为旧的纯显示模式")
+        self.card_waveform_center_playhead = self._tr_register(
+            SwitchSettingCard(FIF.PIN, tr("播放头居中模式"),
+                tr("播放时将播放头锁定在时间轴中央，由波形和时间标签随播放向左滚动"), parent=g_wave),
+            title_source="播放头居中模式",
+            content_source="播放时将播放头锁定在时间轴中央，由波形和时间标签随播放向左滚动")
         self.card_waveform_tag_char = self._tr_register(
             SwitchSettingCard(FIF.FONT, tr("波形标签显示字符"),
                 tr("在波形时间标签上显示对应的本体字符文本；关闭后该字符不在波形上标注"), parent=g_wave),
@@ -83,7 +88,7 @@ class TimingSubInterface(SubSettingInterface):
                 tr("在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注"), parent=g_wave),
             title_source="波形标签显示注音",
             content_source="在波形时间标签上显示对应的注音(ruby)文本；关闭后注音不在波形上标注")
-        for c in [self.card_waveform_tag_edit, self.card_waveform_tag_char,
+        for c in [self.card_waveform_center_playhead, self.card_waveform_tag_edit, self.card_waveform_tag_char,
                   self.card_waveform_tag_ruby]:
             g_wave.addSettingCard(c)
         self.expandLayout.addWidget(g_wave)
@@ -200,6 +205,7 @@ class TimingSubInterface(SubSettingInterface):
         self.card_export_offset.value_changed.connect(self._notify_changed)
         self.card_timing_step.value_changed.connect(self._notify_changed)
         self.card_waveform_tag_edit.checked_changed.connect(self._notify_changed)
+        self.card_waveform_center_playhead.checked_changed.connect(self._notify_changed)
         self.card_waveform_tag_char.checked_changed.connect(self._notify_changed)
         # 注音显示以字符显示为前提：字符关则注音卡禁用（联动）
         self.card_waveform_tag_char.checked_changed.connect(self._sync_ruby_card_enabled)
@@ -221,6 +227,7 @@ class TimingSubInterface(SubSettingInterface):
         self.card_export_offset.setValue(s.get("export.offset_ms", 0))
         self.card_timing_step.setValue(s.get("timing.timing_adjust_step_ms", 10))
         self.card_waveform_tag_edit.setChecked(s.get("timing.waveform_tag_edit_enabled", True))
+        self.card_waveform_center_playhead.setChecked(s.get("timing.waveform_center_playhead_enabled", False))
         self.card_waveform_tag_char.setChecked(s.get("timing.waveform_tag_char_enabled", True))
         self.card_waveform_tag_ruby.setChecked(s.get("timing.waveform_tag_ruby_enabled", True))
         self._sync_ruby_card_enabled()
@@ -240,6 +247,7 @@ class TimingSubInterface(SubSettingInterface):
         s.set("export.offset_ms", self.card_export_offset.value())
         s.set("timing.timing_adjust_step_ms", self.card_timing_step.value())
         s.set("timing.waveform_tag_edit_enabled", self.card_waveform_tag_edit.isChecked())
+        s.set("timing.waveform_center_playhead_enabled", self.card_waveform_center_playhead.isChecked())
         s.set("timing.waveform_tag_char_enabled", self.card_waveform_tag_char.isChecked())
         s.set("timing.waveform_tag_ruby_enabled", self.card_waveform_tag_ruby.isChecked())
         s.set("timing.disable_click_jump", self.card_disable_click_jump.isChecked())

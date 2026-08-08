@@ -93,6 +93,7 @@ class WaveformDisplay(QWidget):
 
         # 音频数据
         self._samples: Optional[np.ndarray] = None
+        self._waveform_samples: Optional[np.ndarray] = None
         self._sample_rate: int = 44100
         self._channels: int = 2
 
@@ -100,10 +101,15 @@ class WaveformDisplay(QWidget):
         self._zoom_factor: float = 50.0  # 默认50x缩放，减少初始渲染压力
         self._zoom_enabled: bool = True
         self._scroll_position: float = 0.0
+        self._center_playhead_mode: bool = False
+        self._is_playing: bool = False
 
         # 波形峰值缓存
         self._peaks_cache: Optional[List[tuple]] = None
         self._peaks_cache_key: Optional[tuple] = None  # (width, zoom, scroll, samples_id)
+        # 整段音频的多分辨率峰值缓存：bin_size -> (mins, maxs)。同一缩放
+        # 粒度只归约一次，播放滚动时仅从缓存中取当前窗口。
+        self._waveform_peak_levels: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
         # 左键拖动平移状态
         self._pan_start_x: Optional[float] = None
@@ -168,13 +174,43 @@ class WaveformDisplay(QWidget):
 
     def set_playing(self, playing: bool) -> None:
         """播放状态变化：重新开始播放时取消自动滚动挂起。"""
+        was_playing = self._is_playing
+        self._is_playing = bool(playing)
         if playing:
             self._resume_auto_scroll()
+            if self._center_playhead_mode:
+                self._sync_scroll_to_playhead()
+        elif was_playing and self._center_playhead_mode:
+            # 离开居中播放态时把虚拟视窗收回音频有效范围，暂停画面不跳回旧位置。
+            self._sync_scroll_to_playhead()
+        self.update()
+
+    def set_center_playhead_mode(self, enabled: bool) -> None:
+        """播放时将播放头锁在中央，由波形和时间标签从右向左滚动。"""
+        enabled = bool(enabled)
+        if enabled == self._center_playhead_mode:
+            return
+        self._center_playhead_mode = enabled
+        if self._is_playing:
+            self._resume_auto_scroll()
+            self._sync_scroll_to_playhead()
+        self.update()
+
+    def _sync_scroll_to_playhead(self) -> None:
+        if self._duration_ms <= 0:
+            return
+        half_window_ms = self._visible_duration_ms() / 2.0
+        self._scroll_position = self._clamp_scroll(
+            (self._current_ms - half_window_ms) / self._duration_ms
+        )
+        self.scroll_position_changed.emit(self._scroll_position)
 
     def set_position(self, ms: int):
         self._current_ms = ms
+        if self._center_playhead_mode and self._is_playing:
+            self._sync_scroll_to_playhead()
         # 自动滚动保持播放头可见（用户手动操作后挂起）
-        if self._duration_ms > 0 and self._zoom_factor > 1.0 and not self._auto_scroll_suspended:
+        elif self._duration_ms > 0 and self._zoom_factor > 1.0 and not self._auto_scroll_suspended:
             visible_start = self._scroll_position * self._duration_ms
             visible_end = visible_start + self._duration_ms / self._zoom_factor
             if ms < visible_start or ms > visible_end:
@@ -270,19 +306,27 @@ class WaveformDisplay(QWidget):
 
     def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
         self._samples = samples
+        # 波形滚动会逐帧重算可见峰值；立体声只在加载时混合一次，避免播放时
+        # 每帧扫描整首音频。
+        self._waveform_samples = (
+            np.mean(samples, axis=1, dtype=np.float32) if channels > 1 else samples
+        )
         self._sample_rate = sample_rate
         self._channels = channels
         # 清除波形缓存
         self._peaks_cache = None
         self._peaks_cache_key = None
+        self._waveform_peak_levels.clear()
         self.update()
 
     def clear_audio_data(self):
         self._samples = None
+        self._waveform_samples = None
         self._sample_rate = 0
         self._channels = 0
         self._peaks_cache = None
         self._peaks_cache_key = None
+        self._waveform_peak_levels.clear()
         self.update()
 
     def set_zoom(self, zoom: float):
@@ -347,6 +391,9 @@ class WaveformDisplay(QWidget):
     # ── 视窗 / 坐标换算 ──
 
     def _visible_start_ms(self) -> float:
+        if self._center_playhead_mode and self._is_playing:
+            # 不 clamp：开头/结尾保留半屏空白，播放头才能在整段播放期间严格居中。
+            return self._current_ms - self._visible_duration_ms() / 2.0
         return self._scroll_position * self._duration_ms
 
     def _visible_duration_ms(self) -> float:
@@ -356,6 +403,15 @@ class WaveformDisplay(QWidget):
         if visible_duration_ms <= 0:
             return 0
         return int((ts - visible_start_ms) / visible_duration_ms * w)
+
+    def _x_to_time(self, x: float, width: Optional[int] = None) -> int:
+        """把波形横坐标换算为时间；居中播放时同样使用滚动中的虚拟视窗。"""
+        w = self.width() if width is None else width
+        if self._duration_ms <= 0 or w <= 0:
+            return 0
+        ratio = max(0.0, min(1.0, x / w))
+        target_ms = self._visible_start_ms() + ratio * self._visible_duration_ms()
+        return max(0, min(self._duration_ms, int(round(target_ms))))
 
     def _draw_ts(self, tag: "TimeTag") -> int:
         """拖拽预览：被选中且正在拖拽的标签按 delta 平移其显示时间戳。"""
@@ -412,50 +468,89 @@ class WaveformDisplay(QWidget):
         },
     )
     def _compute_waveform_peaks(self, width: int) -> Optional[List[tuple]]:
-        """计算波形峰值数据（按像素降采样），带缓存"""
+        """从整段峰值层中截取当前窗口；每种采样粒度只计算一次。"""
         if self._samples is None or self._duration_ms <= 0 or width <= 0:
             return None
 
-        # 缓存键：(width, zoom, scroll_position, samples_id)
+        # 居中播放时 visible_start 随播放位置逐帧变化，必须进入缓存键。
         samples_id = id(self._samples)
-        cache_key = (width, self._zoom_factor, self._scroll_position, samples_id)
+        visible_start_ms = self._visible_start_ms()
+        cache_key = (width, self._zoom_factor, visible_start_ms, samples_id)
 
         if self._peaks_cache_key == cache_key and self._peaks_cache is not None:
             return self._peaks_cache
 
-        visible_start_ms = self._scroll_position * self._duration_ms
-        visible_duration_ms = self._duration_ms / self._zoom_factor
-        visible_end_ms = visible_start_ms + visible_duration_ms
+        samples = self._waveform_samples
+        if samples is None:
+            return None
 
-        start_sample = int((visible_start_ms / 1000.0) * self._sample_rate)
-        end_sample = int((visible_end_ms / 1000.0) * self._sample_rate)
-        start_sample = max(0, min(start_sample, len(self._samples) - 1))
-        end_sample = max(start_sample + 1, min(end_sample, len(self._samples)))
+        visible_duration_ms = self._visible_duration_ms()
+        samples_per_pixel = max(
+            1.0, visible_duration_ms / 1000.0 * self._sample_rate / width
+        )
+        # 量化到 2 的幂，缩放/resize 时可复用少量固定层级；选不大于目标
+        # 粒度的层，确保缓存不会吃掉瞬态峰值。
+        bin_size = 1 << max(0, int(math.floor(math.log2(samples_per_pixel))))
+        level_min, level_max = self._waveform_peak_level(bin_size)
 
-        visible_samples = self._samples[start_sample:end_sample]
+        ms_per_pixel = visible_duration_ms / width
+        left_times = visible_start_ms + np.arange(width, dtype=np.float64) * ms_per_pixel
+        center_times = left_times + ms_per_pixel * 0.5
+        right_times = left_times + ms_per_pixel
+        valid = (right_times > 0.0) & (left_times < self._duration_ms)
 
-        # 立体声混合为单声道
-        if self._channels > 1:
-            visible_samples = np.mean(visible_samples, axis=1)
+        def _level_indices(times: np.ndarray) -> np.ndarray:
+            sample_indices = np.floor(
+                np.clip(times, 0.0, float(self._duration_ms))
+                / 1000.0
+                * self._sample_rate
+            ).astype(np.int64)
+            return np.clip(sample_indices // bin_size, 0, len(level_min) - 1)
 
-        # 按像素宽度降采样
-        samples_per_pixel = max(1, len(visible_samples) // width)
-        peaks = []
-
-        for i in range(width):
-            start_idx = i * samples_per_pixel
-            end_idx = min(start_idx + samples_per_pixel, len(visible_samples))
-            if start_idx >= len(visible_samples):
-                break
-            chunk = visible_samples[start_idx:end_idx]
-            if len(chunk) > 0:
-                peaks.append((float(np.min(chunk)), float(np.max(chunk))))
+        left_idx = _level_indices(left_times)
+        center_idx = _level_indices(center_times)
+        # 右边界减一个极小量，避免恰好落入下一个像素区间。
+        right_idx = _level_indices(np.nextafter(right_times, left_times))
+        mins = np.minimum.reduce(
+            (level_min[left_idx], level_min[center_idx], level_min[right_idx])
+        )
+        maxs = np.maximum.reduce(
+            (level_max[left_idx], level_max[center_idx], level_max[right_idx])
+        )
+        mins = np.where(valid, mins, 0.0)
+        maxs = np.where(valid, maxs, 0.0)
+        peaks = [(float(lo), float(hi)) for lo, hi in zip(mins, maxs)]
 
         # 更新缓存
         self._peaks_cache = peaks
         self._peaks_cache_key = cache_key
 
         return peaks
+
+    def _waveform_peak_level(self, bin_size: int) -> tuple[np.ndarray, np.ndarray]:
+        """惰性生成整段音频的一个峰值层，后续播放帧直接复用。"""
+        cached = self._waveform_peak_levels.get(bin_size)
+        if cached is not None:
+            return cached
+        samples = self._waveform_samples
+        if samples is None or len(samples) == 0:
+            empty = np.zeros(1, dtype=np.float32)
+            return empty, empty
+        full_bins, remainder = divmod(len(samples), bin_size)
+        if full_bins:
+            main = samples[:full_bins * bin_size].reshape(full_bins, bin_size)
+            mins = np.min(main, axis=1).astype(np.float32, copy=False)
+            maxs = np.max(main, axis=1).astype(np.float32, copy=False)
+        else:
+            mins = np.empty(0, dtype=np.float32)
+            maxs = np.empty(0, dtype=np.float32)
+        if remainder:
+            tail = samples[full_bins * bin_size:]
+            mins = np.append(mins, np.float32(np.min(tail)))
+            maxs = np.append(maxs, np.float32(np.max(tail)))
+        level = (mins, maxs)
+        self._waveform_peak_levels[bin_size] = level
+        return level
 
     @log_slow_method(
         "timeline.paint",
@@ -480,7 +575,7 @@ class WaveformDisplay(QWidget):
             )
             return
 
-        visible_start_ms = self._scroll_position * self._duration_ms
+        visible_start_ms = self._visible_start_ms()
         visible_duration_ms = self._duration_ms / self._zoom_factor
         visible_end_ms = visible_start_ms + visible_duration_ms
 
@@ -842,11 +937,7 @@ class WaveformDisplay(QWidget):
             return
         # 回退：原 seek
         if not self._is_panning and self._pan_start_x is not None:
-            visible_duration_ms = self._visible_duration_ms()
-            visible_start_ms = self._visible_start_ms()
-            ratio = max(0.0, min(1.0, a0.position().x() / self.width()))
-            target_ms = int(visible_start_ms + ratio * visible_duration_ms)
-            self.seek_requested.emit(target_ms)
+            self.seek_requested.emit(self._x_to_time(a0.position().x()))
         self._pan_start_x = None
         self._is_panning = False
         self.unsetCursor()
@@ -1033,6 +1124,9 @@ class TimelineWidget(QWidget):
 
     def set_playing(self, playing: bool) -> None:
         self.waveform_display.set_playing(playing)
+
+    def set_center_playhead_mode(self, enabled: bool) -> None:
+        self.waveform_display.set_center_playhead_mode(enabled)
 
     def set_zoom_enabled(self, enabled: bool) -> None:
         self._zoom_enabled = enabled

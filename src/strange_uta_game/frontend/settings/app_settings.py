@@ -98,6 +98,7 @@ class AppSettings:
             "waveform_tag_edit_enabled": True,
             "waveform_tag_char_enabled": True,
             "waveform_tag_ruby_enabled": True,
+            "waveform_center_playhead_enabled": False,
             "disable_click_jump": False,
             "disable_click_recenter": False,
             "preview_guide_enabled": False,
