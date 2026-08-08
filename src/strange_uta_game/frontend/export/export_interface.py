@@ -265,6 +265,15 @@ class ExportInterface(QWidget):
         self.line_filename.setPlaceholderText("untitled")
         self._settings_layout.addWidget(self.line_filename)
 
+        # Kirakara 可在同一个 .krl 格式中切换单注音/双注音。
+        self._chk_export_romaji = CheckBox(self.tr("导出罗马音"))
+        self._chk_export_romaji.setToolTip(
+            self.tr("勾选时输出假名与罗马音双注音；不勾选时仅输出假名注音")
+        )
+        self._chk_export_romaji.setChecked(True)
+        self._chk_export_romaji.hide()
+        self._settings_layout.addWidget(self._chk_export_romaji)
+
         # Nicokara 标签设置按钮（仅 Nicokara 格式显示）
         self.btn_tags = PushButton(self.tr("Nicokara 标签设置..."), self)
         self.btn_tags.setIcon(FIF.TAG)
@@ -272,7 +281,7 @@ class ExportInterface(QWidget):
         self.btn_tags.hide()
         self._settings_layout.addWidget(self.btn_tags)
 
-        # 演唱者选择区域（仅 Nicokara 格式显示）
+        # 演唱者选择区域（Nicokara / Kirakara 格式显示）
         self._singer_group = FluentGroupBox(self.tr("演唱者过滤"))
         singer_group_layout = self._singer_group.contentLayout
         singer_group_layout.setSpacing(6)
@@ -404,6 +413,14 @@ class ExportInterface(QWidget):
         """
         return re.sub(r"\s*\(\.[^)]+\)$", "", name).strip()
 
+    @classmethod
+    def _normalize_format_name(cls, name: str) -> str:
+        """把旧配置中的已升级格式名映射到当前名称。"""
+        stripped = cls._strip_extension_hint(name)
+        if stripped == "春日向注音（带罗马音）":
+            return "Kirakara"
+        return stripped
+
     def _tr_format_name(self, name: str) -> str:
         """显式枚举各 format key → 让 .ts 抽取器把源串纳入 ExportInterface
         上下文（变量参数的 self.tr(var) 抓不到）。"""
@@ -413,8 +430,7 @@ class ExportInterface(QWidget):
         if name == "Nicokara (带注音)":    return self.tr("Nicokara (带注音)")
         if name == "RL 编辑模式":           return self.tr("RL 编辑模式")
         if name == "春日向注音":            return self.tr("春日向注音")
-        if name == "春日向注音（带罗马音）": return self.tr("春日向注音（带罗马音）")
-        # KRA / TXT / SRT / txt2ass / ASS / Nicokara 都是英文，无需翻译
+        # KRA / TXT / SRT / txt2ass / ASS / Nicokara / Kirakara 都是英文
         return name
 
     def _populate_formats(self):
@@ -430,14 +446,14 @@ class ExportInterface(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, fmt["name"])
             self.format_list.addItem(item)
         if self.format_list.count() > 0:
-            default_format = self._strip_extension_hint(
+            default_format = self._normalize_format_name(
                 AppSettings().get("export.default_format", "")
             )
             default_row = 0
             if default_format:
                 for i in range(self.format_list.count()):
                     item = self.format_list.item(i)
-                    if item and self._strip_extension_hint(
+                    if item and self._normalize_format_name(
                         item.data(Qt.ItemDataRole.UserRole)
                     ) == default_format:
                         default_row = i
@@ -448,16 +464,39 @@ class ExportInterface(QWidget):
         self._on_format_selected(self.format_list.currentItem(), None)
 
     def _on_format_selected(self, current, _previous):
-        """根据所选格式显示/隐藏 Nicokara 专用控件"""
+        """根据所选格式显示/隐藏格式专用控件。"""
         if current:
             name = current.data(Qt.ItemDataRole.UserRole)
             is_nicokara = "nicokara" in name.lower()
+            is_kirakara = name.lower() == "kirakara"
+            has_singer_options = is_nicokara or is_kirakara
             self.btn_tags.setVisible(is_nicokara)
-            self._singer_group.setVisible(is_nicokara)
-            self._chk_insert_singer_tags.setVisible(is_nicokara)
-            self._chk_insert_singer_each_line.setVisible(is_nicokara)
+            self._chk_export_romaji.setVisible(is_kirakara)
+            self._singer_group.setVisible(has_singer_options)
+            self._chk_insert_singer_tags.setVisible(has_singer_options)
+            self._chk_insert_singer_each_line.setVisible(has_singer_options)
             self._btn_emoji_config.setVisible(is_nicokara)
-            if is_nicokara:
+            if is_kirakara:
+                self._chk_insert_singer_tags.setText(
+                    self.tr("插入【@演唱者名】标签")
+                )
+                self._chk_insert_singer_tags.setToolTip(
+                    self.tr("导出时，当演唱者发生变化，在字符前自动插入【@演唱者名】标签")
+                )
+                self._chk_insert_singer_each_line.setToolTip(
+                    self.tr("每一行开头都插入【@演唱者名】标签（需先启用演唱者标签）")
+                )
+            else:
+                self._chk_insert_singer_tags.setText(
+                    self.tr("插入【演唱者名】标签")
+                )
+                self._chk_insert_singer_tags.setToolTip(
+                    self.tr("导出时，当演唱者发生变化，在字符前自动插入演唱者名称标签")
+                )
+                self._chk_insert_singer_each_line.setToolTip(
+                    self.tr("每一行开头都插入演唱者名称标签（需先启用「插入【演唱者名】标签」）")
+                )
+            if has_singer_options:
                 self._refresh_singer_checkboxes()
             self._update_settings_geometry()
 
@@ -515,14 +554,14 @@ class ExportInterface(QWidget):
 
     def _sync_default_format(self):
         """将 format_list 的选中项与配置中的 default_format 同步。"""
-        default_format = self._strip_extension_hint(
+        default_format = self._normalize_format_name(
             AppSettings().get("export.default_format", "")
         )
         if not default_format:
             return
         for i in range(self.format_list.count()):
             item = self.format_list.item(i)
-            if item and self._strip_extension_hint(
+            if item and self._normalize_format_name(
                 item.data(Qt.ItemDataRole.UserRole)
             ) == default_format:
                 self.format_list.setCurrentRow(i)
@@ -873,6 +912,7 @@ class ExportInterface(QWidget):
             insert_singer_tags=self._chk_insert_singer_tags.isChecked(),
             insert_singer_each_line=self._chk_insert_singer_each_line.isChecked(),
             singer_map=self._get_singer_map(),
+            export_romaji=self._chk_export_romaji.isChecked(),
             software_compensation_ms=self._get_software_compensation(),
         )
         if result.success:

@@ -73,6 +73,7 @@ class ExportService:
         insert_singer_tags: bool = False,
         insert_singer_each_line: bool = False,
         singer_map: Optional[Dict[str, str]] = None,
+        export_romaji: bool = True,
         software_compensation_ms: int = 0,
     ) -> ExportResult:
         """导出项目
@@ -83,10 +84,11 @@ class ExportService:
             file_path: 导出文件路径
             offset_ms: 已弃用。全局偏移由前端通过 Character.set_offset() 预先写入
                        global_timestamps，本参数保留只为向后兼容，不会被使用。
-            singer_ids: 要输出的演唱者 ID 集合（None=全部，仅 Nicokara 格式有效）
+            singer_ids: 要输出的演唱者 ID 集合（None=全部，仅 Nicokara/Kirakara 有效）
             insert_singer_tags: 是否在演唱者切换处插入【演唱者名】标签
             insert_singer_each_line: 是否在每行行首插入演唱者名称标签
             singer_map: singer_id → 演唱者显示名的映射
+            export_romaji: Kirakara 是否输出罗马音层
             software_compensation_ms: 软件导出补偿（毫秒），导出时给时间戳加上此值
 
         Returns:
@@ -126,8 +128,21 @@ class ExportService:
                 NicokaraExporter,
                 NicokaraWithRubyExporter,
             )
+            from strange_uta_game.backend.infrastructure.exporters.kasugamuki_romaji_exporter import (
+                KirakaraExporter,
+            )
 
-            if isinstance(exporter, NicokaraWithRubyExporter):
+            if isinstance(exporter, KirakaraExporter):
+                exporter.export(
+                    project,
+                    file_path,
+                    singer_ids=singer_ids,
+                    insert_singer_tags=insert_singer_tags,
+                    insert_singer_each_line=insert_singer_each_line,
+                    singer_map=singer_map,
+                    export_romaji=export_romaji,
+                )
+            elif isinstance(exporter, NicokaraWithRubyExporter):
                 exporter.export(
                     project,
                     file_path,

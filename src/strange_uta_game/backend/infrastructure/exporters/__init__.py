@@ -6,7 +6,7 @@
 from .base import BaseExporter, ExportError, IExporter
 from .inline_exporter import InlineExporter
 from .kasugamuki_exporter import KasugamukiExporter
-from .kasugamuki_romaji_exporter import KasugamukiRomajiExporter
+from .kasugamuki_romaji_exporter import KirakaraExporter, KasugamukiRomajiExporter
 from .lrc_exporter import KRAExporter, LRCExporter, LRCLineExporter, LRCWordExporter
 from .nicokara_exporter import NicokaraExporter, NicokaraWithRubyExporter
 from .srt_exporter import SRTExporter
@@ -27,7 +27,7 @@ ALL_EXPORTERS = [
     NicokaraWithRubyExporter,
     InlineExporter,
     KasugamukiExporter,
-    KasugamukiRomajiExporter,
+    KirakaraExporter,
 ]
 
 
@@ -46,6 +46,7 @@ def get_exporter_by_name(name: str) -> IExporter:
     # 向后兼容：旧配置中 "LRC" 映射到 "LRC (增强型)"
     _LEGACY_NAME_MAP = {
         "LRC": "LRC (增强型)",
+        "春日向注音（带罗马音）": "Kirakara",
     }
     resolved = _LEGACY_NAME_MAP.get(name, name)
 
@@ -101,6 +102,7 @@ __all__ = [
     "InlineExporter",
     "KasugamukiExporter",
     "KasugamukiRomajiExporter",
+    "KirakaraExporter",
     "ALL_EXPORTERS",
     "get_exporter_by_name",
     "get_exporter_by_extension",
