@@ -141,8 +141,9 @@ class UISubInterface(SubSettingInterface):
         available_width = max(1, viewport_width - margin * 2)
         available_height = max(1, viewport_height - margin * 2)
         width = min(680, max(420, int(viewport_width * 0.46)), available_width)
-        height = min(340, max(280, int(viewport_height * 0.38)), available_height)
-        self.preview.resize(width, height)
+        height = min(480, max(380, int(viewport_height * 0.48)), available_height)
+        if not self.preview.user_resized:
+            self.preview.resize(width, height)
         if self.preview.user_positioned:
             self.preview.clamp_to_parent()
         else:

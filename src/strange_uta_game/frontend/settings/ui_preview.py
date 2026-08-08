@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PyQt6.QtCore import QPoint, QRectF, Qt
+from PyQt6.QtCore import QEvent, QPoint, QRect, QRectF, Qt
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen, QResizeEvent
 from PyQt6.QtWidgets import QWidget
 
@@ -46,12 +46,19 @@ class InterfacePreview(QWidget):
 
     HEADER_HEIGHT = 42
     CONTENT_MARGIN = 8
+    RESIZE_MARGIN = 9
+    MINIMUM_WIDTH = 360
+    MINIMUM_HEIGHT = 320
 
     def __init__(self, parent: QWidget | None = None, *, floating: bool = False):
         super().__init__(parent)
         self._floating = floating
         self._drag_offset: QPoint | None = None
+        self._resize_edges: tuple[bool, bool, bool, bool] | None = None
+        self._resize_start_global: QPoint | None = None
+        self._resize_start_geometry: QRect | None = None
         self._user_positioned = False
+        self._user_resized = False
         self._values: dict[str, Any] = {}
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setMouseTracking(True)
@@ -73,6 +80,10 @@ class InterfacePreview(QWidget):
     @property
     def user_positioned(self) -> bool:
         return self._user_positioned
+
+    @property
+    def user_resized(self) -> bool:
+        return self._user_resized
 
     def set_preview_values(self, **values: Any) -> None:
         """Apply settings through the same public API used by the editor."""
@@ -104,6 +115,11 @@ class InterfacePreview(QWidget):
         parent = self.parentWidget()
         if parent is None:
             return
+        if self.width() > parent.width() or self.height() > parent.height():
+            self.resize(
+                min(self.width(), parent.width()),
+                min(self.height(), parent.height()),
+            )
         max_x = max(0, parent.width() - self.width())
         max_y = max(0, parent.height() - self.height())
         self.move(
@@ -124,7 +140,67 @@ class InterfacePreview(QWidget):
             self.set_preview_values(**self._values)
         super().resizeEvent(event)
 
+    def _edges_at(self, pos: QPoint) -> tuple[bool, bool, bool, bool] | None:
+        margin = self.RESIZE_MARGIN
+        left = pos.x() <= margin
+        top = pos.y() <= margin
+        right = pos.x() >= self.width() - margin
+        bottom = pos.y() >= self.height() - margin
+        edges = (left, top, right, bottom)
+        return edges if any(edges) else None
+
+    @staticmethod
+    def _cursor_for_edges(edges: tuple[bool, bool, bool, bool]) -> Qt.CursorShape:
+        left, top, right, bottom = edges
+        if (left and top) or (right and bottom):
+            return Qt.CursorShape.SizeFDiagCursor
+        if (right and top) or (left and bottom):
+            return Qt.CursorShape.SizeBDiagCursor
+        if left or right:
+            return Qt.CursorShape.SizeHorCursor
+        return Qt.CursorShape.SizeVerCursor
+
+    def _resize_to_global(self, global_pos: QPoint) -> None:
+        parent = self.parentWidget()
+        start = self._resize_start_geometry
+        start_global = self._resize_start_global
+        edges = self._resize_edges
+        if parent is None or start is None or start_global is None or edges is None:
+            return
+
+        delta = global_pos - start_global
+        left_edge, top_edge, right_edge, bottom_edge = edges
+        left = start.x()
+        top = start.y()
+        right = start.x() + start.width()
+        bottom = start.y() + start.height()
+        minimum_width = min(self.MINIMUM_WIDTH, parent.width())
+        minimum_height = min(self.MINIMUM_HEIGHT, parent.height())
+
+        if left_edge:
+            left = max(0, min(left + delta.x(), right - minimum_width))
+        if right_edge:
+            right = min(parent.width(), max(right + delta.x(), left + minimum_width))
+        if top_edge:
+            top = max(0, min(top + delta.y(), bottom - minimum_height))
+        if bottom_edge:
+            bottom = min(parent.height(), max(bottom + delta.y(), top + minimum_height))
+
+        self.setGeometry(left, top, right - left, bottom - top)
+        self._user_positioned = True
+        self._user_resized = True
+
     def mousePressEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
+            edges = self._edges_at(event.position().toPoint())
+            if edges is not None:
+                self._resize_edges = edges
+                self._resize_start_global = event.globalPosition().toPoint()
+                self._resize_start_geometry = self.geometry()
+                self.raise_()
+                self.setCursor(self._cursor_for_edges(edges))
+                event.accept()
+                return
         if (
             event is not None
             and event.button() == Qt.MouseButton.LeftButton
@@ -138,6 +214,10 @@ class InterfacePreview(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
+        if event is not None and self._resize_edges is not None:
+            self._resize_to_global(event.globalPosition().toPoint())
+            event.accept()
+            return
         if event is not None and self._drag_offset is not None:
             parent = self.parentWidget()
             if parent is not None:
@@ -147,7 +227,10 @@ class InterfacePreview(QWidget):
                 self._user_positioned = True
             event.accept()
             return
-        if event is not None and event.position().y() <= self.HEADER_HEIGHT:
+        edges = self._edges_at(event.position().toPoint()) if event is not None else None
+        if edges is not None:
+            self.setCursor(self._cursor_for_edges(edges))
+        elif event is not None and event.position().y() <= self.HEADER_HEIGHT:
             self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self.unsetCursor()
@@ -155,12 +238,23 @@ class InterfacePreview(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
         if event is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._resize_edges = None
+            self._resize_start_global = None
+            self._resize_start_geometry = None
             self._drag_offset = None
-            if event.position().y() <= self.HEADER_HEIGHT:
+            edges = self._edges_at(event.position().toPoint())
+            if edges is not None:
+                self.setCursor(self._cursor_for_edges(edges))
+            elif event.position().y() <= self.HEADER_HEIGHT:
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
             else:
                 self.unsetCursor()
         super().mouseReleaseEvent(event)
+
+    def leaveEvent(self, event: QEvent | None) -> None:  # noqa: N802
+        if self._drag_offset is None and self._resize_edges is None:
+            self.unsetCursor()
+        super().leaveEvent(event)
 
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -190,6 +284,6 @@ class InterfacePreview(QWidget):
                 self.HEADER_HEIGHT,
             ),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            self.tr("界面实时预览（拖动此处移动）"),
+            self.tr("界面实时预览（拖动标题移动，拖动边缘缩放）"),
         )
         painter.end()
