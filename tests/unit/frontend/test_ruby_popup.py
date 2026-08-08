@@ -156,3 +156,15 @@ def test_ruby_input_accepts_unrestricted_ime_text(qapp):
 
     popup.edit_ruby.setText("かな・拼音・한글・ruby")
     assert popup.edit_ruby.text() == "かな・拼音・한글・ruby"
+
+
+def test_link_button_expands_for_wider_translation(qapp):
+    popup = RubyEditPopup(_character(), can_link_next=True)
+    compact_width = popup.width()
+
+    popup.btn_link_next.setText("リンクする")
+    popup._resize_link_button()
+
+    expected = popup.btn_link_next.fontMetrics().horizontalAdvance("リンクする") + 28
+    assert popup.btn_link_next.width() >= expected
+    assert popup.width() > compact_width

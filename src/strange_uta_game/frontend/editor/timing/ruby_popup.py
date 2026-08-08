@@ -19,6 +19,7 @@ class RubyEditPopup(QDialog):
 
     _INPUT_MIN_WIDTH = 92
     _INPUT_MAX_WIDTH = 420
+    _LINK_BUTTON_MIN_WIDTH = 52
 
     def __init__(
         self,
@@ -66,7 +67,7 @@ class RubyEditPopup(QDialog):
 
         self.btn_link_next = PushButton(self)
         self.btn_link_next.setCheckable(True)
-        self.btn_link_next.setFixedWidth(52)
+        self.btn_link_next.setFixedWidth(self._LINK_BUTTON_MIN_WIDTH)
         self.btn_link_next.setEnabled(can_link_next)
         self.btn_link_next.clicked.connect(self._toggle_link)
         self._sync_link_button()
@@ -92,6 +93,7 @@ class RubyEditPopup(QDialog):
     def _sync_link_button(self) -> None:
         self.btn_link_next.setChecked(self._linked)
         self.btn_link_next.setText(self.tr("链接"))
+        self._resize_link_button()
         if not self._can_link_next:
             self.btn_link_next.setToolTip(self.tr("行末字符不能链接下一字"))
         else:
@@ -100,6 +102,18 @@ class RubyEditPopup(QDialog):
                 if self._linked
                 else self.tr("点击链接下一个字")
             )
+
+    def _resize_link_button(self) -> None:
+        """Fit translated labels such as Japanese ``リンク`` without clipping."""
+        text_width = self.btn_link_next.fontMetrics().horizontalAdvance(
+            self.btn_link_next.text()
+        )
+        self.btn_link_next.setFixedWidth(
+            max(self._LINK_BUTTON_MIN_WIDTH, text_width + 28)
+        )
+        self.setFixedSize(self.sizeHint())
+        if self._anchor is not None and self.isVisible():
+            self._position_above_anchor()
 
     def _resize_for_text(self, text: str) -> None:
         text_width = self.edit_ruby.fontMetrics().horizontalAdvance(
