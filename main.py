@@ -80,6 +80,24 @@ from strange_uta_game.frontend.settings.app_settings import AppSettings
 # 从配置文件读取主题设置并应用
 settings = AppSettings()
 
+# 闪屏早于 MainWindow 创建，因此先按设置准备应用字体；MainWindow 随后安装
+# translator 时会再次确认有效语言。这样启动阶段也不会短暂使用中文 UI 字体。
+from strange_uta_game.frontend.font_utils import set_ui_font_override, set_ui_language
+from strange_uta_game.frontend.localization import (
+    AUTO_LANGUAGE_CODE,
+    language_by_code,
+    resolve_auto_language,
+)
+
+_selected_language = language_by_code(settings.get("ui.language", "auto"))
+_font_language = (
+    resolve_auto_language()
+    if _selected_language.code == AUTO_LANGUAGE_CODE
+    else _selected_language.code
+)
+set_ui_font_override(settings.get("ui.interface_font", ""))
+set_ui_language(_font_language)
+
 # 翻译器安装迁移到 MainWindow.__init__（在 super().__init__() 之前）——
 # 让入口对语言初始化无感、嵌入式场景也能正常工作。
 

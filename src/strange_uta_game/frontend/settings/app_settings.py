@@ -153,6 +153,8 @@ class AppSettings:
         "ui": {
             "theme": "auto",
             "language": "auto",
+            # 应用界面字体；空串表示根据界面语言和平台自动选择。
+            "interface_font": "",
             # 窗口习惯：启动时读取以恢复上次的窗口大小与最大化状态；
             # 用户改变窗口大小或最大化时实时写回（见 MainWindow）。
             "window_size": [1400, 900],

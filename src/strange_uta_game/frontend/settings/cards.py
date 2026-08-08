@@ -234,10 +234,26 @@ class FontSettingCard(SettingCard):
 
     value_changed = pyqtSignal(str)
 
-    def __init__(self, icon, title: str, content: str, parent=None):
+    def __init__(
+        self,
+        icon,
+        title: str,
+        content: str,
+        parent=None,
+        *,
+        allow_auto: bool = False,
+    ):
+        # SettingCard 构造期间可能收到 LanguageChange，changeEvent 会先于
+        # super().__init__ 返回，因此这些状态必须预先存在。
+        self._allow_auto = allow_auto
+        self._family = ""
         super().__init__(icon, title, content, parent)
         self._title_text = title
-        self._family = ""
+        if allow_auto:
+            self.btn_auto = PushButton(self.tr("自动"), self)
+            self.btn_auto.setMinimumWidth(72)
+            self.btn_auto.clicked.connect(self._on_auto)
+            self.hBoxLayout.addWidget(self.btn_auto, 0, Qt.AlignmentFlag.AlignRight)
         self.btn = PushButton(self.tr("选择字体"), self)
         self.btn.setMinimumWidth(200)
         self.btn.clicked.connect(self._on_click)
@@ -267,6 +283,12 @@ class FontSettingCard(SettingCard):
                 self.btn.setText(self._label_for(family))
                 self.value_changed.emit(family)
 
+    def _on_auto(self):
+        if self._family:
+            self._family = ""
+            self.btn.setText(self.tr("按界面语言自动选择"))
+            self.value_changed.emit("")
+
     @staticmethod
     def _label_for(family: str) -> str:
         try:
@@ -278,10 +300,24 @@ class FontSettingCard(SettingCard):
 
     def setValue(self, family: str):
         self._family = family or ""
-        self.btn.setText(self._label_for(self._family) if self._family else self.tr("选择字体"))
+        if self._family:
+            self.btn.setText(self._label_for(self._family))
+        elif self._allow_auto:
+            self.btn.setText(self.tr("按界面语言自动选择"))
+        else:
+            self.btn.setText(self.tr("选择字体"))
 
     def value(self) -> str:
         return self._family
+
+    def changeEvent(self, event):
+        from PyQt6.QtCore import QEvent as _QEvent
+        if event.type() == _QEvent.Type.LanguageChange:
+            if self._allow_auto and hasattr(self, "btn_auto"):
+                self.btn_auto.setText(self.tr("自动"))
+            if not self._family and hasattr(self, "btn"):
+                self.setValue("")
+        super().changeEvent(event)
 
 
 class BrowseSettingCard(SettingCard):

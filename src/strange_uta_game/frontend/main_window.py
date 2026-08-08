@@ -84,11 +84,16 @@ class MainWindow(MSFluentWindow):
         # embedded 模式语言由宿主独占（见 EMBEDDING.md §5），不自行装载。
         if not self._embedded:
             from strange_uta_game.frontend.settings.app_settings import AppSettings
+            from strange_uta_game.frontend.font_utils import set_ui_font_override
             from strange_uta_game.frontend.localization import install_translators
             try:
-                _lang = AppSettings().get("ui.language", "auto")
+                _startup_settings = AppSettings()
+                _lang = _startup_settings.get("ui.language", "auto")
+                _interface_font = _startup_settings.get("ui.interface_font", "")
             except Exception:
                 _lang = "zh_CN"
+                _interface_font = ""
+            set_ui_font_override(_interface_font)
             install_translators(_lang)
 
         self._report_progress(10, self.tr("正在初始化窗口框架..."))

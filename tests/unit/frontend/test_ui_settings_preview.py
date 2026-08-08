@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtGui import QFontDatabase
 from PyQt6.QtTest import QTest
+from qfluentwidgets import FluentIcon
+
+from strange_uta_game.frontend.settings.cards import FontSettingCard
 
 
 class _SettingsStub:
@@ -13,6 +17,9 @@ class _SettingsStub:
     def get(self, path, default=None):
         return self.values.get(path, default)
 
+    def set(self, path, value):
+        self.values[path] = value
+
 
 def test_ui_settings_preview_loads_and_tracks_controls(qapp):
     from strange_uta_game.frontend.settings.sub_interfaces.ui_settings import (
@@ -21,28 +28,34 @@ def test_ui_settings_preview_loads_and_tracks_controls(qapp):
 
     page = UISubInterface()
     page.connect_signals()
-    page.load_settings(
-        _SettingsStub(
-            {
-                "ui.main_font": "Arial",
-                "ui.ruby_font": "Arial",
-                "ui.font_size": 16,
-                "ui.current_line_font_size": 28,
-                "ui.ruby_size": 11,
-                "ui.ruby_spacing": 7,
-                "ui.cp_size": 9,
-                "ui.cp_spacing": 5,
-                "ui.line_height_factor": 1.4,
-                "ui.alignment_margin": 120,
-                "ui.lyrics_alignment": "right",
-                "ui.needs_guide_symbol": "!",
-                "ui.needs_guide_size": 15,
-                "ui.checkpoint_markers": {"cp_first_timed": "◆"},
-            }
-        )
+    interface_family = QFontDatabase.systemFont(
+        QFontDatabase.SystemFont.GeneralFont
+    ).family()
+    settings = _SettingsStub(
+        {
+            "ui.interface_font": interface_family,
+            "ui.main_font": "Arial",
+            "ui.ruby_font": "Arial",
+            "ui.font_size": 16,
+            "ui.current_line_font_size": 28,
+            "ui.ruby_size": 11,
+            "ui.ruby_spacing": 7,
+            "ui.cp_size": 9,
+            "ui.cp_spacing": 5,
+            "ui.line_height_factor": 1.4,
+            "ui.alignment_margin": 120,
+            "ui.lyrics_alignment": "right",
+            "ui.needs_guide_symbol": "!",
+            "ui.needs_guide_size": 15,
+            "ui.checkpoint_markers": {"cp_first_timed": "◆"},
+        }
     )
+    page.load_settings(settings)
 
     values = page.preview.preview_values
+    assert page.card_interface_font.value() == interface_family
+    page.collect_settings(settings)
+    assert settings.values["ui.interface_font"] == interface_family
     assert values["font_size"] == 16
     assert values["current_line_font_size"] == 28
     assert values["alignment"] == "right"
@@ -117,6 +130,20 @@ def test_ui_settings_preview_loads_and_tracks_controls(qapp):
 
     assert not page.preview.grab().isNull()
     page.close()
+
+
+def test_interface_font_card_can_return_to_auto(qapp):
+    card = FontSettingCard(FluentIcon.FONT, "UI font", "", allow_auto=True)
+    card.setValue("Example Font")
+    changed: list[str] = []
+    card.value_changed.connect(changed.append)
+
+    card._on_auto()
+
+    assert card.value() == ""
+    assert changed == [""]
+    assert card.btn.text() == card.tr("按界面语言自动选择")
+    card.close()
 
 
 def test_preview_uses_real_renderer_and_ruby_sample(qapp):

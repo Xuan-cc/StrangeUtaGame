@@ -35,6 +35,7 @@ DEFAULT_FONT_FAMILY = _platform_default_font_family()
 
 
 _active_ui_language = "zh_CN"
+_ui_font_override = ""
 
 
 def _ui_font_candidates(language_code: str) -> tuple[str, ...]:
@@ -64,11 +65,38 @@ def _ui_font_candidates(language_code: str) -> tuple[str, ...]:
     return ("Noto Sans", "DejaVu Sans", "Liberation Sans")
 
 
+def _installed_font_family(family: str | None) -> str:
+    """返回系统中的规范字体族名；未安装或为空时返回空串。"""
+    if not family:
+        return ""
+    installed = {name.casefold(): name for name in QFontDatabase.families()}
+    return installed.get(family.casefold(), "")
+
+
+def resolve_ui_font_override(family: str | None) -> str:
+    """解析用户 UI 字体设置；``auto``、空值和缺失字体均表示自动。"""
+    if not family or family.casefold() == "auto":
+        return ""
+    return _installed_font_family(family)
+
+
 def ui_font_families(language_code: str | None = None) -> list[str]:
-    """返回当前系统实际可用的 UI 字体回退链。"""
+    """返回当前系统实际可用的 UI 字体回退链。
+
+    用户指定字体优先；目标语言常用字体与系统通用字体继续作为字形回退，避免
+    西文字体不含中日文字形时出现方框。
+    """
     candidates = _ui_font_candidates(language_code or _active_ui_language)
     installed = {family.casefold(): family for family in QFontDatabase.families()}
-    available = [installed[name.casefold()] for name in candidates if name.casefold() in installed]
+    available: list[str] = []
+    if _ui_font_override:
+        available.append(_ui_font_override)
+    available.extend(
+        installed[name.casefold()]
+        for name in candidates
+        if name.casefold() in installed
+        and installed[name.casefold()].casefold() not in {f.casefold() for f in available}
+    )
 
     system_family = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont).family()
     if system_family and system_family.casefold() not in {f.casefold() for f in available}:
@@ -78,11 +106,8 @@ def ui_font_families(language_code: str | None = None) -> list[str]:
     return available
 
 
-def set_ui_language(language_code: str) -> None:
-    """更新 UI 字体语言，并将对应字体应用到 QApplication。"""
-    global _active_ui_language
-    _active_ui_language = language_code
-
+def _apply_application_ui_font() -> None:
+    """将当前 UI 字体链应用到 QApplication。"""
     # 延迟导入避免仅使用字体测量工具时强制创建/依赖 QApplication。
     from PyQt6.QtWidgets import QApplication
 
@@ -90,8 +115,23 @@ def set_ui_language(language_code: str) -> None:
     if app is None:
         return
     font = QFont(app.font())
-    font.setFamilies(ui_font_families(language_code))
+    font.setFamilies(ui_font_families())
     app.setFont(font)
+
+
+def set_ui_font_override(family: str | None) -> str:
+    """设置用户选择的 UI 字体并返回实际覆盖值；空串表示按语言自动选择。"""
+    global _ui_font_override
+    _ui_font_override = resolve_ui_font_override(family)
+    _apply_application_ui_font()
+    return _ui_font_override
+
+
+def set_ui_language(language_code: str) -> None:
+    """更新 UI 字体语言，并保留用户字体覆盖设置。"""
+    global _active_ui_language
+    _active_ui_language = language_code
+    _apply_application_ui_font()
 
 
 def ui_font(point_size: int, weight: QFont.Weight = QFont.Weight.Normal) -> QFont:

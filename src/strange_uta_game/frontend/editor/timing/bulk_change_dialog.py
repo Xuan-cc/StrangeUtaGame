@@ -21,7 +21,6 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QWidget,
 )
-from PyQt6.QtGui import QFont
 from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,

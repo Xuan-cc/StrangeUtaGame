@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from PyQt6.QtGui import QFont
 
-from strange_uta_game.frontend.font_utils import set_ui_language, ui_font
+from strange_uta_game.frontend.font_utils import (
+    resolve_ui_font_override,
+    set_ui_font_override,
+    set_ui_language,
+    ui_font,
+)
 from strange_uta_game.frontend.localization import install_translators, localization
 
 
@@ -39,3 +44,21 @@ def test_language_manager_updates_application_font(qapp, monkeypatch):
     finally:
         install_translators(previous_language)
         qapp.setFont(previous)
+
+
+def test_user_override_precedes_language_font_and_keeps_fallbacks(qapp, monkeypatch):
+    monkeypatch.setattr(
+        "strange_uta_game.frontend.font_utils.QFontDatabase.families",
+        lambda: ["Custom UI", "Yu Gothic UI", "Segoe UI"],
+    )
+    try:
+        set_ui_language("ja_JP")
+        assert set_ui_font_override("custom ui") == "Custom UI"
+        assert ui_font(10).families()[:2] == ["Custom UI", "Yu Gothic UI"]
+        assert qapp.font().families()[:2] == ["Custom UI", "Yu Gothic UI"]
+
+        assert set_ui_font_override("missing font") == ""
+        assert ui_font(10).families()[0] == "Yu Gothic UI"
+        assert resolve_ui_font_override("auto") == ""
+    finally:
+        set_ui_font_override("")

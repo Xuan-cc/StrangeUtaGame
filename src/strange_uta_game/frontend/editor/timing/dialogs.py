@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
-from strange_uta_game.frontend.font_utils import DEFAULT_FONT_FAMILY, ui_font
+from strange_uta_game.frontend.font_utils import ui_font
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -165,8 +165,6 @@ def _radio_split_mode(radio_direct: QRadioButton, radio_by_char: QRadioButton) -
 # ── 字符编辑类对话框（修改所选字符 / 编辑字符(F2) / 批量变更）统一外观 ──
 # 三窗口共用同一默认尺寸与字体层级，保证视觉一致、信息区分度高。
 CHAR_DIALOG_SIZE = (600, 700)
-_FONT_FAMILY = DEFAULT_FONT_FAMILY
-
 # 字体层级（pt）：显示值 > 字符字形 > 主输入 > 字段标签/行内输入 > 说明
 FONT_DIALOG_BASE = 10      # 对话框基础字体
 FONT_VALUE_DISPLAY = 16    # 顶部只读"当前字符"显示值（最醒目，加粗）
@@ -178,9 +176,7 @@ FONT_ROW_INPUT = 11        # 每字符行的注音/节奏点输入框
 
 def char_dialog_font(size: int, bold: bool = False) -> QFont:
     """构造字符编辑类对话框统一字体。"""
-    f = QFont(_FONT_FAMILY, size)
-    f.setBold(bold)
-    return f
+    return ui_font(size, QFont.Weight.Bold if bold else QFont.Weight.Normal)
 
 
 def style_quick_link_button(btn: PushButton) -> None:
@@ -211,8 +207,8 @@ def style_quick_link_button(btn: PushButton) -> None:
 
 
 def parse_ruby_text(
-    raw: str, check_count: int = 1, mode: Optional[str] = None
-) -> Optional[Ruby]:
+    raw: str, check_count: int = 1, mode: str | None = None
+) -> Ruby | None:
     """解析 ruby 文本，根据 check_count 自动分段
 
     规则（详见 ``inline_format.split_ruby_segments``，预览与写回共用）：

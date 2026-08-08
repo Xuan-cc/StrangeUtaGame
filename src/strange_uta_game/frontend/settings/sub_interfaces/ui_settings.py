@@ -5,7 +5,11 @@ from __future__ import annotations
 from PyQt6.QtCore import QTimer, Qt
 from qfluentwidgets import FluentIcon as FIF, PushButton, SettingCard, SettingCardGroup
 
-from strange_uta_game.frontend.font_utils import DEFAULT_FONT_FAMILY, resolve_font_family
+from strange_uta_game.frontend.font_utils import (
+    DEFAULT_FONT_FAMILY,
+    resolve_font_family,
+    resolve_ui_font_override,
+)
 
 from ..cards import ComboSettingCard, DoubleSpinSettingCard, FontSettingCard, SpinSettingCard, TextSettingCard
 from ..checkpoint_marker_dialog import CheckpointMarkerDialog
@@ -39,6 +43,17 @@ class UISubInterface(SubSettingInterface):
                 items=[tr("自动"), tr("浅色"), tr("深色")], parent=g),
             title_source="主题", content_source="选择界面主题，或设为自动跟随系统切换")
         self.card_theme.set_item_sources(["自动", "浅色", "深色"])
+        self.card_interface_font = self._tr_register(
+            FontSettingCard(
+                FIF.FONT,
+                tr("界面字体"),
+                tr("应用菜单、按钮和对话框字体；留空时按界面语言自动选择，重启后完整生效"),
+                parent=g,
+                allow_auto=True,
+            ),
+            title_source="界面字体",
+            content_source="应用菜单、按钮和对话框字体；留空时按界面语言自动选择，重启后完整生效",
+        )
         self.card_main_font = self._tr_register(
             FontSettingCard(FIF.FONT, tr("主文字字体"),
                 tr("卡拉OK预览主文字（当前行/上下文行）字体，取自系统已安装字体；同时用于全文本编辑的字宽统计"), parent=g),
@@ -46,9 +61,9 @@ class UISubInterface(SubSettingInterface):
             content_source="卡拉OK预览主文字（当前行/上下文行）字体，取自系统已安装字体；同时用于全文本编辑的字宽统计")
         self.card_ruby_font = self._tr_register(
             FontSettingCard(FIF.FONT, tr("注音字体"),
-                tr("卡拉OK预览 Ruby 注音字体（节奏点标记字体固定为微软雅黑，不可更改）"), parent=g),
+                tr("卡拉OK预览 Ruby 注音字体（节奏点标记跟随界面字体）"), parent=g),
             title_source="注音字体",
-            content_source="卡拉OK预览 Ruby 注音字体（节奏点标记字体固定为微软雅黑，不可更改）")
+            content_source="卡拉OK预览 Ruby 注音字体（节奏点标记跟随界面字体）")
         self.card_font_size = self._tr_register(
             SpinSettingCard(FIF.FONT_SIZE, tr("基础字体大小"),
                 tr("非当前行的歌词字体像素大小"),
@@ -123,7 +138,8 @@ class UISubInterface(SubSettingInterface):
             title_source="导唱待办标记大小",
             content_source="导唱待办标记符号的字体像素大小")
 
-        for c in [self.card_theme, self.card_main_font, self.card_ruby_font,
+        for c in [self.card_theme, self.card_interface_font,
+                  self.card_main_font, self.card_ruby_font,
                   self.card_font_size, self.card_current_line_font_size,
                   self.card_ruby_size, self.card_ruby_spacing, self.card_cp_size,
                   self.card_cp_spacing,
@@ -177,6 +193,8 @@ class UISubInterface(SubSettingInterface):
             self._notify_changed()
 
     def connect_signals(self):
+        # UI 字体不参与歌词预览；仅标记设置已变更并等待重启完整应用。
+        self.card_interface_font.value_changed.connect(self._notify_changed)
         for signal in (
             self.card_theme.index_changed,
             self.card_main_font.value_changed,
@@ -231,8 +249,12 @@ class UISubInterface(SubSettingInterface):
         # 主题选择卡，避免用户在子模块里改主题导致与宿主状态不一致。
         embedded = getattr(s, "_provider", None) is not None
         self.card_theme.setVisible(not embedded)
+        self.card_interface_font.setVisible(not embedded)
         theme_idx = {"auto": 0, "light": 1, "dark": 2}.get(s.get("ui.theme", "auto"), 0)
         self.card_theme.setCurrentIndex(theme_idx)
+        self.card_interface_font.setValue(
+            resolve_ui_font_override(s.get("ui.interface_font", ""))
+        )
         # 显示实际生效的字体族：存储值在本平台不可用时（如 Windows 项目带到 mac，
         # 存的是"Microsoft YaHei"）回退到平台默认，避免选择器显示一个本机没有的字体名。
         self.card_main_font.setValue(resolve_font_family(s.get("ui.main_font", DEFAULT_FONT_FAMILY)))
@@ -253,6 +275,7 @@ class UISubInterface(SubSettingInterface):
 
     def collect_settings(self, s):
         s.set("ui.theme", {0: "auto", 1: "light", 2: "dark"}.get(self.card_theme.currentIndex(), "auto"))
+        s.set("ui.interface_font", self.card_interface_font.value())
         s.set("ui.main_font", self.card_main_font.value())
         s.set("ui.ruby_font", self.card_ruby_font.value())
         s.set("ui.font_size", self.card_font_size.value())
