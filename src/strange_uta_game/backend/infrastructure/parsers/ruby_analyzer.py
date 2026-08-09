@@ -606,23 +606,43 @@ class WinRTAnalyzer(KanaDistributingAnalyzer):
             pass
 
     def _get_pairs(self, text: str) -> List[Tuple[str, str]]:
-        """整段 → [(原文 surface, 平假名读音)]，按 ≤100 字切块。"""
+        """整段 → [(原文 surface, 平假名读音)]，按 ≤100 字切块。
+
+        WinRT 会规范化连续空白（例如多个半角/全角空格可能只在
+        ``display_text`` 中留下一个），因此不能用其返回长度直接映射包含空白的
+        原文。这里先按空白边界切分，只把非空白文本交给 WinRT，并将每个空白
+        字符原样放回结果，确保后续结果索引与原文严格一致。
+        """
         pairs: List[Tuple[str, str]] = []
-        for off in range(0, len(text), self._MAX_LEN):
-            chunk = text[off : off + self._MAX_LEN]
-            words = self._jpa.get_words(chunk)
-            cursor = 0
-            for w in words:
-                disp_len = len(w.display_text)
-                # surface 取原文切片（display_text 已全角归一，不可信）
-                surface = chunk[cursor : cursor + disp_len]
-                reading = w.yomi_text or surface
-                pairs.append((surface, reading))
-                cursor += disp_len
-            # 兜底：若 GetWords 返回空（超长或异常），逐字回退
-            if cursor < len(chunk):
-                for c in chunk[cursor:]:
-                    pairs.append((c, c))
+        segment_start = 0
+        while segment_start < len(text):
+            if text[segment_start].isspace():
+                pairs.append((text[segment_start], text[segment_start]))
+                segment_start += 1
+                continue
+
+            segment_end = segment_start + 1
+            while segment_end < len(text) and not text[segment_end].isspace():
+                segment_end += 1
+
+            segment = text[segment_start:segment_end]
+            for off in range(0, len(segment), self._MAX_LEN):
+                chunk = segment[off : off + self._MAX_LEN]
+                words = self._jpa.get_words(chunk)
+                cursor = 0
+                for w in words:
+                    disp_len = len(w.display_text)
+                    # surface 取原文切片（display_text 已全角归一，不可信）
+                    surface = chunk[cursor : cursor + disp_len]
+                    reading = w.yomi_text or surface
+                    pairs.append((surface, reading))
+                    cursor += disp_len
+                # 兜底：若 GetWords 返回空（超长或异常），逐字回退
+                if cursor < len(chunk):
+                    for c in chunk[cursor:]:
+                        pairs.append((c, c))
+
+            segment_start = segment_end
         return pairs
 
     def get_reading(self, text: str) -> str:
