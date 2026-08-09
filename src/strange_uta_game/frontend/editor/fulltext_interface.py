@@ -1144,9 +1144,9 @@ class RubyInterface(QWidget):
             for idx, ch in enumerate(sentence.characters):
                 if not ch.ruby:
                     continue
-                if idx in kanji_linked:
-                    continue  # 与汉字连词，视为汉字，保留注音
-                ct = get_char_type(ch.char)
+                # 含汉字的连词块整体按汉字类型匹配：删除其他类型时保留，
+                # 明确选择“汉字”时则应正常删除。
+                ct = CharType.KANJI if idx in kanji_linked else get_char_type(ch.char)
 
                 # 片假名（不含促音ッ，ッ/っ 由 SOKUON 路径独立处理）
                 is_kata_family = ct == CharType.KATAKANA

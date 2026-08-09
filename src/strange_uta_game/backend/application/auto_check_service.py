@@ -2891,7 +2891,7 @@ def delete_rubies_by_type_names(
     - 勾选 HIRAGANA → 同时移除促音 っ
     - katakana_hiragana_ruby → 删除注音全为平假名的片假名字符（含ッ）
     - katakana_english_ruby  → 删除注音含非平假名内容的片假名字符（含ッ）
-    - 与汉字处于同一连词链中的字符视为汉字，不删除其注音。
+    - 与汉字处于同一连词链中的字符视为汉字：选择汉字时删除，选择其他类型时保留。
 
     Args:
         project: 项目
@@ -2923,9 +2923,9 @@ def delete_rubies_by_type_names(
         for idx, ch in enumerate(sentence.characters):
             if not ch.ruby:
                 continue
-            if idx in kanji_linked:
-                continue  # 与汉字连词，视为汉字，保留注音
-            ct = get_char_type(ch.char)
+            # 含汉字的连词块应整体按汉字类型匹配。此前这里无条件跳过，导致即使
+            # 用户明确选择“汉字”，连词块上的注音也始终无法删除。
+            ct = CharType.KANJI if idx in kanji_linked else get_char_type(ch.char)
 
             # 片假名家族：片假名本体 + 片假名形式的促音 ッ（sokuon 未被显式选中时）
             # 和长音符号 ー（long_vowel 未被显式选中时）。hiragana 等其他类型不应

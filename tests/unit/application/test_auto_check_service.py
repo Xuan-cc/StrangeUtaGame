@@ -411,6 +411,46 @@ class TestBlankLineLineStartEndGuard:
         assert removed == 2
         assert all(char.ruby is None for char in sentence.characters)
 
+    def test_kanji_type_removes_rubies_from_linked_kanji_word(self):
+        """含汉字的连词块按汉字类型删除，而不是被无条件保护。"""
+        from strange_uta_game.backend.application.auto_check_service import (
+            delete_rubies_by_type_names,
+        )
+        from strange_uta_game.backend.domain import Project
+        from strange_uta_game.backend.domain.models import Ruby, RubyPart
+
+        sentence = Sentence.from_text("今日", "s1")
+        sentence.characters[0].linked_to_next = True
+        for text, char in zip(("きょ", "う"), sentence.characters):
+            char.set_ruby(Ruby(parts=[RubyPart(text=text)]))
+        project = Project(sentences=[sentence])
+
+        removed = delete_rubies_by_type_names(project, ["kanji"])
+
+        assert removed == 2
+        assert all(char.ruby is None for char in sentence.characters)
+        assert not any(char.linked_to_next for char in sentence.characters)
+
+    def test_non_kanji_type_keeps_mixed_linked_kanji_word(self):
+        """含汉字的混合连词块仍不应被平假名类型误删。"""
+        from strange_uta_game.backend.application.auto_check_service import (
+            delete_rubies_by_type_names,
+        )
+        from strange_uta_game.backend.domain import Project
+        from strange_uta_game.backend.domain.models import Ruby, RubyPart
+
+        sentence = Sentence.from_text("食べ", "s1")
+        sentence.characters[0].linked_to_next = True
+        for text, char in zip(("た", "べ"), sentence.characters):
+            char.set_ruby(Ruby(parts=[RubyPart(text=text)]))
+        project = Project(sentences=[sentence])
+
+        removed = delete_rubies_by_type_names(project, ["hiragana"])
+
+        assert removed == 0
+        assert all(char.ruby is not None for char in sentence.characters)
+        assert sentence.characters[0].linked_to_next
+
 
 class TestFallbackSplitPeelKana:
     """连词回退：头尾假名剥离策略（_fallback_split_peel_kana）"""
