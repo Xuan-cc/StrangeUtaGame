@@ -411,6 +411,37 @@ class TestBlankLineLineStartEndGuard:
         assert removed == 2
         assert all(char.ruby is None for char in sentence.characters)
 
+    def test_alphabet_ruby_removal_keeps_whole_english_word_linked(self):
+        """删除英文注音后，全文本仍应把 magic 作为一个完整连词块。"""
+        from strange_uta_game.backend.application.auto_check_service import (
+            delete_rubies_by_type_names,
+        )
+        from strange_uta_game.backend.domain import Project
+        from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
+            sentence_to_timed_line,
+        )
+
+        service = AutoCheckService(
+            DummyAnalyzer(),
+            auto_check_flags={
+                "check_english_word_end": False,
+                "symbol": False,
+            },
+        )
+        sentence = Sentence.from_text("magic!", "s1")
+        service.apply_to_sentence(sentence)
+        project = Project(sentences=[sentence])
+
+        removed = delete_rubies_by_type_names(project, ["alphabet"])
+
+        assert removed == 1
+        assert all(char.ruby is None for char in sentence.characters)
+        assert [char.linked_to_next for char in sentence.characters[:5]] == [
+            True, True, True, True, False,
+        ]
+        line, _ = sentence_to_timed_line(sentence.characters)
+        assert line == "{magic||[T],,,[T],}![>T]"
+
     def test_kanji_type_removes_rubies_from_linked_kanji_word(self):
         """含汉字的连词块按汉字类型删除，而不是被无条件保护。"""
         from strange_uta_game.backend.application.auto_check_service import (

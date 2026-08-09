@@ -1165,9 +1165,12 @@ class RubyInterface(QWidget):
                     if ct == CharType.SOKUON and ch.char == "っ" and CharType.HIRAGANA not in ct_selected:
                         continue
                     ch.set_ruby(None)
-                    ch.linked_to_next = False
-                    if idx > 0:
-                        sentence.characters[idx - 1].linked_to_next = False
+                    # 英文注音删除后保留自动解析得到的整词连词链，避免全文本
+                    # 把首字母拆到 ``{...}`` 块外。
+                    if ct != CharType.ALPHABET:
+                        ch.linked_to_next = False
+                        if idx > 0:
+                            sentence.characters[idx - 1].linked_to_next = False
                     removed += 1
 
         self._refresh_display()

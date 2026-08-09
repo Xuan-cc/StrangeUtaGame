@@ -2951,9 +2951,14 @@ def delete_rubies_by_type_names(
                 if ct == CharType.SOKUON and ch.char == "っ" and CharType.HIRAGANA not in ct_selected:
                     continue
                 ch.set_ruby(None)
-                ch.linked_to_next = False
-                if idx > 0:
-                    sentence.characters[idx - 1].linked_to_next = False
+                # 英文自动解析把整个单词作为一个连词块；其 ruby 通常只挂在
+                # 首字母。删除“英文字母”注音时只移除读音，必须保留单词边界，
+                # 否则 ``magic`` 会在全文本中断成 ``[T]m{agic||...}``。
+                # 其他字符类型沿用旧行为：删除 ruby 的同时拆开连词。
+                if ct != CharType.ALPHABET:
+                    ch.linked_to_next = False
+                    if idx > 0:
+                        sentence.characters[idx - 1].linked_to_next = False
                 removed += 1
         if progress_callback is not None:
             progress_callback("删除注音", si + 1, total)
