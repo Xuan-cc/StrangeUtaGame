@@ -1428,6 +1428,12 @@ class AutoCheckService:
         # 拆分文本
         chars, check_counts = split_text(text, split_config)
 
+        # split_text 会按既有规则合并连续空白（混有全角空格时保留为一个全角
+        # 空格）。后续分析器和所有基于字符索引的处理必须使用同一份规范化文本，
+        # 否则分析器按原文位置返回结果、chars 却已少了字符，会导致后半句注音
+        # 整体左移。apply_to_sentence 最终也会据 chars 将句子重建为合并后的文本。
+        text = "".join(chars)
+
         # 分析注音
         ruby_results = self._analyzer.analyze(text)
 

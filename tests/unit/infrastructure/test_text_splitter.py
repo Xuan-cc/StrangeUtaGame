@@ -1,14 +1,13 @@
 """文本拆分器测试。"""
 
-import pytest
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
-    CharType,
-    get_char_type,
-    JapaneseSplitter,
-    EnglishSplitter,
     AutoSplitter,
-    split_text,
+    CharType,
+    EnglishSplitter,
+    JapaneseSplitter,
     SplitConfig,
+    get_char_type,
+    split_text,
 )
 
 
@@ -146,3 +145,9 @@ class TestSplitText:
         chars, counts = split_text("赤い花", config)
         assert len(chars) == len(counts)
         assert chars == ["赤", "い", "花"]
+
+    def test_mixed_consecutive_spaces_merge_to_one_full_width_space(self):
+        chars, counts = split_text("magic magic! \u3000君に届くよぅに")
+
+        assert "".join(chars) == "magic magic!\u3000君に届くよぅに"
+        assert len(counts) == len(chars)

@@ -122,6 +122,24 @@ class TestAutoCheckService:
         # 验证最后一个字符标记为句尾
         assert sentence.characters[2].is_line_end
 
+    def test_mixed_consecutive_spaces_do_not_shift_ruby_results(self):
+        service = AutoCheckService(
+            _FixedReadingAnalyzer({"君": "きみ", "届": "とど"})
+        )
+        text = "magic magic! \u3000君に届くよぅに"
+        sentence = Sentence.from_text(text, "s1")
+
+        service.apply_to_sentence(sentence)
+
+        normalized = "magic magic!\u3000君に届くよぅに"
+        assert sentence.text == normalized
+        kimi = sentence.characters[normalized.index("君")]
+        todoku = sentence.characters[normalized.index("届")]
+        assert kimi.char == "君"
+        assert [part.text for part in kimi.ruby.parts] == ["き", "み"]
+        assert todoku.char == "届"
+        assert [part.text for part in todoku.ruby.parts] == ["と", "ど"]
+
     def test_estimate_check_count(self):
         """测试估算节奏点数量"""
         service = AutoCheckService(DummyAnalyzer())
