@@ -11,7 +11,7 @@ from qfluentwidgets import LineEdit, PushButton
 
 from strange_uta_game.backend.domain import Character
 
-from .dialogs import parse_ruby_text
+from . import dialogs as ruby_dialogs
 
 
 class RubyEditPopup(QDialog):
@@ -32,7 +32,10 @@ class RubyEditPopup(QDialog):
         self._character = character
         self._can_link_next = can_link_next
         self._link_toggle_callback = link_toggle_callback
-        self._original_ruby = self._ruby_input_text(character)
+        self._split_mode = ruby_dialogs._get_ruby_split_mode()
+        if self._split_mode not in ("direct", "char", "mora"):
+            self._split_mode = "mora"
+        self._original_ruby = self._ruby_input_text(character, self._split_mode)
         self._original_linked = bool(character.linked_to_next)
         self._linked = self._original_linked and can_link_next
         self._modified = False
@@ -76,10 +79,12 @@ class RubyEditPopup(QDialog):
         self._resize_for_text(self.edit_ruby.text())
 
     @staticmethod
-    def _ruby_input_text(character: Character) -> str:
+    def _ruby_input_text(character: Character, mode: str) -> str:
         if not character.ruby or not character.ruby.parts:
             return ""
-        return ",".join(part.text for part in character.ruby.parts)
+        if mode == "direct":
+            return ",".join(part.text for part in character.ruby.parts)
+        return character.ruby.text
 
     def _toggle_link(self, checked: bool) -> None:
         if self._link_toggle_callback is not None:
@@ -133,17 +138,27 @@ class RubyEditPopup(QDialog):
             return
         ruby_text = self.edit_ruby.text().strip()
         ruby_changed = ruby_text != self._original_ruby
+        split_mode = self._split_mode
+        mode_changed = split_mode != "direct" and "," in ruby_text
+        if mode_changed:
+            split_mode = "direct"
+            ruby_dialogs._set_ruby_split_mode(split_mode)
+            self._split_mode = split_mode
         link_changed = (
             self._link_toggle_callback is None
             and self._linked != self._original_linked
         )
         if ruby_changed:
             self._character.set_ruby(
-                parse_ruby_text(ruby_text, self._character.check_count)
+                ruby_dialogs.parse_ruby_text(
+                    ruby_text,
+                    self._character.check_count,
+                    mode=split_mode,
+                )
             )
         if link_changed:
             self._character.linked_to_next = self._linked
-        self._modified = ruby_changed or link_changed
+        self._modified = ruby_changed or link_changed or mode_changed
         self._finished = True
         super().accept()
 
