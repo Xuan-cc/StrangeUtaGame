@@ -244,3 +244,27 @@ def test_move_to_checkpoint_uses_index_for_exact_and_fallback(service):
     assert (pos.line_idx, pos.char_idx, pos.checkpoint_idx) == (0, 0, 0)
 
     assert not service.move_to_checkpoint(99, 0, 0)
+
+
+def test_pressed_timestamp_uses_audio_clock_queue_delay_and_offset(service):
+    """UI refresh rate must not participate in timing timestamp calculation."""
+    project, _sentence, c1, _c2 = _make_project_normal_then_sentence_end()
+    service.set_project(project)
+    service._audio_engine.set_position_ms(2_000)
+    service.set_timing_offset(-230)
+
+    service.on_timing_key_pressed("SPACE", queue_delay_ms=17)
+
+    assert c1.timestamps == [1_753]
+
+
+def test_released_timestamp_uses_fresh_audio_clock_for_sentence_end(service):
+    project, _sentence, _c1, c2 = _make_project_normal_then_sentence_end()
+    service.set_project(project)
+    assert service.move_to_checkpoint(0, 1, 2)
+    service._audio_engine.set_position_ms(5_000)
+    service.set_timing_offset(-100)
+
+    service.on_timing_key_released("SPACE", queue_delay_ms=25)
+
+    assert c2.sentence_end_ts == 4_875
