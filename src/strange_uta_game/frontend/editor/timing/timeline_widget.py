@@ -20,7 +20,9 @@ from PyQt6.QtGui import (
     QPainter,
     QPaintEvent,
     QPen,
+    QPixmap,
     QPolygon,
+    QResizeEvent,
 )
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -112,6 +114,10 @@ class WaveformDisplay(QWidget):
         # 整段音频的多分辨率峰值缓存：bin_size -> (mins, maxs)。同一缩放
         # 粒度只归约一次，播放滚动时仅从缓存中取当前窗口。
         self._waveform_peak_levels: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+        # 网格、波形、范围和标签在普通播放期间不变。缓存为静态图层后，
+        # 逐帧只需绘制该图层和播放头；缩放/滚动/数据变化时再失效重建。
+        self._static_layer: Optional[QPixmap] = None
+        self._static_layer_key: Optional[tuple] = None
 
         # 左键拖动平移状态
         self._pan_start_x: Optional[float] = None
@@ -147,7 +153,19 @@ class WaveformDisplay(QWidget):
         self.setMouseTracking(True)
 
         # 监听主题变化，触发重绘
-        theme.changed.connect(self.update)
+        theme.changed.connect(self._on_theme_changed)
+
+    def _invalidate_static_layer(self) -> None:
+        self._static_layer = None
+        self._static_layer_key = None
+
+    def _on_theme_changed(self) -> None:
+        self._invalidate_static_layer()
+        self.update()
+
+    def resizeEvent(self, event: Optional[QResizeEvent]) -> None:
+        self._invalidate_static_layer()
+        super().resizeEvent(event)
 
     def _max_scroll(self) -> float:
         """当前缩放下允许的最大滚动位置，保证视窗末尾不超出音频范围。"""
@@ -162,6 +180,9 @@ class WaveformDisplay(QWidget):
         self._duration_ms = ms
         # 时长变化后重新 clamp，避免旧滚动位置超出新范围
         self._scroll_position = self._clamp_scroll(self._scroll_position)
+        # Keep this method usable by the lightweight non-QWidget test double.
+        self._static_layer = None
+        self._static_layer_key = None
         self.update()
 
     def set_playback_range(
@@ -169,6 +190,7 @@ class WaveformDisplay(QWidget):
     ) -> None:
         self._range_start_ms = start_ms
         self._range_end_ms = end_ms
+        self._invalidate_static_layer()
         self.update()
 
     def _suspend_auto_scroll(self) -> None:
@@ -215,6 +237,7 @@ class WaveformDisplay(QWidget):
         self.scroll_position_changed.emit(self._scroll_position)
 
     def set_position(self, ms: int):
+        old_scroll = self._scroll_position
         self._current_ms = ms
         if self._center_playhead_mode and self._is_playing:
             self._sync_scroll_to_playhead()
@@ -228,6 +251,8 @@ class WaveformDisplay(QWidget):
                 )
                 self._scroll_position = new_scroll
                 self.scroll_position_changed.emit(self._scroll_position)
+        if self._center_playhead_mode or self._scroll_position != old_scroll:
+            self._invalidate_static_layer()
         self.update()
 
     @log_slow_method(
@@ -275,6 +300,7 @@ class WaveformDisplay(QWidget):
         self._running_max_ts = running_max
         self._last_tags_input = tags
         self._max_file_order_key = (tags[-1][2], tags[-1][3], tags[-1][4]) if tags else None
+        WaveformDisplay._invalidate_static_layer(self)
         self.update()
 
     def _append_time_tag(self, entry: Tuple[int, str, int, int, int, bool, Optional[str]]) -> None:
@@ -292,6 +318,7 @@ class WaveformDisplay(QWidget):
             self._running_max_ts = ts
         self._handle_index[handle] = item
         self._max_file_order_key = (line_idx, char_idx, cp_idx)
+        WaveformDisplay._invalidate_static_layer(self)
         self.update()
 
     def try_append_tag(self, ts: int, char: str, line_idx: int, char_idx: int,
@@ -326,6 +353,7 @@ class WaveformDisplay(QWidget):
         self._peaks_cache = None
         self._peaks_cache_key = None
         self._waveform_peak_levels.clear()
+        self._invalidate_static_layer()
         self.update()
 
     def clear_audio_data(self):
@@ -336,12 +364,14 @@ class WaveformDisplay(QWidget):
         self._peaks_cache = None
         self._peaks_cache_key = None
         self._waveform_peak_levels.clear()
+        self._invalidate_static_layer()
         self.update()
 
     def set_zoom(self, zoom: float):
         self._zoom_factor = max(1.0, min(100.0, zoom))
         # 缩放变化后重新 clamp，避免当前滚动位置超出新的有效范围
         self._scroll_position = self._clamp_scroll(self._scroll_position)
+        self._invalidate_static_layer()
         self.update()
 
     def set_zoom_enabled(self, enabled: bool) -> None:
@@ -349,6 +379,7 @@ class WaveformDisplay(QWidget):
 
     def set_scroll_position(self, position: float):
         self._scroll_position = self._clamp_scroll(position)
+        self._invalidate_static_layer()
         self.update()
 
     # ── 时间标签拖拽编辑：总开关 + 选中态 ──
@@ -365,6 +396,7 @@ class WaveformDisplay(QWidget):
             self._press_handle = None
             self._drag_armed = False
             self.unsetCursor()
+        self._invalidate_static_layer()
         self.update()
 
     def set_tag_char_enabled(self, enabled: bool) -> None:
@@ -372,6 +404,7 @@ class WaveformDisplay(QWidget):
         enabled = bool(enabled)
         if enabled != self._tag_char_enabled:
             self._tag_char_enabled = enabled
+            self._invalidate_static_layer()
             self.update()
 
     def set_tag_ruby_enabled(self, enabled: bool) -> None:
@@ -379,6 +412,7 @@ class WaveformDisplay(QWidget):
         enabled = bool(enabled)
         if enabled != self._tag_ruby_enabled:
             self._tag_ruby_enabled = enabled
+            self._invalidate_static_layer()
             self.update()
 
     def clear_tag_selection(self) -> None:
@@ -387,6 +421,7 @@ class WaveformDisplay(QWidget):
             self._reset_drag()
         if self._selected_handles:
             self._selected_handles.clear()
+            self._invalidate_static_layer()
             self.update()
 
     def _reset_drag(self) -> None:
@@ -572,12 +607,10 @@ class WaveformDisplay(QWidget):
     def paintEvent(self, a0: Optional[QPaintEvent]):
         _ = a0
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
 
-        painter.fillRect(self.rect(), theme.waveform_bg)
-
         if self._duration_ms <= 0:
+            painter.fillRect(self.rect(), theme.waveform_bg)
             painter.setPen(theme.text_hint)
             painter.drawText(
                 self.rect(), Qt.AlignmentFlag.AlignCenter, self.tr("请加载音频文件")
@@ -588,14 +621,50 @@ class WaveformDisplay(QWidget):
         visible_duration_ms = self._duration_ms / self._zoom_factor
         visible_end_ms = visible_start_ms + visible_duration_ms
 
+        layer_key = (
+            w,
+            h,
+            visible_start_ms,
+            visible_duration_ms,
+            self._range_start_ms,
+            self._range_end_ms,
+            self._tag_edit_enabled,
+            self._tag_char_enabled,
+            self._tag_ruby_enabled,
+            frozenset(self._selected_handles),
+            self._drag_delta_ms if self._is_dragging_tags else 0,
+        )
+        if self._static_layer is None or self._static_layer_key != layer_key:
+            self._static_layer = self._render_static_layer(
+                w, h, visible_start_ms, visible_end_ms, visible_duration_ms
+            )
+            self._static_layer_key = layer_key
+        painter.drawPixmap(0, 0, self._static_layer)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._draw_playhead(painter, w, h, visible_start_ms, visible_duration_ms)
+        self._draw_drag_badge(painter, w, h, visible_start_ms, visible_duration_ms)
+
+    def _render_static_layer(
+        self,
+        w: int,
+        h: int,
+        visible_start_ms: float,
+        visible_end_ms: float,
+        visible_duration_ms: float,
+    ) -> QPixmap:
+        layer = QPixmap(max(1, w), max(1, h))
+        layer.fill(theme.waveform_bg)
+        painter = QPainter(layer)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
         self._draw_time_grid(painter, w, h, visible_start_ms, visible_end_ms)
         self._draw_waveform(painter, w, h)
         self._draw_playback_range(
             painter, w, h, visible_start_ms, visible_duration_ms
         )
         self._draw_time_tags(painter, w, h, visible_start_ms, visible_end_ms)
-        self._draw_playhead(painter, w, h, visible_start_ms, visible_duration_ms)
-        self._draw_drag_badge(painter, w, h, visible_start_ms, visible_duration_ms)
+        painter.end()
+        return layer
 
     def _draw_time_grid(self, painter: QPainter, w: int, h: int,
                         visible_start_ms: float, visible_end_ms: float):
