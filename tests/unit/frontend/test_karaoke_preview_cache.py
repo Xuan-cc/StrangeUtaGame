@@ -123,6 +123,26 @@ def test_playback_line_change_requests_full_repaint(qapp, monkeypatch):
     assert dirty and dirty[-1] == ()
 
 
+def test_partial_lyric_repaint_matches_full_render(qapp, monkeypatch):
+    preview = preview_module.KaraokePreview()
+    preview.resize(800, 560)
+    preview.set_project(_project_with_linked_word())
+    preview.show()
+    preview.set_playing(True)
+    preview._auto_scroll_enabled = False
+    qapp.processEvents()
+
+    preview.set_current_time_ms(1_050)
+    qapp.processEvents()
+    partial = preview.grab().toImage()
+
+    preview.update()
+    qapp.processEvents()
+    full = preview.grab().toImage()
+
+    assert partial == full
+
+
 def test_line_invalidation_advances_uncached_line_version(qapp, monkeypatch):
     monkeypatch.setattr(preview_module, "theme", _DummyTheme())
 

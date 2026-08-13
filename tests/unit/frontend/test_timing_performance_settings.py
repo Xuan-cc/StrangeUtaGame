@@ -1,6 +1,20 @@
 from strange_uta_game.frontend.editor.timing_interface import EditorInterface
 from strange_uta_game.frontend.editor.timing.timeline_widget import WaveformDisplay
+from strange_uta_game.frontend.editor.timing import timeline_widget as timeline_module
 from strange_uta_game.backend.domain import Character, Project, Sentence
+
+
+class _DummySignal:
+    def connect(self, callback):
+        pass
+
+
+class _TimelineThemeProxy:
+    changed = _DummySignal()
+
+    def __getattr__(self, name):
+        from strange_uta_game.frontend.theme import theme as live_theme
+        return getattr(live_theme, name)
 
 
 def test_ui_refresh_fps_accepts_supported_values():
@@ -17,6 +31,7 @@ def test_ui_refresh_fps_falls_back_to_safe_values():
 
 
 def test_waveform_static_layer_is_reused_for_playhead_updates(qapp, monkeypatch):
+    monkeypatch.setattr(timeline_module, "theme", _TimelineThemeProxy())
     display = WaveformDisplay()
     display.resize(640, 120)
     display.set_duration(120_000)
@@ -40,6 +55,7 @@ def test_waveform_static_layer_is_reused_for_playhead_updates(qapp, monkeypatch)
 
 
 def test_waveform_static_layer_rebuilds_after_scroll(qapp, monkeypatch):
+    monkeypatch.setattr(timeline_module, "theme", _TimelineThemeProxy())
     display = WaveformDisplay()
     display.resize(640, 120)
     display.set_duration(120_000)
@@ -50,6 +66,29 @@ def test_waveform_static_layer_rebuilds_after_scroll(qapp, monkeypatch):
     display.grab()
 
     assert display._static_layer is not old_layer
+
+
+def test_cached_waveform_matches_forced_full_render(qapp, monkeypatch):
+    monkeypatch.setattr(timeline_module, "theme", _TimelineThemeProxy())
+    display = WaveformDisplay()
+    display.resize(640, 120)
+    display.set_duration(120_000)
+    display.set_time_tags([
+        (1_000, "春", 0, 0, 0, False, "はる"),
+        (2_000, "風", 0, 1, 0, False, "かぜ"),
+    ])
+    display.show()
+    qapp.processEvents()
+    display.set_position(1_500)
+    qapp.processEvents()
+    cached = display.grab().toImage()
+
+    display._invalidate_static_layer()
+    display.update()
+    qapp.processEvents()
+    rebuilt = display.grab().toImage()
+
+    assert cached == rebuilt
 
 
 class _Label:
