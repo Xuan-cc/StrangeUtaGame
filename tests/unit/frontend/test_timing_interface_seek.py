@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 
 from strange_uta_game.frontend.editor.timing_interface import EditorInterface
@@ -154,7 +155,7 @@ def test_play_starts_from_locked_start_when_position_is_outside_range():
         _status_state="paused",
         lbl_status=SimpleNamespace(setText=lambda text: None),
         tr=lambda text: text,
-        _update_mode_indicator=lambda: None,
+        _update_mode_indicator=lambda playing=None: None,
         _show_runtime_error=lambda text: None,
     )
 
@@ -216,7 +217,7 @@ def test_poll_pauses_exactly_at_locked_end_at_1_5x_speed():
         _status_state="playing",
         lbl_status=SimpleNamespace(setText=lambda text: None),
         tr=lambda text: text,
-        _update_mode_indicator=lambda: None,
+        _update_mode_indicator=lambda playing=None: None,
         _validate_all_timestamps=lambda: None,
     )
     editor._on_pause = lambda: EditorInterface._on_pause(editor)
@@ -230,3 +231,77 @@ def test_poll_pauses_exactly_at_locked_end_at_1_5x_speed():
     assert timeline.position_ms == 6_000
     assert preview.current_time_ms == 6_000
     assert editor._status_state == "range_finished"
+
+
+def test_page_animation_resume_polls_once_when_audio_finished_during_pause():
+    calls = []
+    editor = SimpleNamespace(
+        _timing_service=SimpleNamespace(is_playing=lambda: False),
+        _position_poll_timer=SimpleNamespace(start=lambda: calls.append("start")),
+        _status_state="playing",
+        _poll_audio_position=lambda: calls.append("poll"),
+        _update_mode_indicator=lambda: calls.append("mode"),
+    )
+
+    EditorInterface._resume_poll_after_page_animation(editor)
+
+    assert calls == ["poll"]
+
+
+def test_page_animation_resume_does_not_mark_explicit_pause_as_finished():
+    calls = []
+    editor = SimpleNamespace(
+        _timing_service=SimpleNamespace(is_playing=lambda: False),
+        _position_poll_timer=SimpleNamespace(start=lambda: calls.append("start")),
+        _status_state="paused",
+        _poll_audio_position=lambda: calls.append("poll"),
+        _update_mode_indicator=lambda: calls.append("mode"),
+    )
+
+    EditorInterface._resume_poll_after_page_animation(editor)
+
+    assert calls == ["mode"]
+
+
+def test_position_callback_syncs_mode_before_frame_throttle():
+    calls = []
+    editor = SimpleNamespace(
+        _timing_service=SimpleNamespace(is_playing=lambda: False),
+        _shortcut_mode_playing=True,
+        _last_position_update_time=time.monotonic(),
+        _update_mode_indicator=lambda: calls.append("mode"),
+    )
+
+    EditorInterface._handle_position_changed(editor, 10_000, 10_000, {})
+
+    assert calls == ["mode"]
+
+
+def test_manual_pause_selects_edit_mode_without_requerying_engine():
+    class StaleTimingService:
+        def pause(self) -> None:
+            pass
+
+        def is_playing(self) -> bool:
+            return True
+
+    selected_modes = []
+    editor = SimpleNamespace(
+        _timing_service=StaleTimingService(),
+        transport=SimpleNamespace(set_playing=lambda playing: None),
+        preview=SimpleNamespace(set_playing=lambda playing: None),
+        timeline=SimpleNamespace(set_playing=lambda playing: None),
+        _status_state="playing",
+        lbl_status=SimpleNamespace(setText=lambda text: None),
+        tr=lambda text: text,
+        _update_mode_indicator=lambda playing=None: selected_modes.append(playing),
+        _auto_scroll_suspended=True,
+        _auto_scroll_new_line_reached=True,
+        _auto_scroll_cooldown_timer=SimpleNamespace(stop=lambda: None),
+        _position_poll_timer=SimpleNamespace(stop=lambda: None),
+        _validate_all_timestamps=lambda: None,
+    )
+
+    EditorInterface._on_pause(editor)
+
+    assert selected_modes == [False]

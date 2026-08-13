@@ -4502,16 +4502,20 @@ class EditorInterface(QWidget):
             worker.deleteLater()
             self._audio_load_worker = None
 
-    def _update_mode_indicator(self):
+    def _update_mode_indicator(self, playing: Optional[bool] = None):
         """#8：根据播放状态更新左下角模式指示器与激活的 key_map。
 
         - 播放中 → "模式：打轴"，使用 _key_map_timing_short/long
         - 未播放 → "模式：编辑"，使用 _key_map_edit_short/long
         同步刷新底部快捷键提示（因为两模式文本可能不同）。
         """
+        if playing is None:
+            playing = bool(self._timing_service and self._timing_service.is_playing())
+        else:
+            playing = bool(playing)
+        self._shortcut_mode_playing = playing
         if not hasattr(self, "lbl_mode"):
             return
-        playing = bool(self._timing_service and self._timing_service.is_playing())
         if playing:
             self.lbl_mode.setText(self.tr("模式：打轴"))
             self.lbl_mode.setStyleSheet(
@@ -4665,7 +4669,7 @@ class EditorInterface(QWidget):
                 self.timeline.set_playing(True)
                 self._status_state = "playing"
                 self.lbl_status.setText(self.tr("播放中"))
-                self._update_mode_indicator()
+                self._update_mode_indicator(True)
                 self.preview._last_auto_scroll_line_idx = -1
                 # 无论鼠标点击还是键盘快捷键触发播放，都无条件恢复自动滚动
                 self._auto_scroll_suspended = False
@@ -4685,7 +4689,7 @@ class EditorInterface(QWidget):
             self.timeline.set_playing(False)
             self._status_state = "paused"
             self.lbl_status.setText(self.tr("已暂停"))
-            self._update_mode_indicator()
+            self._update_mode_indicator(False)
             # 重置自动滚动状态
             self._auto_scroll_suspended = False
             self._auto_scroll_new_line_reached = False
@@ -4705,7 +4709,7 @@ class EditorInterface(QWidget):
             self.timeline.set_position(0)
             self._status_state = "stopped"
             self.lbl_status.setText(self.tr("已停止"))
-            self._update_mode_indicator()
+            self._update_mode_indicator(False)
             # 重置自动滚动状态
             self._auto_scroll_suspended = False
             self._auto_scroll_new_line_reached = False
@@ -7117,12 +7121,24 @@ class EditorInterface(QWidget):
         self._position_poll_timer.stop()
         QTimer.singleShot(
             duration_ms,
-            lambda: (
-                self._position_poll_timer.start()
-                if self._timing_service and self._timing_service.is_playing()
-                else None
-            ),
+            self._resume_poll_after_page_animation,
         )
+
+    def _resume_poll_after_page_animation(self) -> None:
+        """动画结束后恢复轮询，或补做暂停期间遗漏的结束同步。"""
+        if not self._timing_service:
+            return
+        if self._timing_service.is_playing():
+            self._position_poll_timer.start()
+            return
+
+        # 音频可能在页面动画暂停轮询的这段时间内自然结束。旧逻辑只在仍播放时
+        # 重启 timer，导致结束分支永远没有机会运行，模式指示器和快捷键表会一直
+        # 留在打轴模式。显式 pause/stop 已经同步过完整 UI，只需刷新模式即可。
+        if self._status_state == "playing":
+            self._poll_audio_position()
+        else:
+            self._update_mode_indicator()
 
     @log_slow_method(
         "editor.poll_audio_position",
@@ -7303,6 +7319,13 @@ class EditorInterface(QWidget):
     def _handle_position_changed(
         self, position_ms: int, duration_ms: int, singer_positions
     ):
+        playing = bool(self._timing_service and self._timing_service.is_playing())
+        if playing != getattr(self, "_shortcut_mode_playing", None):
+            # 音频引擎回调本身就是播放状态发生变化时最早、最可靠的 UI 通知。
+            # 模式同步必须放在 60fps 位置节流之前，否则自然结束的最后一次回调
+            # 可能只刷新播放控件，快捷键表却仍停留在打轴模式。
+            self._update_mode_indicator()
+
         # 60fps UI 节流：跳过间隔 < 16ms 的更新
         now = time.monotonic()
         if now - self._last_position_update_time < 0.016:
@@ -7319,7 +7342,6 @@ class EditorInterface(QWidget):
         self.timeline.set_position(position_ms)
         self.preview.set_current_time_ms(position_ms)
         if self._timing_service:
-            playing = self._timing_service.is_playing()
             self.transport.set_playing(playing)
             self.preview.set_playing(playing)
 
