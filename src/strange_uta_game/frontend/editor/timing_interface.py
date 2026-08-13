@@ -7410,7 +7410,9 @@ class EditorInterface(QWidget):
             ruby = ch.ruby.parts[cp_idx].text if ch.ruby and cp_idx < len(ch.ruby.parts) else None
         if global_ts is None:
             return False
-        return self.timeline.try_append_tag(global_ts, ch.char, line_idx, char_idx, cp_idx, is_end, ruby)
+        return self.timeline.try_add_tag(
+            global_ts, ch.char, line_idx, char_idx, cp_idx, is_end, ruby
+        )
 
     def _handle_timing_error(self, error_type: str, message: str):
         InfoBar.warning(

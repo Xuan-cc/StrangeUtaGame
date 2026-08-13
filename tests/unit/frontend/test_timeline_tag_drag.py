@@ -26,6 +26,8 @@ def _fake_wd():
     f.set_time_tags = lambda tags: WaveformDisplay.set_time_tags(f, tags)
     f._visible_slice = lambda lst, vs, ve: WaveformDisplay._visible_slice(f, lst, vs, ve)
     f.try_append_tag = lambda *a: WaveformDisplay.try_append_tag(f, *a)
+    f.try_add_tag = lambda *a: WaveformDisplay.try_add_tag(f, *a)
+    f._entries_by_handle = {}
     return f
 
 
@@ -155,6 +157,19 @@ def test_try_append_tag_not_at_end_fails():
     wd.set_time_tags(T0)  # _max_file_order_key=(0,2,0)
     # 补打 (0,1,0)：file_key < max → 必须回退（它会改变 (0,2,0) 的归类语义）
     assert wd.try_append_tag(200, "b", 0, 1, 0, False, None) is False
+
+
+def test_try_add_tag_fills_gap_without_project_rescan():
+    """Interior additions rebuild from the widget cache instead of project collect."""
+    initial = [(100, "a", 0, 0, 0, False, None),
+               (300, "c", 0, 2, 0, False, None)]
+    wd = _fake_wd()
+    wd.set_time_tags(initial)
+
+    assert wd.try_add_tag(200, "b", 0, 1, 0, False, None) is True
+    expected = initial + [(200, "b", 0, 1, 0, False, None)]
+    expected.sort(key=lambda item: (item[2], item[3], item[4], item[5]))
+    assert _summary(wd) == _summary(_full_rebuild(expected))
 
 
 def test_visible_slice():

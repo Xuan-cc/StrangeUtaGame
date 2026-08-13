@@ -94,6 +94,9 @@ class WaveformDisplay(QWidget):
         self._seen_char_keys: set = set()
         # 文件序最大键 (line, char, cp)，用于 try_append_tag 判定"末尾追加"
         self._max_file_order_key: Optional[Tuple[int, int, int]] = None
+        # Raw entries keyed by stable handle. This lets an interior checkpoint be
+        # inserted without collecting every timestamp from the project again.
+        self._entries_by_handle: dict[TagHandle, tuple] = {}
 
         # 音频数据
         self._samples: Optional[np.ndarray] = None
@@ -300,6 +303,9 @@ class WaveformDisplay(QWidget):
         self._running_max_ts = running_max
         self._last_tags_input = tags
         self._max_file_order_key = (tags[-1][2], tags[-1][3], tags[-1][4]) if tags else None
+        self._entries_by_handle = {
+            (entry[2], entry[3], entry[4], entry[5]): entry for entry in tags
+        }
         WaveformDisplay._invalidate_static_layer(self)
         self.update()
 
@@ -317,6 +323,7 @@ class WaveformDisplay(QWidget):
             bisect.insort(self._time_tags, item, key=lambda x: x.ts)
             self._running_max_ts = ts
         self._handle_index[handle] = item
+        self._entries_by_handle[handle] = entry
         self._max_file_order_key = (line_idx, char_idx, cp_idx)
         WaveformDisplay._invalidate_static_layer(self)
         self.update()
@@ -338,6 +345,27 @@ class WaveformDisplay(QWidget):
         self._append_time_tag((ts, char, line_idx, char_idx, cp_idx, is_end, ruby))
         # 直接增量后让下次 set_time_tags 走全量重建（避免前缀比对基准失配）
         self._last_tags_input = None
+        return True
+
+    def try_add_tag(self, ts: int, char: str, line_idx: int, char_idx: int,
+                    cp_idx: int, is_end: bool, ruby: Optional[str]) -> bool:
+        """Add a newly timed checkpoint without rescanning the project.
+
+        The common file-tail case keeps the O(log N) append path. Filling an
+        earlier gap rebuilds classification from the widget's local raw-entry
+        cache because it can change which later timestamps are warnings.
+        """
+        handle: TagHandle = (line_idx, char_idx, cp_idx, is_end)
+        if handle in self._handle_index:
+            return False
+        if self.try_append_tag(ts, char, line_idx, char_idx, cp_idx, is_end, ruby):
+            return True
+
+        entry = (ts, char, line_idx, char_idx, cp_idx, is_end, ruby)
+        cached = list(self._entries_by_handle.values())
+        cached.append(entry)
+        cached.sort(key=lambda item: (item[2], item[3], item[4], item[5]))
+        self.set_time_tags(cached)
         return True
 
     def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
@@ -1249,6 +1277,11 @@ class TimelineWidget(QWidget):
     def try_append_tag(self, ts: int, char: str, line_idx: int, char_idx: int,
                        cp_idx: int, is_end: bool, ruby: Optional[str]) -> bool:
         return self.waveform_display.try_append_tag(
+            ts, char, line_idx, char_idx, cp_idx, is_end, ruby)
+
+    def try_add_tag(self, ts: int, char: str, line_idx: int, char_idx: int,
+                    cp_idx: int, is_end: bool, ruby: Optional[str]) -> bool:
+        return self.waveform_display.try_add_tag(
             ts, char, line_idx, char_idx, cp_idx, is_end, ruby)
 
     def set_tag_char_enabled(self, enabled: bool) -> None:
