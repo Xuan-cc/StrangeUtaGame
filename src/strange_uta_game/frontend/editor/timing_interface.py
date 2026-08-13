@@ -173,6 +173,13 @@ class EditorInterface(QWidget):
         self._position_poll_timer.setInterval(16)  # ~60fps
         self._position_poll_timer.timeout.connect(self._poll_audio_position)
         self._last_polled_duration_ms: Optional[int] = None
+        # Per-line status snapshots. A timing key only changes one line, so the
+        # footer can update in O(chars in line) instead of scanning the project.
+        self._status_line_cache: dict[int, tuple[bool, bool, int]] = {}
+        self._status_cache_project_id: Optional[int] = None
+        self._status_meaningful_total = 0
+        self._status_timed_total = 0
+        self._status_needs_guide_total = 0
 
         # 高频打轴时合并 timeline 标签刷新，避免每次按键都全量遍历/排序。
         self._time_tags_update_timer = QTimer(self)
@@ -7362,7 +7369,7 @@ class EditorInterface(QWidget):
 
     def _handle_checkpoint_moved(self, position: CheckpointPosition):
         self._apply_checkpoint_position(position)
-        self._update_status()
+        self._render_cached_status()
     
     def _handle_foucus_moved(self, line_idx: int, char_idx: int):
         self.preview.set_focus_position(line_idx, char_idx)
@@ -7383,7 +7390,12 @@ class EditorInterface(QWidget):
             self._timetags_dirty_while_hidden = True
         elif not self._try_incremental_append(line_idx, char_idx, cp_idx):
             self._schedule_time_tags_update()
-        self._update_status()
+        if hasattr(self, "_status_line_cache"):
+            EditorInterface._update_status_line(self, line_idx)
+        else:
+            # Compatibility for embedded/lightweight callers that construct the
+            # editor callback surface without running QWidget.__init__.
+            self._update_status()
 
     def _try_incremental_append(self, line_idx: int, char_idx: int, cp_idx: int) -> bool:
         """顺序打轴：把新增的单个 checkpoint 直接增量插入波形，绕过 collect + 全量重建。
@@ -7556,17 +7568,66 @@ class EditorInterface(QWidget):
             self._time_tags_update_timer.start(delay_ms)
 
     def _update_status(self):
+        self._rebuild_status_cache()
+        self._render_cached_status()
+
+    @staticmethod
+    def _status_for_sentence(sentence) -> tuple[bool, bool, int]:
+        meaningful = any(c.total_timing_points > 0 for c in sentence.characters)
+        timed = meaningful and sentence.has_timetags
+        needs_guide = sum(1 for c in sentence.characters if c.needs_guide)
+        return meaningful, timed, needs_guide
+
+    def _rebuild_status_cache(self) -> None:
+        self._status_line_cache = {}
+        self._status_meaningful_total = 0
+        self._status_timed_total = 0
+        self._status_needs_guide_total = 0
+        if not self._project:
+            self._status_cache_project_id = None
+            return
+        self._status_cache_project_id = id(self._project)
+        for line_idx, sentence in enumerate(self._project.sentences):
+            state = self._status_for_sentence(sentence)
+            self._status_line_cache[line_idx] = state
+            self._status_meaningful_total += int(state[0])
+            self._status_timed_total += int(state[1])
+            self._status_needs_guide_total += state[2]
+
+    def _status_cache_is_valid(self) -> bool:
+        return bool(
+            self._project
+            and self._status_cache_project_id == id(self._project)
+            and len(self._status_line_cache) == len(self._project.sentences)
+        )
+
+    def _update_status_line(self, line_idx: int) -> None:
+        if not self._project:
+            self._render_cached_status()
+            return
+        if not self._status_cache_is_valid():
+            self._rebuild_status_cache()
+        if not (0 <= line_idx < len(self._project.sentences)):
+            self._render_cached_status()
+            return
+        old = self._status_line_cache.get(line_idx, (False, False, 0))
+        new = self._status_for_sentence(self._project.sentences[line_idx])
+        self._status_line_cache[line_idx] = new
+        self._status_meaningful_total += int(new[0]) - int(old[0])
+        self._status_timed_total += int(new[1]) - int(old[1])
+        self._status_needs_guide_total += new[2] - old[2]
+        self._render_cached_status()
+
+    def _render_cached_status(self) -> None:
         if not self._project:
             self.lbl_progress.setText(self.tr("行: 0/0 | 进度: 0%"))
             if hasattr(self, "lbl_needs_guide"):
                 self.lbl_needs_guide.setText("")
             return
-        meaningful_lines = [
-            s for s in self._project.sentences
-            if any(c.total_timing_points > 0 for c in s.characters)
-        ]
-        total = len(meaningful_lines)
-        timed = sum(1 for s in meaningful_lines if s.has_timetags)
+        if not self._status_cache_is_valid():
+            self._rebuild_status_cache()
+        total = self._status_meaningful_total
+        timed = self._status_timed_total
         pct = int(timed / total * 100) if total > 0 else 0
         self.lbl_progress.setText(
             self.tr("行: {total} | 已打轴: {timed}/{total_again} ({pct}%)").format(
@@ -7575,12 +7636,7 @@ class EditorInterface(QWidget):
         )
         # 待添加导唱符计数：>0 显示，=0 隐藏（避免视觉噪音）
         if hasattr(self, "lbl_needs_guide"):
-            n = sum(
-                1
-                for s in self._project.sentences
-                for c in s.characters
-                if c.needs_guide
-            )
+            n = self._status_needs_guide_total
             self.lbl_needs_guide.setText(
                 self.tr("待添加导唱符：{n}").format(n=n) if n > 0 else ""
             )

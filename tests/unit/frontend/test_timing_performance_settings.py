@@ -1,5 +1,6 @@
 from strange_uta_game.frontend.editor.timing_interface import EditorInterface
 from strange_uta_game.frontend.editor.timing.timeline_widget import WaveformDisplay
+from strange_uta_game.backend.domain import Character, Project, Sentence
 
 
 def test_ui_refresh_fps_accepts_supported_values():
@@ -49,3 +50,51 @@ def test_waveform_static_layer_rebuilds_after_scroll(qapp, monkeypatch):
     display.grab()
 
     assert display._static_layer is not old_layer
+
+
+class _Label:
+    def __init__(self):
+        self.text = ""
+
+    def setText(self, text):
+        self.text = text
+
+
+def _status_editor(project):
+    editor = type("StatusEditor", (), {})()
+    editor._project = project
+    editor._status_line_cache = {}
+    editor._status_cache_project_id = None
+    editor._status_meaningful_total = 0
+    editor._status_timed_total = 0
+    editor._status_needs_guide_total = 0
+    editor.lbl_progress = _Label()
+    editor.lbl_needs_guide = _Label()
+    editor.tr = lambda text: text
+    editor._status_for_sentence = EditorInterface._status_for_sentence
+    editor._rebuild_status_cache = lambda: EditorInterface._rebuild_status_cache(editor)
+    editor._status_cache_is_valid = lambda: EditorInterface._status_cache_is_valid(editor)
+    editor._render_cached_status = lambda: EditorInterface._render_cached_status(editor)
+    return editor
+
+
+def test_status_update_recomputes_only_changed_line(monkeypatch):
+    first = Sentence(singer_id="s", characters=[Character(char="a", check_count=1)])
+    second = Sentence(singer_id="s", characters=[Character(char="b", check_count=1)])
+    project = Project(sentences=[first, second])
+    editor = _status_editor(project)
+    EditorInterface._rebuild_status_cache(editor)
+    calls = []
+    original = EditorInterface._status_for_sentence
+
+    def counted(sentence):
+        calls.append(sentence)
+        return original(sentence)
+
+    editor._status_for_sentence = counted
+    first.characters[0].add_timestamp(100, 0)
+    EditorInterface._update_status_line(editor, 0)
+
+    assert calls == [first]
+    assert editor._status_timed_total == 1
+    assert "1/2" in editor.lbl_progress.text
