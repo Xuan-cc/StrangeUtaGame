@@ -91,6 +91,20 @@ def test_cached_waveform_matches_forced_full_render(qapp, monkeypatch):
     assert cached == rebuilt
 
 
+def test_waveform_static_layer_uses_physical_pixels_on_high_dpi(qapp, monkeypatch):
+    monkeypatch.setattr(timeline_module, "theme", _TimelineThemeProxy())
+    display = WaveformDisplay()
+    monkeypatch.setattr(display, "devicePixelRatioF", lambda: 1.5)
+
+    layer = display._render_static_layer(640, 120, 0.0, 1_000.0, 1_000.0)
+
+    assert layer.devicePixelRatio() == 1.5
+    assert layer.width() == 960
+    assert layer.height() == 180
+    assert layer.deviceIndependentSize().width() == 640
+    assert layer.deviceIndependentSize().height() == 120
+
+
 class _Label:
     def __init__(self):
         self.text = ""

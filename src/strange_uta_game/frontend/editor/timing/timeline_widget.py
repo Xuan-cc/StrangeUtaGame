@@ -648,10 +648,12 @@ class WaveformDisplay(QWidget):
         visible_start_ms = self._visible_start_ms()
         visible_duration_ms = self._duration_ms / self._zoom_factor
         visible_end_ms = visible_start_ms + visible_duration_ms
+        device_pixel_ratio = max(1.0, float(self.devicePixelRatioF()))
 
         layer_key = (
             w,
             h,
+            device_pixel_ratio,
             visible_start_ms,
             visible_duration_ms,
             self._range_start_ms,
@@ -680,10 +682,19 @@ class WaveformDisplay(QWidget):
         visible_end_ms: float,
         visible_duration_ms: float,
     ) -> QPixmap:
-        layer = QPixmap(max(1, w), max(1, h))
+        # QPixmap dimensions are physical pixels. Without a matching DPR the
+        # logical-size cache is stretched by Windows at 125%/150%/200%, which
+        # blurs both the waveform and the small ruby labels.
+        dpr = max(1.0, float(self.devicePixelRatioF()))
+        layer = QPixmap(
+            max(1, int(math.ceil(w * dpr))),
+            max(1, int(math.ceil(h * dpr))),
+        )
+        layer.setDevicePixelRatio(dpr)
         layer.fill(theme.waveform_bg)
         painter = QPainter(layer)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
         self._draw_time_grid(painter, w, h, visible_start_ms, visible_end_ms)
         self._draw_waveform(painter, w, h)
