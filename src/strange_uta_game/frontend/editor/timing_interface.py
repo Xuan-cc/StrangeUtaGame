@@ -638,6 +638,15 @@ class EditorInterface(QWidget):
             # 兜底打日志，决不让 cascade 击穿到 Qt。
             print(f"[Settings] _apply_settings 失败: {e}")
 
+    @staticmethod
+    def _normalize_ui_refresh_fps(value) -> int:
+        """Return a supported timing-page refresh rate."""
+        try:
+            fps = int(value)
+        except (TypeError, ValueError):
+            return 60
+        return 30 if fps <= 30 else 60
+
     def _apply_settings_inner(self):
         if not self._store:
             return
@@ -654,6 +663,12 @@ class EditorInterface(QWidget):
         self._timing_adjust_step_ms = int(
             settings.get("timing.timing_adjust_step_ms", 10)
         )
+        # UI 刷新率只影响播放头、波形和歌词动画，不参与时间戳采样。
+        # 打轴仍在按键发生时直接读取音频引擎，因此低性能模式不会降低精度。
+        refresh_fps = self._normalize_ui_refresh_fps(
+            settings.get("timing.ui_refresh_fps", 60)
+        )
+        self._position_poll_timer.setInterval(round(1000 / refresh_fps))
         # 波形时间标签拖拽编辑总开关（默认开启，关闭回退旧的纯显示/seek/pan 模式）
         if hasattr(self, "timeline"):
             self.timeline.set_tag_edit_enabled(

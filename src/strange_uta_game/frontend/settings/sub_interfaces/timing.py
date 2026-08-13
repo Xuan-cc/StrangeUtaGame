@@ -48,6 +48,20 @@ class TimingSubInterface(SubSettingInterface):
                 min_val=1, max_val=500, step=1, suffix=" ms", parent=g_correct),
             title_source="微调时间戳步长",
             content_source="Alt+↑/Alt+↓ 微调选中节奏点时间戳的步长")
+        self.card_ui_refresh_fps = self._tr_register(
+            ComboSettingCard(
+                FIF.SPEED_MEDIUM,
+                tr("打轴界面刷新率"),
+                tr("低配置电脑可选择 30 帧；仅降低界面动画刷新率，不影响打轴时间戳精度"),
+                items=[tr("流畅（60 帧）"), tr("低性能模式（30 帧）")],
+                parent=g_correct,
+            ),
+            title_source="打轴界面刷新率",
+            content_source="低配置电脑可选择 30 帧；仅降低界面动画刷新率，不影响打轴时间戳精度",
+        )
+        self.card_ui_refresh_fps.set_item_sources(
+            ["流畅（60 帧）", "低性能模式（30 帧）"]
+        )
         # 节拍器校准并入「时间补正」组（与「按键补偿」呼应：用下方 offset 校正来矫正）
         cal_card = self._tr_register(
             SettingCard(FIF.SPEED_HIGH, tr("节拍器校准"),
@@ -61,7 +75,8 @@ class TimingSubInterface(SubSettingInterface):
         cal_card.hBoxLayout.addWidget(self.btn_cal_open, 0, Qt.AlignmentFlag.AlignRight)
         cal_card.hBoxLayout.addSpacing(16)
         for c in [self.card_offset, self.card_speed_correction,
-                  self.card_export_offset, self.card_timing_step, cal_card]:
+                  self.card_export_offset, self.card_timing_step,
+                  self.card_ui_refresh_fps, cal_card]:
             g_correct.addSettingCard(c)
         self.expandLayout.addWidget(g_correct)
 
@@ -204,6 +219,7 @@ class TimingSubInterface(SubSettingInterface):
         self.card_speed_correction.value_changed.connect(self._notify_changed)
         self.card_export_offset.value_changed.connect(self._notify_changed)
         self.card_timing_step.value_changed.connect(self._notify_changed)
+        self.card_ui_refresh_fps.index_changed.connect(self._notify_changed)
         self.card_waveform_tag_edit.checked_changed.connect(self._notify_changed)
         self.card_waveform_center_playhead.checked_changed.connect(self._notify_changed)
         self.card_waveform_tag_char.checked_changed.connect(self._notify_changed)
@@ -226,6 +242,8 @@ class TimingSubInterface(SubSettingInterface):
         self.card_speed_correction.setValue(s.get("timing.speed_correction", 80))
         self.card_export_offset.setValue(s.get("export.offset_ms", 0))
         self.card_timing_step.setValue(s.get("timing.timing_adjust_step_ms", 10))
+        refresh_fps = s.get("timing.ui_refresh_fps", 60)
+        self.card_ui_refresh_fps.setCurrentIndex(1 if refresh_fps == 30 else 0)
         self.card_waveform_tag_edit.setChecked(s.get("timing.waveform_tag_edit_enabled", True))
         self.card_waveform_center_playhead.setChecked(s.get("timing.waveform_center_playhead_enabled", False))
         self.card_waveform_tag_char.setChecked(s.get("timing.waveform_tag_char_enabled", True))
@@ -246,6 +264,10 @@ class TimingSubInterface(SubSettingInterface):
         s.set("timing.speed_correction", self.card_speed_correction.value())
         s.set("export.offset_ms", self.card_export_offset.value())
         s.set("timing.timing_adjust_step_ms", self.card_timing_step.value())
+        s.set(
+            "timing.ui_refresh_fps",
+            30 if self.card_ui_refresh_fps.currentIndex() == 1 else 60,
+        )
         s.set("timing.waveform_tag_edit_enabled", self.card_waveform_tag_edit.isChecked())
         s.set("timing.waveform_center_playhead_enabled", self.card_waveform_center_playhead.isChecked())
         s.set("timing.waveform_tag_char_enabled", self.card_waveform_tag_char.isChecked())
