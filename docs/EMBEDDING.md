@@ -54,6 +54,7 @@ class MainWindow(MSFluentWindow):
 | `has_unsaved_changes() -> bool` | 宿主 closeEvent 用，判断是否有脏数据 |
 | `flush_unsaved()` | 宿主销毁 widget 前调用，把脏数据兜底写到崩溃恢复临时文件 |
 | `export_to_next_payload() -> dict \| None` | 获取项目、角色、Nicokara 标签和媒体路径的隔离快照，供宿主送往下一模块 |
+| `on_host_visibility_changed(visible: bool)` | 宿主切入/切出整个 SUG 控件时调用；按设置暂停播放并从音频实际状态同步快捷键模式 |
 
 embedded 实例还公开 `export_to_next_requested` 信号。SUG 的导出页仅在
 embedded 模式显示“导出到下一步”按钮；点击后发出该信号，宿主收到后调用
@@ -62,6 +63,11 @@ embedded 模式显示“导出到下一步”按钮；点击后发出该信号�
 异步保存完成后发出 `project_save_finished(str)`，失败时发出
 `project_save_failed(str)`。宿主需要“保存后继续”的流程时，应等待对应信号，
 不能把 `trigger_save()` 返回 `True` 当作已经写入磁盘。
+
+宿主的外层页面切换不会进入 SUG 的 `switchTo()`。因此宿主应在隐藏 SUG 前调用
+`on_host_visibility_changed(False)`，并在重新显示后调用
+`on_host_visibility_changed(True)`。SUG 的 embedded `hideEvent/showEvent` 也会执行相同
+同步作为兜底；接口是幂等的，显式通知与 Qt 事件重复到达不会重复暂停。
 
 ## 3. 设置后端：SettingsProvider
 

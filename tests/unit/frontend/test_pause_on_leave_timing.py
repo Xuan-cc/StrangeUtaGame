@@ -9,9 +9,13 @@ from strange_uta_game.frontend.settings.app_settings import AppSettings
 class _Editor:
     def __init__(self):
         self.pause_count = 0
+        self.sync_count = 0
 
     def _on_pause(self):
         self.pause_count += 1
+
+    def sync_playback_mode(self):
+        self.sync_count += 1
 
 
 class _TimingService:
@@ -61,3 +65,56 @@ def test_same_page_or_already_paused_does_not_pause():
     MainWindow._pause_playback_when_leaving(window, object())
 
     assert editor.pause_count == 0
+
+
+def test_host_hide_pauses_and_syncs_embedded_timing_page():
+    window, editor = _window()
+
+    MainWindow.on_host_visibility_changed(window, False)
+
+    assert editor.pause_count == 1
+    assert editor.sync_count == 1
+
+
+def test_host_visibility_syncs_stale_mode_when_audio_is_already_paused():
+    window, editor = _window(playing=False)
+
+    MainWindow.on_host_visibility_changed(window, False)
+    MainWindow.on_host_visibility_changed(window, True)
+
+    assert editor.pause_count == 0
+    assert editor.sync_count == 2
+
+
+def test_host_visibility_notifications_are_idempotent():
+    window, editor = _window()
+
+    def pause():
+        editor.pause_count += 1
+        window._timing_service.playing = False
+
+    editor._on_pause = pause
+    MainWindow.on_host_visibility_changed(window, False)
+    MainWindow.on_host_visibility_changed(window, False)
+
+    assert editor.pause_count == 1
+    assert editor.sync_count == 2
+
+
+def test_host_hide_honors_pause_setting_but_still_syncs_mode():
+    window, editor = _window(enabled=False)
+
+    MainWindow.on_host_visibility_changed(window, False)
+
+    assert editor.pause_count == 0
+    assert editor.sync_count == 1
+
+
+def test_host_hide_does_not_pause_when_sug_is_on_another_internal_page():
+    window, editor = _window()
+    window._current_interface = object()
+
+    MainWindow.on_host_visibility_changed(window, False)
+
+    assert editor.pause_count == 0
+    assert editor.sync_count == 1

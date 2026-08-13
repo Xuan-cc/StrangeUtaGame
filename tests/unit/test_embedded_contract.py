@@ -349,6 +349,11 @@ class TestEmbeddedUIContract:
         assert MainWindow.project_save_finished is not None
         assert MainWindow.project_save_failed is not None
 
+    def test_public_host_visibility_lifecycle_exists(self):
+        from strange_uta_game.frontend.main_window import MainWindow
+
+        assert callable(MainWindow.on_host_visibility_changed)
+
     def test_network_auto_update_scheduler_uses_default_provider(
         self, monkeypatch, reset_default_provider
     ):

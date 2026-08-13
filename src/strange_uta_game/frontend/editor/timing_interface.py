@@ -4567,6 +4567,15 @@ class EditorInterface(QWidget):
                 getattr(self, "_shortcut_actions_edit", None),
             )
 
+    def sync_playback_mode(self) -> None:
+        """按音频服务的实际状态重新同步播放模式与活动快捷键表。
+
+        宿主隐藏整个嵌入窗口时，SUG 自己的页面切换和位置回调可能都不会
+        执行。这个入口让嵌入生命周期可以主动修复播放状态与快捷键模式的
+        偏差，而不需要在每次按键时临时判断。
+        """
+        self._update_mode_indicator()
+
     # ==================== 播放控制 ====================
 
     def _apply_playback_range(

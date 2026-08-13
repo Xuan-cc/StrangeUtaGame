@@ -383,6 +383,18 @@ class MainWindow(MSFluentWindow):
             self.setWindowTitle(self.tr("StrangeUtaGame - 歌词打轴工具 Bilibili@不会说话的呆轩cc"))
             self._refresh_navigation_labels()
 
+    def hideEvent(self, event):
+        """在宿主未显式转发生命周期时为 embedded 模式提供兜底。"""
+        if self._embedded:
+            self.on_host_visibility_changed(False)
+        super().hideEvent(event)
+
+    def showEvent(self, event):
+        """embedded 窗口重新显示时按音频实际状态恢复快捷键模式。"""
+        super().showEvent(event)
+        if self._embedded:
+            self.on_host_visibility_changed(True)
+
     def _refresh_frameless(self) -> None:
         """刷新无边框窗口状态，修复导入后无法拖拽边缘调整窗口大小。
 
@@ -1688,6 +1700,33 @@ class MainWindow(MSFluentWindow):
                 self._store.save_sync_for_exit()
         except Exception:
             pass
+
+    def on_host_visibility_changed(self, visible: bool) -> None:
+        """接收宿主对整个 SUG 控件的可见性生命周期通知（公开 API）。
+
+        宿主应在切出 SUG 前传入 ``False``，在切入 SUG 后传入 ``True``。
+        离开时沿用“离开打轴界面时暂停”设置；进入和离开都会从音频服务
+        重新同步编辑器模式，避免音频已暂停但快捷键仍处于打轴模式。
+
+        本方法可重复调用：只有实际仍在播放时才会触发暂停。
+        """
+        editor = getattr(self, "editorInterface", None)
+        timing_service = getattr(self, "_timing_service", None)
+        if editor is None:
+            return
+
+        if (
+            not visible
+            and getattr(self, "_current_interface", None) is editor
+            and self._pause_on_leave_timing_enabled()
+            and timing_service is not None
+            and timing_service.is_playing()
+        ):
+            editor._on_pause()
+
+        sync_mode = getattr(editor, "sync_playback_mode", None)
+        if callable(sync_mode):
+            sync_mode()
 
     @staticmethod
     def for_embedding(
