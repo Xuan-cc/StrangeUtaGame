@@ -786,6 +786,15 @@ class KaraokePreview(QWidget):
         static lyric layer from the dynamic playback rows without a large pixmap.
         """
         rows = {self._effective_current_line()}
+        # 自动滚动只让视口跟随播放行；编辑当前行仍由
+        # ``_current_line_idx`` 表示。播放行可能因此不是视觉“当前行”，但其
+        # wipe 仍需逐帧重绘。
+        if (
+            self._is_playing
+            and self._auto_scroll_enabled
+            and self._last_auto_scroll_line_idx >= 0
+        ):
+            rows.add(self._last_auto_scroll_line_idx)
         if self._preview_guide_enabled:
             rows.add(self._current_line_idx)
         dirty = QRect()
@@ -1143,13 +1152,12 @@ class KaraokePreview(QWidget):
         self._horizontal_layout_dirty = True
 
     def _effective_current_line(self) -> int:
-        if (
-            self._is_playing
-            and self._auto_scroll_enabled
-            and not self._auto_scroll_suspended
-            and self._last_auto_scroll_line_idx >= 0
-        ):
-            return self._last_auto_scroll_line_idx
+        """返回编辑当前行；播放行和视窗位置不得改变此语义。
+
+        ``_last_auto_scroll_line_idx`` 仅表示播放行，供视窗跟随和走字刷新；
+        ``_scroll_center_line`` 仅表示视窗中心。二者都不能替代编辑光标行，
+        否则当前字符指示框、当前行字体和行号高亮会随播放滚动漂移。
+        """
         return self._current_line_idx
 
     def _line_start_x(self, total_text_width: int, left: int, right: int) -> int:

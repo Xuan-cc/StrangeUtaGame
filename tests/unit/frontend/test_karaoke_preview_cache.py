@@ -104,6 +104,67 @@ def test_playback_tick_repaints_only_dynamic_row(qapp, monkeypatch):
     assert 0 < rect.height() < preview.height()
 
 
+@pytest.mark.parametrize("scroll_mode", ["auto", "always", "never"])
+def test_scroll_mode_keeps_editor_current_line_visual(qapp, monkeypatch, scroll_mode):
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.set_project(_plain_project(line_count=8, chars_per_line=1))
+    preview._current_line_idx = 2
+    preview._last_auto_scroll_line_idx = 6
+    preview._is_playing = True
+    preview.set_scroll_mode(scroll_mode)
+
+    assert preview._effective_current_line() == 2
+    assert preview._current_line_idx == 2
+
+
+@pytest.mark.parametrize("scroll_mode", ["auto", "always", "never"])
+def test_playback_line_change_never_changes_current_line(
+    qapp, monkeypatch, scroll_mode
+):
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.set_project(_plain_project(line_count=8, chars_per_line=1))
+    preview._line_switch_points = [(100, 0), (200, 6)]
+    preview._current_line_idx = 2
+    preview._scroll_center_line = 2.0
+    preview._last_auto_scroll_line_idx = 0
+    preview._is_playing = True
+    preview.set_scroll_mode(scroll_mode)
+
+    preview.set_current_time_ms(250)
+
+    assert preview._current_line_idx == 2
+    if scroll_mode == "never":
+        assert preview._last_auto_scroll_line_idx == 0
+        assert preview._scroll_center_line == 2.0
+    else:
+        assert preview._last_auto_scroll_line_idx == 6
+        assert preview._scroll_center_line == 6.0
+
+
+@pytest.mark.parametrize("scroll_mode", ["auto", "always"])
+def test_follow_scroll_repaints_playback_row_without_moving_current(
+    qapp, monkeypatch, scroll_mode
+):
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.resize(800, 560)
+    preview.set_project(_plain_project(line_count=8, chars_per_line=1))
+    preview._current_line_idx = 2
+    preview._last_auto_scroll_line_idx = 6
+    preview._is_playing = True
+    preview.set_scroll_mode(scroll_mode)
+    dirty = []
+    monkeypatch.setattr(preview, "update", lambda *args: dirty.append(args))
+
+    preview._update_dynamic_playback_rows()
+
+    assert dirty and len(dirty[-1]) == 1
+    expected = preview._line_repaint_rect(2).united(preview._line_repaint_rect(6))
+    assert dirty[-1][0] == expected
+
+
 def test_playback_line_change_requests_full_repaint(qapp, monkeypatch):
     monkeypatch.setattr(preview_module, "theme", _DummyTheme())
     preview = preview_module.KaraokePreview()
