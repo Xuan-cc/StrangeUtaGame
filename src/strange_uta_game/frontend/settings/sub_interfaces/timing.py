@@ -22,7 +22,27 @@ class TimingSubInterface(SubSettingInterface):
 
     def _init_ui(self):
         tr = self.tr
-        # ── 分组 1：时间补正 ──
+        # ── 分组 1：性能 ──
+        g_performance = SettingCardGroup(tr("性能"), self.scrollWidget)
+        self._tr_register(g_performance, title_source="性能")
+        self.card_ui_refresh_fps = self._tr_register(
+            ComboSettingCard(
+                FIF.SPEED_MEDIUM,
+                tr("打轴界面刷新率"),
+                tr("低配置电脑可选择 30 帧；仅降低界面动画刷新率，不影响打轴时间戳精度"),
+                items=[tr("流畅（60 帧）"), tr("低性能模式（30 帧）")],
+                parent=g_performance,
+            ),
+            title_source="打轴界面刷新率",
+            content_source="低配置电脑可选择 30 帧；仅降低界面动画刷新率，不影响打轴时间戳精度",
+        )
+        self.card_ui_refresh_fps.set_item_sources(
+            ["流畅（60 帧）", "低性能模式（30 帧）"]
+        )
+        g_performance.addSettingCard(self.card_ui_refresh_fps)
+        self.expandLayout.addWidget(g_performance)
+
+        # ── 分组 2：时间补正 ──
         g_correct = SettingCardGroup(tr("时间补正"), self.scrollWidget)
         self._tr_register(g_correct, title_source="时间补正")
         self.card_offset = self._tr_register(
@@ -48,20 +68,6 @@ class TimingSubInterface(SubSettingInterface):
                 min_val=1, max_val=500, step=1, suffix=" ms", parent=g_correct),
             title_source="微调时间戳步长",
             content_source="Alt+↑/Alt+↓ 微调选中节奏点时间戳的步长")
-        self.card_ui_refresh_fps = self._tr_register(
-            ComboSettingCard(
-                FIF.SPEED_MEDIUM,
-                tr("打轴界面刷新率"),
-                tr("低配置电脑可选择 30 帧；仅降低界面动画刷新率，不影响打轴时间戳精度"),
-                items=[tr("流畅（60 帧）"), tr("低性能模式（30 帧）")],
-                parent=g_correct,
-            ),
-            title_source="打轴界面刷新率",
-            content_source="低配置电脑可选择 30 帧；仅降低界面动画刷新率，不影响打轴时间戳精度",
-        )
-        self.card_ui_refresh_fps.set_item_sources(
-            ["流畅（60 帧）", "低性能模式（30 帧）"]
-        )
         # 节拍器校准并入「时间补正」组（与「按键补偿」呼应：用下方 offset 校正来矫正）
         cal_card = self._tr_register(
             SettingCard(FIF.SPEED_HIGH, tr("节拍器校准"),
@@ -75,12 +81,11 @@ class TimingSubInterface(SubSettingInterface):
         cal_card.hBoxLayout.addWidget(self.btn_cal_open, 0, Qt.AlignmentFlag.AlignRight)
         cal_card.hBoxLayout.addSpacing(16)
         for c in [self.card_offset, self.card_speed_correction,
-                  self.card_export_offset, self.card_timing_step,
-                  self.card_ui_refresh_fps, cal_card]:
+                  self.card_export_offset, self.card_timing_step, cal_card]:
             g_correct.addSettingCard(c)
         self.expandLayout.addWidget(g_correct)
 
-        # ── 分组 2：波形时间标签 ──
+        # ── 分组 3：波形时间标签 ──
         g_wave = SettingCardGroup(tr("波形时间标签"), self.scrollWidget)
         self._tr_register(g_wave, title_source="波形时间标签")
         self.card_waveform_tag_edit = self._tr_register(
@@ -108,7 +113,7 @@ class TimingSubInterface(SubSettingInterface):
             g_wave.addSettingCard(c)
         self.expandLayout.addWidget(g_wave)
 
-        # ── 分组 3：鼠标与焦点 ──
+        # ── 分组 4：鼠标与焦点 ──
         g_mouse = SettingCardGroup(tr("鼠标与焦点"), self.scrollWidget)
         self._tr_register(g_mouse, title_source="鼠标与焦点")
         self.card_disable_click_jump = self._tr_register(
@@ -131,7 +136,7 @@ class TimingSubInterface(SubSettingInterface):
             g_mouse.addSettingCard(c)
         self.expandLayout.addWidget(g_mouse)
 
-        # ── 分组 4：预览指引 ──
+        # ── 分组 5：预览指引 ──
         g_guide = SettingCardGroup(tr("预览指引"), self.scrollWidget)
         self._tr_register(g_guide, title_source="预览指引")
         self.card_preview_guide = self._tr_register(
@@ -153,7 +158,7 @@ class TimingSubInterface(SubSettingInterface):
             g_guide.addSettingCard(c)
         self.expandLayout.addWidget(g_guide)
 
-        # ── 分组 5：按键音效 ──
+        # ── 分组 6：按键音效 ──
         g_sound = SettingCardGroup(tr("按键音效"), self.scrollWidget)
         self._tr_register(g_sound, title_source="按键音效")
         self.card_keysound = self._tr_register(
