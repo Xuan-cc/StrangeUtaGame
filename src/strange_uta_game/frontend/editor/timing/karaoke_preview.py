@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
+import math
 import sys
 import time
 from typing import Optional
@@ -751,16 +752,49 @@ class KaraokePreview(QWidget):
             self._warm_nearby_cache(budget=2)
         # 自动滚动：检测播放行变化（用于 cooldown 判断），
         # 仅在未挂起时才移动视口（不改变编辑光标 _current_line_idx）
+        line_changed = False
         if self._auto_scroll_enabled and self._is_playing:
             target_line_idx = self._find_line_for_time(time_ms)
             if target_line_idx is not None:
                 if target_line_idx != self._last_auto_scroll_line_idx:
+                    line_changed = True
                     self._last_auto_scroll_line_idx = target_line_idx
                     self._mark_horizontal_layout_dirty()
                     self.auto_scroll_line_changed.emit()
                     if not self._auto_scroll_suspended:
                         self._scroll_to_line(target_line_idx)
-        self.update()
+        if line_changed:
+            self.update()
+        else:
+            self._update_dynamic_playback_rows()
+
+    def _line_repaint_rect(self, line_idx: int) -> QRect:
+        """Return the viewport band occupied by one lyric row, with AA padding."""
+        if self.height() <= 0 or self._visible_lines <= 0:
+            return self.rect()
+        line_height = self.height() / self._visible_lines
+        center_y = self.height() / 2.0
+        y_center = center_y + (line_idx - self._scroll_center_line) * line_height
+        top = math.floor(y_center - line_height / 2.0) - 3
+        bottom = math.ceil(y_center + line_height / 2.0) + 3
+        return QRect(0, top, self.width(), max(1, bottom - top)).intersected(self.rect())
+
+    def _update_dynamic_playback_rows(self) -> None:
+        """Repaint only rows whose wipe/guide pixels can change this frame.
+
+        Qt's backing store retains the context rows, effectively separating the
+        static lyric layer from the dynamic playback rows without a large pixmap.
+        """
+        rows = {self._effective_current_line()}
+        if self._preview_guide_enabled:
+            rows.add(self._current_line_idx)
+        dirty = QRect()
+        for line_idx in rows:
+            dirty = dirty.united(self._line_repaint_rect(line_idx))
+        if dirty.isValid() and not dirty.isEmpty():
+            self.update(dirty)
+        else:
+            self.update()
 
     def _prewarm_all_sentences(self) -> None:
         """项目加载时预渲染所有句子到缓存，避免切换界面时卡顿。"""

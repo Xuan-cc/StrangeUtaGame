@@ -83,6 +83,46 @@ def test_position_and_focus_changes_do_not_invalidate_render_cache(qapp, monkeyp
     assert preview._global_version == global_version + 1
 
 
+def test_playback_tick_repaints_only_dynamic_row(qapp, monkeypatch):
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.resize(800, 560)
+    preview.set_project(_plain_project(line_count=20, chars_per_line=4))
+    preview._is_playing = True
+    preview._auto_scroll_enabled = False
+    preview._current_line_idx = 6
+    preview._scroll_center_line = 6.0
+    dirty = []
+    monkeypatch.setattr(preview, "update", lambda *args: dirty.append(args))
+
+    preview.set_current_time_ms(1234)
+
+    assert len(dirty) == 1
+    assert len(dirty[0]) == 1
+    rect = dirty[0][0]
+    assert isinstance(rect, preview_module.QRect)
+    assert 0 < rect.height() < preview.height()
+
+
+def test_playback_line_change_requests_full_repaint(qapp, monkeypatch):
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.resize(800, 560)
+    project = _plain_project(line_count=3, chars_per_line=1)
+    project.sentences[0].characters[0].timestamps = [100]
+    project.sentences[1].characters[0].timestamps = [200]
+    preview.set_project(project)
+    preview.set_playing(True)
+    preview._line_switch_points = [(100, 0), (200, 1)]
+    preview._last_auto_scroll_line_idx = 0
+    dirty = []
+    monkeypatch.setattr(preview, "update", lambda *args: dirty.append(args))
+
+    preview.set_current_time_ms(250)
+
+    assert dirty and dirty[-1] == ()
+
+
 def test_line_invalidation_advances_uncached_line_version(qapp, monkeypatch):
     monkeypatch.setattr(preview_module, "theme", _DummyTheme())
 
