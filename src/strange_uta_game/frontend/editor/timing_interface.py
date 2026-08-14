@@ -392,6 +392,7 @@ class EditorInterface(QWidget):
         self.toolbar.auto_insert_guide_clicked.connect(self._on_auto_insert_guide)
         self.toolbar.analyze_pinyin_clicked.connect(self._on_analyze_pinyin)
         self.toolbar.concat_sug_clicked.connect(self._on_concat_sug)
+        self.toolbar.ai_timing_clicked.connect(self._on_ai_timing_clicked)
         self.toolbar.offset_changed.connect(self._on_offset_changed)
         layout.addWidget(self.toolbar)
 
@@ -2021,6 +2022,135 @@ class EditorInterface(QWidget):
         if hasattr(self, "_concat_worker") and self._concat_worker:
             self._concat_worker.deleteLater()
             self._concat_worker = None
+
+    # ──────────────────────────────────────────────
+    # AI 打轴（阶段 F；宿主能力注入见阶段 G）
+    # ──────────────────────────────────────────────
+
+    def _on_ai_timing_clicked(self):
+        """AI 打轴一级入口：§3.1 前置阻拦 + 打开完整弹窗。"""
+        if self._project is None or not any(
+            len(s.characters) for s in self._project.sentences
+        ):
+            InfoBar.warning(
+                title=self.tr("无法使用 AI 打轴"),
+                content=self.tr("请先加载或创建包含歌词正文的工程"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
+        audio_path = getattr(self, "_audio_file_path", None)
+        if not audio_path or not Path(audio_path).is_file():
+            InfoBar.warning(
+                title=self.tr("无法使用 AI 打轴"),
+                content=self.tr("请先加载音频，AI 打轴需要人声/音频素材"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
+
+        from strange_uta_game.frontend.editor.ai_timing_dialog import AiTimingDialog
+
+        parts = self._build_ai_timing_service()
+        if parts is None:
+            return
+        service, settings, registry, runtime, download_service = parts
+        self._ai_timing_dialog = AiTimingDialog(
+            project=self._project,
+            audio_path=str(audio_path),
+            service=service,
+            settings=settings,
+            registry=registry,
+            runtime=runtime,
+            download_service=download_service,
+            on_applied=self._apply_ai_timing_command,
+            parent=self,
+        )
+        self._ai_timing_dialog.show()
+
+    def _build_ai_timing_service(self):
+        """构建 AI 打轴服务栈；设置读取失败时提示并返回 None。"""
+        from strange_uta_game.backend.application.ai_timing import (
+            AiCache,
+            AiRuntimeManager,
+            AiTimingService,
+            ModelDownloadService,
+            ModelRegistry,
+            PronunciationResolver,
+            VocalPreparationService,
+            load_ai_timing_settings,
+            resolve_model_root,
+        )
+        from strange_uta_game.backend.application.ai_timing.models import (
+            HfHubTransport,
+        )
+        from strange_uta_game.backend.application.ai_timing.vocals import (
+            default_ai_cache_root,
+        )
+        from strange_uta_game.frontend.settings.app_settings import AppSettings
+
+        try:
+            app_settings = AppSettings()
+            settings = load_ai_timing_settings(app_settings.get)
+        except Exception:
+            InfoBar.error(
+                title=self.tr("AI 打轴初始化失败"),
+                content=self.tr("无法读取应用设置，请重试或检查配置目录权限"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            return None
+
+        model_root = resolve_model_root(settings)
+        cache = AiCache(default_ai_cache_root())
+        registry = ModelRegistry(model_root)
+        runtime = AiRuntimeManager()
+        vocal_service = VocalPreparationService(cache)
+        service = AiTimingService(
+            settings=settings,
+            cache=cache,
+            registry=registry,
+            runtime=runtime,
+            vocal_service=vocal_service,
+            resolver=PronunciationResolver(),
+        )
+        download_service = ModelDownloadService(
+            registry,
+            HfHubTransport(
+                endpoint=settings.download_mirror,
+                hf_cache_root=model_root / ".hf",
+            ),
+        )
+        return service, settings, registry, runtime, download_service
+
+    def _apply_ai_timing_command(self, command):
+        """弹窗成功回调（主线程）：执行命令入撤销栈并按非结构命令刷新。"""
+        command_manager = None
+        if self._timing_service:
+            command_manager = self._timing_service.command_manager
+        if command_manager is not None:
+            command_manager.execute(command)
+        else:
+            command.execute()
+        self.refresh_lyric_display()
+        self._update_time_tags_display()
+        if self._timing_service:
+            self._apply_checkpoint_position(
+                self._timing_service.get_current_position()
+            )
+        self._update_status()
+        self._sync_focus_from_timing_service()
+        if getattr(self, "_store", None):
+            self._store.mark_dirty()
 
     def _on_undo(self):
         if self._timing_service and self._timing_service.can_undo():

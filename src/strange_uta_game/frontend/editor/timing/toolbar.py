@@ -64,6 +64,7 @@ class EditorToolBar(QFrame):
     delete_timestamps_selected_clicked = pyqtSignal()      # 删除所选范围时间戳
     analyze_pinyin_clicked = pyqtSignal()                   # 中文拼音注音
     concat_sug_clicked = pyqtSignal()                       # 拼接多个SUG
+    ai_timing_clicked = pyqtSignal()                        # AI 打轴（一级入口）
     offset_changed = pyqtSignal(int)  # 偏移量变化（毫秒）
 
     def __init__(self, parent=None):
@@ -188,6 +189,14 @@ class EditorToolBar(QFrame):
         ts_menu.addAction(Action(FIF.MUSIC, tr("自动生成间奏指引"), self, triggered=self.auto_generate_interlude_guide_clicked.emit))
         self.btn_timestamp.setMenu(ts_menu)
         layout.addWidget(self.btn_timestamp)
+
+        # AI 打轴：一级入口按钮（standalone / embedded 共用同一弹窗）
+        self.btn_ai_timing = PushButton(tr("AI 打轴"), self)
+        self.btn_ai_timing.setIcon(FIF.ROBOT)
+        self.btn_ai_timing.setFixedHeight(32)
+        self.btn_ai_timing.setMinimumWidth(100)
+        self.btn_ai_timing.clicked.connect(self.ai_timing_clicked.emit)
+        layout.addWidget(self.btn_ai_timing)
 
         layout.addSpacing(10)
 
