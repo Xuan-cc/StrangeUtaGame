@@ -27,6 +27,7 @@ from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QFileDialog, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
+    CaptionLabel,
     CheckBox,
     ComboBox,
     FluentIcon as FIF,
@@ -294,41 +295,69 @@ class AiTimingDialog(QDialog):
         mirror_row.addWidget(self.edit_mirror, 1)
         self._box_opts.contentLayout.addLayout(mirror_row)
 
-        # 存储位置（§3.2）
-        self.storage_label = BodyLabel("", self)
-        self.storage_label.setWordWrap(True)
-        self._box_opts.contentLayout.addWidget(self.storage_label)
+        # 存储位置（§3.2）：导出页行样式——名称 + 省略路径 + 行内动作
+        def _path_row(name, path_getter, buttons):
+            from PyQt6.QtWidgets import QHBoxLayout, QWidget
 
-        # 存储位置的动作（§3.3 浏览/更改/恢复推荐；下载与安装已上移到对应行内）
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        self.btn_browse_model = PushButton(self.tr("浏览模型目录"), self)
-        self.btn_browse_model.clicked.connect(
-            lambda: self._open_dir(resolve_model_root(self._settings))
-        )
-        self.btn_browse_runtime = PushButton(self.tr("浏览运行环境"), self)
-        self.btn_browse_runtime.clicked.connect(
-            lambda: self._open_dir(
-                resolve_model_root(self._settings).parent / "ai_runtime"
+            row = QWidget(self)
+            h = QHBoxLayout(row)
+            h.setContentsMargins(0, 0, 0, 0)
+            h.setSpacing(8)
+            h.addWidget(BodyLabel(name, row))
+            value = CaptionLabel(self._elide_text(path_getter()), row)
+            h.addWidget(value, 1)
+            for text, cb in buttons:
+                b = PushButton(text, row)
+                b.setFixedHeight(26)
+                b.clicked.connect(cb)
+                h.addWidget(b)
+            row._value = value
+            row._refresh = lambda: value.setText(
+                self._elide_text(path_getter())
             )
+            self._box_opts.contentLayout.addWidget(row)
+            return row
+
+        self._row_model_dir = _path_row(
+            self.tr("模型目录"),
+            lambda: str(resolve_model_root(self._settings)),
+            [
+                (
+                    self.tr("浏览"),
+                    lambda: self._open_dir(resolve_model_root(self._settings)),
+                ),
+                (self.tr("更改…"), self._on_change_model_dir),
+            ],
         )
-        self.btn_change_model_dir = PushButton(self.tr("更改模型位置"), self)
-        self.btn_change_model_dir.clicked.connect(self._on_change_model_dir)
-        self.btn_change_cache_dir = PushButton(self.tr("更改缓存位置"), self)
-        self.btn_change_cache_dir.clicked.connect(self._on_change_cache_dir)
+        self._row_cache_dir = _path_row(
+            self.tr("AI 缓存"),
+            lambda: str(self._snapshot.cache_root)
+            if self._snapshot and self._snapshot.cache_root
+            else self.tr("默认（.cache）"),
+            [(self.tr("更改…"), self._on_change_cache_dir)],
+        )
+        self._row_runtime = _path_row(
+            self.tr("运行环境"),
+            lambda: self._settings.runtime_python
+            or self.tr("当前解释器"),
+            [
+                (
+                    self.tr("浏览"),
+                    lambda: self._open_dir(
+                        resolve_model_root(self._settings).parent / "ai_runtime"
+                    ),
+                )
+            ],
+        )
+        # 恢复推荐（右对齐，与路径行动作同层级）
+        from PyQt6.QtWidgets import QHBoxLayout as _HBL
+        tail = _HBL()
+        tail.addStretch(1)
         self.btn_reset = PushButton(self.tr("恢复推荐设置"), self)
+        self.btn_reset.setFixedHeight(26)
         self.btn_reset.clicked.connect(self._on_reset_settings)
-        for b in (
-            self.btn_browse_model,
-            self.btn_browse_runtime,
-            self.btn_change_model_dir,
-            self.btn_change_cache_dir,
-            self.btn_reset,
-        ):
-            b.setFixedHeight(26)
-            actions.addWidget(b)
-        actions.addStretch(1)
-        self._box_opts.contentLayout.addLayout(actions)
+        tail.addWidget(self.btn_reset)
+        self._box_opts.contentLayout.addLayout(tail)
 
         layout.addStretch(1)
 
@@ -389,12 +418,8 @@ class AiTimingDialog(QDialog):
         return [
             self.btn_download_model,
             self.btn_install_runtime,
-            self.btn_browse_model,
-            self.btn_browse_runtime,
-            self.btn_change_model_dir,
-            self.btn_change_cache_dir,
-            self.btn_reset,
             self.btn_recheck,
+            self.btn_reset,
         ]  # 全部已存在：前三个在状态行内，其余在存储动作行
 
     def _cleanup_task(self) -> None:
@@ -604,26 +629,9 @@ class AiTimingDialog(QDialog):
                 ),
             )
 
-        # 存储位置（§3.2）：分行明确标注，避免与状态行混淆
-        lines = [
-            self.tr("模型目录：{path}").format(
-                path=resolve_model_root(self._settings)
-            )
-        ]
-        if snapshot.cache_root is not None:
-            lines.append(
-                self.tr("AI 缓存（人声/对齐结果，自动清理）：{path}").format(
-                    path=snapshot.cache_root
-                )
-            )
-        lines.append(
-            self.tr("运行环境（Python/torch）：{path}").format(
-                path=self._settings.runtime_python
-                or self.tr("当前解释器（未安装专用环境）")
-            )
-        )
-        self.storage_label.setText("\n".join(lines))
-
+        self._row_model_dir._refresh()
+        self._row_cache_dir._refresh()
+        self._row_runtime._refresh()
 
         reasons = snapshot.blocking_reasons
         if reasons:
