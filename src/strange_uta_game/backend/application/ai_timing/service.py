@@ -243,7 +243,10 @@ class AiTimingService:
             )
         if probe_runtime:
             snap.runtime = self._runtime.probe(self._worker_python())
-        snap.model = self._registry.validate(self.effective_model_id)
+        if self._settings.provider == "mms_fa":
+            snap.model = ModelStatus(state="ok", message="随对齐环境自动获取")
+        else:
+            snap.model = self._registry.validate(self.effective_model_id)
         snap.separation_follows_host = self._separation_follows_host
         if self._separation_prober is not None:
             try:
@@ -299,11 +302,16 @@ class AiTimingService:
 
         # §8.1-5：对齐 Runtime 与模型快检（完整探测在弹窗快照里做；
         # 这里只做快速存在性/注册表校验，避免点击后才在 worker 里失败）
-        model_status = self._registry.validate(self.effective_model_id)
-        if not model_status.is_ready:
-            raise AiTimingError(
-                f"对齐模型未就绪：{model_status.message}。请先在弹窗中下载模型"
-            )
+        if self._settings.provider == "mms_fa":
+            # MMS_FA 是 torchaudio bundle：由 worker 加载时自动获取，
+            # 不走受控模型注册表（那套只服务 HF 仓模型）
+            pass
+        else:
+            model_status = self._registry.validate(self.effective_model_id)
+            if not model_status.is_ready:
+                raise AiTimingError(
+                    f"对齐模型未就绪：{model_status.message}。请先在弹窗中下载模型"
+                )
         runtime_python = self._worker_python()
         if runtime_python and not Path(runtime_python).is_file():
             raise AiTimingError(

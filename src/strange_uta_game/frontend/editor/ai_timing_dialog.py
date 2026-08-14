@@ -580,7 +580,14 @@ class AiTimingDialog(QDialog):
             )
 
         model = snapshot.model
-        if model is not None and model.is_ready:
+        is_mms = self.combo_model.currentIndex() == 1
+        self.btn_download_model.setVisible(not is_mms)
+        self.btn_recheck.setVisible(not is_mms)
+        if is_mms:
+            self.row_model.set_state(
+                "ok", "MMS_FA（备选）：随对齐环境自动获取，无需下载"
+            )
+        elif model is not None and model.is_ready:
             self.row_model.set_state("ok", str(model.model_dir))
         else:
             # 告知目标位置：用户在下载前就知道模型会放到哪里（可更改）
