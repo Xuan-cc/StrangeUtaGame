@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -209,7 +210,7 @@ class AiTimingDialog(QDialog):
     # ── UI ──
 
     def _build_ui(self) -> None:
-        self.setWindowTitle(self.tr("AI 打轴"))
+        self.setWindowTitle(self.tr("AI 打轴（Beta）"))
         fit_to_screen(self, 720, 640)
         self.setFont(char_dialog_font(FONT_DIALOG_BASE))
 
@@ -226,7 +227,7 @@ class AiTimingDialog(QDialog):
         layout.setContentsMargins(4, 0, 4, 0)
         layout.setSpacing(6)
 
-        title = SubtitleLabel(self.tr("AI 打轴"), content)
+        title = SubtitleLabel(self.tr("AI 打轴（Beta）"), content)
         layout.addWidget(title)
 
         hint = BodyLabel(
@@ -254,6 +255,19 @@ class AiTimingDialog(QDialog):
         model_credit.setOpenExternalLinks(True)
         model_credit.setWordWrap(True)
         layout.addWidget(model_credit)
+        # 平台限制（Beta）：运行环境/分离链路当前仅在 Windows 上验证
+        self._mac_supported = sys.platform == "win32"
+        if not self._mac_supported:
+            warn_mac = BodyLabel(
+                self.tr(
+                    "⚠ macOS 暂不支持：对齐/分离运行环境当前仅在 Windows 上"
+                    "提供与验证，预计随后续版本支持。"
+                ),
+                content,
+            )
+            warn_mac.setWordWrap(True)
+            warn_mac.setStyleSheet("color:#e85555;font-weight:bold;")
+            layout.addWidget(warn_mac)
 
         # ── 执行前状态 ──
         self._box_status = FluentGroupBox(self.tr("执行前状态"), content)
@@ -936,6 +950,19 @@ class AiTimingDialog(QDialog):
         self._run_task(_task, _done, self.tr("正在深度校验模型…"))
 
     def _on_run_clicked(self) -> None:
+        if not getattr(self, "_mac_supported", True):
+            InfoBar.error(
+                title=self.tr("平台不支持"),
+                content=self.tr(
+                    "AI 打轴当前仅支持 Windows，macOS 支持将在后续版本提供。"
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=6000,
+                parent=self,
+            )
+            return
         if self._snapshot is None or not self._snapshot.ready:
             return
         if self._context_checker is not None and not self._context_checker():

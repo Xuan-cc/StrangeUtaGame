@@ -395,6 +395,7 @@ class AiTimingService:
                     stem=stem,
                     params=params,
                     vocal_path=Path(vocal_path),
+                    display_name=vocal_source.stem,
                 ),
                 source_detail="本次分离的人声",
             )
@@ -490,6 +491,7 @@ class AiTimingService:
                     for s in result.spans
                 ],
             },
+            display_name=vocal_source.stem,
         )
         progress("apply", 99, "准备应用结果")
         return self._build_command(project, plan, request, result)

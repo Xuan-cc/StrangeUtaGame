@@ -4,7 +4,8 @@ ApplyAiTimingCommand 把校验通过的 AlignmentResult 一次性应用到 Proje
 
 - 覆盖全部时间戳（token 单元取对齐区间起点；结构单元按延音插值）；
 - 清空句尾呼吸点时间戳（呼吸点属于旧时间轴，不由对齐器产出）；
-- 为「整字补注音」的缺口字符写入 GENERATED Ruby（与时间戳同一次原子应用）；
+- 缺口字符的 GENERATED 读音只用于对齐 transcript，不写回工程
+  （2026-08 用户决策：AI 打轴只改时间轴，原 .sug 注音保持原样）；
 - 一次撤销完整恢复执行前的时间戳与注音状态。
 
 执行前校验（结果校验失败 / 工程标注漂移 / 缺口未清零时抛出异常），
@@ -130,9 +131,8 @@ class ApplyAiTimingCommand(Command):
                     )
                     if derived is not None:
                         ch.sentence_end_ts = derived
-                self._maybe_write_generated_ruby(
-                    ch, line_idx, char_idx, line_units
-                )
+                # 2026-08 用户决策：自动补出的读音只用于对齐 transcript，
+                # 不写回工程 ruby（原 .sug 注音保持原样，只改时间轴）
                 ch._update_offset_timestamps()
                 ch.push_to_ruby()
 
@@ -164,25 +164,3 @@ class ApplyAiTimingCommand(Command):
         # 调用方保留原释放点，绝不置空
         return None
 
-    def _maybe_write_generated_ruby(
-        self, ch, line_idx: int, char_idx: int, line_units: list
-    ) -> None:
-        """为整字 GENERATED 的缺口字符写入注音（原子应用的一部分）。"""
-        if ch.ruby is not None or ch.check_count <= 0:
-            return
-        units = [
-            u for u in line_units
-            if u.char_idx == char_idx and not u.is_sentence_end
-        ]
-        if not units:
-            return
-        if not all(
-            u.source == PronunciationSource.GENERATED and u.reading for u in units
-        ):
-            return
-        ch.set_ruby(
-            Ruby(parts=[RubyPart(text=u.reading or "") for u in units])
-        )
-
-
-__all__ = ["ApplyAiTimingCommand"]

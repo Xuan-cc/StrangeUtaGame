@@ -110,8 +110,9 @@ class TestAiCacheVocals:
         cache.store_vocal(_meta(media="m2"), vocal_file())
         dirs = {p.name for p in cache.vocals_dir().iterdir() if p.is_dir()}
         assert len(dirs) == 2
-        assert cache_key(_meta(media="m0")) in dirs
-        assert cache_key(_meta(media="m2")) in dirs
+        # 新命名：<原曲名>_<完整哈希前 6 位>（未传名 → unnamed）
+        assert f"unnamed_{cache_key(_meta(media='m0'))[:6]}" in dirs
+        assert f"unnamed_{cache_key(_meta(media='m2'))[:6]}" in dirs
 
     def test_locked_entry_survives_prune(self, tmp_path, vocal_file):
         cache = AiCache(tmp_path / "ai")
@@ -120,12 +121,12 @@ class TestAiCacheVocals:
         for i in range(1, 4):
             cache.store_vocal(_meta(media=f"m{i}"), vocal_file())
         dirs = {p.name for p in cache.vocals_dir().iterdir() if p.is_dir()}
-        assert cache_key(_meta(media="m0")) in dirs  # 带锁条目不被清理
+        assert f"unnamed_{cache_key(_meta(media='m0'))[:6]}" in dirs  # 带锁条目不被清理
         cache.unlock("vocals", _meta(media="m0"), token)
         cache.prune()
         dirs = {p.name for p in cache.vocals_dir().iterdir() if p.is_dir()}
         assert len(dirs) == 2
-        assert cache_key(_meta(media="m0")) not in dirs
+        assert f"unnamed_{cache_key(_meta(media='m0'))[:6]}" not in dirs
 
     def test_clean_work(self, tmp_path):
         cache = AiCache(tmp_path / "ai")

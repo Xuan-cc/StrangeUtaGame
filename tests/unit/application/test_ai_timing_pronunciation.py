@@ -526,28 +526,36 @@ class TestLatinLinkedWords:
         tokens = build_alignment_tokens(plan)
         assert [t.text for t in tokens] == ["take", "me"]
 
-    def test_generated_ruby_carries_whole_word(self):
+    def test_whole_word_reading_not_written_back(self):
+        """整词读音只用于对齐；应用后工程 ruby 保持原样（无写回）。"""
         from strange_uta_game.backend.application.ai_timing.alignment import (
-            AlignmentResult, EmissionSpan, build_alignment_request,
+            AlignmentResult,
+            EmissionSpan,
+            build_alignment_request,
         )
         from strange_uta_game.backend.application.ai_timing.commands import (
             ApplyAiTimingCommand,
         )
         from strange_uta_game.backend.domain import Project
+
         project = Project()
         project.sentences = [self._line()]
         resolver = PronunciationResolver(analyzer=DummyAnalyzer(), chinese_mode=False)
         plan = resolver.resolve_project(project, fill_missing=True)
         request = build_alignment_request(plan)
         result = AlignmentResult(
-            annotation_digest=request.annotation_digest, model_id="fake",
-            spans=[EmissionSpan(t.index, i * 100, i * 100 + 50)
-                   for i, t in enumerate(request.tokens)])
+            annotation_digest=request.annotation_digest,
+            model_id="fake",
+            spans=[
+                EmissionSpan(t.index, i * 100, i * 100 + 50)
+                for i, t in enumerate(request.tokens)
+            ],
+        )
         ApplyAiTimingCommand(project, plan, request, result).execute()
-        ch_t = project.sentences[0].characters[0]
-        assert [p.text for p in ch_t.ruby.parts] == ["Take"]  # SUG 首字承载整词
-        ch_m = project.sentences[0].characters[5]
-        assert [p.text for p in ch_m.ruby.parts] == ["me"]
+        # transcript 用了 take/me；工程里 T、m 的 ruby 不被写入
+        assert project.sentences[0].characters[0].ruby is None
+        assert project.sentences[0].characters[5].ruby is None
+        assert project.sentences[0].characters[0].timestamps == [0]
 
     def test_kana_linked_words_not_merged(self):
         """假名/汉字连词不受整词化影响（走形态素逐字注音）。"""

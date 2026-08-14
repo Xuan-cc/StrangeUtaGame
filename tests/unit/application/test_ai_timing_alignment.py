@@ -367,8 +367,8 @@ class TestApplyAiTimingCommand:
         cmd.undo()
         assert project.sentences[0].characters[0].timestamps == []
 
-    def test_generated_ruby_written_and_undone_atomically(self):
-        """缺口字符的 GENERATED 注音与时间戳同一次应用/撤销。"""
+    def test_generated_readings_not_written_to_project(self):
+        """缺口读音只用于 transcript，不写回工程 ruby（2026-08 用户决策）。"""
         s = _sentence([("見", 1, None, False), ("て", 1, None, False)])
         resolver = PronunciationResolver(
             analyzer=_FixedReadingAnalyzer({"見": "み"}), chinese_mode=False
@@ -384,12 +384,14 @@ class TestApplyAiTimingCommand:
         cmd = ApplyAiTimingCommand(project, plan, request, result)
         assert s.characters[0].ruby is None
         cmd.execute()
-        assert [p.text for p in s.characters[0].ruby.parts] == ["み"]
+        # 时间戳已应用，但 ruby 保持为空（原注音原样——这里本就没有注音）
         assert s.characters[0].timestamps == [100]
+        assert s.characters[0].ruby is None
+        assert s.characters[1].ruby is None
         cmd.undo()
         restored = project.sentences[0]
-        assert restored.characters[0].ruby is None
         assert restored.characters[0].timestamps == []
+        assert restored.characters[0].ruby is None
 
     def test_existing_ruby_never_rewritten(self):
         s = _sentence([("赤", 1, ["あか"], False)])

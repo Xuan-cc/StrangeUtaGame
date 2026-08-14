@@ -136,8 +136,29 @@ def find_sibling_vocals(source: Path) -> List[Path]:
 # ──────────────────────────────────────────────
 
 
+def _safe_dir_name(name: str) -> str:
+    """缓存目录名安全化：替换 Windows 非法字符与控制符，限长 48。"""
+    import re as _re
+
+    cleaned = _re.sub(r'[\\/:*?"<>|\r\n\t]', "_", (name or "").strip())
+    cleaned = cleaned.strip(" .")
+    return cleaned[:48] if cleaned else "unnamed"
+
+
+def _dir_name(full_key: str, display_name: str) -> str:
+    """可读目录名：<原曲名>_<完整哈希前 6 位>。
+
+    键的真值仍是完整哈希（manifest 校验）；6 位后缀用于查找定位与同名去重。
+    """
+    return f"{_safe_dir_name(display_name)}_{full_key[:6]}"
+
+
 class AiCache:
-    """.cache/ai_timing 人声/对齐缓存（校验 manifest + 原子写 + LRU）。"""
+    """.cache/ai_timing 人声/对齐缓存（校验 manifest + 原子写 + LRU）。
+
+    目录命名为 ``<原曲名>_<哈希前6位>``，便于人工调研与工作台复用；
+    查找按后缀扫描并经 manifest 内完整 key 校验，旧版全哈希目录兼容。
+    """
 
     def __init__(self, root: Path, *, keep_per_type: int = 2):
         self._root = Path(root)
@@ -159,6 +180,34 @@ class AiCache:
     def _entry_dir(self, kind: str, key: str) -> Path:
         base = self.vocals_dir() if kind == "vocals" else self.alignment_dir()
         return base / key
+
+    def _find_entry(self, kind: str, full_key: str) -> Optional[Path]:
+        """按后缀（新命名）或全名（旧命名）查找，manifest 全键必须精确匹配。"""
+        base = self.vocals_dir() if kind == "vocals" else self.alignment_dir()
+        if not base.is_dir():
+            return None
+        suffix = "_" + full_key[:6]
+        candidates = [
+            p
+            for p in base.iterdir()
+            if p.is_dir() and (p.name == full_key or p.name.endswith(suffix))
+        ]
+        candidates.sort(key=lambda p: p.stat().st_mtime)
+        for entry in reversed(candidates):
+            payload = self._read_manifest(entry) or {}
+            if payload.get("key") == full_key:
+                return entry
+        return None
+
+    def _ensure_entry(self, kind: str, full_key: str, display_name: str) -> Path:
+        """取既有条目（防重复建目录），否则按「原曲名_短哈希」新建。"""
+        found = self._find_entry(kind, full_key)
+        if found is not None:
+            return found
+        base = self.vocals_dir() if kind == "vocals" else self.alignment_dir()
+        entry = base / _dir_name(full_key, display_name)
+        entry.mkdir(parents=True, exist_ok=True)
+        return entry
 
     def _entry_is_inside_root(self, entry: Path) -> bool:
         """清理/读取前的安全检查：条目必须位于解析后的根目录内（§7.3）。"""
@@ -200,9 +249,9 @@ class AiCache:
     def lookup_vocal(self, metadata: Dict[str, object]) -> Optional[Path]:
         """校验通过则返回人声文件路径并刷新 LRU；否则 None。"""
         key = cache_key(metadata)
-        entry = self._entry_dir("vocals", key)
-        payload = self._read_manifest(entry)
-        if payload is None or payload.get("key") != key:
+        entry = self._find_entry("vocals", key)
+        payload = self._read_manifest(entry) if entry else None
+        if payload is None:
             return None
         vocal = entry / "vocals.wav"
         try:
@@ -219,15 +268,17 @@ class AiCache:
         return vocal
 
     def store_vocal(
-        self, metadata: Dict[str, object], vocal_path: Path
+        self,
+        metadata: Dict[str, object],
+        vocal_path: Path,
+        display_name: str = "",
     ) -> Path:
         """把已完成的最终人声写入缓存（原子：.part → 改名 → manifest 最后）。"""
         vocal_path = Path(vocal_path)
         if not vocal_path.is_file():
             raise AiCacheError(f"人声文件不存在：{vocal_path}")
         key = cache_key(metadata)
-        entry = self._entry_dir("vocals", key)
-        entry.mkdir(parents=True, exist_ok=True)
+        entry = self._ensure_entry("vocals", key, display_name)
         target = entry / "vocals.wav"
         partial = entry / f".vocals.{uuid.uuid4().hex}.part"
         try:
@@ -244,6 +295,7 @@ class AiCache:
                     "kind": "vocals",
                     "complete": True,
                     "key": key,
+                    "display_name": display_name,
                     "metadata": metadata,
                     "size": target.stat().st_size,
                     "sha256": digest,
@@ -261,9 +313,9 @@ class AiCache:
     def lookup_alignment(self, metadata: Dict[str, object]) -> Optional[dict]:
         """返回缓存的对齐结果 payload；校验失败返回 None。"""
         key = cache_key(metadata)
-        entry = self._entry_dir("alignment", key)
-        payload = self._read_manifest(entry)
-        if payload is None or payload.get("key") != key:
+        entry = self._find_entry("alignment", key)
+        payload = self._read_manifest(entry) if entry else None
+        if payload is None:
             return None
         try:
             result = json.loads(
@@ -276,11 +328,13 @@ class AiCache:
         return result
 
     def store_alignment(
-        self, metadata: Dict[str, object], result_payload: dict
+        self,
+        metadata: Dict[str, object],
+        result_payload: dict,
+        display_name: str = "",
     ) -> Path:
         key = cache_key(metadata)
-        entry = self._entry_dir("alignment", key)
-        entry.mkdir(parents=True, exist_ok=True)
+        entry = self._ensure_entry("alignment", key, display_name)
         result_path = entry / "result.json"
         partial = entry / f".result.{uuid.uuid4().hex}.part"
         try:
@@ -297,6 +351,7 @@ class AiCache:
                     "kind": "alignment",
                     "complete": True,
                     "key": key,
+                    "display_name": display_name,
                     "metadata": metadata,
                     "created_at": now,
                     "last_used_at": now,
@@ -309,15 +364,14 @@ class AiCache:
 
     # ── 锁与清理 ──
 
-    def lock(self, kind: str, key_or_metadata) -> str:
+    def lock(self, kind: str, key_or_metadata, display_name: str = "") -> str:
         """为正在运行的条目创建锁；返回锁 token（unlock 用）。"""
         key = (
             cache_key(key_or_metadata)
             if isinstance(key_or_metadata, dict)
             else str(key_or_metadata)
         )
-        entry = self._entry_dir(kind, key)
-        entry.mkdir(parents=True, exist_ok=True)
+        entry = self._ensure_entry(kind, key, display_name or "pending")
         token = uuid.uuid4().hex
         (entry / f".lock.{token}").write_text(token, encoding="utf-8")
         return token
@@ -328,8 +382,9 @@ class AiCache:
             if isinstance(key_or_metadata, dict)
             else str(key_or_metadata)
         )
-        entry = self._entry_dir(kind, key)
-        (entry / f".lock.{token}").unlink(missing_ok=True)
+        entry = self._find_entry(kind, key)
+        if entry is not None:
+            (entry / f".lock.{token}").unlink(missing_ok=True)
 
     def _is_locked(self, entry: Path) -> bool:
         """条目是否带有效锁（正在运行，§7.3 不参与清理）。
@@ -499,6 +554,7 @@ class VocalPreparationService:
         stem: str,
         params: Optional[Dict[str, object]] = None,
         vocal_path: Path,
+        display_name: str = "",
     ) -> Path:
         """分离完成后登记最终人声（进入缓存，供后续任务复用）。"""
         metadata = vocal_cache_metadata(
@@ -507,7 +563,9 @@ class VocalPreparationService:
             stem=stem,
             params=params,
         )
-        return self._cache.store_vocal(metadata, Path(vocal_path))
+        return self._cache.store_vocal(
+            metadata, Path(vocal_path), display_name=display_name
+        )
 
 
 def default_ai_cache_root() -> Path:
