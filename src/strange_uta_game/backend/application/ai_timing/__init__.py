@@ -31,6 +31,23 @@ from .alignment import (
     validate_result,
 )
 from .commands import ApplyAiTimingCommand
+from .settings import (
+    AiTimingSettings,
+    default_model_root,
+    load_ai_timing_settings,
+    resolve_model_root,
+    save_ai_timing_settings,
+)
+from .models import (
+    ModelDownloadService,
+    ModelDownloadTransport,
+    ModelManifest,
+    ModelRegistry,
+    ModelRegistryError,
+    ModelStatus,
+    HfHubTransport,
+)
+from .runtime import AiRuntimeError, AiRuntimeManager, RuntimeStatus
 
 __all__ = [
     # 阶段 A
@@ -56,4 +73,20 @@ __all__ = [
     "interpolate_structural_timestamps",
     "validate_result",
     "ApplyAiTimingCommand",
+    # 阶段 D
+    "AiTimingSettings",
+    "default_model_root",
+    "load_ai_timing_settings",
+    "resolve_model_root",
+    "save_ai_timing_settings",
+    "ModelDownloadService",
+    "ModelDownloadTransport",
+    "ModelManifest",
+    "ModelRegistry",
+    "ModelRegistryError",
+    "ModelStatus",
+    "HfHubTransport",
+    "AiRuntimeError",
+    "AiRuntimeManager",
+    "RuntimeStatus",
 ]

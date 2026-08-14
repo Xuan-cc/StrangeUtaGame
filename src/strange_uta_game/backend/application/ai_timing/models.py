@@ -1,0 +1,446 @@
+"""AI 打轴模型注册表与下载服务（阶段 D）。
+
+目录约定（§7.1）::
+
+    <model_root>/
+    └── <slug(model_id)>/
+        ├── manifest.json          # 最后写入：只有它存在且校验通过才算已安装
+        ├── config.json
+        ├── model.safetensors
+        └── ...
+
+原子性：下载先写 ``<name>.part``，完成后改名并计算摘要；manifest 在
+全部文件就绪后最后写入。中断（取消/断网/崩溃）不会注册半成品——
+``validate`` 对无 manifest 或摘要不符的目录返回 incomplete/corrupt。
+
+模型去重：下载到受控本地目录（hub local_dir 模式），并控制
+HF_HOME / HF_HUB_CACHE 指向同一位置，避免应用模型目录与 Hugging Face
+默认缓存各存一份权重（§7.1、§10）。
+"""
+
+import hashlib
+import json
+import re
+import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, List, Optional, Tuple
+
+PROGRESS_CB = Callable[[int, str], None]
+CANCEL_CB = Callable[[], bool]
+
+MANIFEST_NAME = "manifest.json"
+PART_SUFFIX = ".part"
+
+# Wav2Vec2 模型需要的文件类型；排除 TF/Flax/ONNX 权重与冗余大文件
+_INCLUDED_EXTENSIONS = {
+    ".json",
+    ".txt",
+    ".safetensors",
+}
+_EXCLUDED_NAMES = {".gitattributes", "README.md"}
+
+
+class ModelRegistryError(RuntimeError):
+    """模型注册表操作错误（中文消息）。"""
+
+
+def slugify_model_id(model_id: str) -> str:
+    """repo id → 目录名（``NextFire/mms-300m-...`` → ``NextFire__mms-300m-...``）。"""
+    slug = model_id.replace("/", "__").replace("\\", "__")
+    slug = re.sub(r"[^A-Za-z0-9._-]", "_", slug)
+    return slug or "model"
+
+
+def sha256_of_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while True:
+            chunk = fh.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+@dataclass
+class ModelFileEntry:
+    filename: str
+    size: int
+    sha256: str
+
+
+@dataclass
+class ModelManifest:
+    model_id: str
+    provider: str
+    revision: str
+    license: str = ""
+    files: List[ModelFileEntry] = field(default_factory=list)
+    created_at: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "model_id": self.model_id,
+            "provider": self.provider,
+            "revision": self.revision,
+            "license": self.license,
+            "created_at": self.created_at,
+            "files": [
+                {
+                    "filename": f.filename,
+                    "size": f.size,
+                    "sha256": f.sha256,
+                }
+                for f in self.files
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ModelManifest":
+        return cls(
+            model_id=str(data.get("model_id", "")),
+            provider=str(data.get("provider", "")),
+            revision=str(data.get("revision", "")),
+            license=str(data.get("license", "")),
+            created_at=str(data.get("created_at", "")),
+            files=[
+                ModelFileEntry(
+                    filename=str(f.get("filename", "")),
+                    size=int(f.get("size", 0)),
+                    sha256=str(f.get("sha256", "")),
+                )
+                for f in data.get("files", [])
+            ],
+        )
+
+
+@dataclass
+class ModelStatus:
+    """单个模型在注册表中的状态（对应弹窗状态卡）。"""
+
+    state: str
+    """missing / incomplete / corrupt / ok / error"""
+
+    model_dir: Optional[Path] = None
+    manifest: Optional[ModelManifest] = None
+    message: str = ""
+
+    @property
+    def is_ready(self) -> bool:
+        return self.state == "ok"
+
+
+class ModelRegistry:
+    """受控模型目录 + manifest 管理（只负责本地状态，不负责下载）。"""
+
+    def __init__(self, root: Path):
+        self._root = Path(root)
+
+    @property
+    def root(self) -> Path:
+        return self._root
+
+    def model_dir(self, model_id: str) -> Path:
+        return self._root / slugify_model_id(model_id)
+
+    def read_manifest(self, model_id: str) -> Optional[ModelManifest]:
+        path = self.model_dir(model_id) / MANIFEST_NAME
+        if not path.is_file():
+            return None
+        try:
+            return ModelManifest.from_dict(
+                json.loads(path.read_text(encoding="utf-8"))
+            )
+        except (json.JSONDecodeError, ValueError, OSError):
+            return None
+
+    def register(self, manifest: ModelManifest) -> Path:
+        """写入 manifest（安装的最后一步）。manifest 存在即视为已安装。"""
+        target = self.model_dir(manifest.model_id)
+        target.mkdir(parents=True, exist_ok=True)
+        manifest.created_at = manifest.created_at or time.strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+        manifest_path = target / MANIFEST_NAME
+        tmp = manifest_path.with_suffix(".json.part")
+        tmp.write_text(
+            json.dumps(manifest.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp.replace(manifest_path)
+        return target
+
+    def validate(
+        self, model_id: str, *, deep: bool = False
+    ) -> ModelStatus:
+        """校验模型目录。
+
+        deep=False：只检查 manifest 与文件存在/大小（快）；
+        deep=True：重算 sha256（慢，用户主动「重新校验」时用）。
+        """
+        model_dir = self.model_dir(model_id)
+        if not model_dir.is_dir():
+            return ModelStatus(state="missing", model_dir=None, message="模型未安装")
+        manifest = self.read_manifest(model_id)
+        if manifest is None:
+            return ModelStatus(
+                state="incomplete",
+                model_dir=model_dir,
+                message="下载未完成（缺少 manifest）",
+            )
+        for entry in manifest.files:
+            f = model_dir / entry.filename
+            if not f.is_file():
+                return ModelStatus(
+                    state="corrupt",
+                    model_dir=model_dir,
+                    manifest=manifest,
+                    message=f"文件缺失：{entry.filename}",
+                )
+            if f.stat().st_size != entry.size:
+                return ModelStatus(
+                    state="corrupt",
+                    model_dir=model_dir,
+                    manifest=manifest,
+                    message=f"文件大小不符：{entry.filename}",
+                )
+        if deep:
+            for entry in manifest.files:
+                digest = sha256_of_file(model_dir / entry.filename)
+                if digest != entry.sha256:
+                    return ModelStatus(
+                        state="corrupt",
+                        model_dir=model_dir,
+                        manifest=manifest,
+                        message=f"文件校验失败：{entry.filename}",
+                    )
+        return ModelStatus(state="ok", model_dir=model_dir, manifest=manifest)
+
+    def resolve_model_path(self, model_id: str, *, deep: bool = False) -> Optional[Path]:
+        """校验通过则返回本地模型目录（worker 直接从该路径加载）。"""
+        status = self.validate(model_id, deep=deep)
+        return status.model_dir if status.is_ready else None
+
+    def list_installed(self) -> List[ModelManifest]:
+        """列出已注册（manifest 存在）的模型。"""
+        result: List[ModelManifest] = []
+        if not self._root.is_dir():
+            return result
+        for child in sorted(self._root.iterdir()):
+            if not child.is_dir():
+                continue
+            manifest_path = child / MANIFEST_NAME
+            if not manifest_path.is_file():
+                continue
+            try:
+                result.append(
+                    ModelManifest.from_dict(
+                        json.loads(manifest_path.read_text(encoding="utf-8"))
+                    )
+                )
+            except (json.JSONDecodeError, ValueError, OSError):
+                continue
+        return result
+
+    def clear_partial_downloads(self, model_id: str) -> int:
+        """清理 ``.part`` 残留（任务结束与下次启动时调用，§7.3）。"""
+        model_dir = self.model_dir(model_id)
+        removed = 0
+        if not model_dir.is_dir():
+            return 0
+        for p in model_dir.rglob(f"*{PART_SUFFIX}"):
+            try:
+                p.unlink()
+                removed += 1
+            except OSError:
+                pass
+        return removed
+
+
+class ModelDownloadTransport(ABC):
+    """远端模型仓库传输抽象（真实实现为 Hugging Face Hub）。"""
+
+    @abstractmethod
+    def list_files(self, repo_id: str, revision: str) -> List[Tuple[str, int]]:
+        """返回 [(filename, size_bytes)]，按文件名排序。"""
+
+    @abstractmethod
+    def download_file(
+        self,
+        repo_id: str,
+        revision: str,
+        filename: str,
+        dest: Path,
+        progress: PROGRESS_CB,
+        cancel: CANCEL_CB,
+    ) -> None:
+        """下载单个文件到 dest（原子：完成前写 .part）。"""
+
+
+def filter_model_files(files: List[Tuple[str, int]]) -> List[Tuple[str, int]]:
+    """按白名单过滤所需文件（排除 TF/Flax/ONNX 冗余权重）。"""
+    return [
+        (name, size)
+        for name, size in files
+        if name not in _EXCLUDED_NAMES
+        and Path(name).suffix.lower() in _INCLUDED_EXTENSIONS
+        and ".cache" not in name.split("/")
+    ]
+
+
+class HfHubTransport(ModelDownloadTransport):
+    """Hugging Face Hub 实现（lazy import；支持镜像端点）。
+
+    使用 ``local_dir`` 模式直接落盘到受控目录；同时把进程级
+    HF_HOME/HF_HUB_CACHE 指向模型根目录下的 ``.hf``，保证 Hub 元数据
+    不会在用户默认缓存再存一份权重（§7.1）。
+    """
+
+    def __init__(self, endpoint: str = "", hf_cache_root: Optional[Path] = None):
+        self._endpoint = endpoint or None
+        self._hf_cache_root = hf_cache_root
+
+    def _apply_env(self) -> None:
+        import os
+
+        if self._hf_cache_root is not None:
+            cache = str(self._hf_cache_root)
+            os.environ["HF_HOME"] = cache
+            os.environ["HF_HUB_CACHE"] = str(Path(cache) / "hub")
+
+    def _hub(self):
+        try:
+            import huggingface_hub as hub
+        except ImportError as exc:
+            raise ModelRegistryError(
+                "无法导入 huggingface_hub，请先安装对齐运行环境"
+            ) from exc
+        return hub
+
+    def list_files(self, repo_id: str, revision: str) -> List[Tuple[str, int]]:
+        self._apply_env()
+        hub = self._hub()
+        try:
+            info = hub.model_info(repo_id, revision=revision, files_metadata=True)
+        except Exception as exc:
+            raise ModelRegistryError(f"获取模型文件列表失败：{exc}") from exc
+        result: List[Tuple[str, int]] = []
+        for sibling in getattr(info, "siblings", None) or []:
+            name = getattr(sibling, "rfilename", "")
+            size = getattr(sibling, "size", None) or 0
+            if name:
+                result.append((name, int(size)))
+        return sorted(result)
+
+    def download_file(
+        self,
+        repo_id: str,
+        revision: str,
+        filename: str,
+        dest: Path,
+        progress: PROGRESS_CB,
+        cancel: CANCEL_CB,
+    ) -> None:
+        self._apply_env()
+        hub = self._hub()
+        if cancel():
+            raise ModelRegistryError("已取消")
+        try:
+            hub.hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                revision=revision,
+                local_dir=str(dest.parent),
+                endpoint=self._endpoint,
+            )
+        except Exception as exc:
+            raise ModelRegistryError(f"下载 {filename} 失败：{exc}") from exc
+
+
+class ModelDownloadService:
+    """编排：列文件 → 逐文件下载（.part → 改名 → 摘要）→ 注册 manifest。"""
+
+    def __init__(self, registry: ModelRegistry, transport: ModelDownloadTransport):
+        self._registry = registry
+        self._transport = transport
+
+    def download(
+        self,
+        model_id: str,
+        provider: str,
+        *,
+        revision: str = "main",
+        license_text: str = "",
+        progress: Optional[PROGRESS_CB] = None,
+        cancel: Optional[CANCEL_CB] = None,
+    ) -> Path:
+        """下载并注册模型，返回本地目录；已就绪时直接返回现有目录。"""
+        cancel = cancel or (lambda: False)
+        progress = progress or (lambda p, m: None)
+
+        existing = self._registry.resolve_model_path(model_id)
+        if existing is not None:
+            progress(100, "模型已安装")
+            return existing
+
+        model_dir = self._registry.model_dir(model_id)
+        model_dir.mkdir(parents=True, exist_ok=True)
+        progress(2, "获取模型文件列表")
+        files = filter_model_files(
+            self._transport.list_files(model_id, revision)
+        )
+        if not files:
+            raise ModelRegistryError(f"模型仓库中没有可下载的文件：{model_id}")
+
+        entries: List[ModelFileEntry] = []
+        for i, (filename, size) in enumerate(files):
+            if cancel():
+                raise ModelRegistryError("已取消")
+            base = int(5 + 90 * i / len(files))
+            progress(base, f"下载 {filename}（{i + 1}/{len(files)}）")
+            dest = model_dir / filename
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            self._transport.download_file(
+                model_id, revision, filename, dest, progress, cancel
+            )
+            if not dest.is_file():
+                raise ModelRegistryError(f"下载后文件不存在：{filename}")
+            entries.append(
+                ModelFileEntry(
+                    filename=filename,
+                    size=dest.stat().st_size,
+                    sha256=sha256_of_file(dest),
+                )
+            )
+
+        if cancel():
+            raise ModelRegistryError("已取消")
+        progress(97, "写入模型清单")
+        manifest = ModelManifest(
+            model_id=model_id,
+            provider=provider,
+            revision=revision,
+            license=license_text,
+            files=entries,
+        )
+        target = self._registry.register(manifest)
+        progress(100, "模型下载完成")
+        return target
+
+
+__all__ = [
+    "MANIFEST_NAME",
+    "ModelRegistryError",
+    "slugify_model_id",
+    "sha256_of_file",
+    "ModelFileEntry",
+    "ModelManifest",
+    "ModelStatus",
+    "ModelRegistry",
+    "ModelDownloadTransport",
+    "HfHubTransport",
+    "ModelDownloadService",
+    "filter_model_files",
+]
