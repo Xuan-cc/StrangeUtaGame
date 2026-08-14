@@ -129,6 +129,14 @@ class _StateRow(QWidget):
         self._state = state
         self._state_label.setText(f"<b style='color:{color}'>●</b> {text}")
 
+    def add_action(self, text: str, clicked: Callable) -> PushButton:
+        """在行尾放一个小动作按钮（缺什么就在该行旁边给什么操作）。"""
+        btn = PushButton(text, self)
+        btn.setFixedHeight(26)
+        btn.clicked.connect(clicked)
+        self.layout().addWidget(btn)
+        return btn
+
 
 class AiTimingDialog(Dialog):
     """AI 打轴完整弹窗。"""
@@ -181,6 +189,10 @@ class AiTimingDialog(Dialog):
         from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout
 
         content = QWidget(self)
+        content.setObjectName("aiTimingContent")
+        # 透明背景：qfluentwidgets Dialog 的 QSS 按主题（深/浅）给窗口上色，
+        # 普通子 QWidget 会用默认调色板（暗色主题下呈白色）——置透明随主题。
+        content.setStyleSheet("#aiTimingContent{background:transparent;}")
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 18, 24, 18)
         layout.setSpacing(8)
@@ -212,6 +224,17 @@ class AiTimingDialog(Dialog):
             self.row_model,
         ):
             layout.addWidget(row)
+        # 行内动作：对齐环境的「安装/修复」、模型的「下载」「校验」
+        # （检测到缺什么，同行直接给操作，不用去底部找）
+        self.btn_install_runtime = self.row_runtime.add_action(
+            "安装 / 修复", self._on_install_runtime
+        )
+        self.btn_download_model = self.row_model.add_action(
+            "下载模型", self._on_download_model
+        )
+        self.btn_recheck = self.row_model.add_action(
+            "校验", self._on_deep_recheck
+        )
 
         # 多人声候选选择（§6.1：多个严格候选时在弹窗内选择）
         self.vocal_combo = ComboBox(content)
@@ -259,12 +282,8 @@ class AiTimingDialog(Dialog):
         self.storage_label.setWordWrap(True)
         layout.addWidget(self.storage_label)
 
-        # 动作按钮（§3.3）
+        # 存储位置的动作（§3.3 浏览/更改/恢复推荐；下载与安装已上移到对应行内）
         actions = QHBoxLayout()
-        self.btn_download_model = PushButton("下载对齐模型", content)
-        self.btn_download_model.clicked.connect(self._on_download_model)
-        self.btn_install_runtime = PushButton("安装对齐环境", content)
-        self.btn_install_runtime.clicked.connect(self._on_install_runtime)
         self.btn_browse_model = PushButton("浏览模型目录", content)
         self.btn_browse_model.clicked.connect(
             lambda: self._open_dir(resolve_model_root(self._settings))
@@ -281,18 +300,14 @@ class AiTimingDialog(Dialog):
         self.btn_change_cache_dir.clicked.connect(self._on_change_cache_dir)
         self.btn_reset = PushButton("恢复推荐设置", content)
         self.btn_reset.clicked.connect(self._on_reset_settings)
-        self.btn_recheck = PushButton("深度重新校验", content)
-        self.btn_recheck.clicked.connect(self._on_deep_recheck)
         for b in (
-            self.btn_download_model,
-            self.btn_install_runtime,
             self.btn_browse_model,
             self.btn_browse_runtime,
             self.btn_change_model_dir,
             self.btn_change_cache_dir,
             self.btn_reset,
-            self.btn_recheck,
         ):
+            b.setFixedHeight(26)
             actions.addWidget(b)
         actions.addStretch(1)
         layout.addLayout(actions)
@@ -362,7 +377,7 @@ class AiTimingDialog(Dialog):
             self.btn_change_cache_dir,
             self.btn_reset,
             self.btn_recheck,
-        ]
+        ]  # 全部已存在：前三个在状态行内，其余在存储动作行
 
     def _cleanup_task(self) -> None:
         if self._thread is not None:
@@ -538,8 +553,10 @@ class AiTimingDialog(Dialog):
         if model is not None and model.is_ready:
             self.row_model.set_state("ok", str(model.model_dir))
         else:
+            # 告知目标位置：用户在下载前就知道模型会放到哪里（可更改）
             self.row_model.set_state(
-                "error", (model.message if model else "") or "模型未安装"
+                "error",
+                f"未安装，将下载到 {resolve_model_root(self._settings)}",
             )
 
         # 存储位置（§3.2）

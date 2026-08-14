@@ -46,7 +46,9 @@ class _FakeTransport:
     def list_files(self, repo_id, revision):
         return sorted((name, len(data)) for name, data in self.files.items())
 
-    def download_file(self, repo_id, revision, filename, dest, progress, cancel):
+    def download_file(
+        self, repo_id, revision, filename, dest, *, expected_size, progress, cancel
+    ):
         if filename in self.fail_on:
             raise ModelRegistryError(f"下载 {filename} 失败：模拟网络中断")
         if cancel():
@@ -54,6 +56,7 @@ class _FakeTransport:
         dest.parent.mkdir(parents=True, exist_ok=True)
         part = dest.with_name(dest.name + ".part")
         part.write_bytes(self.files[filename])
+        progress(100, f"完成 {filename}")
         part.replace(dest)
         self.downloaded.append(filename)
 
@@ -358,3 +361,103 @@ class TestSettings:
         root = default_model_root()
         assert root.name == "ai_models"
         assert cache_dir() not in root.parents  # 模型不放自动清理目录
+
+
+class TestStreamingTransport:
+    """HfHubTransport 直连流式下载（本地 http.server，离线）。"""
+
+    def _serve(self, tmp_path):
+        import http.server
+        import threading
+
+        payload = tmp_path / "blob.bin"
+        payload.write_bytes(b"x" * 300_000)
+        handler = type(
+            "H",
+            (http.server.SimpleHTTPRequestHandler,),
+            {"log_message": lambda *a: None, "translate_path": lambda s, p: str(payload)},
+        )
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server, f"http://127.0.0.1:{server.server_address[1]}/blob.bin"
+
+    def test_progress_and_atomic_complete(self, tmp_path):
+        from strange_uta_game.backend.application.ai_timing.models import (
+            HfHubTransport,
+        )
+
+        server, url = self._serve(tmp_path)
+        try:
+            transport = HfHubTransport(endpoint=url.rsplit("/", 1)[0])
+            dest = tmp_path / "out" / "blob.bin"
+            percents = []
+            transport.download_file(
+                "repo",
+                "rev",
+                "blob.bin",
+                dest,
+                expected_size=300_000,
+                progress=lambda p, m: percents.append(p),
+                cancel=lambda: False,
+            )
+            assert dest.stat().st_size == 300_000
+            assert not dest.with_name(dest.name + ".part").exists()
+            assert percents and percents[-1] == 100
+            assert percents[0] < percents[-1]
+        finally:
+            server.shutdown()
+
+    def test_cancel_midstream_keeps_part(self, tmp_path):
+        from strange_uta_game.backend.application.ai_timing.models import (
+            HfHubTransport,
+        )
+
+        server, url = self._serve(tmp_path)
+        try:
+            transport = HfHubTransport(endpoint=url.rsplit("/", 1)[0])
+            dest = tmp_path / "out" / "blob.bin"
+            calls = {"n": 0}
+
+            def cancel():
+                calls["n"] += 1
+                return calls["n"] > 1  # 收到首块后取消
+
+            with pytest.raises(ModelRegistryError, match="已取消"):
+                transport.download_file(
+                    "repo",
+                    "rev",
+                    "blob.bin",
+                    dest,
+                    expected_size=300_000,
+                    progress=lambda p, m: None,
+                    cancel=cancel,
+                )
+            part = dest.with_name(dest.name + ".part")
+            assert part.is_file() and 0 < part.stat().st_size < 300_000
+        finally:
+            server.shutdown()
+
+    def test_resume_from_part(self, tmp_path):
+        from strange_uta_game.backend.application.ai_timing.models import (
+            HfHubTransport,
+        )
+
+        server, url = self._serve(tmp_path)
+        try:
+            transport = HfHubTransport(endpoint=url.rsplit("/", 1)[0])
+            dest = tmp_path / "out" / "blob.bin"
+            part = dest.with_name(dest.name + ".part")
+            part.parent.mkdir(parents=True, exist_ok=True)
+            part.write_bytes(b"x" * 100_000)  # 预置断点
+            transport.download_file(
+                "repo",
+                "rev",
+                "blob.bin",
+                dest,
+                expected_size=300_000,
+                progress=lambda p, m: None,
+                cancel=lambda: False,
+            )
+            assert dest.stat().st_size == 300_000  # 续传补齐
+        finally:
+            server.shutdown()

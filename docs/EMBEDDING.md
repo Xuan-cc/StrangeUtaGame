@@ -135,6 +135,7 @@ class SettingsProvider(Protocol):
 | `find_session_vocal(source_path, media_sha256) -> Path \| None` | 本次会话已分离、与原音频匹配的人声（零分离复用） |
 | `separate_vocal(source_path, on_progress, is_cancelled) -> Path` | 阻塞执行一次工作台人声分离，返回产物路径；取消/失败抛中文异常 |
 | `ai_cache_dir() -> Path` | SUG AI 缓存根目录（宿主 `.cache` 范围，§7.2） |
+| `http_proxy() -> str`（可选） | 当前生效的下载代理 URL；空串/缺省 = 不显式代理（SUG 模型下载默认跟随宿主网络设置，standalone 则用 SUG 自身的「网络与代理」设置） |
 
 embedded 语义（对应主仓库 AI 打轴计划 §6.2）：跟随工作台当前「分离人声」
 设置，不安装第二份 PyMSS Runtime、不复制模型、不在 SUG 设置中保存另一套

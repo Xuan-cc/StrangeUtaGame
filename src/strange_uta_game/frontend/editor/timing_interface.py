@@ -2158,11 +2158,33 @@ class EditorInterface(QWidget):
                 host.effective_identity if host is not None else None
             ),
         )
+        # 代理：embedded 用宿主（工作台网络设置）；standalone 用 SUG 自己
+        # 「设置 → 网络与代理」的代理模式（updater.proxy.resolve_proxy）
+        proxy = ""
+        if host is not None:
+            proxy_getter = getattr(host, "http_proxy", None)
+            if callable(proxy_getter):
+                try:
+                    proxy = str(proxy_getter() or "")
+                except Exception:
+                    proxy = ""
+        else:
+            try:
+                from strange_uta_game.updater.proxy import resolve_proxy
+                from strange_uta_game.updater.settings import UpdaterSettings
+
+                net = UpdaterSettings.load()
+                info, _ = resolve_proxy(net.proxy_mode, net.proxy_manual_url)
+                if info and info.is_valid:
+                    proxy = info.url
+            except Exception:
+                proxy = ""
         download_service = ModelDownloadService(
             registry,
             HfHubTransport(
                 endpoint=settings.download_mirror,
                 hf_cache_root=model_root / ".hf",
+                proxy=proxy,
             ),
         )
         return service, settings, registry, runtime, download_service

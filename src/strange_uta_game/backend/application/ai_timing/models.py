@@ -273,10 +273,16 @@ class ModelDownloadTransport(ABC):
         revision: str,
         filename: str,
         dest: Path,
+        *,
+        expected_size: int,
         progress: PROGRESS_CB,
         cancel: CANCEL_CB,
     ) -> None:
-        """下载单个文件到 dest（原子：完成前写 .part）。"""
+        """下载单个文件到 dest（原子：完成前写 .part）。
+
+        progress 按本文件 0-100 回调（字节级真实进度）；cancel 在传输
+        块之间被检查，必须可及时中断。
+        """
 
 
 def filter_model_files(files: List[Tuple[str, int]]) -> List[Tuple[str, int]]:
@@ -291,47 +297,53 @@ def filter_model_files(files: List[Tuple[str, int]]) -> List[Tuple[str, int]]:
 
 
 class HfHubTransport(ModelDownloadTransport):
-    """Hugging Face Hub 实现（lazy import；支持镜像端点）。
+    """Hugging Face Hub 直连流式下载（不经过 hub 的 tqdm/缓存）。
 
-    使用 ``local_dir`` 模式直接落盘到受控目录；同时把进程级
-    HF_HOME/HF_HUB_CACHE 指向模型根目录下的 ``.hf``，保证 Hub 元数据
-    不会在用户默认缓存再存一份权重（§7.1）。
+    - 真实字节级进度（UI 进度条不再停在 0.08%）；
+    - 逐块检查取消标记，大文件下载可随时打断（断点续传保留 .part）；
+    - Range 断点续传：已下载部分不重拉；
+    - 代理：默认继承系统/环境代理（requests trust_env）；显式 proxy
+      优先（embedded 由宿主注入工作台的网络代理设置）；镜像端点支持。
     """
 
-    def __init__(self, endpoint: str = "", hf_cache_root: Optional[Path] = None):
-        self._endpoint = endpoint or None
+    _CHUNK = 256 * 1024
+    _TIMEOUT = (10, 30)  # 连接 / 读超时（秒）
+
+    def __init__(
+        self,
+        endpoint: str = "",
+        hf_cache_root: Optional[Path] = None,
+        proxy: str = "",
+    ):
+        self._endpoint = (endpoint or "https://huggingface.co").rstrip("/")
         self._hf_cache_root = hf_cache_root
+        self._proxies = {"http": proxy, "https": proxy} if proxy else None
 
-    def _apply_env(self) -> None:
-        import os
-
-        if self._hf_cache_root is not None:
-            cache = str(self._hf_cache_root)
-            os.environ["HF_HOME"] = cache
-            os.environ["HF_HUB_CACHE"] = str(Path(cache) / "hub")
-
-    def _hub(self):
-        try:
-            import huggingface_hub as hub
-        except ImportError as exc:
-            raise ModelRegistryError(
-                "无法导入 huggingface_hub，请先安装对齐运行环境"
-            ) from exc
-        return hub
+    def _proxies_kwargs(self) -> dict:
+        return {"proxies": self._proxies} if self._proxies else {}
 
     def list_files(self, repo_id: str, revision: str) -> List[Tuple[str, int]]:
-        self._apply_env()
-        hub = self._hub()
+        import requests
+
+        url = f"{self._endpoint}/api/models/{repo_id}/tree/{revision}?recursive=true"
         try:
-            info = hub.model_info(repo_id, revision=revision, files_metadata=True)
+            resp = requests.get(
+                url, timeout=self._TIMEOUT, **self._proxies_kwargs()
+            )
+            resp.raise_for_status()
+            entries = resp.json()
         except Exception as exc:
             raise ModelRegistryError(f"获取模型文件列表失败：{exc}") from exc
         result: List[Tuple[str, int]] = []
-        for sibling in getattr(info, "siblings", None) or []:
-            name = getattr(sibling, "rfilename", "")
-            size = getattr(sibling, "size", None) or 0
-            if name:
-                result.append((name, int(size)))
+        for item in entries if isinstance(entries, list) else []:
+            name = str(item.get("path", ""))
+            if not name:
+                continue
+            # LFS 权重在 lfs.size；普通文件在 size
+            size = int(
+                (item.get("lfs") or {}).get("size") or item.get("size") or 0
+            )
+            result.append((name, size))
         return sorted(result)
 
     def download_file(
@@ -340,23 +352,62 @@ class HfHubTransport(ModelDownloadTransport):
         revision: str,
         filename: str,
         dest: Path,
+        *,
+        expected_size: int,
         progress: PROGRESS_CB,
         cancel: CANCEL_CB,
     ) -> None:
-        self._apply_env()
-        hub = self._hub()
-        if cancel():
-            raise ModelRegistryError("已取消")
+        import requests
+
+        url = f"{self._endpoint}/{repo_id}/resolve/{revision}/{filename}"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        part = dest.with_name(dest.name + PART_SUFFIX)
+        offset = part.stat().st_size if part.is_file() else 0
+
+        headers = {"Range": f"bytes={offset}-"} if offset else {}
         try:
-            hub.hf_hub_download(
-                repo_id=repo_id,
-                filename=filename,
-                revision=revision,
-                local_dir=str(dest.parent),
-                endpoint=self._endpoint,
+            resp = requests.get(
+                url,
+                headers=headers,
+                stream=True,
+                timeout=self._TIMEOUT,
+                **self._proxies_kwargs(),
             )
+            if offset and resp.status_code == 200:
+                # 服务端不支持 Range：重头下载
+                offset = 0
+            resp.raise_for_status()
+        except Exception as exc:
+            raise ModelRegistryError(f"连接下载源失败：{exc}") from exc
+
+        total = expected_size or int(resp.headers.get("Content-Length", 0)) + offset
+        done_bytes = offset
+        try:
+            mode = "ab" if offset and resp.status_code == 206 else "wb"
+            with part.open(mode) as fh:
+                for chunk in resp.iter_content(chunk_size=self._CHUNK):
+                    if cancel():
+                        raise ModelRegistryError("已取消")
+                    if not chunk:
+                        continue
+                    fh.write(chunk)
+                    done_bytes += len(chunk)
+                    if total:
+                        progress(
+                            min(99, int(done_bytes * 100 / total)),
+                            f"下载 {filename}（{done_bytes // 1024 // 1024}MB）",
+                        )
+        except ModelRegistryError:
+            raise
         except Exception as exc:
             raise ModelRegistryError(f"下载 {filename} 失败：{exc}") from exc
+
+        if total and done_bytes < total:
+            raise ModelRegistryError(
+                f"下载 {filename} 不完整（{done_bytes}/{total} 字节），已保留断点"
+            )
+        part.replace(dest)
+        progress(100, f"完成 {filename}")
 
 
 class ModelDownloadService:
@@ -399,11 +450,20 @@ class ModelDownloadService:
             if cancel():
                 raise ModelRegistryError("已取消")
             base = int(5 + 90 * i / len(files))
+            span = int(90 / len(files))
             progress(base, f"下载 {filename}（{i + 1}/{len(files)}）")
             dest = model_dir / filename
             dest.parent.mkdir(parents=True, exist_ok=True)
             self._transport.download_file(
-                model_id, revision, filename, dest, progress, cancel
+                model_id,
+                revision,
+                filename,
+                dest,
+                expected_size=size,
+                progress=lambda p, m, _b=base, _s=span: progress(
+                    min(95, _b + int(p * _s / 100)), m
+                ),
+                cancel=cancel,
             )
             if not dest.is_file():
                 raise ModelRegistryError(f"下载后文件不存在：{filename}")
