@@ -2079,6 +2079,7 @@ class EditorInterface(QWidget):
             download_service,
             proxy,
             managed_runtime,
+            open_separation,
         ) = parts
         duration_ms = 0
         if self._timing_service:
@@ -2100,6 +2101,7 @@ class EditorInterface(QWidget):
             download_proxy=proxy,
             managed_runtime_python=managed_runtime,
             embedded_mode=host is not None,
+            open_separation_page=open_separation,
             context_checker=lambda: (
                 self._project is not None
                 and getattr(self, "_audio_file_path", None) == audio_path
@@ -2245,7 +2247,9 @@ class EditorInterface(QWidget):
             except Exception:
                 proxy = ""
         # 方案 B：embedded 复用宿主托管 Runtime——宿主给出可用的
-        # python.exe 时，解释器跟随宿主（不另建 venv，安装改为增量）
+        # python.exe 时，解释器跟随宿主（不另建 venv，安装改为增量）。
+        # 例外：用户显式选择过的其他解释器（含原生安装兜底产物）不覆盖；
+        # 旧版自建 venv 路径视为过期配置，切到宿主托管值。
         managed_runtime = ""
         if host is not None:
             runtime_getter = getattr(host, "runtime_python", None)
@@ -2256,7 +2260,24 @@ class EditorInterface(QWidget):
                     candidate = ""
                 if candidate and Path(candidate).is_file():
                     managed_runtime = candidate
-                    settings.runtime_python = managed_runtime
+                    current = settings.runtime_python or ""
+                    legacy = ""
+                    try:
+                        legacy = str(
+                            AiRuntimeManager._venv_python(
+                                resolve_model_root(settings).parent / "ai_runtime"
+                            )
+                        )
+                    except Exception:
+                        pass
+                    if not current or not Path(current).is_file() or current == legacy:
+                        settings.runtime_python = managed_runtime
+        # 宿主页面跳转（引导去第 2 步装环境）；未提供则为 None
+        open_separation = None
+        if host is not None:
+            page_opener = getattr(host, "open_separation_page", None)
+            if callable(page_opener):
+                open_separation = page_opener
         download_service = ModelDownloadService(
             registry,
             HfHubTransport(
@@ -2273,6 +2294,7 @@ class EditorInterface(QWidget):
             download_service,
             proxy,
             managed_runtime,
+            open_separation,
         )
 
     def _save_ai_timing_settings(self, settings) -> None:

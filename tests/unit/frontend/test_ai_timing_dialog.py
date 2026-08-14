@@ -260,20 +260,29 @@ class TestAiTimingDialog:
         mode, target = dialog._install_plan()
         assert mode == "venv" and target.name == "ai_runtime"
 
-    def test_embedded_blocks_bare_venv_install(self, qapp, tmp_path):
-        """嵌入模式宿主 Runtime 未安装：禁止裸装 venv，引导去第 2 步。"""
+    def test_embedded_blocks_bare_venv_install(self, qapp, tmp_path, monkeypatch):
+        """嵌入模式宿主 Runtime 未安装：默认引导，确认后才原生安装兜底。"""
+        import strange_uta_game.frontend.editor.ai_timing_dialog as dlg_mod
+
         snap = _ready_snapshot()
         dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
         dialog._embedded_mode = True
-        dialog._managed_runtime_python = ""  # 宿主未提供（未安装）
+        dialog._managed_runtime_python = ""  # 宿主未提供（未安装/非托管配置）
         mode, target = dialog._install_plan()
         assert mode == "blocked"
 
-        # 点安装/修复 → 只弹引导提示，不发起任何安装任务
         started = []
         dialog._run_task = lambda *a, **k: started.append(a)
+
+        # 未确认 → 只引导，不发起安装
+        monkeypatch.setattr(dlg_mod, "message_question", lambda *a, **k: False)
         dialog._on_install_runtime()
         assert started == []
+
+        # 确认「独立安装」→ 走 standalone 同款 venv 路径
+        monkeypatch.setattr(dlg_mod, "message_question", lambda *a, **k: True)
+        dialog._on_install_runtime()
+        assert len(started) == 1
 
         # 状态行给出去第 2 步的引导而非"缺少依赖请下载"
         snap.runtime = RuntimeStatus(
@@ -282,6 +291,49 @@ class TestAiTimingDialog:
         dialog._on_snapshot_ready(snap)
         assert dialog.row_runtime._state == "warn"
         assert "音频分离" in dialog.row_runtime._state_label.text()
+
+    def test_install_plan_prefers_user_chosen_interpreter(self, qapp, tmp_path):
+        """用户显式选择/原生安装过的解释器优先于托管值（环境调用分支）。"""
+        snap = _ready_snapshot()
+        managed = tmp_path / "managed" / "python.exe"
+        managed.parent.mkdir(parents=True, exist_ok=True)
+        managed.write_text("#m", encoding="utf-8")
+        chosen = tmp_path / "chosen" / "python.exe"
+        chosen.parent.mkdir(parents=True, exist_ok=True)
+        chosen.write_text("#c", encoding="utf-8")
+
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._managed_runtime_python = str(managed)
+        dialog._settings.runtime_python = str(chosen)
+        mode, target = dialog._install_plan()
+        assert mode == "shared" and str(target) == str(chosen)
+
+        # 未显式选择时托管值生效
+        dialog._settings.runtime_python = ""
+        mode, target = dialog._install_plan()
+        assert mode == "shared" and str(target) == str(managed)
+
+    def test_goto_separation_button_jumps(self, qapp, tmp_path):
+        """blocked 且宿主提供跳转能力时显示按钮，点击完成跳转。"""
+        snap = _ready_snapshot()
+        snap.runtime = RuntimeStatus(available=False, message="缺少对齐依赖")
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._embedded_mode = True
+        dialog._managed_runtime_python = ""
+        called = []
+        dialog._open_separation_page = lambda: called.append(1) or True
+        dialog._on_snapshot_ready(snap)
+        assert not dialog.btn_goto_sep.isHidden()
+        # 弹窗初始 refresh 尚未结束时会禁用动作按钮，测试先解禁
+        dialog.btn_goto_sep.setEnabled(True)
+        dialog.btn_goto_sep.click()
+        assert called == [1]
+
+        # 非阻塞状态隐藏按钮
+        ok_snap = _ready_snapshot()
+        dialog._open_separation_page = None
+        dialog._on_snapshot_ready(ok_snap)
+        assert dialog.btn_goto_sep.isHidden()
 
     def test_runtime_row_hints_cuda_upgrade(self, qapp, tmp_path):
         """CPU 版运行环境 + 检测到 NVIDIA 显卡：橙色提示可升级 CUDA 版。"""

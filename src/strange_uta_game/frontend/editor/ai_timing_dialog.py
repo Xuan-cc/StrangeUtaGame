@@ -186,6 +186,7 @@ class AiTimingDialog(QDialog):
         download_proxy: str = "",
         managed_runtime_python: str = "",
         embedded_mode: bool = False,
+        open_separation_page: Optional[Callable] = None,
         context_checker: Optional[Callable[[], bool]] = None,
         parent=None,
     ):
@@ -207,6 +208,8 @@ class AiTimingDialog(QDialog):
         # torch，实际测试中已造成过一次多装）
         self._managed_runtime_python = managed_runtime_python
         self._embedded_mode = embedded_mode
+        # 宿主页面跳转（嵌入模式引导去第 2 步装环境）；None = 未提供
+        self._open_separation_page = open_separation_page
         # 返回 True 表示打开时的工程/音频仍然有效（未切换/未关闭）
         self._context_checker = context_checker
 
@@ -321,6 +324,11 @@ class AiTimingDialog(QDialog):
         self.btn_install_runtime = self.row_runtime.add_action(
             self.tr("安装 / 修复"), self._on_install_runtime
         )
+        # 嵌入模式宿主 Runtime 未安装时的一键跳转（宿主提供能力才显示）
+        self.btn_goto_sep = self.row_runtime.add_action(
+            self.tr("去音频分离"), self._on_goto_separation
+        )
+        self.btn_goto_sep.hide()
         self.btn_download_model = self.row_model.add_action(
             self.tr("下载模型"), self._on_download_model
         )
@@ -519,6 +527,7 @@ class AiTimingDialog(QDialog):
         return [
             self.btn_download_model,
             self.btn_install_runtime,
+            self.btn_goto_sep,
             self.btn_recheck,
             self.btn_reset,
         ]
@@ -829,6 +838,7 @@ class AiTimingDialog(QDialog):
             )
 
         runtime = snapshot.runtime
+        self.btn_goto_sep.hide()
         if runtime is not None and runtime.available:
             if not runtime.cuda_available and runtime.gpu_name:
                 # CPU 版运行环境 + 检测到 NVIDIA 显卡：一键升级 CUDA 版
@@ -842,11 +852,13 @@ class AiTimingDialog(QDialog):
             else:
                 self.row_runtime.set_state("ok", runtime.summary)
         elif self._install_plan()[0] == "blocked":
-            # 嵌入模式宿主 Runtime 未安装：引导去第 2 步，不提供裸装
+            # 嵌入模式宿主 Runtime 未安装：引导去第 2 步（可点击跳转），
+            # 或经确认后原生安装兜底
             self.row_runtime.set_state(
                 "warn",
                 self.tr("请先在第 2 步「音频分离」安装工作台运行环境"),
             )
+            self.btn_goto_sep.setVisible(self._open_separation_page is not None)
         else:
             self.row_runtime.set_state(
                 "error",
@@ -934,35 +946,76 @@ class AiTimingDialog(QDialog):
         )
 
     def _install_plan(self) -> tuple:
-        """安装模式判定：('shared', python.exe) 复用宿主 Runtime /
-        ('venv', target_dir) 自建 venv（仅 standalone）/
-        ('blocked', '') 嵌入模式宿主 Runtime 未安装——引导去工作台
-        第 2 步安装，绝不裸装第二份环境。"""
-        if self._managed_runtime_python and Path(
+        """安装模式判定与目标环境分支。
+
+        - ('shared', python.exe)：宿主托管 Runtime，或用户显式选择/
+          原生安装过的解释器（嵌入模式下宿主未提供托管 Runtime——
+          外部服务/MSST 等配置——时允许独立环境兜底，增量维护）；
+        - ('venv', target_dir)：自建 venv（standalone，或嵌入模式
+          经用户确认后的原生安装兜底）；
+        - ('blocked', '')：嵌入模式且无任何可用解释器——引导去
+          工作台第 2 步，不静默裸装。
+        """
+        managed = (
             self._managed_runtime_python
-        ).is_file():
-            return "shared", self._managed_runtime_python
+            if self._managed_runtime_python
+            and Path(self._managed_runtime_python).is_file()
+            else ""
+        )
+        chosen = self._settings.runtime_python or ""
+        if chosen and Path(chosen).is_file() and chosen != managed:
+            return "shared", chosen
+        if managed:
+            return "shared", managed
         if self._embedded_mode:
             return "blocked", ""
         return "venv", resolve_model_root(self._settings).parent / "ai_runtime"
 
+    def _on_goto_separation(self) -> None:
+        """跳转到宿主分离环境页（嵌入模式引导安装）。"""
+        ok = False
+        if self._open_separation_page is not None:
+            try:
+                ok = bool(self._open_separation_page())
+            except Exception:
+                ok = False
+        if ok:
+            return
+        InfoBar.info(
+            title=self.tr("请切换页面"),
+            content=self.tr(
+                "请在主界面进入第 2 步「音频分离」页完成环境安装"
+            ),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=5000,
+            parent=self,
+        )
+
     def _on_install_runtime(self) -> None:
         mode, target = self._install_plan()
         if mode == "blocked":
-            InfoBar.warning(
-                title=self.tr("需要工作台运行环境"),
-                content=self.tr(
-                    "嵌入模式与工作台共享托管运行环境：请先在第 2 步"
-                    "「音频分离」完成环境安装，再回到这里点「安装 / 修复」"
-                    "补装 AI 增量依赖（不会重复下载 torch）"
+            confirmed = message_question(
+                self,
+                self.tr("独立安装 AI 运行环境"),
+                self.tr(
+                    "当前工作台分离环境未使用托管 PyMSS（或尚未安装）。"
+                    "可以独立安装一份 AI 运行环境（约 3-6GB，与工作台"
+                    "环境互不影响），或先去第 2 步「音频分离」安装"
+                    "托管环境。"
                 ),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=8000,
-                parent=self,
+                yes_text=self.tr("独立安装"),
+                no_text=self.tr("取消"),
+                default_cancel=True,
             )
-            return
+            if not confirmed:
+                return
+            # 用户确认的原生安装兜底：同 standalone 的自建 venv 路径
+            mode, target = (
+                "venv",
+                resolve_model_root(self._settings).parent / "ai_runtime",
+            )
 
         def _task(progress_cb, cancel_check):
             if mode == "shared":

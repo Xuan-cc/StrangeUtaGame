@@ -72,8 +72,18 @@ class AiTimingHost(Protocol):
 
         SUG 检测到该方法且路径存在时，「安装/修复」改为向该解释器
         **增量**安装 AI 依赖（不建 venv、不重装 torch，torchaudio 按
-        其 torch 版本自动配对）；返回 None / 路径不存在时 SUG 回落
-        自建 venv 路径。能力发现用 ``getattr``，不实现也不影响协议。
+        其 torch 版本自动配对）；返回 None / 路径不存在时：嵌入模式
+        引导去宿主分离页安装，或经确认后独立安装兜底。能力发现用
+        ``getattr``，不实现也不影响协议。
+        """
+        ...
+
+    def open_separation_page(self) -> bool:
+        """（可选）跳转到宿主的分离环境页（如工作台第 2 步）。
+
+        嵌入模式下宿主 Runtime 未安装时，SUG 弹窗展示「去安装」入口，
+        点击后调用本方法完成页面跳转；返回 False / 未实现时 SUG 回落
+        为文字提示。
         """
         ...
 
