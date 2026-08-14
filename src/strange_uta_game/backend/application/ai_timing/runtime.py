@@ -19,7 +19,7 @@ import sys
 import venv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 
 PROGRESS_CB = Callable[[int, str], None]
 CANCEL_CB = Callable[[], bool]
@@ -84,6 +84,43 @@ def detect_nvidia_gpu() -> str:
     except (OSError, subprocess.TimeoutExpired, IndexError):
         pass
     return ""
+
+
+def detect_torch_build(python_exe: str) -> Optional[Tuple[str, str]]:
+    """探测目标解释器里 torch 的 (基线版本, 变体标签)。
+
+    如 ``2.7.1+cu128`` → ``("2.7.1", "cu128")``；``2.7.1`` / ``2.7.1+cpu``
+    → ``("2.7.1", "cpu")``。无法导入 torch（环境未装/损坏）返回 None。
+
+    增量安装（方案 B）用它动态配对 torchaudio：托管 runtime 升级
+    torch 后无需改代码，配对版本自动跟随。
+    """
+    try:
+        completed = subprocess.run(
+            [python_exe, "-c", "import torch; print(torch.__version__)"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=90,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    lines = (completed.stdout or "").strip().splitlines()
+    raw = lines[-1].strip() if lines else ""
+    if not raw:
+        return None
+    if "+" in raw:
+        version, tag = raw.split("+", 1)
+    else:
+        version, tag = raw, "cpu"
+    version = version.strip()
+    tag = tag.strip().lower()
+    if not version or not tag:
+        return None
+    return version, tag
 
 
 class AiRuntimeError(RuntimeError):
@@ -296,14 +333,88 @@ class AiRuntimeManager:
         if use_cuda:
             args += ["-U"]
         args += list(requirements)
+        return self._pip_install_requirements(
+            python_exe, args, progress=progress, cancel=cancel
+        )
 
+    def install_shared(
+        self,
+        python_exe: str,
+        *,
+        mirror: str = "",
+        proxy: str = "",
+        progress: Optional[PROGRESS_CB] = None,
+        cancel: Optional[CANCEL_CB] = None,
+    ) -> RuntimeStatus:
+        """向宿主托管的 Runtime（工作台 PyMSS runtime）增量安装 AI 依赖。
+
+        与 ``install``（自建 venv）不同：不创建环境、**不安装 torch**
+        （托管 runtime 已带，按其变体只装配对的 torchaudio），直接向
+        该解释器 pip 安装 AI 增量包。方案 B：embedded 与分离共享同一
+        份 torch（含 CUDA），避免重复下载约 3GB。
+
+        Raises:
+            AiRuntimeError: 解释器不存在 / 托管环境缺 torch（提示先在
+                工作台完成分离环境安装）/ pip 失败。
+        """
+        progress = progress or (lambda p, m: None)
+        cancel = cancel or (lambda: False)
+        exe = Path(python_exe)
+        if not exe.is_file():
+            raise AiRuntimeError(f"托管运行环境解释器不存在：{python_exe}")
+        if cancel():
+            raise AiRuntimeError("已取消")
+
+        build = detect_torch_build(str(exe))
+        if build is None:
+            raise AiRuntimeError(
+                "托管运行环境缺少 PyTorch：请先在工作台「音频分离」页"
+                "完成环境安装，再使用 AI 打轴"
+            )
+        torch_version, torch_tag = build
+        # torchaudio 必须与 torch 同版本同变体（混装不受支持）；PyPI 的
+        # torchaudio 可能比官方索引新，按「版本+本地标签」精确钉住
+        index_url = f"https://download.pytorch.org/whl/{torch_tag}"
+        requirements: List[str] = [
+            f"torchaudio=={torch_version}+{torch_tag}",
+            "transformers",
+            "soundfile",
+            "huggingface_hub",
+            "audio-separator[cpu]",
+            "librosa==0.10.2.post1",
+        ]
+        progress(
+            2,
+            f"复用工作台运行环境（PyTorch {torch_version}+{torch_tag}），"
+            "仅安装 AI 增量依赖（不重复下载 torch）",
+        )
+        args: List[str] = ["-m", "pip", "install", "--disable-pip-version-check"]
+        if proxy:
+            args += ["--proxy", proxy]
+        args += ["--extra-index-url", index_url]
+        if mirror:
+            args += ["-i", mirror]
+        args += list(requirements)
+        return self._pip_install_requirements(
+            str(exe), args, progress=progress, cancel=cancel
+        )
+
+    def _pip_install_requirements(
+        self,
+        python_exe,
+        args: List[str],
+        *,
+        progress: PROGRESS_CB,
+        cancel: CANCEL_CB,
+    ) -> RuntimeStatus:
+        """pip 安装公共管线：dry-run 预估 → 流式安装 → 探测校验。"""
         import os
         import time as _time
 
         pip_env = dict(os.environ)
-        if proxy:
-            pip_env["HTTP_PROXY"] = proxy
-            pip_env["HTTPS_PROXY"] = proxy
+        if "--proxy" in args:
+            pip_env["HTTP_PROXY"] = args[args.index("--proxy") + 1]
+            pip_env["HTTPS_PROXY"] = args[args.index("--proxy") + 1]
         self._pip_env = pip_env
 
         # dry-run 预估包数（流式转发解析行，解析阶段界面不空转）；
@@ -450,7 +561,13 @@ class AiRuntimeManager:
 
 __all__ = [
     "RUNTIME_REQUIREMENTS",
+    "TORCH_CUDA_TAG",
+    "TORCH_CUDA_INDEX_URL",
+    "TORCH_CUDA_VERSION",
+    "CUDA_RUNTIME_DISK_GB",
     "AiRuntimeError",
     "RuntimeStatus",
     "AiRuntimeManager",
+    "detect_nvidia_gpu",
+    "detect_torch_build",
 ]

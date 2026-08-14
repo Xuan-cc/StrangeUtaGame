@@ -2074,6 +2074,7 @@ class EditorInterface(QWidget):
             runtime,
             download_service,
             proxy,
+            managed_runtime,
         ) = parts
         duration_ms = 0
         if self._timing_service:
@@ -2093,6 +2094,7 @@ class EditorInterface(QWidget):
             on_applied=self._apply_ai_timing_command,
             save_settings=self._save_ai_timing_settings,
             download_proxy=proxy,
+            managed_runtime_python=managed_runtime,
             context_checker=lambda: (
                 self._project is not None
                 and getattr(self, "_audio_file_path", None) == audio_path
@@ -2226,6 +2228,19 @@ class EditorInterface(QWidget):
                     proxy = info.url
             except Exception:
                 proxy = ""
+        # 方案 B：embedded 复用宿主托管 Runtime——宿主给出可用的
+        # python.exe 时，解释器跟随宿主（不另建 venv，安装改为增量）
+        managed_runtime = ""
+        if host is not None:
+            runtime_getter = getattr(host, "runtime_python", None)
+            if callable(runtime_getter):
+                try:
+                    candidate = str(runtime_getter() or "")
+                except Exception:
+                    candidate = ""
+                if candidate and Path(candidate).is_file():
+                    managed_runtime = candidate
+                    settings.runtime_python = managed_runtime
         download_service = ModelDownloadService(
             registry,
             HfHubTransport(
@@ -2234,7 +2249,15 @@ class EditorInterface(QWidget):
                 proxy=proxy,
             ),
         )
-        return service, settings, registry, runtime, download_service, proxy
+        return (
+            service,
+            settings,
+            registry,
+            runtime,
+            download_service,
+            proxy,
+            managed_runtime,
+        )
 
     def _save_ai_timing_settings(self, settings) -> None:
         """弹窗「安装对齐环境」等动作后的设置持久化。"""

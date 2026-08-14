@@ -67,6 +67,16 @@ class AiTimingHost(Protocol):
         """SUG AI 缓存根目录（宿主 ``.cache`` 范围内）。"""
         ...
 
+    def runtime_python(self) -> Optional[str]:
+        """（可选，方案 B）宿主托管 Runtime 的 python.exe 路径。
+
+        SUG 检测到该方法且路径存在时，「安装/修复」改为向该解释器
+        **增量**安装 AI 依赖（不建 venv、不重装 torch，torchaudio 按
+        其 torch 版本自动配对）；返回 None / 路径不存在时 SUG 回落
+        自建 venv 路径。能力发现用 ``getattr``，不实现也不影响协议。
+        """
+        ...
+
 
 def is_ai_timing_host(obj: object) -> bool:
     """运行时判定对象是否满足宿主协议（全部方法存在即可）。"""

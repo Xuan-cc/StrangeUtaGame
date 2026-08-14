@@ -654,3 +654,93 @@ class TestStreamingTransport:
             assert dest.stat().st_size == 300_000  # 续传补齐
         finally:
             server.shutdown()
+
+
+class TestSharedRuntimeInstall:
+    """方案 B：向宿主托管 Runtime 增量安装（不建 venv、不装 torch）。"""
+
+    def _fake_managed_python(self, tmp_path):
+        exe = tmp_path / "managed" / "python.exe"
+        exe.parent.mkdir(parents=True, exist_ok=True)
+        exe.write_text("#fake", encoding="utf-8")
+        return str(exe)
+
+    def test_detect_torch_build_parses_variants(self, monkeypatch):
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        class _C:
+            def __init__(self, stdout="", rc=0):
+                self.returncode = rc
+                self.stdout = stdout
+
+        cases = {
+            "2.7.1+cu128\n": ("2.7.1", "cu128"),
+            "2.7.1\n": ("2.7.1", "cpu"),
+            "2.13.0+cpu\n": ("2.13.0", "cpu"),
+        }
+        for stdout, expected in cases.items():
+            monkeypatch.setattr(
+                rt.subprocess, "run", lambda *a, _s=stdout, **k: _C(_s)
+            )
+            assert rt.detect_torch_build("C:/fake/python.exe") == expected
+        # torch 不可导入 → None
+        monkeypatch.setattr(
+            rt.subprocess, "run", lambda *a, **k: _C(rc=1)
+        )
+        assert rt.detect_torch_build("C:/fake/python.exe") is None
+
+    def test_install_shared_pins_matching_torchaudio_without_torch(
+        self, tmp_path, monkeypatch
+    ):
+        exe = self._fake_managed_python(tmp_path)
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(
+            rt, "detect_torch_build", lambda exe: ("2.7.1", "cu128")
+        )
+        seen = {}
+
+        def fake_runner(python, args, on_line, cancel):
+            seen.setdefault("args", list(args))
+            seen.setdefault("python", str(python))
+            return 0
+
+        events = []
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        status = manager.install_shared(
+            exe,
+            mirror="https://pypi.example/simple",
+            progress=lambda p, m: events.append((p, m)),
+        )
+        assert status.available and status.python_path == exe
+        args = seen["args"]
+        # torchaudio 与 torch 同版本同变体；torch 本身绝不安装
+        assert "torchaudio==2.7.1+cu128" in args
+        i = args.index("--extra-index-url")
+        assert args[i + 1] == "https://download.pytorch.org/whl/cu128"
+        assert "-i" in args and "https://pypi.example/simple" in args
+        assert "torch" not in args and "torch==2.7.1+cu128" not in args
+        assert "transformers" in args and "librosa==0.10.2.post1" in args
+        assert any("增量" in m or "复用" in m for _, m in events)
+        assert events[-1][1] == "运行环境就绪"
+
+    def test_install_shared_without_torch_raises(self, tmp_path, monkeypatch):
+        exe = self._fake_managed_python(tmp_path)
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(rt, "detect_torch_build", lambda exe: None)
+        manager = AiRuntimeManager(pip_runner=lambda *a: 0)
+        with pytest.raises(AiRuntimeError, match="PyTorch"):
+            manager.install_shared(exe)
+
+    def test_install_shared_missing_interpreter_raises(self, tmp_path):
+        manager = AiRuntimeManager(pip_runner=lambda *a: 0)
+        with pytest.raises(AiRuntimeError, match="不存在"):
+            manager.install_shared(str(tmp_path / "nope" / "python.exe"))

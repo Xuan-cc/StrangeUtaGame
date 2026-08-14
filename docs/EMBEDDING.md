@@ -137,6 +137,7 @@ class SettingsProvider(Protocol):
 | `ai_cache_dir() -> Path` | SUG AI 缓存根目录（宿主 `.cache` 范围，§7.2） |
 | `model_root() -> Path`（可选） | 统一 AI 模型根目录（对齐模型与分离模型同源管理，嵌入模式复用工作台目录）；缺省 = SUG 自身默认目录 |
 | `http_proxy() -> str`（可选） | 当前生效的下载代理 URL；空串/缺省 = 不显式代理（SUG 模型下载默认跟随宿主网络设置，standalone 则用 SUG 自身的「网络与代理」设置） |
+| `runtime_python() -> str \| None`（可选，方案 B） | 宿主托管 PyMSS Runtime 的 `python.exe`。路径存在时：SUG 的「安装/修复」向该解释器**增量**安装 AI 依赖（`install_shared`：不建 venv、不重装 torch，torchaudio 按其 torch 版本/变体自动配对），embedded 的对齐 worker 与分离共享同一份 torch（含 CUDA）；返回 None / 路径不存在 = SUG 回落自建 venv 路径。能力发现用 `getattr`，不实现不影响其余协议 |
 
 embedded 语义（对应主仓库 AI 打轴计划 §6.2）：跟随工作台当前「分离人声」
 设置，不安装第二份 PyMSS Runtime、不复制模型、不在 SUG 设置中保存另一套

@@ -244,6 +244,22 @@ class TestAiTimingDialog:
         dialog2._settings.ai_cache_root = str(tmp_path / "cfg")
         assert dialog2._current_cache_root() == tmp_path / "cfg"
 
+    def test_install_plan_prefers_managed_runtime(self, qapp, tmp_path):
+        """方案 B：宿主托管解释器存在时走 shared 增量安装，否则自建 venv。"""
+        snap = _ready_snapshot()
+        exe = tmp_path / "managed" / "python.exe"
+        exe.parent.mkdir(parents=True, exist_ok=True)
+        exe.write_text("#fake", encoding="utf-8")
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._managed_runtime_python = str(exe)
+        mode, target = dialog._install_plan()
+        assert mode == "shared" and str(target) == str(exe)
+
+        # 路径失效（宿主卸载 runtime）→ 回落自建 venv
+        dialog._managed_runtime_python = str(tmp_path / "gone" / "python.exe")
+        mode, target = dialog._install_plan()
+        assert mode == "venv" and target.name == "ai_runtime"
+
     def test_runtime_row_hints_cuda_upgrade(self, qapp, tmp_path):
         """CPU 版运行环境 + 检测到 NVIDIA 显卡：橙色提示可升级 CUDA 版。"""
         snap = _ready_snapshot()

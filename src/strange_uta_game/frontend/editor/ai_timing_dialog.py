@@ -184,6 +184,7 @@ class AiTimingDialog(QDialog):
         on_applied: Callable,
         save_settings: Optional[Callable[[AiTimingSettings], None]] = None,
         download_proxy: str = "",
+        managed_runtime_python: str = "",
         context_checker: Optional[Callable[[], bool]] = None,
         parent=None,
     ):
@@ -199,6 +200,9 @@ class AiTimingDialog(QDialog):
         self._on_applied = on_applied
         self._save_settings = save_settings
         self._download_proxy = download_proxy
+        # 方案 B：宿主托管 Runtime 的 python.exe（embedded 注入）。
+        # 存在且有效时「安装/修复」走 install_shared 增量安装
+        self._managed_runtime_python = managed_runtime_python
         # 返回 True 表示打开时的工程/音频仍然有效（未切换/未关闭）
         self._context_checker = context_checker
 
@@ -919,17 +923,37 @@ class AiTimingDialog(QDialog):
             self.tr("正在下载（网络波动时进度可能短暂停顿）…"),
         )
 
+    def _install_plan(self) -> tuple:
+        """安装模式判定：('shared', python.exe) 复用宿主 Runtime /
+        ('venv', target_dir) 自建 venv。"""
+        if self._managed_runtime_python and Path(
+            self._managed_runtime_python
+        ).is_file():
+            return "shared", self._managed_runtime_python
+        return "venv", resolve_model_root(self._settings).parent / "ai_runtime"
+
     def _on_install_runtime(self) -> None:
-        target = resolve_model_root(self._settings).parent / "ai_runtime"
+        mode, target = self._install_plan()
 
         def _task(progress_cb, cancel_check):
-            status = self._runtime.install(
-                target,
-                mirror=self._settings.download_mirror,
-                proxy=self._download_proxy,
-                progress=lambda p, m: progress_cb("runtime", p, m),
-                cancel=cancel_check,
-            )
+            if mode == "shared":
+                # 方案 B：向宿主托管解释器增量安装（不建 venv、不重装
+                # torch，torchaudio 按其 torch 版本自动配对）
+                status = self._runtime.install_shared(
+                    str(target),
+                    mirror=self._settings.download_mirror,
+                    proxy=self._download_proxy,
+                    progress=lambda p, m: progress_cb("runtime", p, m),
+                    cancel=cancel_check,
+                )
+            else:
+                status = self._runtime.install(
+                    target,
+                    mirror=self._settings.download_mirror,
+                    proxy=self._download_proxy,
+                    progress=lambda p, m: progress_cb("runtime", p, m),
+                    cancel=cancel_check,
+                )
             # 安装成功后记录解释器路径（_done 里持久化）
             self._settings.runtime_python = status.python_path
             return status
