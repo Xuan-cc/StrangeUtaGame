@@ -11,6 +11,14 @@ from .calibration_service import (
     compute_tap_offset_ms,
     filtered_average_offset_ms,
 )
+from .ai_timing import (
+    PronunciationPlan,
+    PronunciationSource,
+    PronunciationUnit,
+    ScriptKind,
+    PronunciationResolver,
+    ProjectDriftError,
+)
 from .commands import (
     Command,
     BatchCommand,
@@ -46,6 +54,12 @@ __all__ = [
     "ProjectImportError",
     "compute_tap_offset_ms",
     "filtered_average_offset_ms",
+    "PronunciationPlan",
+    "PronunciationSource",
+    "PronunciationUnit",
+    "ScriptKind",
+    "PronunciationResolver",
+    "ProjectDriftError",
     "Command",
     "BatchCommand",
     "CommandState",
