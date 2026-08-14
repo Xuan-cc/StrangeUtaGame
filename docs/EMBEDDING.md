@@ -130,7 +130,7 @@ class SettingsProvider(Protocol):
 
 | 方法 | 语义 |
 |---|---|
-| `separation_status() -> dict` | 工作台分离环境状态 `{available, model, message}` |
+| `separation_status() -> dict` | 工作台分离环境状态 `{available, model, message}`；`available` 涵盖「已配置但服务未运行」（INSTALLED_STOPPED/STARTING）——`separate_vocal` 执行前会自动拉起/等待服务 |
 | `effective_identity() -> dict` | 当前生效分离身份 `{model, stem, params}`（人声缓存键组成） |
 | `find_session_vocal(source_path, media_sha256) -> Path \| None` | 本次会话已分离、与原音频匹配的人声（零分离复用） |
 | `separate_vocal(source_path, on_progress, is_cancelled) -> Path` | 阻塞执行一次工作台人声分离，返回产物路径；取消/失败抛中文异常 |
