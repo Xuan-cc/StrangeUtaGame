@@ -501,7 +501,7 @@ class TestTailSilenceCriterion:
         )
 
         energies = [1.0] * 20 + [0.0] * 3 + [1.0] * 7 + [0.0] * 10
-        # mean = 27/40 → 阈值 0.2×0.675 = 0.135；3 帧低谷不算静音
+        # mean = 27/40 → 阈值 0.1×0.675 = 0.0675；3 帧低谷不算静音
         b = _silence_boundary(energies, sum(energies) / len(energies), 5, 40)
         assert b == 30  # 第一段 ≥4 帧静音的起点
         assert TAIL_SILENCE_MIN_FRAMES == 4

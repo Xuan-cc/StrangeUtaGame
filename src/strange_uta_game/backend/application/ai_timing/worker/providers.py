@@ -29,7 +29,8 @@ DEFAULT_WAV2VEC2_MODEL = "NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn"
 # 比例阈值——帧功率低于 ratio × 整轨平均功率视为静音，且需连续
 # min_frames 帧才认定「进入静音」（吸收换气与持续音的瞬时低谷）。
 # 用整轨平均功率作基准可以自适应不同素材的响度，不依赖绝对电平。
-TAIL_SILENCE_POWER_RATIO = 0.2
+# 0.2 首版实测偏高（弱尾音被误判为静音截断），2026-08-15 调至 0.1。
+TAIL_SILENCE_POWER_RATIO = 0.1
 TAIL_SILENCE_MIN_FRAMES = 4
 
 
