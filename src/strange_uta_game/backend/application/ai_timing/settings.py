@@ -39,6 +39,10 @@ class AiTimingSettings:
     runtime_python: str = ""
     """对齐 Runtime 的 python.exe 路径（standalone 自管；空 = 使用当前解释器）。"""
 
+    ai_cache_root: str = ""
+    """AI 缓存根目录（standalone 自定义位置；空 = 默认 .cache/ai_timing；
+    embedded 由宿主注入，此字段不生效）。"""
+
     tail_snap: bool = True
     """尾音修正：token 终点吸附到下一 token 起点。"""
 
@@ -74,6 +78,9 @@ def load_ai_timing_settings(getter: Getter) -> AiTimingSettings:
         ),
         runtime_python=str(
             getter(f"{SETTINGS_SECTION}.runtime_python", base.runtime_python)
+        ),
+        ai_cache_root=str(
+            getter(f"{SETTINGS_SECTION}.ai_cache_root", base.ai_cache_root)
         ),
         tail_snap=bool(getter(f"{SETTINGS_SECTION}.tail_snap", base.tail_snap)),
         audio_speed=float(

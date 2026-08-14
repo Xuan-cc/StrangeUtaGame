@@ -301,6 +301,45 @@ def test_consume_event_stream_reports_reasoning_without_collecting_it():
     assert progress[-1].startswith("LLM 返回完成：")
 
 
+def test_consume_event_stream_decodes_sse_as_utf8_even_without_charset():
+    """回归：SSE 响应头无 charset 时 requests 按 RFC 默认 ISO-8859-1 解码。
+
+    Zen 网关部分上游（gpt-5.6-terra/luna 走 Console）的 ``text/event-stream``
+    不带 ``charset=utf-8``，``iter_lines(decode_unicode=True)`` 会把 UTF-8
+    日误解成乱码，剥标校验 ``raw_text == line`` 必败、整行被丢弃。
+    模拟 requests 该行为，断言按 bytes 迭代 + 手工 UTF-8 解码才正确。
+    """
+    import json as _json
+
+    from strange_uta_game.backend.infrastructure.parsers.llm_ruby import LLMRubyClient
+
+    client = LLMRubyClient(
+        LLMRubyConfig(base_url="x", api_key="k", model="m", provider="responses")
+    )
+    delta = '{"lines":[{"i":0,"text":"{今日||きょう,}は"}]}'
+    wire = [
+        (
+            "data: "
+            + _json.dumps(
+                {"type": "response.output_text.delta", "delta": delta},
+                ensure_ascii=False,
+            )
+        ).encode("utf-8"),
+        b"data: [DONE]",
+    ]
+
+    class _Resp:
+        # 模拟 requests：响应头无 charset → encoding 回落 ISO-8859-1，
+        # decode_unicode=True 时按它解码出乱码。
+        encoding = "ISO-8859-1"
+
+        def iter_lines(self, decode_unicode=False):
+            for chunk in wire:
+                yield chunk.decode(self.encoding) if decode_unicode else chunk
+
+    assert client._consume_event_stream(_Resp(), time.time()) == delta
+
+
 def test_estimate_token_count_is_lightweight_and_cjk_aware():
     from strange_uta_game.backend.infrastructure.parsers.llm_ruby import (
         _estimate_token_count,

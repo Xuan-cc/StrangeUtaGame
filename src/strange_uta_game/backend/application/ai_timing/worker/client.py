@@ -81,18 +81,45 @@ class AlignmentWorkerClient:
 
     # ── 生命周期 ──
 
-    def _build_env(self) -> Dict[str, str]:
+    @staticmethod
+    def _package_root() -> "Path":
+        """SUG 包根目录（含 ``strange_uta_game/`` 的目录，即 src 布局的 src）。"""
+        from pathlib import Path
+
+        import strange_uta_game
+
+        return Path(strange_uta_game.__file__).resolve().parent.parent
+
+    def _build_env(self, *, propagate_sys_path: bool) -> Dict[str, str]:
         env = dict(self._env_override or os.environ)
-        # 传播当前解释器的 import 路径，保证 src 布局/开发模式可找到包
-        path_sep = os.pathsep
-        existing = env.get("PYTHONPATH", "")
-        entries: List[str] = [
-            p for p in sys.path if p and p not in existing.split(path_sep)
-        ]
-        env["PYTHONPATH"] = path_sep.join(entries + ([existing] if existing else []))
+        if propagate_sys_path:
+            # 仅当 worker 与宿主用同一解释器时传播完整 import 路径（src
+            # 布局/开发模式需要）。外部 Runtime（专用 venv，自带 torch）
+            # 绝不继承宿主 site-packages，否则其包版本会被宿主环境遮蔽。
+            path_sep = os.pathsep
+            existing = env.get("PYTHONPATH", "")
+            entries: List[str] = [
+                p for p in sys.path if p and p not in existing.split(path_sep)
+            ]
+            env["PYTHONPATH"] = path_sep.join(entries + ([existing] if existing else []))
+        else:
+            # 外部解释器：只带上 SUG 包根（worker 模块代码在那里），其余
+            # 交给 venv 自身的 site-packages（torch/transformers 等）
+            env.pop("PYTHONPATH", None)
+            env["PYTHONPATH"] = str(self._package_root())
         # 强制子进程 stdout/stderr 为文本协议通道友好的环境
         env.setdefault("PYTHONIOENCODING", "utf-8")
         return env
+
+    def _is_same_interpreter(self) -> bool:
+        if not self._python_exe or self._python_exe == sys.executable:
+            return True
+        try:
+            from pathlib import Path
+
+            return Path(self._python_exe).resolve() == Path(sys.executable).resolve()
+        except OSError:
+            return False
 
     def _ensure_started(self) -> subprocess.Popen:
         if self._proc is not None and self._proc.poll() is None:
@@ -105,7 +132,9 @@ class AlignmentWorkerClient:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-                env=self._build_env(),
+                env=self._build_env(
+                    propagate_sys_path=self._is_same_interpreter()
+                ),
                 text=True,
                 encoding="utf-8",
                 cwd=None,

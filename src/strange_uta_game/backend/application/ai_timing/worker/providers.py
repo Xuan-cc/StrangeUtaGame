@@ -205,7 +205,7 @@ class _TorchProviderBase(ForcedAlignmentProvider):
         if not flat:
             raise AlignmentProviderError("没有可对齐的 token")
         alignments, scores = forced_align(
-            emission, flat, input_lengths=None, target_lengths=None
+            emission, flat, input_lengths=None, target_lengths=None, blank=blank
         )
         spans = merge_tokens(alignments, scores, blank=blank)
         grouped: List[Tuple[int, int]] = []

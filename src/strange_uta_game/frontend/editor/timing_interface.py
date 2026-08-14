@@ -2061,15 +2061,23 @@ class EditorInterface(QWidget):
         if parts is None:
             return
         service, settings, registry, runtime, download_service = parts
+        duration_ms = 0
+        if self._timing_service:
+            try:
+                duration_ms = int(self._timing_service.get_duration_ms() or 0)
+            except Exception:
+                duration_ms = 0
         self._ai_timing_dialog = AiTimingDialog(
             project=self._project,
             audio_path=str(audio_path),
+            audio_duration_ms=duration_ms,
             service=service,
             settings=settings,
             registry=registry,
             runtime=runtime,
             download_service=download_service,
             on_applied=self._apply_ai_timing_command,
+            save_settings=self._save_ai_timing_settings,
             parent=self,
         )
         self._ai_timing_dialog.show()
@@ -2123,6 +2131,8 @@ class EditorInterface(QWidget):
         model_root = resolve_model_root(settings)
         if host is not None:
             cache_root = Path(host.ai_cache_dir())
+        elif settings.ai_cache_root:
+            cache_root = Path(settings.ai_cache_root)
         else:
             cache_root = default_ai_cache_root()
         cache = AiCache(cache_root)
@@ -2156,6 +2166,17 @@ class EditorInterface(QWidget):
             ),
         )
         return service, settings, registry, runtime, download_service
+
+    def _save_ai_timing_settings(self, settings) -> None:
+        """弹窗「安装对齐环境」等动作后的设置持久化。"""
+        from strange_uta_game.backend.application.ai_timing import (
+            save_ai_timing_settings,
+        )
+        from strange_uta_game.frontend.settings.app_settings import AppSettings
+
+        app_settings = AppSettings()
+        save_ai_timing_settings(app_settings.set, settings)
+        app_settings.save()
 
     def _resolve_ai_timing_host(self):
         """沿 parent 链查找宿主注入的 AiTimingHost（嵌入式）。"""

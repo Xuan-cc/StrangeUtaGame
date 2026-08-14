@@ -162,3 +162,13 @@ class TestToolbarButton:
         bar.ai_timing_clicked.connect(lambda: fired.append(1))
         bar.btn_ai_timing.click()
         assert fired == [1]
+
+    def test_guide_actions_live_in_edit_menu_not_standalone(self, qapp):
+        """导唱符系列并入编辑管理菜单（AI 打轴按钮腾出工具栏空间）。"""
+        from strange_uta_game.frontend.editor.timing.toolbar import EditorToolBar
+
+        bar = EditorToolBar()
+        assert not hasattr(bar, "btn_insert_guide")
+        actions = [a.text() for a in bar.btn_edit.menu().actions()]
+        assert "插入导唱符" in actions
+        assert "自动插入导唱符" in actions

@@ -332,10 +332,25 @@ class AiCache:
         (entry / f".lock.{token}").unlink(missing_ok=True)
 
     def _is_locked(self, entry: Path) -> bool:
+        """条目是否带有效锁（正在运行，§7.3 不参与清理）。
+
+        锁带 24 小时 TTL：进程崩溃未能 unlock 时，锁文件会残留并永远
+        钉住条目；超过 TTL 视为失效锁（长任务远短于该阈值）。
+        """
         try:
-            return any(entry.glob(".lock.*"))
+            locks = list(entry.glob(".lock.*"))
         except OSError:
             return False
+        if not locks:
+            return False
+        cutoff = time.time() - 24 * 3600
+        for lock in locks:
+            try:
+                if lock.stat().st_mtime >= cutoff:
+                    return True
+            except OSError:
+                continue
+        return False
 
     def prune(self) -> None:
         """人声与对齐缓存各保留最近使用的 keep_per_type 个条目。
@@ -418,9 +433,19 @@ class VocalPreparationService:
         separation_model: str,
         stem: str,
         params: Optional[Dict[str, object]] = None,
-        fingerprint: Optional[Callable[[Path], str]] = None,
+        explicit_choice: Optional[Path] = None,
     ) -> VocalCandidate:
-        """执行 §6.1 的发现顺序（不含分离本身）。"""
+        """执行 §6.1 的发现顺序（不含分离本身）。
+
+        explicit_choice：用户在弹窗中对多个严格候选做出的选择
+        （最高优先，仍要求文件真实存在）。
+        """
+        if explicit_choice is not None and Path(explicit_choice).is_file():
+            return VocalCandidate(
+                state="sibling",
+                path=Path(explicit_choice),
+                source_detail="用户选择的人声文件",
+            )
         # ① 宿主会话人声（身份匹配由 finder 自行校验）
         if self._session_vocal_finder is not None:
             found = self._session_vocal_finder(Path(source_path), media_sha256)

@@ -100,6 +100,11 @@ class AiTimingSnapshot:
     vocal: Optional[VocalCandidate] = None
     runtime: Optional[RuntimeStatus] = None
     model: Optional[ModelStatus] = None
+    separation_follows_host: bool = False
+    """embedded：分离能力由宿主注入（跟随工作台设置）。"""
+
+    cache_root: Optional[Path] = None
+    """当前 AI 缓存根目录（存储位置状态卡显示用）。"""
 
     @property
     def blocking_reasons(self) -> List[str]:
@@ -229,6 +234,8 @@ class AiTimingService:
         if probe_runtime:
             snap.runtime = self._runtime.probe(self._worker_python())
         snap.model = self._registry.validate(self.effective_model_id)
+        snap.separation_follows_host = self._separation_executor is not None
+        snap.cache_root = self._cache.root
         return snap
 
     # ── 执行 ──
@@ -240,6 +247,7 @@ class AiTimingService:
         *,
         on_progress: Optional[ProgressFn] = None,
         is_cancelled: Optional[CancelFn] = None,
+        vocal_choice: Optional[Path] = None,
     ) -> ApplyAiTimingCommand:
         """完整执行并返回待应用命令（调用方负责 CommandManager 执行）。
 
@@ -263,6 +271,25 @@ class AiTimingService:
         vocal_source = Path(audio_path)
         if not vocal_source.is_file():
             raise AiTimingError(f"音频文件不存在：{audio_path}")
+
+        # §8.1-6/7：工作目录清理与冲突检查（对话框单任务互斥由 UI 保证）
+        try:
+            self._cache.clean_work()
+        except Exception:
+            pass
+
+        # §8.1-5：对齐 Runtime 与模型快检（完整探测在弹窗快照里做；
+        # 这里只做快速存在性/注册表校验，避免点击后才在 worker 里失败）
+        model_status = self._registry.validate(self.effective_model_id)
+        if not model_status.is_ready:
+            raise AiTimingError(
+                f"对齐模型未就绪：{model_status.message}。请先在弹窗中下载模型"
+            )
+        runtime_python = self._worker_python()
+        if runtime_python and not Path(runtime_python).is_file():
+            raise AiTimingError(
+                f"对齐运行环境解释器不存在：{runtime_python}。请重新安装对齐环境"
+            )
 
         # §8.1-2：标注解析（缺口在此时阻断）
         progress("prepare", 2, "分析歌词标注")
@@ -293,6 +320,7 @@ class AiTimingService:
             separation_model=separation_model,
             stem=stem,
             params=params,
+            explicit_choice=vocal_choice,
         )
         if candidate.state == "needs_choice":
             raise AiTimingError(

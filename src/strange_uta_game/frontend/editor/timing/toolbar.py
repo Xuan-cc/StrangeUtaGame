@@ -98,28 +98,11 @@ class EditorToolBar(QFrame):
         edit_menu.addAction(Action(FIF.EDIT, tr("修改所选字符"), self, triggered=self.modify_char_clicked.emit))
         edit_menu.addAction(Action(FIF.EDIT, tr("批量变更"), self, triggered=self.bulk_change_clicked.emit))
         edit_menu.addAction(Action(FIF.EDIT, tr("修改选中行"), self, triggered=self.modify_line_clicked.emit))
+        edit_menu.addSeparator()
+        edit_menu.addAction(Action(FIF.ADD, tr("插入导唱符"), self, triggered=self.insert_guide_clicked.emit))
+        edit_menu.addAction(Action(FIF.SYNC, tr("自动插入导唱符"), self, triggered=self.auto_insert_guide_clicked.emit))
         self.btn_edit.setMenu(edit_menu)
         layout.addWidget(self.btn_edit)
-
-        self.btn_insert_guide = DropDownPushButton(tr("插入导唱符"), self)
-        self.btn_insert_guide.setIcon(FIF.ADD)
-        self.btn_insert_guide.setFixedHeight(32)
-        self.btn_insert_guide.setMinimumWidth(110)
-        guide_menu = RoundMenu(parent=self.btn_insert_guide)
-        guide_menu.addAction(Action(
-            FIF.ADD,
-            tr("插入导唱符"),
-            self,
-            triggered=self.insert_guide_clicked.emit,
-        ))
-        guide_menu.addAction(Action(
-            FIF.SYNC,
-            tr("自动插入导唱符"),
-            self,
-            triggered=self.auto_insert_guide_clicked.emit,
-        ))
-        self.btn_insert_guide.setMenu(guide_menu)
-        layout.addWidget(self.btn_insert_guide)
 
         layout.addSpacing(10)
 

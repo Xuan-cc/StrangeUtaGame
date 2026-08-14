@@ -137,11 +137,20 @@ def _make_service(
         cache, session_vocal_finder=session_finder
     )
     settings = settings or AiTimingSettings(provider="wav2vec2")
+    registry = ModelRegistry(tmp_path / "models")
+    # §8.1 执行前快检要求模型已注册；测试统一预装默认模型
+    registry.register(
+        ModelManifest(
+            model_id="NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn",
+            provider="wav2vec2",
+            revision="main",
+        )
+    )
     worker = worker or _FakeWorker()
     service = AiTimingService(
         settings=settings,
         cache=cache,
-        registry=ModelRegistry(tmp_path / "models"),
+        registry=registry,
         runtime=AiRuntimeManager(),
         vocal_service=vocal_service,
         resolver=PronunciationResolver(analyzer=DummyAnalyzer(), chinese_mode=False),
@@ -160,8 +169,11 @@ class TestSnapshot:
         assert snap.audio_ok and snap.project_ok and snap.has_content
         assert snap.pending_units == 0
         assert snap.vocal.state == "sibling"
-        assert snap.model is not None  # 模型未安装 → 阻断理由包含模型
-        assert any("模型" in r for r in snap.blocking_reasons)
+        # 测试夹具已预装模型 → 模型状态就绪，不构成阻断
+        assert snap.model is not None and snap.model.is_ready
+        assert not any("模型" in r for r in snap.blocking_reasons)
+        assert snap.separation_follows_host is False  # 未注入宿主
+        assert snap.cache_root is not None
 
     def test_snapshot_no_audio(self, tmp_path):
         service, _ = _make_service(tmp_path)
@@ -347,3 +359,37 @@ class TestModelResolution:
         assert cmd is not None
         _, _, model_spec = worker.calls[0]
         assert str(tmp_path / "models") in model_spec["model_id"]
+
+
+class TestExecutePrechecks:
+    """2026-08 审查补充：§8.1 执行前快检。"""
+
+    def test_missing_model_blocks_before_worker(self, tmp_path):
+        """模型未注册 → 不启动 worker 直接中文阻断。"""
+        worker = _FakeWorker()
+        service, audio = _make_service(tmp_path, worker=worker)
+        # 制造模型缺失：换一个未注册的 model_id
+        service._settings.wav2vec2_model_id = "someone/other-model"
+        with pytest.raises(AiTimingError, match="对齐模型未就绪"):
+            service.execute(_project(), str(audio))
+        assert worker.calls == []
+
+    def test_bad_runtime_python_blocks(self, tmp_path):
+        """配置的 Runtime 解释器不存在 → 阻断。"""
+        worker = _FakeWorker()
+        service, audio = _make_service(tmp_path, worker=worker)
+        service._settings.runtime_python = str(tmp_path / "nope" / "python.exe")
+        with pytest.raises(AiTimingError, match="解释器不存在"):
+            service.execute(_project(), str(audio))
+        assert worker.calls == []
+
+    def test_vocal_choice_overrides_discovery(self, tmp_path):
+        """弹窗内选择的人声文件优先于发现顺序（§6.1 多候选）。"""
+        chosen = tmp_path / "picked_人声.flac"
+        chosen.write_bytes(b"picked")
+        worker = _FakeWorker()
+        service, audio = _make_service(tmp_path, worker=worker)
+        cmd = service.execute(_project(), str(audio), vocal_choice=chosen)
+        assert cmd is not None
+        _, used_audio, _ = worker.calls[0]
+        assert Path(used_audio) == chosen
