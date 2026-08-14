@@ -115,7 +115,11 @@ def main(argv=None) -> int:
             return 1
 
         cancel_state = _CancelState()
-        _start_cancel_reader(cancel_state)
+        # 注意：取消监听线程延迟到 provider.load 之后启动。若在 torch 的
+        # DLL 导入期间存在阻塞读 stdin 的线程，Windows 上会与加载器死锁
+        # （stdin 保持打开的真实链路必挂；stdin 关闭时线程秒退 EOF 反而
+        # 无事——这也是假 provider 测试从未暴露的原因）。加载阶段的取消由
+        # 宿主直接终止进程树兜底；推理阶段的协作取消不受影响。
 
         def progress(percent: int, message_cn: str) -> None:
             _emit(
@@ -138,6 +142,7 @@ def main(argv=None) -> int:
             }
         )
         provider.load(model_spec, progress, cancel_state)
+        _start_cancel_reader(cancel_state)
         result = provider.align(request, audio_path, progress, cancel_state)
         provider.unload()
         _emit({"type": "result", "payload": serialize_result(result)})

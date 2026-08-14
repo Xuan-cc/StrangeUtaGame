@@ -318,7 +318,9 @@ class Wav2Vec2LatnProvider(_TorchProviderBase):
         progress: ProgressFn,
         cancel: CancelFn,
     ) -> None:
+        progress(12, "加载 PyTorch…（首次可能需要 1-3 分钟）")
         torch = self._import_torch()
+        progress(16, "加载 Transformers…（首次可能需要 1-3 分钟）")
         try:
             from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
         except ImportError as exc:

@@ -14,7 +14,12 @@ from .base import (
     PlaybackState,
     AudioInfo,
 )
-from .sounddevice_engine import SoundDeviceEngine
+# sounddevice 是播放引擎依赖：AI Runtime 等无播放组件的环境里缺失时，
+# 不能让整个 backend 包导入失败（曾导致对齐 worker 启动即崩）。
+try:
+    from .sounddevice_engine import SoundDeviceEngine
+except ImportError:  # pragma: no cover - 环境相关
+    SoundDeviceEngine = None  # type: ignore[assignment,misc]
 
 # BASS 能力信号：仅在 Windows（打包了 bass.dll）上为 True。导入失败时静默回落，
 # 绝不让应用启动失败。开发期在 mac 上从源码运行时同样为 False（DLL 物理不存在）。

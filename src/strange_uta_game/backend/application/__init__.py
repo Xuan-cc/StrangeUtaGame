@@ -5,7 +5,14 @@ from .project_service import ProjectService, ProjectCallbacks, ProjectServiceErr
 from .auto_check_service import AutoCheckService, AutoCheckResult, is_chinese_lyrics
 from .singer_service import SingerService, SingerCallbacks
 from .export_service import ExportService, ExportResult
-from .timing_service import TimingService, TimingCallbacks, CheckpointPosition
+# timing_service 依赖 PyQt6：无头环境（AI Runtime worker）没有 Qt，
+# 导入失败不阻断整个 application 包（worker 只需要纯逻辑服务）
+try:
+    from .timing_service import TimingService, TimingCallbacks, CheckpointPosition
+except ImportError:  # pragma: no cover - 无 Qt 环境
+    TimingService = None  # type: ignore[assignment,misc]
+    TimingCallbacks = None  # type: ignore[assignment,misc]
+    CheckpointPosition = None  # type: ignore[assignment,misc]
 from .project_import_service import ProjectImportService, ProjectImportError
 from .calibration_service import (
     compute_tap_offset_ms,

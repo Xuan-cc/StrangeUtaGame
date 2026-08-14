@@ -109,6 +109,10 @@ class AlignmentWorkerClient:
             env["PYTHONPATH"] = str(self._package_root())
         # 强制子进程 stdout/stderr 为文本协议通道友好的环境
         env.setdefault("PYTHONIOENCODING", "utf-8")
+        # 模型走受控本地目录：杜绝 from_pretrained 的网络探测/遥测卡顿
+        env.setdefault("HF_HUB_OFFLINE", "1")
+        env.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+        env.setdefault("TOKENIZERS_PARALLELISM", "false")
         return env
 
     def _is_same_interpreter(self) -> bool:
@@ -127,11 +131,23 @@ class AlignmentWorkerClient:
         self._cancel_requested.clear()
         self._finished.clear()
         try:
+            # stderr 落临时文件而非 DEVNULL：worker 崩溃时把 traceback 尾部
+            # 并入错误消息，彻底告别「返回码 1」式静默失败
+            import tempfile as _tf
+
+            self._stderr_file = open(
+                _tf.NamedTemporaryFile(
+                    prefix="krok-aitiming-stderr-", delete=False
+                ).name,
+                "w",
+                encoding="utf-8",
+                errors="replace",
+            )
             self._proc = subprocess.Popen(
                 [self._python_exe, "-m", self.WORKER_MODULE],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=self._stderr_file,
                 env=self._build_env(
                     propagate_sys_path=self._is_same_interpreter()
                 ),
@@ -226,8 +242,19 @@ class AlignmentWorkerClient:
                 raise AlignmentWorkerCancelled()
             if timed_out.is_set():
                 raise AlignmentWorkerTimeout("对齐超时，进程已终止")
+            detail = ""
+            try:
+                self._stderr_file.flush()
+                with open(
+                    self._stderr_file.name, encoding="utf-8", errors="replace"
+                ) as fh:
+                    tail = fh.read().strip().splitlines()[-6:]
+                if tail:
+                    detail = "；详情：" + " | ".join(tail)
+            except Exception:
+                pass
             raise AlignmentWorkerError(
-                f"对齐进程异常退出（返回码 {returncode}），未返回结果"
+                f"对齐进程异常退出（返回码 {returncode}），未返回结果{detail}"
             )
         finally:
             if watchdog is not None:
@@ -269,6 +296,14 @@ class AlignmentWorkerClient:
         """回收进程与管道（幂等）。"""
         proc = self._proc
         self._proc = None
+        self._kill_tree(proc)
+        stderr_file = getattr(self, "_stderr_file", None)
+        if stderr_file is not None:
+            self._stderr_file = None
+            try:
+                stderr_file.close()
+            except Exception:
+                pass
         if proc is None:
             return
         for stream in (proc.stdin, proc.stdout):
@@ -285,6 +320,27 @@ class AlignmentWorkerClient:
                     proc.kill()
                 except OSError:
                     pass
+
+    @staticmethod
+    def _kill_tree(proc) -> None:
+        """回收进程树（torch 导入在某些环境会派生辅助子进程，不能只等父进程）。"""
+        if proc is None or proc.poll() is not None:
+            return
+        import sys as _sys
+
+        try:
+            if _sys.platform == "win32":
+                import subprocess as _sp
+
+                _sp.run(
+                    ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                    capture_output=True,
+                    timeout=10,
+                )
+            else:
+                proc.kill()
+        except Exception:
+            pass
 
     def __enter__(self) -> "AlignmentWorkerClient":
         return self
