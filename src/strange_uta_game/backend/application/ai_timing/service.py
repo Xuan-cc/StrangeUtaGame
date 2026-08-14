@@ -123,7 +123,12 @@ class AiTimingSnapshot:
         reasons.extend(self.generation_errors)
         if self.vocal is not None and self.vocal.state == "needs_choice":
             reasons.append("同目录存在多个人声文件，请先选择")
-        elif self.vocal is not None and self.vocal.state == "separation":
+        elif (
+            self.vocal is not None
+            and self.vocal.state == "separation"
+            and not self.separation_available
+        ):
+            # 分离可用时不阻断：执行阶段会自动分离（§6.1 ④）
             reasons.append(
                 "没有可复用的人声，且分离组件未就绪：请点击「对齐环境 → "
                 "安装 / 修复」自动补装（已装过环境只会补缺失组件），"
