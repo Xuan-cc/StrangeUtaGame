@@ -103,6 +103,22 @@ def test_record_recent_project_moves_it_to_front_and_limits_list(tmp_path):
     assert editor.toolbar.recent_paths == recent
 
 
+def test_store_save_finished_records_recent_project(tmp_path):
+    first = tmp_path / "first.sug"
+    first.write_text("{}", encoding="utf-8")
+    second = tmp_path / "second.sug"
+    second.write_text("{}", encoding="utf-8")
+    settings = _Settings({"recent_projects": [str(first)]})
+    editor = _Editor(settings)
+    loader = FileLoader(editor)
+
+    loader._on_store_saved(str(second))
+
+    expected = [str(second.absolute()), str(first.absolute())]
+    assert settings.values["recent_projects"] == expected
+    assert editor.toolbar.recent_paths == expected
+
+
 def test_clear_recent_projects_updates_settings_and_toolbar(tmp_path):
     project = Path(tmp_path) / "song.sug"
     project.write_text("{}", encoding="utf-8")

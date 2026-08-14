@@ -147,8 +147,16 @@ class FileLoader:
             settings.save()
         return paths
 
+    def _on_store_saved(self, saved_path: str) -> None:
+        """手动保存成功后把路径记入最近列表（首次保存/另存为由此进入列表）。
+
+        仅手动保存会触发 store.save_finished；后台 autosave/periodic 保存
+        走独立回调，不会被记录。
+        """
+        self._record_recent_project(saved_path)
+
     def _record_recent_project(self, file_path: str) -> None:
-        """把成功打开的项目移到最近列表首位。"""
+        """把成功打开/保存的项目移到最近列表首位。"""
         path = str(Path(file_path).expanduser().absolute())
         key = self._recent_path_key(path)
         paths = [
