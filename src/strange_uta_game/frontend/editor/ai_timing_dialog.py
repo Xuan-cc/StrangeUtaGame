@@ -196,6 +196,7 @@ class AiTimingDialog(QDialog):
         self._eta_samples: List[tuple] = []
         self._task_started = 0.0
         self._last_eta_text = ""
+        self._last_msg_time = 0.0
         # 秒级刷新：不依赖上游消息频率（模型加载等阶段可能长时间无输出），
         # 每秒刷新一次已耗时与最近估算
         self._tick_timer = QTimer(self)
@@ -448,6 +449,7 @@ class AiTimingDialog(QDialog):
         import time as _time
 
         self._task_started = _time.monotonic()
+        self._last_msg_time = self._task_started
         self._tick_timer.start()
 
         self._thread = QThread(self)
@@ -497,18 +499,31 @@ class AiTimingDialog(QDialog):
             ][0]
         else:
             self._last_eta_text = self._compute_eta(percent)
+        import time as _time
+
+        self._last_msg_time = _time.monotonic()
         self.eta_label.setText(self._last_eta_text)
 
     def _on_second_tick(self) -> None:
-        """每秒刷新：已耗时 + 最近一次 ETA（长静默阶段不再冻结显示）。"""
+        """每秒刷新：已耗时 + 最近 ETA；长时间无消息改为如实显示阶段。"""
         import time as _time
 
         elapsed = int(_time.monotonic() - self._task_started)
         m, s = divmod(elapsed, 60)
         prefix = self.tr("已耗时 {m}:{s:02d}").format(m=m, s=s)
-        self.eta_label.setText(
-            prefix + ("　·　" + self._last_eta_text if self._last_eta_text else "")
-        )
+        now = _time.monotonic()
+        if self._last_msg_time and now - self._last_msg_time > 15:
+            # 推理等单步长任务没有中间消息：陈旧估算不如如实说明
+            self.eta_label.setText(
+                prefix
+                + "　·　"
+                + self.tr("处理中…（单步推理无中间进度，大文件 CPU 需数分钟）")
+            )
+        else:
+            self.eta_label.setText(
+                prefix
+                + ("　·　" + self._last_eta_text if self._last_eta_text else "")
+            )
 
     def _compute_eta(self, percent: int) -> str:
         """平滑 ETA：样本不足时显示「正在估算」（§8.2）。"""
@@ -956,19 +971,25 @@ class AiTimingDialog(QDialog):
             except Exception as exc:  # noqa: BLE001
                 self._on_task_failed(f"应用结果失败：{exc}")
                 return
+            # 不自动关窗：成功提示与保存提醒必须可见（此前挂在本弹窗上
+            # 随 close 瞬间消失，造成“静默失败”错觉；数据实际已应用）
+            self.status_label.setText(
+                self.tr("完成：已覆盖全部时间戳。请保存工程（Ctrl+S）落盘")
+            )
+            self.eta_label.setText("")
+            self.btn_run.setEnabled(False)
             InfoBar.warning(
                 title=self.tr("AI 打轴完成"),
                 content=self.tr(
-                    "已覆盖全部时间戳，可撤销一次恢复。"
-                    "和声/重叠人声段落请人工复查！"
+                    "已覆盖全部时间戳并写入工程（尚未保存，请按 Ctrl+S 落盘；"
+                    "可撤销一次恢复）。和声/重叠人声段落请人工复查！"
                 ),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
-                duration=8000,
+                duration=10000,
                 parent=self,
             )
-            self.close()
 
         self._run_task(_task, _done, self.tr("正在执行自动对齐…"))
 
