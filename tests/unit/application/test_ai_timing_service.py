@@ -43,6 +43,27 @@ from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
 )
 
 
+class TestPackageExports:
+    def test_service_reachable_from_package_root(self):
+        """包级导出回归：timing_interface._build_ai_timing_service 从包根导入
+        全部名字——2026-08 曾漏导出 AiTimingService 导致点击按钮即
+        ImportError（测试都走子模块直连路径而漏测）。"""
+        from strange_uta_game.backend.application import ai_timing
+
+        for name in (
+            "AiCache",
+            "AiRuntimeManager",
+            "AiTimingService",
+            "ModelDownloadService",
+            "ModelRegistry",
+            "PronunciationResolver",
+            "VocalPreparationService",
+            "load_ai_timing_settings",
+            "resolve_model_root",
+        ):
+            assert hasattr(ai_timing, name), name
+
+
 class _FakeWorker:
     """进程内假 worker：按 token 均分区间，可注入失败。"""
 

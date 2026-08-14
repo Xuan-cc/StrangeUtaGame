@@ -32,6 +32,12 @@ from .alignment import (
 )
 from .commands import ApplyAiTimingCommand
 from .host import AiTimingHost, is_ai_timing_host
+from .service import (
+    AiTimingError,
+    AiTimingService,
+    AiTimingSnapshot,
+    WorkerLike,
+)
 from .settings import (
     AiTimingSettings,
     default_model_root,
@@ -88,6 +94,11 @@ __all__ = [
     # 阶段 G
     "AiTimingHost",
     "is_ai_timing_host",
+    # 阶段 F
+    "AiTimingError",
+    "AiTimingService",
+    "AiTimingSnapshot",
+    "WorkerLike",
     # 阶段 D
     "AiTimingSettings",
     "default_model_root",
