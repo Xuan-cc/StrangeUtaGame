@@ -235,7 +235,7 @@ class AiRuntimeManager:
         fallback_lines = 0
 
         def _on_line(line: str) -> None:
-            nonlocal installed_pkgs
+            nonlocal installed_pkgs, fallback_lines
             text = line.strip()
             if not text:
                 return
@@ -285,8 +285,8 @@ class AiRuntimeManager:
             return target_dir / "Scripts" / "python.exe"
         return target_dir / "bin" / "python"
 
-    @staticmethod
     def _default_pip_runner(
+        self,
         python_exe: str,
         args: List[str],
         on_line: Callable[[str], None],
