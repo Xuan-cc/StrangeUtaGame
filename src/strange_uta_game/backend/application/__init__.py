@@ -18,6 +18,10 @@ from .ai_timing import (
     ScriptKind,
     PronunciationResolver,
     ProjectDriftError,
+    AlignmentRequest,
+    AlignmentResult,
+    AlignmentValidationError,
+    ApplyAiTimingCommand,
 )
 from .commands import (
     Command,
@@ -60,6 +64,10 @@ __all__ = [
     "ScriptKind",
     "PronunciationResolver",
     "ProjectDriftError",
+    "AlignmentRequest",
+    "AlignmentResult",
+    "AlignmentValidationError",
+    "ApplyAiTimingCommand",
     "Command",
     "BatchCommand",
     "CommandState",
