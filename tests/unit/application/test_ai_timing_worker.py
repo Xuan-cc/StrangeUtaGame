@@ -382,3 +382,126 @@ class TestLayerProgressForward:
         )
         assert result == 1
         assert events == []  # 只保留外层阶段消息，不报层进度
+
+
+class TestTailSilenceCriterion:
+    """尾音静音判据：相对整轨平均功率的比例（fake 波形，不依赖 torch）。
+
+    帧能量直接由 fake 波形构造（每帧 320 个幅度 sqrt(E) 的样本），
+    20ms/帧（16kHz × 320 样本），与真实 emission 帧率一致。
+    """
+
+    SPF = 320  # samples per frame
+    SR = 16000
+
+    def _wave(self, energies):
+        import numpy as np
+
+        samples = []
+        for e in energies:
+            amp = float(e) ** 0.5
+            samples.extend([amp] * self.SPF)
+
+        arr = np.array(samples, dtype="float32")
+
+        class _W:
+            def detach(self):
+                return self
+
+            def cpu(self):
+                return self
+
+            def numpy(self):
+                return arr
+
+        return _W()
+
+    def _spans(self, groups, energies, **kw):
+        from strange_uta_game.backend.application.ai_timing.alignment import (
+            AlignmentRequest,
+            AlignmentToken,
+        )
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            Wav2Vec2LatnProvider,
+        )
+
+        tokens = [
+            AlignmentToken(
+                index=i, text=f"t{i}", raw_reading=f"t{i}", location=(0, i, 0)
+            )
+            for i in range(len(groups))
+        ]
+        request = AlignmentRequest(
+            tokens=tokens, options={"tail_snap": True}
+        )
+        provider = Wav2Vec2LatnProvider()
+        num_frames = len(energies)
+        return provider._frames_to_spans(
+            request,
+            groups,
+            num_frames=num_frames,
+            num_samples=num_frames * self.SPF,
+            sample_rate=self.SR,
+            tail_snap=True,
+            waveform=self._wave(energies),
+            **kw,
+        )
+
+    def test_tail_capped_at_silence_before_next_token(self):
+        """跨长间奏的尾音裁到静音边界，而不是延伸到下一 token 起点。"""
+        # 帧 0-14 有声、15-39 静音；token0 的 CTC 终点在第 10 帧，
+        # 下一 token 第 30 帧才起 —— 旧逻辑会把尾音拉到 600ms
+        energies = [1.0] * 15 + [0.0] * 25
+        spans = self._spans([(0, 10), (30, 32)], energies)
+        # 静音从第 15 帧起持续 ≥4 帧 → 边界=15 帧=300ms
+        assert spans[0].end_ms == 300
+        assert spans[1].end_ms == 32 * 20  # 末 token 已在静音内，不延长
+
+    def test_last_token_tail_extends_to_silence(self):
+        """末个 token 被 CTC 截断的真实尾音延伸到静音边界。"""
+        # 帧 0-25 有声、26-39 静音；token 终点第 24 帧 → 延伸到 26 帧
+        energies = [1.0] * 26 + [0.0] * 14
+        spans = self._spans([(0, 10), (12, 20), (22, 24)], energies)
+        assert spans[2].end_ms == 26 * 20
+        # 中间 token 之间全程有声：保持吸附下一起点
+        assert spans[1].end_ms == 22 * 20
+
+    def test_no_waveform_falls_back_to_plain_snap(self):
+        """无波形（旧调用路径）：退回纯吸附下一起点行为。"""
+        from strange_uta_game.backend.application.ai_timing.alignment import (
+            AlignmentRequest,
+            AlignmentToken,
+        )
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            Wav2Vec2LatnProvider,
+        )
+
+        tokens = [
+            AlignmentToken(
+                index=i, text=f"t{i}", raw_reading=f"t{i}", location=(0, i, 0)
+            )
+            for i in range(2)
+        ]
+        spans = Wav2Vec2LatnProvider()._frames_to_spans(
+            AlignmentRequest(tokens=tokens, options={"tail_snap": True}),
+            [(0, 10), (30, 32)],
+            num_frames=40,
+            num_samples=40 * self.SPF,
+            sample_rate=self.SR,
+            tail_snap=True,
+            waveform=None,
+        )
+        assert spans[0].end_ms == 30 * 20  # 吸附到下一 token 起点
+
+    def test_silence_boundary_min_frames(self):
+        """持续静音需连续 ≥TAIL_SILENCE_MIN_FRAMES 帧，瞬时低谷不截断。"""
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            TAIL_SILENCE_MIN_FRAMES,
+            _silence_boundary,
+        )
+
+        energies = [1.0] * 20 + [0.0] * 3 + [1.0] * 7 + [0.0] * 10
+        # mean = 27/40 → 阈值 0.2×0.675 = 0.135；3 帧低谷不算静音
+        b = _silence_boundary(energies, sum(energies) / len(energies), 5, 40)
+        assert b == 30  # 第一段 ≥4 帧静音的起点
+        assert TAIL_SILENCE_MIN_FRAMES == 4

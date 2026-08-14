@@ -25,6 +25,29 @@ CancelFn = Callable[[], bool]
 
 DEFAULT_WAV2VEC2_MODEL = "NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn"
 
+# 尾音静音判据（2026-08 用户决策口径）：相对分离人声整轨平均功率的
+# 比例阈值——帧功率低于 ratio × 整轨平均功率视为静音，且需连续
+# min_frames 帧才认定「进入静音」（吸收换气与持续音的瞬时低谷）。
+# 用整轨平均功率作基准可以自适应不同素材的响度，不依赖绝对电平。
+TAIL_SILENCE_POWER_RATIO = 0.2
+TAIL_SILENCE_MIN_FRAMES = 4
+
+
+def _silence_boundary(
+    energies: Any, mean_power: float, from_frame: int, to_frame: int
+) -> int:
+    """从 from_frame 向后找第一段持续静音的起始帧；未找到返回 to_frame。"""
+    threshold = TAIL_SILENCE_POWER_RATIO * mean_power
+    run = 0
+    for f in range(max(0, from_frame), to_frame):
+        if float(energies[f]) < threshold:
+            run += 1
+            if run >= TAIL_SILENCE_MIN_FRAMES:
+                return f - TAIL_SILENCE_MIN_FRAMES + 1
+        else:
+            run = 0
+    return to_frame
+
 
 def normalize_latn_text(text: str) -> str:
     """把 token 文本归一化为对齐器可接受的 Latn 转写（同 yohane 口径）。
@@ -218,6 +241,12 @@ class _TorchProviderBase(ForcedAlignmentProvider):
         对展平的子 token 序列做 forced_align + merge_tokens，按分组
         聚合出每组的 (首子 token 起始帧, 末子 token 结束帧)。
         """
+        # torchaudio 的 forced_align 在 CUDA emission 下要求 targets
+        # 也在 CUDA（compute.cu:256 "targets must be a CUDA tensor"），
+        # 设备组合的兼容矩阵难以逐一验证；CTC 对齐耗时相对 transformer
+        # forward 可忽略，统一回 CPU 做，保证与 CPU 路径逐位一致
+        if hasattr(emission, "cpu"):
+            emission = emission.cpu()
         from torchaudio.functional import forced_align, merge_tokens
 
         torch = self._import_torch()
@@ -252,6 +281,27 @@ class _TorchProviderBase(ForcedAlignmentProvider):
             offset += len(group)
         return grouped
 
+    def _frame_energies(self, waveform: Any, num_frames: int) -> Any:
+        """按 emission 帧计算平均功率（numpy 数组）；不可用时返回 None。
+
+        返回 None 时尾音退回纯「吸附下一起点」行为（与旧版一致）。
+        """
+        try:
+            import numpy as np
+
+            wav = waveform.detach().cpu().numpy().reshape(-1)
+        except Exception:
+            return None
+        n = int(wav.shape[0])
+        if num_frames <= 0 or n <= num_frames:
+            return None
+        bounds = np.minimum(
+            (np.arange(num_frames + 1) * (n / num_frames)).astype(np.int64), n
+        )
+        counts = np.diff(bounds)
+        sums = np.add.reduceat(wav * wav, bounds[:-1])
+        return sums / np.maximum(counts, 1)
+
     def _frames_to_spans(
         self,
         request: AlignmentRequest,
@@ -260,8 +310,15 @@ class _TorchProviderBase(ForcedAlignmentProvider):
         num_samples: int,
         sample_rate: int,
         tail_snap: bool,
+        waveform: Any = None,
     ) -> List[EmissionSpan]:
-        """帧区间 → 毫秒 EmissionSpan；空组用相邻 token 插值补齐。"""
+        """帧区间 → 毫秒 EmissionSpan；空组用相邻 token 插值补齐。
+
+        尾音修正（tail_snap）：先吸附到下一 token 起点（弥补 CTC 对
+        长音/尾音的截断，FA-Kara 思路），再按整轨平均功率的比例判据
+        裁到静音边界——否则行尾尾音会一路延伸跨过整段间奏静音；
+        末个 token 也借此把被 CTC 截断的真实尾音延伸到静音边界。
+        """
         ratio = (num_samples / num_frames) / sample_rate * 1000.0  # ms / frame
         spans: List[EmissionSpan] = []
         valid = [(i, g) for i, g in enumerate(groups) if g[0] >= 0]
@@ -292,17 +349,38 @@ class _TorchProviderBase(ForcedAlignmentProvider):
                 )
             )
         if tail_snap:
-            # 尾音修正：token 终点吸附到同需求序列的下一 token 起点，
-            # 弥补 CTC 对长音/尾音的截断（FA-Kara 思路）；最后一个保持原值
-            for i in range(len(spans) - 1):
-                nxt = spans[i + 1]
-                if spans[i].end_ms < nxt.start_ms:
-                    spans[i] = EmissionSpan(
-                        token_index=spans[i].token_index,
-                        start_ms=spans[i].start_ms,
-                        end_ms=nxt.start_ms,
-                        score=spans[i].score,
+            energies = (
+                self._frame_energies(waveform, num_frames)
+                if waveform is not None
+                else None
+            )
+            mean_power = float(energies.mean()) if energies is not None else 0.0
+            audio_end_ms = int(round(num_frames * ratio))
+            for i, cur in enumerate(spans):
+                cand = (
+                    spans[i + 1].start_ms if i + 1 < len(spans) else audio_end_ms
+                )
+                if cur.end_ms >= cand:
+                    continue
+                if energies is not None:
+                    raw_end_f = min(num_frames - 1, int(cur.end_ms / ratio))
+                    cand_f = min(num_frames, int(cand / ratio))
+                    boundary_f = _silence_boundary(
+                        energies, mean_power, raw_end_f, cand_f
                     )
+                    new_end = int(round(boundary_f * ratio))
+                    # 不短于 CTC 原始终点，不超过下一 token 起点/音频末尾
+                    new_end = max(cur.end_ms, min(new_end, cand))
+                    if new_end <= cur.start_ms:
+                        continue
+                else:
+                    new_end = cand
+                spans[i] = EmissionSpan(
+                    token_index=cur.token_index,
+                    start_ms=cur.start_ms,
+                    end_ms=new_end,
+                    score=cur.score,
+                )
         return spans
 
     def _forward_with_layer_progress(
@@ -459,6 +537,7 @@ class Wav2Vec2LatnProvider(_TorchProviderBase):
             num_samples=waveform.size(1),
             sample_rate=sample_rate,
             tail_snap=bool((request.options or {}).get("tail_snap", True)),
+            waveform=waveform,
         )
         progress(100, "对齐完成")
         return AlignmentResult(
@@ -548,7 +627,8 @@ class MmsFaProvider(_TorchProviderBase):
 
         progress(85, "计算对齐区间")
         non_empty = [g for g in groups if g]
-        token_spans = self._aligner(emission[0], non_empty)
+        # bundle aligner 内部同样要求 emission/targets 同设备：统一 CPU
+        token_spans = self._aligner(emission[0].cpu() if hasattr(emission, "cpu") else emission[0], non_empty)
         grouped: List[Tuple[int, int]] = []
         span_iter = iter(token_spans)
         for g in groups:
@@ -564,6 +644,7 @@ class MmsFaProvider(_TorchProviderBase):
             num_samples=waveform.size(1),
             sample_rate=sample_rate,
             tail_snap=bool((request.options or {}).get("tail_snap", True)),
+            waveform=waveform,
         )
         progress(100, "对齐完成")
         return AlignmentResult(

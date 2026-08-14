@@ -411,6 +411,9 @@ class AiTimingService:
         # 尾音修正常开（2026-08 用户决策：不再提供开关）
         options = {
             "tail_snap": True,
+            # 尾音静音判据版本（相对整轨平均功率比例）：进缓存键，
+            # 判据升级时 bump 使旧缓存自动失效重算
+            "tail_silence": 1,
         }
         request = build_alignment_request(
             plan,
