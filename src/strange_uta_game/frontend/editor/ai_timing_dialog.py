@@ -404,11 +404,7 @@ class AiTimingDialog(QDialog):
             [
                 (
                     self.tr("浏览"),
-                    lambda: self._open_dir(
-                        self._snapshot.cache_root
-                        if self._snapshot and self._snapshot.cache_root
-                        else Path.home()
-                    ),
+                    lambda: self._open_dir(self._current_cache_root()),
                 ),
                 (self.tr("更改…"), self._on_change_cache_dir),
             ],
@@ -739,6 +735,8 @@ class AiTimingDialog(QDialog):
         self._snapshot = snapshot
         self.progress.setValue(0)
         self.status_label.setText(self.tr("就绪"))
+        # 上一轮任务的已耗时残留在底部（秒级 tick 停止后不再刷新）
+        self.eta_label.setText("")
 
         # 原始音频（含时长，§3.2）
         if snapshot.audio_ok:
@@ -956,11 +954,21 @@ class AiTimingDialog(QDialog):
             self.tr("正在安装（创建虚拟环境与下载大包期间可能数分钟没有输出）…"),
         )
 
+    def _current_cache_root(self) -> Path:
+        """当前生效的 AI 缓存根：展示值（快照实例）优先于设置项。"""
+        if self._snapshot is not None and self._snapshot.cache_root:
+            return Path(self._snapshot.cache_root)
+        if self._settings.ai_cache_root:
+            return Path(self._settings.ai_cache_root)
+        return Path.home()
+
     def _notify_saved_reopen(self) -> None:
         """模型/缓存根变更提示：设置已落盘，重新打开窗口后生效。
 
         模型注册表与 AI 缓存实例在弹窗打开时构建并固定根目录，
         原地更换设置不会迁移它们——因此提示用户重开窗口（重建栈）。
+        提示挂在主窗口上：本弹窗即将关闭，挂在自身会随窗口销毁
+        瞬间消失（或脱离父级悬浮在错误的位置）。
         """
         InfoBar.info(
             title=self.tr("已保存"),
@@ -969,7 +977,7 @@ class AiTimingDialog(QDialog):
             isClosable=True,
             position=InfoBarPosition.TOP,
             duration=4000,
-            parent=self,
+            parent=self.parent() if isinstance(self.parent(), QWidget) else self,
         )
 
     def _on_change_model_dir(self) -> None:
@@ -983,10 +991,12 @@ class AiTimingDialog(QDialog):
             self.close()
 
     def _on_change_cache_dir(self) -> None:
+        # 起点 = 行内当前显示的生效缓存根（而非设置项：独立模式默认
+        # 缓存根不在设置里，此前会错误地从用户主目录开始）
         chosen = QFileDialog.getExistingDirectory(
             self,
             self.tr("选择 AI 缓存根目录（独立运行模式生效）"),
-            self._settings.ai_cache_root or str(Path.home()),
+            str(self._current_cache_root()),
         )
         if chosen:
             self._settings.ai_cache_root = chosen
@@ -995,10 +1005,12 @@ class AiTimingDialog(QDialog):
             self.close()
 
     def _on_change_runtime(self) -> None:
+        # 未显式选择过解释器时，从当前解释器所在目录开始
+        start = self._settings.runtime_python or str(Path(sys.executable).parent)
         chosen, _filter = QFileDialog.getOpenFileName(
             self,
             self.tr("选择对齐运行环境的 python.exe"),
-            self._settings.runtime_python or str(Path.home()),
+            start,
             "python (python.exe python3 python);;All files (*)",
         )
         if chosen:

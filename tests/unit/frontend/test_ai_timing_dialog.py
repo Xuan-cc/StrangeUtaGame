@@ -222,6 +222,28 @@ class TestAiTimingDialog:
         assert dialog.row_vocal._state == "warn"
         assert not dialog.btn_run.isEnabled()
 
+    def test_snapshot_ready_clears_stale_eta(self, qapp, tmp_path):
+        """检查完成回到就绪时，清掉上一轮任务残留的已耗时行。"""
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog.eta_label.setText("已耗时 0:05 · 预计剩余 0:12")
+        dialog._on_snapshot_ready(snap)
+        assert dialog.eta_label.text() == ""
+
+    def test_cache_dialog_starts_from_effective_root(self, qapp, tmp_path):
+        """「更改…/浏览」起点 = 行内显示的生效缓存根，而非空设置项回退主目录。"""
+        snap = _ready_snapshot()
+        snap.cache_root = tmp_path / "cache" / "ai_timing"
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._on_snapshot_ready(snap)
+        assert dialog._current_cache_root() == snap.cache_root
+
+        # 无快照时回退到设置项
+        dialog2, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog2._snapshot = None
+        dialog2._settings.ai_cache_root = str(tmp_path / "cfg")
+        assert dialog2._current_cache_root() == tmp_path / "cfg"
+
     def test_runtime_row_hints_cuda_upgrade(self, qapp, tmp_path):
         """CPU 版运行环境 + 检测到 NVIDIA 显卡：橙色提示可升级 CUDA 版。"""
         snap = _ready_snapshot()
