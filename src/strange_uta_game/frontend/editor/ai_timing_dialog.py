@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import time
 from pathlib import Path
@@ -79,6 +80,13 @@ MODEL_LICENSE_TEXT = (
     "（CC-BY-NC-SA-4.0，仅限非商业使用，仅随默认微调模型）"
 )
 CREDIT_TEXT = "对齐思路参考开源项目 FA-Kara 与 yohane（本项目不内嵌其代码）"
+
+# 上游进度消息中的速度/剩余时间片段（下载 MB/s、分离 s/块、pip 包/分）；
+# ETA 优先采信上游自带值，百分比推算只作为无值阶段的兜底
+_SPEED_PATTERN = re.compile(
+    r"[0-9]+(?:\.[0-9]+)?\s*(?:MB/s|KB/s|GB/s|包/分|s/块|it/s)"
+)
+_ETA_PATTERN = re.compile(r"预计剩余\s*([0-9]+):([0-9]{2})")
 
 
 class _TaskWorker(QObject):
@@ -202,6 +210,15 @@ class AiTimingDialog(QDialog):
         self._task_started = 0.0
         self._last_eta_text = ""
         self._last_msg_time = 0.0
+        # ETA 呈现方式：transport = 上游消息自带（下载 MB/s、分离 s/块），
+        # derived = 由百分比样本推算；_speed_text 为消息中的速度片段
+        self._eta_kind = ""
+        self._eta_rate = 0.0
+        self._eta_last = (0.0, 0)
+        self._speed_text = ""
+        # 当前任务「长时间无输出」的如实说明（按任务类型区分：
+        # pip 下载大包、推理单步、环境探测导入 torch 原因各不相同）
+        self._stall_text = ""
         # 秒级刷新：不依赖上游消息频率（模型加载等阶段可能长时间无输出），
         # 每秒刷新一次已耗时与最近估算
         self._tick_timer = QTimer(self)
@@ -452,11 +469,22 @@ class AiTimingDialog(QDialog):
 
     # ── 后台任务基础设施 ──
 
-    def _run_task(self, fn: Callable, on_done: Callable, busy_text: str) -> None:
+    def _run_task(
+        self,
+        fn: Callable,
+        on_done: Callable,
+        busy_text: str,
+        stall_text: str = "",
+    ) -> None:
         if self._busy:
             return
         self._busy = True
         self._eta_samples = []
+        self._eta_kind = ""
+        self._eta_rate = 0.0
+        self._eta_last = (0.0, 0)
+        self._speed_text = ""
+        self._stall_text = stall_text
         self.btn_run.setEnabled(False)
         self.btn_cancel.setEnabled(True)
         for b in self._action_buttons():
@@ -509,53 +537,103 @@ class AiTimingDialog(QDialog):
             # pip 解析行可能极长，截断避免窗口被拉长
             shown = message if len(message) <= 80 else message[:79] + "…"
             self.status_label.setText(shown)
-        # 传输层给出真实速度/剩余时优先展示，否则退回百分比估算
-        if "MB/s" in message and "预计剩余" in message:
-            tail = message.split("，")[-1].rstrip("）")
-            self._last_eta_text = tail + "　·　" + [
-                p for p in message.split("，") if "MB/s" in p
-            ][0]
+        speed = _SPEED_PATTERN.search(message)
+        if speed:
+            # 保留最近一次速度：pip 在「获取依赖」与「Collecting」行之间
+            # 交替输出，无速度的行不该把速度显示清掉
+            self._speed_text = speed.group(0)
+        eta = _ETA_PATTERN.search(message)
+        if eta is not None:
+            # 上游自带剩余时间（模型下载 / 分离 tqdm）：直接采信，随消息刷新
+            self._eta_kind = "transport"
+            parts = [f"预计剩余 {eta.group(1)}:{eta.group(2)}"]
+            if self._speed_text:
+                parts.append(self._speed_text)
+            self._last_eta_text = "　·　".join(parts)
         else:
+            self._eta_kind = "derived"
             self._last_eta_text = self._compute_eta(percent)
         import time as _time
 
         self._last_msg_time = _time.monotonic()
-        self.eta_label.setText(self._last_eta_text)
+        self.eta_label.setText(self._format_eta_line())
+
+    def _format_eta_line(self) -> str:
+        elapsed = int(time.monotonic() - self._task_started)
+        m, s = divmod(max(0, elapsed), 60)
+        prefix = self.tr("已耗时 {m}:{s:02d}").format(m=m, s=s)
+        tail = self._eta_tail_text()
+        return prefix + ("　·　" + tail if tail else "")
+
+    def _eta_tail_text(self) -> str:
+        """ETA 尾部：transport 原样透传；derived 按最近速率继续倒计时。
+
+        百分比消息之间不再冻结显示——用最近一次采样点外推，剩余时间
+        随秒级 tick 持续递减；速率不可用时如实显示「正在估算」。
+        """
+        if self._eta_kind == "transport":
+            return self._last_eta_text
+        if self._eta_kind == "derived":
+            if self._eta_rate > 0:
+                now = time.monotonic()
+                last_t, last_p = self._eta_last
+                remaining = max(
+                    0.0, (100.0 - last_p) / self._eta_rate - (now - last_t)
+                )
+                if remaining <= 1.0:
+                    eta = self.tr("即将完成…")
+                else:
+                    m, s = divmod(int(remaining), 60)
+                    eta = self.tr("预计剩余 {m}:{s:02d}").format(m=m, s=s)
+            else:
+                eta = self.tr("正在估算剩余时间…")
+            if self._speed_text:
+                eta = eta + "　·　" + self._speed_text
+            return eta
+        return ""
 
     def _on_second_tick(self) -> None:
-        """每秒刷新：已耗时 + 最近 ETA；长时间无消息改为如实显示阶段。"""
+        """每秒刷新：已耗时 + 倒计时 ETA；长时间无消息时按任务类型如实说明。"""
         import time as _time
 
-        elapsed = int(_time.monotonic() - self._task_started)
-        m, s = divmod(elapsed, 60)
-        prefix = self.tr("已耗时 {m}:{s:02d}").format(m=m, s=s)
         now = _time.monotonic()
         if self._last_msg_time and now - self._last_msg_time > 15:
-            # 推理等单步长任务没有中间消息：陈旧估算不如如实说明
-            self.eta_label.setText(
-                prefix
-                + "　·　"
-                + self.tr("处理中…（单步推理无中间进度，大文件 CPU 需数分钟）")
-            )
+            # 陈旧估算不如如实说明：不同任务无输出的原因不同
+            # （推理单步 / pip 下载大包 / 环境探测导入 torch）
+            tail = self._stall_text or self.tr("处理中…")
         else:
-            self.eta_label.setText(
-                prefix
-                + ("　·　" + self._last_eta_text if self._last_eta_text else "")
-            )
+            tail = self._eta_tail_text()
+        elapsed = int(now - self._task_started)
+        m, s = divmod(max(0, elapsed), 60)
+        prefix = self.tr("已耗时 {m}:{s:02d}").format(m=m, s=s)
+        self.eta_label.setText(prefix + ("　·　" + tail if tail else ""))
 
     def _compute_eta(self, percent: int) -> str:
-        """平滑 ETA：样本不足时显示「正在估算」（§8.2）。"""
+        """平滑 ETA：样本不足时显示「正在估算」（§8.2）。
+
+        同时记录最近速率与采样点，供每秒 tick 在两条进度消息之间
+        继续倒计时（不再冻结在上一次消息的数值）。
+        """
         if percent <= 0:
+            self._eta_rate = 0.0
             return self.tr("正在估算剩余时间…")
         now = time.monotonic()
+        if self._eta_samples and percent < self._eta_samples[-1][1] - 5:
+            # 阶段边界百分比回落（如内嵌分离自身的 0-100 汇入总进度后，
+            # 对齐阶段从 20 重新开始）：旧样本会让速率算出负值，重新累计
+            self._eta_samples = []
         self._eta_samples.append((now, percent))
         self._eta_samples = self._eta_samples[-20:]
         first_t, first_p = self._eta_samples[0]
         elapsed = now - first_t
         gained = percent - first_p
         if gained < 5 or elapsed < 2:
+            # 百分比停滞（下载单个大包等）：清空速率，如实显示估算中
+            self._eta_rate = 0.0
             return self.tr("正在估算剩余时间…")
         rate = gained / elapsed  # 百分点 / 秒
+        self._eta_rate = rate
+        self._eta_last = (now, percent)
         remaining = max(0, (100 - percent) / rate)
         minutes, seconds = divmod(int(remaining), 60)
         return self.tr("预计剩余 {m}:{s:02d}").format(m=minutes, s=seconds)
@@ -650,7 +728,12 @@ class AiTimingDialog(QDialog):
                 self._project, self._audio_path, probe_runtime=True
             )
 
-        self._run_task(_task, self._on_snapshot_ready, self.tr("正在检查执行条件…"))
+        self._run_task(
+            _task,
+            self._on_snapshot_ready,
+            self.tr("正在检查执行条件…"),
+            self.tr("正在探测运行环境（首次需导入 PyTorch，可能需要几十秒）…"),
+        )
 
     def _on_snapshot_ready(self, snapshot: AiTimingSnapshot) -> None:
         self._snapshot = snapshot
@@ -821,7 +904,12 @@ class AiTimingDialog(QDialog):
             )
             self.refresh()
 
-        self._run_task(_task, _done, self.tr("正在下载模型…"))
+        self._run_task(
+            _task,
+            _done,
+            self.tr("正在下载模型…"),
+            self.tr("正在下载（网络波动时进度可能短暂停顿）…"),
+        )
 
     def _on_install_runtime(self) -> None:
         target = resolve_model_root(self._settings).parent / "ai_runtime"
@@ -851,7 +939,12 @@ class AiTimingDialog(QDialog):
             )
             self.refresh()
 
-        self._run_task(_task, _done, self.tr("正在安装对齐环境…"))
+        self._run_task(
+            _task,
+            _done,
+            self.tr("正在安装对齐环境…"),
+            self.tr("正在安装（创建虚拟环境与下载大包期间可能数分钟没有输出）…"),
+        )
 
     def _notify_saved_reopen(self) -> None:
         """模型/缓存根变更提示：设置已落盘，重新打开窗口后生效。
@@ -951,7 +1044,12 @@ class AiTimingDialog(QDialog):
             )
             self.refresh()
 
-        self._run_task(_task, _done, self.tr("正在深度校验模型…"))
+        self._run_task(
+            _task,
+            _done,
+            self.tr("正在深度校验模型…"),
+            self.tr("正在校验（大模型哈希计算需要一些时间）…"),
+        )
 
     def _on_run_clicked(self) -> None:
         if not getattr(self, "_mac_supported", True):
@@ -1022,7 +1120,12 @@ class AiTimingDialog(QDialog):
                 parent=self,
             )
 
-        self._run_task(_task, _done, self.tr("正在执行自动对齐…"))
+        self._run_task(
+            _task,
+            _done,
+            self.tr("正在执行自动对齐…"),
+            self.tr("处理中…（单步推理无中间进度，大文件 CPU 需数分钟）"),
+        )
 
     def _on_cancel_clicked(self) -> None:
         """取消需二次确认；确认后丢弃未应用结果（§8.3）。"""

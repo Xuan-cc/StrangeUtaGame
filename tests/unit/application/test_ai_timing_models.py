@@ -303,6 +303,67 @@ class TestRuntimeInstall:
         assert status.available
         assert events[-1][1] == "运行环境就绪"
 
+    def test_install_dry_run_totals_and_package_progress(
+        self, tmp_path, monkeypatch
+    ):
+        """dry-run 包数预估生效；pip 行按包粒度推进并带包/分速度。
+
+        回归：此前 dry-run 引用了未定义的 ``args``（UnboundLocalError 被
+        静默吞掉），包数量预估从未生效，进度退化为逐行 +1。
+        """
+        self._fake_venv(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        import json
+
+        def fake_runner(exe, args, on_line, cancel):
+            if "--dry-run" in args:
+                report = {
+                    "install": [
+                        {"download_info": {"archive_info": {"size": size}}}
+                        for size in (100, 200, 300)
+                    ]
+                }
+                path = Path(args[args.index("--report") + 1])
+                path.write_text(json.dumps(report), encoding="utf-8")
+                on_line("Collecting torch\n")
+                on_line("Collecting torchaudio\n")
+                return 0
+            for line in (
+                "Collecting torch\n",
+                "Downloading torch-2.9.1-cp314.whl.metadata (3.2 kB)\n",
+                "Downloading torch-2.9.1-cp314.whl (765.9 MB)\n",
+                "Using cached soundfile-0.13.whl (1.2 MB)\n",
+                "Downloading librosa-0.10.2.whl (3.5 MB)\n",
+                "Successfully installed torch torchaudio soundfile\n",
+            ):
+                on_line(line)
+            return 0
+
+        events = []
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        status = manager.install(
+            tmp_path / "rt", progress=lambda p, m: events.append((p, m))
+        )
+        assert status.available
+        msgs = [m for _, m in events]
+        assert any("共 3 个包" in m for m in msgs)
+        fetch_msgs = [m for m in msgs if "获取依赖" in m]
+        assert fetch_msgs and all("包/分" in m for m in fetch_msgs)
+        # .metadata 行不推进计数：torch 大包是第 1 个，末尾到 3/3
+        assert "获取依赖 1/3" in fetch_msgs[0]
+        assert "获取依赖 3/3" in fetch_msgs[-1]
+        assert any("Successfully installed" in m for m in msgs)
+        assert events[-1][1] == "运行环境就绪"
+        # 百分比单调不回退（解析阶段停在原地而非回落）
+        pcts = [p for p, _ in events]
+        assert pcts == sorted(pcts)
+
     def test_install_pip_failure_raises(self, tmp_path, monkeypatch):
         self._fake_venv(monkeypatch, tmp_path)
         manager = AiRuntimeManager(pip_runner=lambda exe, a, o, c: 3)

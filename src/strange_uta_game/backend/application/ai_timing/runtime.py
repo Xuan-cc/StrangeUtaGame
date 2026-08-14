@@ -188,38 +188,9 @@ class AiRuntimeManager:
         if cancel():
             raise AiRuntimeError("已取消")
 
-        # dry-run 预估：包数 + 总下载量（失败则退化为无总量模式）
-        total_packages = 0
-        total_mb = 0.0
-        try:
-            import json as _json
-            import tempfile as _tf
-
-            report_path = _tf.gettempdir() + "/krok-pip-dryrun.json"
-            probe = subprocess.run(
-                [python_exe, *args, "--dry-run", "--report", report_path],
-                capture_output=True,
-                text=True,
-                timeout=300,
-                env=getattr(self, "_pip_env", None),
-            )
-            if probe.returncode == 0:
-                with open(report_path, encoding="utf-8") as fh:
-                    report = _json.load(fh)
-                items = report.get("install", []) or []
-                total_packages = len(items)
-                total_mb = sum(
-                    float((it.get("download_info") or {}).get("archive_info", {}).get("size") or 0)
-                    for it in items
-                ) / 1024 / 1024
-        except Exception:
-            total_packages = 0
-        if total_packages:
-            progress(
-                8,
-                f"共 {total_packages} 个包，总下载量约 {total_mb:.0f}MB",
-            )
-        progress(10, "安装对齐依赖（体积较大，可能需要数分钟）")
+        # pip 参数一次构建：dry-run 预估与正式安装复用同一组参数
+        # （此前 dry-run 引用了尚未定义的 args，UnboundLocalError 被静默
+        # 吞掉，包数量预估从未生效，pip 进度一直退化为逐行 +1 模式）
         args: List[str] = ["-m", "pip", "install", "--disable-pip-version-check"]
         if proxy:
             args += ["--proxy", proxy]
@@ -231,44 +202,113 @@ class AiRuntimeManager:
             args += ["-i", mirror]
         args += list(requirements or RUNTIME_REQUIREMENTS)
 
-        import time as _time
-
-        started = _time.monotonic()
-        installed_pkgs = 0
-        fallback_lines = 0
-
-        def _on_line(line: str) -> None:
-            nonlocal installed_pkgs, fallback_lines
-            text = line.strip()
-            if not text:
-                return
-            # 包粒度进度：pip 完成包安装会输出 Successfully installed ...
-            if text.startswith("Successfully installed"):
-                installed_pkgs += max(
-                    0,
-                    len(text.split()) - 2,  # 去掉 Successfully/installed 两个词
-                )
-                if total_packages:
-                    elapsed = int(_time.monotonic() - started)
-                    m, s = divmod(elapsed, 60)
-                    pct = min(95, 10 + int(85 * installed_pkgs / total_packages))
-                    progress(
-                        pct,
-                        f"安装包 {min(installed_pkgs, total_packages)}/{total_packages}"
-                        f"（已耗时 {m}:{s:02d}）",
-                    )
-                    return
-            # 无总量模式：渐进爬升（每行 +1，封顶 94），避免恒停导致 ETA 失效
-            fallback_lines += 1
-            progress(min(94, 10 + fallback_lines), text)
-
         import os
+        import time as _time
 
         pip_env = dict(os.environ)
         if proxy:
             pip_env["HTTP_PROXY"] = proxy
             pip_env["HTTPS_PROXY"] = proxy
         self._pip_env = pip_env
+
+        # dry-run 预估包数（流式转发解析行，解析阶段界面不空转）；
+        # 失败（离线/源不可达）静默退化为无总量模式
+        total_packages = 0
+        size_text = ""
+        try:
+            import json as _json
+            import tempfile as _tf
+
+            report_path = Path(_tf.gettempdir()) / "krok-pip-dryrun.json"
+            try:
+                report_path.unlink()
+            except OSError:
+                pass
+            dry_lines = 0
+
+            def _dry_line(line: str) -> None:
+                nonlocal dry_lines
+                text = line.strip()
+                if text:
+                    dry_lines += 1
+                    progress(min(9, 3 + dry_lines // 3), f"解析依赖：{text}")
+
+            dry_rc = self._pip_runner(
+                python_exe,
+                [*args, "--dry-run", "--report", str(report_path)],
+                _dry_line,
+                cancel,
+            )
+            if dry_rc == 0 and report_path.is_file():
+                report = _json.loads(report_path.read_text(encoding="utf-8"))
+                items = report.get("install", []) or []
+                total_packages = len(items)
+                total_mb = (
+                    sum(
+                        float(
+                            (it.get("download_info") or {})
+                            .get("archive_info", {})
+                            .get("size")
+                            or 0
+                        )
+                        for it in items
+                    )
+                    / 1024
+                    / 1024
+                )
+                # 部分pip版本的 report 不含体积字段：仅在确有数值时展示
+                if total_mb >= 1:
+                    size_text = f"，总下载量约 {total_mb:.0f}MB"
+        except Exception:
+            total_packages = 0
+            size_text = ""
+        if cancel():
+            raise AiRuntimeError("已取消")
+
+        if total_packages:
+            progress(10, f"共 {total_packages} 个包{size_text}，开始安装")
+        else:
+            progress(10, "安装对齐依赖（体积较大，可能需要数分钟）")
+
+        started = _time.monotonic()
+        fetched = 0
+        fallback_lines = 0
+
+        def _on_line(line: str) -> None:
+            nonlocal fetched, fallback_lines
+            text = line.strip()
+            if not text:
+                return
+            if text.startswith("Successfully installed"):
+                progress(95, text)
+                return
+            if total_packages:
+                # 包粒度：pip 完成全部安装才输出 Successfully，按它计数没有
+                # 中间进度可用——改按每个包的下载/命中缓存行推进
+                lower = text.lower()
+                is_fetch = lower.startswith("downloading") or lower.startswith(
+                    "using cached"
+                )
+                if is_fetch and ".metadata" not in lower:
+                    fetched += 1
+                    elapsed_min = max(0.02, (_time.monotonic() - started) / 60)
+                    progress(
+                        min(94, 10 + int(85 * fetched / total_packages)),
+                        f"获取依赖 {min(fetched, total_packages)}/"
+                        f"{total_packages}"
+                        f"（{fetched / elapsed_min:.1f} 包/分）：{text}",
+                    )
+                    return
+                # 其他输出（Collecting/元数据/安装）：转发但不推进百分比，
+                # 避免解析行把百分比顶满导致 ETA 失真
+                progress(
+                    min(94, 10 + int(85 * fetched / total_packages)), text
+                )
+                return
+            # 无总量模式：渐进爬升（每行 +1，封顶 94），避免恒停导致 ETA 失效
+            fallback_lines += 1
+            progress(min(94, 10 + fallback_lines), text)
+
         returncode = self._pip_runner(python_exe, args, _on_line, cancel)
         if cancel():
             raise AiRuntimeError("已取消")

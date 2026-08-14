@@ -141,6 +141,79 @@ class TestAiTimingDialog:
         text = dialog._compute_eta(60)
         assert "预计剩余" in text
 
+    def test_eta_counts_down_between_messages(self, qapp, tmp_path):
+        """两条进度消息之间 ETA 不冻结：按最近速率继续倒计时。"""
+        import re as _re
+        import time as _t
+
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        now = _t.monotonic()
+        dialog._eta_samples = [(now - 10.0, 10), (now - 5.0, 35)]
+        dialog._eta_kind = "derived"  # 真实流程由 _on_task_progress 设置
+        dialog._compute_eta(50)
+        assert dialog._eta_rate > 0
+        first = dialog._eta_tail_text()
+        assert "预计剩余" in first
+        # 模拟 3 秒没有新消息：剩余时间应随之递减
+        dialog._eta_last = (dialog._eta_last[0] - 3.0, dialog._eta_last[1])
+        second = dialog._eta_tail_text()
+
+        def _secs(text):
+            m = _re.search(r"(\d+):(\d{2})", text)
+            return int(m.group(1)) * 60 + int(m.group(2))
+
+        assert 0 < _secs(second) < _secs(first)
+        assert _secs(first) - _secs(second) >= 2
+
+    def test_eta_resets_on_phase_boundary_percent_drop(self, qapp, tmp_path):
+        """阶段边界百分比回落（分离 100% → 对齐 20%）时速率重新累计。"""
+        import time as _t
+
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        now = _t.monotonic()
+        # 分离阶段推进到 100% 的样本
+        dialog._eta_samples = [(now - 8.0, 80), (now - 4.0, 95)]
+        dialog._compute_eta(100)
+        # 对齐阶段从 20% 重新开始：旧样本必须被清掉，速率不得为负
+        text = dialog._compute_eta(20)
+        assert dialog._eta_samples == [(dialog._eta_samples[-1][0], 20)]
+        assert dialog._eta_rate == 0.0
+        assert text == "正在估算剩余时间…"
+
+    def test_transport_eta_and_speed_extracted(self, qapp, tmp_path):
+        """上游消息自带剩余时间/速度时直接展示（分离、pip、下载通用）。"""
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._on_task_progress(
+            "separation", 70, "分离处理 3/10 块，预计剩余 0:12（2.1s/块）"
+        )
+        assert "预计剩余 0:12" in dialog.eta_label.text()
+        assert "2.1s/块" in dialog.eta_label.text()
+        # pip 包速度：无「预计剩余」→ 推算 ETA + 包/分速度同屏
+        dialog._on_task_progress(
+            "runtime", 40, "获取依赖 4/12（1.3 包/分）：Downloading torch"
+        )
+        assert "1.3 包/分" in dialog.eta_label.text()
+        assert "已耗时" in dialog.eta_label.text()
+
+    def test_stall_hint_is_task_specific(self, qapp, tmp_path):
+        """长时间无输出的提示按任务区分（pip 安装不再显示推理文案）。"""
+        import time as _t
+
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._stall_text = (
+            "正在安装（创建虚拟环境与下载大包期间可能数分钟没有输出）…"
+        )
+        now = _t.monotonic()
+        dialog._task_started = now - 40
+        dialog._last_msg_time = now - 20  # 超过 15s 无消息
+        dialog._on_second_tick()
+        assert "正在安装" in dialog.eta_label.text()
+        assert "单步推理" not in dialog.eta_label.text()
+
     def test_vocal_needs_choice_warns(self, qapp, tmp_path):
         snap = _ready_snapshot()
         snap.vocal = VocalCandidate(state="needs_choice", choices=[])
