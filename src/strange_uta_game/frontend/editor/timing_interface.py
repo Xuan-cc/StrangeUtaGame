@@ -2055,6 +2055,13 @@ class EditorInterface(QWidget):
             )
             return
 
+        # 防重入：弹窗非模态，忙碌中重复点击只置前已有窗口，不再起第二个任务
+        existing = getattr(self, "_ai_timing_dialog", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+
         from strange_uta_game.frontend.editor.ai_timing_dialog import AiTimingDialog
 
         parts = self._build_ai_timing_service()
