@@ -176,4 +176,48 @@ class StandaloneVocalSeparator:
         )
 
 
-__all__ = ["StandaloneVocalSeparator", "SEPARATION_MODEL", "VOCAL_STEM"]
+def host_first_separation(
+    host, standalone: StandaloneVocalSeparator
+) -> tuple:
+    """embedded 分离编排：宿主优先，宿主未配置时回落 AI Runtime 内置分离。
+
+    AI 安装器（自建 venv 与方案 B 共享解释器两条路径）本来就携带
+    audio-separator——只为 AI 打轴的用户不必强配工作台第 2 步的分离
+    环境；宿主可用时仍优先复用（会话人声零分离、跟随工作台设置）。
+
+    Returns:
+        (executor, identity, prober, follows_host)：
+        executor 兼容 AiTimingService 的 ProgressFn/CancelFn 签名；
+        follows_host 为构造时刻宿主是否可用（弹窗状态行展示口径）。
+    """
+    def _host_available() -> bool:
+        try:
+            return bool(host.separation_status().get("available"))
+        except Exception:
+            return False
+
+    def _executor(source_path: Path, progress: ProgressFn, cancel: CancelFn) -> Path:
+        if _host_available():
+            return host.separate_vocal(source_path, progress, cancel)
+        progress(
+            "vocal", 12, "工作台分离环境未配置，使用 AI 运行环境内置分离"
+        )
+        return standalone.separate(source_path, progress, cancel)
+
+    def _identity() -> dict:
+        if _host_available():
+            return host.effective_identity()
+        return standalone.identity()
+
+    def _available() -> bool:
+        return _host_available() or standalone.available()
+
+    return _executor, _identity, _available, _host_available()
+
+
+__all__ = [
+    "StandaloneVocalSeparator",
+    "host_first_separation",
+    "SEPARATION_MODEL",
+    "VOCAL_STEM",
+]

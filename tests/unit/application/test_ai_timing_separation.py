@@ -2,6 +2,7 @@
 """standalone 分离执行器：假子进程端到端测试（stdout 协议、取消、兜底轨名）。"""
 
 import io
+from pathlib import Path
 
 import pytest
 
@@ -81,3 +82,97 @@ class TestStandaloneSeparator:
         assert ident["model"].endswith(".onnx")
         assert ident["stem"] == "人声"
         assert ident["params"] == {}
+
+
+class TestHostFirstSeparation:
+    """embedded 分离编排：宿主优先，宿主未配置时回落 AI Runtime 内置分离。"""
+
+    def _fake_host(self, available):
+        class _H:
+            def __init__(self):
+                self.calls = []
+
+            def separation_status(self):
+                return {"available": available, "model": "m", "message": ""}
+
+            def effective_identity(self):
+                return {"model": "host-model", "stem": "人声", "params": {}}
+
+            def separate_vocal(self, source, progress, cancel):
+                self.calls.append(("host", str(source)))
+                return Path("C:/host_vocal.wav")
+
+        return _H()
+
+    @staticmethod
+    def _fake_standalone():
+        class _S:
+            name = "builtin"
+
+            def __init__(self):
+                self.calls = []
+
+            def identity(self):
+                return {"model": "builtin.onnx", "stem": "人声", "params": {}}
+
+            def available(self):
+                return True
+
+            def separate(self, source, progress, cancel):
+                self.calls.append(("builtin", str(source)))
+                progress("vocal", 12, "内置分离")
+                return Path("C:/builtin_vocal.wav")
+
+        return _S()
+
+    def test_host_available_uses_host(self):
+        host, sa = self._fake_host(True), self._fake_standalone()
+        executor, identity, prober, follows = sep_mod.host_first_separation(
+            host, sa
+        )
+        assert follows is True
+        assert prober() is True
+        assert identity() == {"model": "host-model", "stem": "人声", "params": {}}
+        out = executor(Path("s.flac"), lambda *a: None, lambda: False)
+        assert out == Path("C:/host_vocal.wav")
+        assert host.calls and not sa.calls
+
+    def test_host_unavailable_falls_back_to_builtin(self):
+        host, sa = self._fake_host(False), self._fake_standalone()
+        executor, identity, prober, follows = sep_mod.host_first_separation(
+            host, sa
+        )
+        assert follows is False
+        msgs = []
+        out = executor(
+            Path("s.flac"), lambda s, p, m: msgs.append(m), lambda: False
+        )
+        assert out == Path("C:/builtin_vocal.wav")
+        assert any("内置分离" in m for m in msgs)
+        assert identity()["model"] == "builtin.onnx"
+        assert prober() is True  # 内置分离可用兜底
+
+    def test_neither_available_reports_false(self):
+        host, sa = self._fake_host(False), self._fake_standalone()
+        sa.available = lambda: False
+        _, _, prober, follows = sep_mod.host_first_separation(host, sa)
+        assert follows is False and prober() is False
+
+    def test_host_status_exception_treated_unavailable(self):
+        class _BadHost:
+            def separation_status(self):
+                raise RuntimeError("boom")
+
+            def effective_identity(self):
+                return {"model": "host-model", "stem": "人声", "params": {}}
+
+            def separate_vocal(self, *a):
+                raise AssertionError("不应走到宿主分离")
+
+        sa = self._fake_standalone()
+        executor, _, prober, follows = sep_mod.host_first_separation(
+            _BadHost(), sa
+        )
+        assert follows is False and prober() is True
+        out = executor(Path("s.flac"), lambda *a: None, lambda: False)
+        assert out == Path("C:/builtin_vocal.wav")

@@ -2178,12 +2178,23 @@ class EditorInterface(QWidget):
                 host.find_session_vocal if host is not None else None
             ),
         )
-        # standalone：共享 Runtime（ai_runtime venv，含 audio-separator）
-        # 的子进程人声分离；embedded：宿主注入
+        # 分离编排：standalone 用共享 Runtime 子进程分离；embedded
+        # 宿主优先（会话人声/工作台设置），宿主未配置第 2 步分离环境时
+        # 回落 AI Runtime 内置分离（安装器本身携带 audio-separator，
+        # 只为 AI 打轴的用户不必强配工作台分离环境）
+        follows_host = False
         if host is not None:
-            executor = host.separate_vocal
-            identity_fn = host.effective_identity
-            prober = None  # 宿主可用性跟随工作台状态行
+            from strange_uta_game.backend.application.ai_timing.separation import (
+                StandaloneVocalSeparator,
+                host_first_separation,
+            )
+
+            standalone_sep = StandaloneVocalSeparator(
+                settings.runtime_python, model_root
+            )
+            executor, identity_fn, prober, follows_host = (
+                host_first_separation(host, standalone_sep)
+            )
         else:
             from strange_uta_game.backend.application.ai_timing.separation import (
                 StandaloneVocalSeparator,
@@ -2205,7 +2216,7 @@ class EditorInterface(QWidget):
             separation_executor=executor,
             separation_identity=identity_fn,
             separation_prober=prober,
-            separation_follows_host=host is not None,
+            separation_follows_host=follows_host,
         )
         # 代理：embedded 用宿主（工作台网络设置）；standalone 用 SUG 自己
         # 「设置 → 网络与代理」的代理模式（updater.proxy.resolve_proxy）
