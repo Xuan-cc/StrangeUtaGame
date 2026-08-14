@@ -201,13 +201,26 @@ class _TorchProviderBase(ForcedAlignmentProvider):
         """
         from torchaudio.functional import forced_align, merge_tokens
 
+        torch = self._import_torch()
         flat = [t for group in token_groups for t in group]
         if not flat:
             raise AlignmentProviderError("没有可对齐的 token")
+        # 新版 torchaudio 的 forced_align API：targets 必须是 [B, N] Tensor，
+        # 且要求 input_lengths/target_lengths（yohane 基于旧版 list/None 签名）
+        targets = torch.tensor([flat], dtype=torch.int64)
         alignments, scores = forced_align(
-            emission, flat, input_lengths=None, target_lengths=None, blank=blank
+            emission,
+            targets,
+            input_lengths=torch.tensor([emission.size(1)]),
+            target_lengths=torch.tensor([len(flat)]),
+            blank=blank,
         )
-        spans = merge_tokens(alignments, scores, blank=blank)
+        # align 返回 [B, T]；merge_tokens 接受一维
+        spans = merge_tokens(
+            alignments[0] if alignments.dim() > 1 else alignments,
+            scores[0] if scores.dim() > 1 else scores,
+            blank=blank,
+        )
         grouped: List[Tuple[int, int]] = []
         offset = 0
         for group in token_groups:
@@ -367,7 +380,7 @@ class Wav2Vec2LatnProvider(_TorchProviderBase):
 
         progress(85, "计算对齐区间")
         blank = self._model.config.pad_token_id
-        grouped = self._ctc_align_groups(emission[0], groups, blank=blank)
+        grouped = self._ctc_align_groups(emission, groups, blank=blank)
         spans = self._frames_to_spans(
             request,
             grouped,

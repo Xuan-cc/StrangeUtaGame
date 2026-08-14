@@ -407,8 +407,9 @@ class AiTimingService:
         progress("prepare", 15, "构建对齐请求")
         # audio_speed（音频倍速预处理）尚未实现：不进选项与缓存键，
         # 避免用户以为设置生效（实现于 worker 后再接入）
+        # 尾音修正常开（2026-08 用户决策：不再提供开关）
         options = {
-            "tail_snap": self._settings.tail_snap,
+            "tail_snap": True,
         }
         request = build_alignment_request(
             plan,

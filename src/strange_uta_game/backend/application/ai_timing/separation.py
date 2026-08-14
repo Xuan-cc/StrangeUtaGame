@@ -71,8 +71,14 @@ class StandaloneVocalSeparator:
         if not self._python or not Path(self._python).is_file():
             return False
         try:
+            # 必须探测真实入口：顶层包可导入不代表 separator 模块可用
+            # （裸 audio-separator 缺 onnxruntime/audioread 时顶层仍成功）
             completed = subprocess.run(
-                [self._python, "-c", "import audio_separator"],
+                [
+                    self._python,
+                    "-c",
+                    "from audio_separator.separator import Separator",
+                ],
                 capture_output=True,
                 timeout=30,
             )
@@ -100,6 +106,11 @@ class StandaloneVocalSeparator:
             str(out_dir),
             str(self._model_root),
         ]
+        import os
+
+        env = dict(os.environ)
+        # 中文 Windows 子进程默认按 GBK 写管道，宿主按 UTF-8 读会乱码
+        env["PYTHONIOENCODING"] = "utf-8"
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -107,13 +118,20 @@ class StandaloneVocalSeparator:
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=env,
         )
         result_path: Optional[Path] = None
         assert proc.stdout is not None
-        for line in proc.stdout:
-            line = line.strip()
+        import re as _re
+
+        _ansi_re = _re.compile("\x1b\\[[0-9;]*[A-Za-z]|[\x00-\x08\x0b-\x1f]")
+        for raw_line in proc.stdout:
+            line = _ansi_re.sub("", raw_line)
+            line = line.replace("\r", " ").strip()
             if not line:
                 continue
+            if len(line) > 160:
+                line = line[:159] + "…"
             if cancel():
                 proc.kill()
                 try:

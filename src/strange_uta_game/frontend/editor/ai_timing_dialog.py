@@ -31,7 +31,6 @@ from PyQt6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QVBoxLayout, QWid
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
-    CheckBox,
     ComboBox,
     FluentIcon as FIF,
     LineEdit,
@@ -310,9 +309,6 @@ class AiTimingDialog(QDialog):
         self.combo_device = ComboBox(content)
         self.combo_device.addItems([self.tr("自动"), "CPU", "CUDA"])
         advanced.addWidget(self.combo_device)
-        self.chk_tail_snap = CheckBox(self.tr("尾音修正"), content)
-        self.chk_tail_snap.setChecked(self._settings.tail_snap)
-        advanced.addWidget(self.chk_tail_snap)
         self._box_adv.contentLayout.addLayout(advanced)
         self._box_adv.contentLayout.addWidget(self.model_desc)
         mirror_row = QHBoxLayout()
@@ -543,7 +539,6 @@ class AiTimingDialog(QDialog):
         self._settings.device = ("auto", "cpu", "cuda")[
             self.combo_device.currentIndex()
         ]
-        self._settings.tail_snap = self.chk_tail_snap.isChecked()
         self._settings.download_mirror = self.edit_mirror.text().strip()
         if self._save_settings is not None:
             try:
@@ -868,7 +863,6 @@ class AiTimingDialog(QDialog):
         self._settings.download_mirror = ""
         self.combo_model.setCurrentIndex(0)
         self.combo_device.setCurrentIndex(0)
-        self.chk_tail_snap.setChecked(True)
         self.edit_mirror.clear()
         self._persist_settings()
         self.refresh()

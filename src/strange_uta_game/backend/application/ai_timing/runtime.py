@@ -32,7 +32,10 @@ RUNTIME_REQUIREMENTS: List[str] = [
     "soundfile",
     "huggingface_hub",
     # standalone 人声分离（UVR/MDX 系模型；CPU 也可跑，模型自动下载）
-    "audio-separator",
+    "audio-separator[cpu]",
+    # audio-separator 0.44.x 使用旧版 librosa API（get_duration(filename=)），
+    # 0.11 起已移除该参数——必须钉住
+    "librosa==0.10.2.post1",
 ]
 
 _PROBE_CODE = (
