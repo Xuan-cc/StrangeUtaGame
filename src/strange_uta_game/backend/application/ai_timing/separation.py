@@ -22,6 +22,10 @@ VOCAL_STEM = "人声"
 _SCRIPT = r"""
 import sys
 inp, out_dir, model_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+# audio-separator 的进度走 logging：重定向到 stdout，宿主读行循环才能
+# 收到模型下载/加载阶段的输出（否则该阶段取消无响应、无进度）
+import logging
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 print("stage:load:加载分离模型", flush=True)
 from audio_separator.separator import Separator
 sep = Separator(
