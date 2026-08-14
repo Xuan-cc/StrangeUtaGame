@@ -125,7 +125,28 @@ class StandaloneVocalSeparator:
         import re as _re
 
         _ansi_re = _re.compile("\x1b\\[[0-9;]*[A-Za-z]|[\x00-\x08\x0b-\x1f]")
+        # tqdm 进度行（audio_separator 分块处理）形如：
+        #   " 50%|█████| 1/2 [00:02<00:02,  2.21s/it]"（\r 分隔、可能同行多段）
+        # —— 解析出 k/N 与 tqdm 自带的剩余时间，喂给进度回调（速度+ETA）
+        _tqdm_re = _re.compile(r"(\d+)/(\d+) \[[^\]<]*<(\d+):(\d{2})")
         for raw_line in proc.stdout:
+            m = None
+            for m2 in _tqdm_re.finditer(raw_line):
+                m = m2  # 取最后一段（\r 覆盖写时同行会有多个状态）
+            if m is not None:
+                done, total = int(m.group(1)), int(m.group(2))
+                rem_s = int(m.group(3)) * 60 + int(m.group(4))
+                if total > 0 and done <= total:
+                    pct = 60 + int(35 * done / total)
+                    rate = (rem_s / (total - done)) if done < total else 0.0
+                    progress(
+                        "separation",
+                        min(95, pct),
+                        f"分离处理 {done}/{total} 块，"
+                        f"预计剩余 {int(rem_s // 60)}:{rem_s % 60:02d}"
+                        + (f"（{rate:.1f}s/块）" if rate else ""),
+                    )
+                continue
             line = _ansi_re.sub("", raw_line)
             line = line.replace("\r", " ").strip()
             if not line:

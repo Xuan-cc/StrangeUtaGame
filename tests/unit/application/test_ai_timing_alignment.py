@@ -439,3 +439,132 @@ class TestApplyAiTimingCommand:
         ApplyAiTimingCommand(project, plan, request, result).execute()
         assert s1.characters[0].timestamps == [100]
         assert s2.characters[0].timestamps == [400]
+
+
+class TestUnalignableChars:
+    """emoji / 空格 / 特殊字符：不参与对齐、不阻断执行、原文原样保留。"""
+
+    def test_structural_chars_skip_alignment_and_survive_apply(self):
+        from strange_uta_game.backend.application.ai_timing.alignment import (
+            AlignmentResult,
+            EmissionSpan,
+            build_alignment_request,
+            checkpoint_timestamps,
+            interpolate_structural_timestamps,
+        )
+        from strange_uta_game.backend.application.ai_timing.commands import (
+            ApplyAiTimingCommand,
+        )
+        from strange_uta_game.backend.application.ai_timing.resolver import (
+            PronunciationResolver,
+        )
+        from strange_uta_game.backend.domain import (
+            Character,
+            Project,
+            Sentence,
+        )
+        from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
+            DummyAnalyzer,
+        )
+
+        raw = "あ🎵 か☆"
+        project = Project()
+        project.sentences = [
+            Sentence(
+                singer_id="s1",
+                characters=[
+                    Character(char=c, check_count=1, ruby=None, singer_id="s1")
+                    for c in raw
+                ],
+            )
+        ]
+        resolver = PronunciationResolver(analyzer=DummyAnalyzer(), chinese_mode=False)
+        plan = resolver.resolve_project(project, fill_missing=True)
+        # emoji/空格/☆ 均为结构单元：不产生缺口、不生成 token
+        assert plan.is_complete
+        request = build_alignment_request(plan)
+        token_texts = [t.raw_reading for t in request.tokens]
+        assert token_texts == ["あ", "か"]  # 仅假名成为 token
+        # 伪造两个 token 区间并走完整应用
+        result = AlignmentResult(
+            annotation_digest=request.annotation_digest,
+            model_id="fake",
+            spans=[
+                EmissionSpan(0, 1000, 1500),
+                EmissionSpan(1, 2000, 2500),
+            ],
+        )
+        cmd = ApplyAiTimingCommand(project, plan, request, result)
+        cmd.execute()
+        chars = project.sentences[0].characters
+        # 全部 checkpoint 均获得时间戳（结构单元为插值），原文一字不改
+        assert all(len(c.timestamps) == 1 for c in chars)
+        assert "".join(c.char for c in chars) == raw
+        ts = [c.timestamps[0] for c in chars]
+        assert ts[0] == 1000 and ts[3] == 2000  # あ / か 各自 token 起点
+        # 中间结构单元（🎵 空格）= 前一 token 终点收敛至下一 token 起点
+        assert ts[1] == ts[2] == 1500
+        # 末尾结构单元（☆）= 前一 token 终点（延音）
+        assert ts[4] == 2500
+
+    def test_applied_result_respects_project_structure(self):
+        """应用后的结构不变量：timestamps 长度==check_count、ruby 同步、
+        句尾释放点清空、既有标注结构不变。"""
+        from strange_uta_game.backend.application.ai_timing.alignment import (
+            AlignmentResult,
+            EmissionSpan,
+            build_alignment_request,
+        )
+        from strange_uta_game.backend.application.ai_timing.commands import (
+            ApplyAiTimingCommand,
+        )
+        from strange_uta_game.backend.application.ai_timing.resolver import (
+            PronunciationResolver,
+        )
+        from strange_uta_game.backend.domain import (
+            Character,
+            Project,
+            Ruby,
+            RubyPart,
+            Sentence,
+        )
+
+        project = Project()
+        project.sentences = [
+            Sentence(
+                singer_id="s1",
+                characters=[
+                    Character(
+                        char="赤",
+                        check_count=2,
+                        ruby=Ruby(parts=[RubyPart(text="あ"), RubyPart(text="か")]),
+                        is_sentence_end=True,
+                        singer_id="s1",
+                    ),
+                    Character(char="い", check_count=1, ruby=None, singer_id="s1"),
+                ],
+            )
+        ]
+        resolver = PronunciationResolver()
+        plan = resolver.collect_existing_annotations(project)
+        request = build_alignment_request(plan)
+        n = len(request.tokens)
+        result = AlignmentResult(
+            annotation_digest=request.annotation_digest,
+            model_id="fake",
+            spans=[
+                EmissionSpan(i, 100 * i, 100 * i + 50) for i in range(n)
+            ],
+        )
+        cmd = ApplyAiTimingCommand(project, plan, request, result)
+        cmd.execute()
+        ch0, ch1 = project.sentences[0].characters
+        assert len(ch0.timestamps) == ch0.check_count == 2
+        assert len(ch1.timestamps) == ch1.check_count == 1
+        assert ch0.sentence_end_ts is None  # 旧释放点按设计清空
+        assert ch0.ruby is not None and ch0.ruby.timestamps == ch0.all_timestamps
+        assert [p.text for p in ch0.ruby.parts] == ["あ", "か"]  # 既有标注原样
+        assert ch0.is_sentence_end is True  # 结构标志不变
+        cmd.undo()
+        ch0, ch1 = project.sentences[0].characters
+        assert ch0.timestamps == [] and ch0.ruby is not None

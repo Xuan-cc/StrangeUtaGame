@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from PyQt6.QtCore import QObject, QThread, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -194,6 +194,13 @@ class AiTimingDialog(QDialog):
         self._worker: Optional[_TaskWorker] = None
         self._busy = False
         self._eta_samples: List[tuple] = []
+        self._task_started = 0.0
+        self._last_eta_text = ""
+        # 秒级刷新：不依赖上游消息频率（模型加载等阶段可能长时间无输出），
+        # 每秒刷新一次已耗时与最近估算
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(1000)
+        self._tick_timer.timeout.connect(self._on_second_tick)
 
         self._build_ui()
         self.refresh()
@@ -437,6 +444,11 @@ class AiTimingDialog(QDialog):
             b.setEnabled(False)
         self.status_label.setText(busy_text)
         self.eta_label.setText("")
+        self._last_eta_text = ""
+        import time as _time
+
+        self._task_started = _time.monotonic()
+        self._tick_timer.start()
 
         self._thread = QThread(self)
         self._worker = _TaskWorker(fn)
@@ -466,6 +478,7 @@ class AiTimingDialog(QDialog):
         self._thread = None
         self._worker = None
         self._busy = False
+        self._tick_timer.stop()
         self.btn_cancel.setEnabled(False)
         for b in self._action_buttons():
             b.setEnabled(True)
@@ -479,13 +492,23 @@ class AiTimingDialog(QDialog):
         # 传输层给出真实速度/剩余时优先展示，否则退回百分比估算
         if "MB/s" in message and "预计剩余" in message:
             tail = message.split("，")[-1].rstrip("）")
-            self.eta_label.setText(
-                tail
-                + "　·　"
-                + [p for p in message.split("，") if "MB/s" in p][0]
-            )
+            self._last_eta_text = tail + "　·　" + [
+                p for p in message.split("，") if "MB/s" in p
+            ][0]
         else:
-            self.eta_label.setText(self._compute_eta(percent))
+            self._last_eta_text = self._compute_eta(percent)
+        self.eta_label.setText(self._last_eta_text)
+
+    def _on_second_tick(self) -> None:
+        """每秒刷新：已耗时 + 最近一次 ETA（长静默阶段不再冻结显示）。"""
+        import time as _time
+
+        elapsed = int(_time.monotonic() - self._task_started)
+        m, s = divmod(elapsed, 60)
+        prefix = self.tr("已耗时 {m}:{s:02d}").format(m=m, s=s)
+        self.eta_label.setText(
+            prefix + ("　·　" + self._last_eta_text if self._last_eta_text else "")
+        )
 
     def _compute_eta(self, percent: int) -> str:
         """平滑 ETA：样本不足时显示「正在估算」（§8.2）。"""
