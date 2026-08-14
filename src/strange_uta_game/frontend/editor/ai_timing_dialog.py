@@ -139,7 +139,11 @@ class _StateRow(QWidget):
     def set_state(self, state: str, text: str) -> None:
         color = self._DOT_COLORS.get(state, "#999999")
         self._state = state
-        self._state_label.setText(f"<b style='color:{color}'>●</b> {text}")
+        # 状态文本统一中间省略（单行显示，超长路径会把滚动区最小宽度撑爆、
+        # 导致窗口显示不全）；完整内容放 tooltip 供悬停查看
+        shown = text if len(text) <= 64 else text[:30] + "…" + text[-30:]
+        self._state_label.setText(f"<b style='color:{color}'>●</b> {shown}")
+        self._state_label.setToolTip(text if text != shown else "")
 
     def add_action(self, text: str, clicked: Callable) -> PushButton:
         """在行尾放一个小动作按钮（缺什么就在该行旁边给什么操作）。"""
