@@ -1124,7 +1124,7 @@ class AiTimingDialog(QDialog):
             _task,
             _done,
             self.tr("正在执行自动对齐…"),
-            self.tr("处理中…（单步推理无中间进度，大文件 CPU 需数分钟）"),
+            self.tr("处理中…（模型加载期间无中间输出，大文件 CPU 需数分钟）"),
         )
 
     def _on_cancel_clicked(self) -> None:

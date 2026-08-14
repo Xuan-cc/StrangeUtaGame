@@ -83,6 +83,25 @@ def _cancelled_check(cancel: CancelFn) -> None:
         raise AlignmentCancelledError("已取消")
 
 
+def _find_encoder_layers(model: Any) -> List[Any]:
+    """定位 transformer encoder 层列表（HF / torchaudio 两种结构兼容）。
+
+    - HF ``Wav2Vec2ForCTC``: ``model.wav2vec2.encoder.layers``
+    - torchaudio ``Wav2Vec2Model``: ``model.encoder.layers``
+
+    找不到（结构变化/新版库）时返回空列表，调用方退化为无层进度。
+    """
+    base = getattr(model, "wav2vec2", model)
+    encoder = getattr(base, "encoder", None)
+    layers = getattr(encoder, "layers", None)
+    if layers is None or not hasattr(layers, "__len__"):
+        return []
+    try:
+        return list(layers)
+    except TypeError:
+        return []
+
+
 class FakeProvider(ForcedAlignmentProvider):
     """确定性假 provider：进程生命周期 / 协议 / 取消测试用。
 
@@ -286,6 +305,48 @@ class _TorchProviderBase(ForcedAlignmentProvider):
                     )
         return spans
 
+    def _forward_with_layer_progress(
+        self,
+        run_forward: Callable[[], Any],
+        progress: ProgressFn,
+        lo: int = 66,
+        hi: int = 84,
+    ) -> Any:
+        """执行一次模型 forward，按 encoder 层上报真实推理进度。
+
+        通过 ``register_forward_hook`` 观察每层完成时刻——不改变任何
+        计算与输出（与 FA-Kara/yohane 的一次整段 forward 完全一致），
+        但把最耗时的推理阶段拆成 N 层的细粒度进度，ETA 有真实数据
+        可算（各层耗时近似均匀，进度与时间近似线性）。
+
+        结构上找不到层列表时静默退化为无层进度（只保留阶段消息）。
+        """
+        layers = _find_encoder_layers(self._model)
+        n = len(layers)
+        if not n:
+            return run_forward()
+        handles: List[Any] = []
+        counter = {"done": 0}
+
+        def _make_hook():
+            def _hook(_module, _inputs, _output):
+                counter["done"] += 1
+                done = counter["done"]
+                progress(
+                    lo + int((hi - lo) * done / n),
+                    f"模型推理中（编码器层 {done}/{n}）",
+                )
+
+            return _hook
+
+        try:
+            for layer in layers:
+                handles.append(layer.register_forward_hook(_make_hook()))
+            return run_forward()
+        finally:
+            for handle in handles:
+                handle.remove()
+
     def unload(self) -> None:
         self._model = None
         gc.collect()
@@ -376,9 +437,13 @@ class Wav2Vec2LatnProvider(_TorchProviderBase):
             sampling_rate=sample_rate,
             return_tensors="pt",
         )
-        with torch.inference_mode():
+
+        def _run_forward():
             outputs = self._model(**inputs.to(self._device))
-            emission = torch.nn.functional.log_softmax(outputs.logits, dim=-1)
+            return torch.nn.functional.log_softmax(outputs.logits, dim=-1)
+
+        with torch.inference_mode():
+            emission = self._forward_with_layer_progress(_run_forward, progress)
 
         progress(85, "计算对齐区间")
         blank = self._model.config.pad_token_id
@@ -466,8 +531,13 @@ class MmsFaProvider(_TorchProviderBase):
 
         progress(65, "模型推理中")
         _cancelled_check(cancel)
+
+        def _run_forward():
+            out, _ = self._model(waveform.to(self._device))
+            return out
+
         with torch.inference_mode():
-            emission, _ = self._model(waveform.to(self._device))
+            emission = self._forward_with_layer_progress(_run_forward, progress)
 
         progress(85, "计算对齐区间")
         non_empty = [g for g in groups if g]

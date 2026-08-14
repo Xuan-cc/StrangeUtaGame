@@ -260,3 +260,125 @@ class TestProviderRegistry:
                 lambda p, m: None,
                 lambda: False,
             )
+
+
+class TestLayerProgressForward:
+    """推理真实进度：encoder 层 forward hook（fake 层对象，不依赖 torch）。
+
+    FA-Kara / yohane 的推理是一次整段 forward、无任何中间进度；我们用
+    层完成时刻观察进度，计算与输出保持逐位一致。
+    """
+
+    def _fake_layers(self, n: int):
+        class _Handle:
+            def __init__(self, layer, cb):
+                self._layer, self._cb = layer, cb
+
+            def remove(self):
+                self._layer.hooks.remove(self._cb)
+
+        class _Layer:
+            def __init__(self):
+                self.hooks = []
+
+            def register_forward_hook(self, cb):
+                self.hooks.append(cb)
+                return _Handle(self, cb)
+
+        return [_Layer() for _ in range(n)]
+
+    def test_find_encoder_layers_hf_and_torchaudio_shapes(self):
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            _find_encoder_layers,
+        )
+
+        class _NS:
+            pass
+
+        hf = _NS()
+        hf.wav2vec2 = _NS()
+        hf.wav2vec2.encoder = _NS()
+        hf.wav2vec2.encoder.layers = self._fake_layers(3)
+        assert len(_find_encoder_layers(hf)) == 3
+
+        ta = _NS()
+        ta.encoder = _NS()
+        ta.encoder.layers = self._fake_layers(2)
+        assert len(_find_encoder_layers(ta)) == 2
+
+        # 结构不可识别 → 空列表（退化为无层进度）
+        assert _find_encoder_layers(object()) == []
+
+    def test_layer_progress_emitted_per_layer(self):
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            Wav2Vec2LatnProvider,
+        )
+
+        provider = Wav2Vec2LatnProvider()
+        layers = self._fake_layers(4)
+
+        class _NS:
+            pass
+
+        root = _NS()
+        root.wav2vec2 = _NS()
+        root.wav2vec2.encoder = _NS()
+        root.wav2vec2.encoder.layers = layers
+        provider._model = root
+
+        events = []
+
+        def _forward():
+            for layer in layers:
+                for cb in list(layer.hooks):
+                    cb(layer, None, None)
+            return "emission"
+
+        result = provider._forward_with_layer_progress(
+            _forward, lambda p, m: events.append((p, m)), lo=66, hi=84
+        )
+        assert result == "emission"
+        # 66 + int(18 * k / 4)
+        assert [p for p, _ in events] == [70, 75, 79, 84]
+        assert all("编码器层" in m for _, m in events)
+        assert "4/4" in events[-1][1]
+        # forward 结束后 hooks 全部移除，重复 forward 不会重复累计
+        assert all(not layer.hooks for layer in layers)
+
+    def test_forward_exception_still_removes_hooks(self):
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            Wav2Vec2LatnProvider,
+        )
+
+        provider = Wav2Vec2LatnProvider()
+        layers = self._fake_layers(2)
+
+        class _NS:
+            pass
+
+        root = _NS()
+        root.wav2vec2 = _NS()
+        root.wav2vec2.encoder = _NS()
+        root.wav2vec2.encoder.layers = layers
+        provider._model = root
+
+        def _boom():
+            raise RuntimeError("推理失败")
+
+        with pytest.raises(RuntimeError, match="推理失败"):
+            provider._forward_with_layer_progress(_boom, lambda p, m: None)
+        assert all(not layer.hooks for layer in layers)
+
+    def test_no_layer_structure_degrades_silently(self):
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            Wav2Vec2LatnProvider,
+        )
+
+        provider = Wav2Vec2LatnProvider()
+        provider._model = object()  # 无 encoder.layers
+        events = []
+        result = provider._forward_with_layer_progress(
+            lambda: 1, lambda p, m: events.append((p, m))
+        )
+        assert result == 1
+        assert events == []  # 只保留外层阶段消息，不报层进度
