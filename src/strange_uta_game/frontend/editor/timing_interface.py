@@ -2060,7 +2060,14 @@ class EditorInterface(QWidget):
         parts = self._build_ai_timing_service()
         if parts is None:
             return
-        service, settings, registry, runtime, download_service = parts
+        (
+            service,
+            settings,
+            registry,
+            runtime,
+            download_service,
+            proxy,
+        ) = parts
         duration_ms = 0
         if self._timing_service:
             try:
@@ -2216,7 +2223,7 @@ class EditorInterface(QWidget):
                 proxy=proxy,
             ),
         )
-        return service, settings, registry, runtime, download_service
+        return service, settings, registry, runtime, download_service, proxy
 
     def _save_ai_timing_settings(self, settings) -> None:
         """弹窗「安装对齐环境」等动作后的设置持久化。"""
