@@ -417,12 +417,19 @@ class AiTimingService:
             options=options,
         )
 
-        # 对齐缓存命中 → 跳过推理
+        # 对齐缓存命中 → 跳过推理。
+        # transcript 指纹纳入缓存键：token 序列变化（如连词整词化修正）
+        # 必须自动失效旧结果，否则旧 span 会按索引错配到新 token 上
+        from hashlib import sha256 as _sha256
+
+        transcript_digest = _sha256(
+            " ".join(t.text for t in request.tokens).encode("utf-8")
+        ).hexdigest()
         cache_meta = alignment_cache_metadata(
             media_sha256=media_sha,
             alignment_model=self.effective_model_id,
             annotation_digest=plan.annotation_digest,
-            options=options,
+            options={**options, "transcript_digest": transcript_digest},
         )
         progress("cache", 18, "检查对齐缓存")
         cached = self._cache.lookup_alignment(cache_meta)

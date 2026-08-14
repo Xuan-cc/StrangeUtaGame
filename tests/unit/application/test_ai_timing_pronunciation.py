@@ -489,3 +489,91 @@ class TestProjectWriteSafety:
             for c in s.characters
         ]
         assert ruby_after == ruby_snapshot
+
+from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
+    DummyAnalyzer,
+)
+
+
+class TestLatinLinkedWords:
+    """2026-08 修复：拉丁连词（SUG 英文词约定）整词注音。"""
+
+    def _line(self):
+        from strange_uta_game.backend.domain import Character, Sentence
+        return Sentence(singer_id="s1", characters=[
+            Character(char="T", check_count=1, ruby=None, linked_to_next=True, singer_id="s1"),
+            Character(char="a", check_count=0, ruby=None, linked_to_next=True, singer_id="s1"),
+            Character(char="k", check_count=0, ruby=None, linked_to_next=True, singer_id="s1"),
+            Character(char="e", check_count=0, ruby=None, linked_to_next=False, singer_id="s1"),
+            Character(char=" ", check_count=0, ruby=None, singer_id="s1"),
+            Character(char="m", check_count=1, ruby=None, linked_to_next=True, singer_id="s1"),
+            Character(char="e", check_count=0, ruby=None, linked_to_next=False, singer_id="s1"),
+        ])
+
+    def test_whole_word_reading_and_token(self):
+        from strange_uta_game.backend.application.ai_timing.alignment import (
+            build_alignment_tokens,
+        )
+        from strange_uta_game.backend.domain import Project
+        project = Project()
+        project.sentences = [self._line()]
+        resolver = PronunciationResolver(analyzer=DummyAnalyzer(), chinese_mode=False)
+        plan = resolver.resolve_project(project, fill_missing=True)
+        units = [u for u in plan.units if not u.is_sentence_end]
+        assert [(u.char_text, u.reading) for u in units] == [
+            ("T", "Take"), ("m", "me")
+        ]
+        tokens = build_alignment_tokens(plan)
+        assert [t.text for t in tokens] == ["take", "me"]
+
+    def test_generated_ruby_carries_whole_word(self):
+        from strange_uta_game.backend.application.ai_timing.alignment import (
+            AlignmentResult, EmissionSpan, build_alignment_request,
+        )
+        from strange_uta_game.backend.application.ai_timing.commands import (
+            ApplyAiTimingCommand,
+        )
+        from strange_uta_game.backend.domain import Project
+        project = Project()
+        project.sentences = [self._line()]
+        resolver = PronunciationResolver(analyzer=DummyAnalyzer(), chinese_mode=False)
+        plan = resolver.resolve_project(project, fill_missing=True)
+        request = build_alignment_request(plan)
+        result = AlignmentResult(
+            annotation_digest=request.annotation_digest, model_id="fake",
+            spans=[EmissionSpan(t.index, i * 100, i * 100 + 50)
+                   for i, t in enumerate(request.tokens)])
+        ApplyAiTimingCommand(project, plan, request, result).execute()
+        ch_t = project.sentences[0].characters[0]
+        assert [p.text for p in ch_t.ruby.parts] == ["Take"]  # SUG 首字承载整词
+        ch_m = project.sentences[0].characters[5]
+        assert [p.text for p in ch_m.ruby.parts] == ["me"]
+
+    def test_kana_linked_words_not_merged(self):
+        """假名/汉字连词不受整词化影响（走形态素逐字注音）。"""
+        from strange_uta_game.backend.domain import Character, Project, Sentence
+        project = Project()
+        project.sentences = [Sentence(singer_id="s1", characters=[
+            Character(char="ま", check_count=1, ruby=None, linked_to_next=True, singer_id="s1"),
+            Character(char="い", check_count=0, ruby=None, linked_to_next=False, singer_id="s1"),
+        ])]
+        resolver = PronunciationResolver(analyzer=DummyAnalyzer(), chinese_mode=False)
+        plan = resolver.resolve_project(project, fill_missing=True)
+        units = [u for u in plan.units if not u.is_sentence_end]
+        # 假名自读逐字（"ま"），未被合并成整词"まい"
+        assert len(units) == 1 and units[0].reading == "ま"
+        assert units[0].source is not None
+
+    def test_transcript_digest_invalidates_cache(self):
+        """transcript 变化 → 缓存键变化（旧 span 不会错配新 token）。"""
+        from strange_uta_game.backend.application.ai_timing.vocals import (
+            alignment_cache_metadata,
+        )
+        a = alignment_cache_metadata(
+            media_sha256="m", alignment_model="x", annotation_digest="d",
+            options={"tail_snap": True, "transcript_digest": "aaa"})
+        b = alignment_cache_metadata(
+            media_sha256="m", alignment_model="x", annotation_digest="d",
+            options={"tail_snap": True, "transcript_digest": "bbb"})
+        from strange_uta_game.backend.application.ai_timing.vocals import cache_key
+        assert cache_key(a) != cache_key(b)

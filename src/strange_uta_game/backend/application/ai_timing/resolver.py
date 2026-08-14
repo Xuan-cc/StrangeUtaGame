@@ -128,6 +128,9 @@ class PronunciationResolver:
             readings = self._generate_readings(
                 sentence, gap_char_idxs, plan, chinese, line_idx
             )
+            readings = self._merge_latin_linked_words(
+                sentence, readings
+            )
             self._apply_generated(plan, line_idx, sentence, readings)
 
     def _effective_chinese_mode(self, project: Project) -> bool:
@@ -251,6 +254,45 @@ class PronunciationResolver:
                     continue
                 readings[char_idx] = piece
         return readings
+
+    @staticmethod
+    def _merge_latin_linked_words(sentence: Sentence, readings: Dict[int, str]) -> Dict[int, str]:
+        """拉丁连词整词化（SUG 英文词约定：首字母 1cp、其余 0cp）。
+
+        逐字分析会把 "Take" 的首字母注成 "T"，对齐 transcript 退化成
+        单字母序列。此处把 linked_to_next 连成的纯拉丁区间合并为整词，
+        读音挂到区间首个带节奏点的字符上（即 SUG 约定的承载字符）。
+        假名/汉字连词不受影响（仅纯拉丁区间合并）。
+        """
+        if not readings:
+            return readings
+        merged = dict(readings)
+        n = len(sentence.characters)
+
+        def _is_latin(ch: str) -> bool:
+            return bool(ch) and all(c.isascii() and c.isalpha() for c in ch)
+
+        idx = 0
+        while idx < n:
+            ch = sentence.characters[idx]
+            if not (_is_latin(ch.char) and ch.linked_to_next):
+                idx += 1
+                continue
+            start = idx
+            end = idx + 1
+            while end < n and sentence.characters[end - 1].linked_to_next:
+                end += 1
+            span = sentence.characters[start:end]
+            if all(_is_latin(c.char) for c in span):
+                word = "".join(c.char for c in span)
+                # 读音挂到区间内首个出现在 readings 的字符（SUG 约定：
+                # 首字母承载节奏点；防御性处理任意成员带点的情况）
+                for k in range(start, end):
+                    if k in merged:
+                        merged[k] = word
+                        break
+            idx = end
+        return merged
 
     @staticmethod
     def _char_offsets(sentence: Sentence) -> List[Tuple[int, int]]:
