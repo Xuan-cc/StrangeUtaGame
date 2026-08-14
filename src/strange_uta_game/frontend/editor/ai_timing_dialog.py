@@ -537,13 +537,20 @@ class AiTimingDialog(QDialog):
         else:
             self.row_vocal.set_state("warn", self.tr("需要分离人声"))
 
-        # 分离环境（§3.2/§6.2：embedded 跟随工作台设置）
+        # 分离环境（§3.2/§6.2）：embedded 跟随工作台设置；
+        # standalone = 共享 Runtime（含 audio-separator）是否已装
         if snapshot.separation_follows_host:
-            self.row_separation.set_state("ok", self.tr("跟随工作台「分离人声」设置"))
+            self.row_separation.set_state(
+                "ok", self.tr("跟随工作台「分离人声」设置")
+            )
+        elif snapshot.separation_available:
+            self.row_separation.set_state(
+                "ok", self.tr("就绪：无人声时自动分离（UVR-MDX 人声模型）")
+            )
         else:
             self.row_separation.set_state(
                 "warn",
-                self.tr("独立运行：请先在人声分离页分离，或使用同目录人声文件"),
+                self.tr("未安装：点击「对齐环境 → 安装 / 修复」可一并安装分离能力"),
             )
 
         runtime = snapshot.runtime
@@ -567,18 +574,38 @@ class AiTimingDialog(QDialog):
                 ),
             )
 
-        # 存储位置（§3.2）
-        storage_parts = [self.tr("模型: {path}").format(path=resolve_model_root(self._settings))]
-        if snapshot.cache_root is not None:
-            storage_parts.append(self.tr("缓存: {path}").format(path=snapshot.cache_root))
-        storage_parts.append(
-            self.tr("运行环境: {path}").format(path=self._settings.runtime_python or self.tr("当前解释器"))
+        # 存储位置（§3.2）：分行明确标注，避免与状态行混淆
+        mode = (
+            self.tr("嵌入模式")
+            if snapshot.separation_follows_host
+            else self.tr("独立模式")
         )
-        self.storage_label.setText("　|　".join(storage_parts))
+        lines = [
+            self.tr("[{mode}] 模型目录：{path}").format(
+                mode=mode, path=resolve_model_root(self._settings)
+            )
+        ]
+        if snapshot.cache_root is not None:
+            lines.append(
+                self.tr("AI 缓存（人声/对齐结果，自动清理）：{path}").format(
+                    path=snapshot.cache_root
+                )
+            )
+        lines.append(
+            self.tr("运行环境（Python/torch）：{path}").format(
+                path=self._settings.runtime_python
+                or self.tr("当前解释器（未安装专用环境）")
+            )
+        )
+        self.storage_label.setText("\n".join(lines))
+
 
         reasons = snapshot.blocking_reasons
         if reasons:
-            self.blocking_label.setText("执行前需解决：\n" + "\n".join(reasons))
+            self.blocking_label.setText(
+                self.tr("执行前需解决：\n")
+                + "\n".join(reasons)
+            )
             self.blocking_label.show()
             self.btn_run.setEnabled(False)
         else:

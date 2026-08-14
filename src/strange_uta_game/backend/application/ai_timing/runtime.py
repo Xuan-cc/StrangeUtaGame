@@ -31,6 +31,8 @@ RUNTIME_REQUIREMENTS: List[str] = [
     "transformers",
     "soundfile",
     "huggingface_hub",
+    # standalone 人声分离（UVR/MDX 系模型；CPU 也可跑，模型自动下载）
+    "audio-separator",
 ]
 
 _PROBE_CODE = (

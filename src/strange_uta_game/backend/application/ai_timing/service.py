@@ -103,6 +103,9 @@ class AiTimingSnapshot:
     separation_follows_host: bool = False
     """embedded：分离能力由宿主注入（跟随工作台设置）。"""
 
+    separation_available: bool = False
+    """分离环境可用（embedded 跟随宿主；standalone = 共享 Runtime 已装）。"""
+
     cache_root: Optional[Path] = None
     """当前 AI 缓存根目录（存储位置状态卡显示用）。"""
 
@@ -121,7 +124,10 @@ class AiTimingSnapshot:
         if self.vocal is not None and self.vocal.state == "needs_choice":
             reasons.append("同目录存在多个人声文件，请先选择")
         elif self.vocal is not None and self.vocal.state == "separation":
-            reasons.append("没有可复用的人声，需要先分离")
+            reasons.append(
+                "没有可复用的人声；分离环境未就绪时无法自动分离，"
+                "请先安装分离环境（自动对齐环境已包含）"
+            )
         if self.runtime is not None and not self.runtime.available:
             reasons.append(self.runtime.message or "对齐运行环境不可用")
         if self.model is not None and not self.model.is_ready:
@@ -146,6 +152,7 @@ class AiTimingService:
         vocal_service: Optional[VocalPreparationService] = None,
         resolver: Optional[PronunciationResolver] = None,
         worker_factory: Optional[Callable[[str], WorkerLike]] = None,
+        separation_prober: Optional[Callable[[], bool]] = None,
         separation_executor: Optional[
             Callable[[Path, ProgressFn, CancelFn], Path]
         ] = None,
@@ -174,6 +181,7 @@ class AiTimingService:
             chinese_mode=None
         )
         self._worker_factory = worker_factory or self._default_worker_factory
+        self._separation_prober = separation_prober
         self._separation_executor = separation_executor
         self._separation_identity = separation_identity or (
             lambda: {"model": "unknown", "stem": "人声", "params": {}}
@@ -235,6 +243,13 @@ class AiTimingService:
             snap.runtime = self._runtime.probe(self._worker_python())
         snap.model = self._registry.validate(self.effective_model_id)
         snap.separation_follows_host = self._separation_executor is not None
+        if self._separation_prober is not None:
+            try:
+                snap.separation_available = bool(self._separation_prober())
+            except Exception:
+                snap.separation_available = False
+        else:
+            snap.separation_available = self._separation_executor is not None
         snap.cache_root = self._cache.root
         return snap
 
