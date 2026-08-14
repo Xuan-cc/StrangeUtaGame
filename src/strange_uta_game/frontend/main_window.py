@@ -59,7 +59,7 @@ class MainWindow(MSFluentWindow):
     project_save_finished = pyqtSignal(str)
     project_save_failed = pyqtSignal(str)
 
-    def __init__(self, embedded: bool = False, settings_provider=None, progress_callback=None):
+    def __init__(self, embedded: bool = False, settings_provider=None, progress_callback=None, ai_timing_host=None):
         # 嵌入模式不经过仓库根目录的 main.py，因此在主窗口入口也安装一次。
         # 安装函数可重复调用，确保 standalone / embedded 的所有弹窗行为一致。
         app = QApplication.instance()
@@ -75,6 +75,10 @@ class MainWindow(MSFluentWindow):
         self._embedded = embedded
         self._settings_provider = settings_provider
         self._progress_cb = progress_callback if not embedded else None
+        # AI 打轴宿主能力（阶段 G 契约，见 backend/.../ai_timing/host.py）：
+        # embedded 时由工作台注入（分离状态/会话人声/分离执行/缓存目录）；
+        # standalone 为 None，AI 打轴使用自身默认配置。
+        self.aiTimingHost = ai_timing_host
 
         self._report_progress(5, self.tr("正在初始化翻译器..."))
 
@@ -1732,6 +1736,7 @@ class MainWindow(MSFluentWindow):
     def for_embedding(
         parent: "Optional[object]" = None,
         settings_provider=None,
+        ai_timing_host=None,
     ) -> "MainWindow":
         """创建一个可作为子 widget 嵌入宿主程序的 MainWindow 实例。
 
@@ -1745,12 +1750,20 @@ class MainWindow(MSFluentWindow):
         参数:
             parent: 宿主中将容纳本 widget 的父 widget。可以为 None
                 （后续宿主自己 ``setParent``）。
+            settings_provider: 宿主设置桥（读写 SUG 设置节）。
+            ai_timing_host: AI 打轴宿主能力（阶段 G 契约，
+                :class:`...ai_timing.host.AiTimingHost`）；None 表示
+                宿主未提供，AI 打轴回落 standalone 默认配置。
 
         返回:
-            一个 :class:`MainWindow` 实例，``_embedded=True``，无顶层
+            一个 ``MainWindow`` 实例，``_embedded=True``，无顶层
             窗口装饰，可以直接 ``addWidget`` 到任意 layout 中。
         """
-        instance = MainWindow(embedded=True, settings_provider=settings_provider)
+        instance = MainWindow(
+            embedded=True,
+            settings_provider=settings_provider,
+            ai_timing_host=ai_timing_host,
+        )
         instance.setWindowFlags(Qt.WindowType.Widget)
         instance._remove_embedded_title_bar()
         instance._apply_embedded_ui_policy()

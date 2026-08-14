@@ -31,6 +31,7 @@ from .alignment import (
     validate_result,
 )
 from .commands import ApplyAiTimingCommand
+from .host import AiTimingHost, is_ai_timing_host
 from .settings import (
     AiTimingSettings,
     default_model_root,
@@ -84,6 +85,9 @@ __all__ = [
     "interpolate_structural_timestamps",
     "validate_result",
     "ApplyAiTimingCommand",
+    # 阶段 G
+    "AiTimingHost",
+    "is_ai_timing_host",
     # 阶段 D
     "AiTimingSettings",
     "default_model_root",

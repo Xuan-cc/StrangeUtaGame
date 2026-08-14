@@ -2075,7 +2075,11 @@ class EditorInterface(QWidget):
         self._ai_timing_dialog.show()
 
     def _build_ai_timing_service(self):
-        """构建 AI 打轴服务栈；设置读取失败时提示并返回 None。"""
+        """构建 AI 打轴服务栈；设置读取失败时提示并返回 None。
+
+        embedded：使用宿主注入的 AiTimingHost 能力（会话人声、分离执行、
+        分离身份、缓存目录）；standalone：全部使用 SUG 自身默认配置。
+        """
         from strange_uta_game.backend.application.ai_timing import (
             AiCache,
             AiRuntimeManager,
@@ -2086,6 +2090,9 @@ class EditorInterface(QWidget):
             VocalPreparationService,
             load_ai_timing_settings,
             resolve_model_root,
+        )
+        from strange_uta_game.backend.application.ai_timing.host import (
+            is_ai_timing_host,
         )
         from strange_uta_game.backend.application.ai_timing.models import (
             HfHubTransport,
@@ -2110,11 +2117,23 @@ class EditorInterface(QWidget):
             )
             return None
 
+        # 宿主能力查找：沿 parent 链找 MainWindow 上注入的 aiTimingHost
+        host = self._resolve_ai_timing_host()
+
         model_root = resolve_model_root(settings)
-        cache = AiCache(default_ai_cache_root())
+        if host is not None:
+            cache_root = Path(host.ai_cache_dir())
+        else:
+            cache_root = default_ai_cache_root()
+        cache = AiCache(cache_root)
         registry = ModelRegistry(model_root)
         runtime = AiRuntimeManager()
-        vocal_service = VocalPreparationService(cache)
+        vocal_service = VocalPreparationService(
+            cache,
+            session_vocal_finder=(
+                host.find_session_vocal if host is not None else None
+            ),
+        )
         service = AiTimingService(
             settings=settings,
             cache=cache,
@@ -2122,6 +2141,12 @@ class EditorInterface(QWidget):
             runtime=runtime,
             vocal_service=vocal_service,
             resolver=PronunciationResolver(),
+            separation_executor=(
+                host.separate_vocal if host is not None else None
+            ),
+            separation_identity=(
+                host.effective_identity if host is not None else None
+            ),
         )
         download_service = ModelDownloadService(
             registry,
@@ -2131,6 +2156,20 @@ class EditorInterface(QWidget):
             ),
         )
         return service, settings, registry, runtime, download_service
+
+    def _resolve_ai_timing_host(self):
+        """沿 parent 链查找宿主注入的 AiTimingHost（嵌入式）。"""
+        from strange_uta_game.backend.application.ai_timing.host import (
+            is_ai_timing_host,
+        )
+
+        widget = self
+        while widget is not None:
+            host = getattr(widget, "aiTimingHost", None)
+            if is_ai_timing_host(host):
+                return host
+            widget = widget.parentWidget()
+        return None
 
     def _apply_ai_timing_command(self, command):
         """弹窗成功回调（主线程）：执行命令入撤销栈并按非结构命令刷新。"""

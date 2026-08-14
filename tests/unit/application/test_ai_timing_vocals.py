@@ -163,7 +163,7 @@ class TestVocalPreparation:
         cache = AiCache(tmp_path / "ai")
         session = tmp_path / "session.wav"
         session.write_bytes(b"s")
-        svc = VocalPreparationService(cache, session_vocal_finder=lambda sha: session)
+        svc = VocalPreparationService(cache, session_vocal_finder=lambda path, sha: session)
         result = svc.find_vocal(
             tmp_path / "song.flac",
             media_sha256="m1",

@@ -30,7 +30,7 @@
 class MainWindow(MSFluentWindow):
     _embedded: bool = False  # 类级 fallback
 
-    def __init__(self, embedded: bool = False, settings_provider=None):
+    def __init__(self, embedded: bool = False, settings_provider=None, ai_timing_host=None):
         # ⚠ _embedded / _settings_provider 必须在 super().__init__() 之前赋值。
         #   MSFluentWindow init 会触发 resizeEvent/changeEvent，那些 handler
         #   读 self._embedded；未赋值会 AttributeError，Qt C++ 事件分发无法
@@ -40,11 +40,11 @@ class MainWindow(MSFluentWindow):
         super().__init__()
 
     @staticmethod
-    def for_embedding(parent=None, settings_provider=None) -> "MainWindow":
+    def for_embedding(parent=None, settings_provider=None, ai_timing_host=None) -> "MainWindow":
         # 构造 embedded 实例，剥离顶层窗口装饰，挂到 parent。宿主拿去 addWidget。
 ```
 
-**契约**：宿主用 `for_embedding(parent, settings_provider)` 创建，得到一个可直接 `addWidget` 到任意 layout 的 widget。
+**契约**：宿主用 `for_embedding(parent, settings_provider, ai_timing_host=...)` 创建，得到一个可直接 `addWidget` 到任意 layout 的 widget。
 
 ## 2. 宿主调用的公开方法
 
@@ -121,16 +121,37 @@ class SettingsProvider(Protocol):
 - 网络词典启动自动更新仍会调度；`maybe_auto_update_network_dictionary` 通过
   provider 读取源配置并写回 cache namespace 与更新时间戳。
 
-## 6. 宿主侧职责（工作台，分离后**不**跟 SUG 走）
+## 6. AI 打轴宿主能力：ai_timing_host（可选注入）
+
+`for_embedding(..., ai_timing_host=...)` 接受一个满足
+`backend/application/ai_timing/host.py::AiTimingHost` 协议的对象（鸭子类型，
+宿主不导入 SUG 代码）。传入后 SUG 的「AI 打轴」使用宿主能力；传 `None`
+（或省略）时回落 standalone 默认配置，两种模式共用同一弹窗与核心逻辑。
+
+| 方法 | 语义 |
+|---|---|
+| `separation_status() -> dict` | 工作台分离环境状态 `{available, model, message}` |
+| `effective_identity() -> dict` | 当前生效分离身份 `{model, stem, params}`（人声缓存键组成） |
+| `find_session_vocal(source_path, media_sha256) -> Path \| None` | 本次会话已分离、与原音频匹配的人声（零分离复用） |
+| `separate_vocal(source_path, on_progress, is_cancelled) -> Path` | 阻塞执行一次工作台人声分离，返回产物路径；取消/失败抛中文异常 |
+| `ai_cache_dir() -> Path` | SUG AI 缓存根目录（宿主 `.cache` 范围，§7.2） |
+
+embedded 语义（对应主仓库 AI 打轴计划 §6.2）：跟随工作台当前「分离人声」
+设置，不安装第二份 PyMSS Runtime、不复制模型、不在 SUG 设置中保存另一套
+分离参数。宿主实现见工作台
+`krok_helper/audio_processing/separation/ai_timing_host.py`。
+
+## 7. 宿主侧职责（工作台，分离后**不**跟 SUG 走）
 
 以下在宿主仓库实现，仅列出供理解契约全貌：
 - `KrokHelperSettingsBridge`（实现 `SettingsProvider`，桥到工作台 settings.json 的 `lyrics_timing*` 字段）
 - `_sync_lyrics_timing_host_paths`（注入 `SUG_CACHE_DIR` + `tools.ffmpeg_path`）
 - 启动时一次性迁移老 SUG 配置（`migrate_strange_uta_game_settings`）
+- `KaraokeAiTimingHost`（实现 §6 的 `AiTimingHost` 协议，注入给 SUG AI 打轴）
 
-## 7. 契约稳定性约定
+## 8. 契约稳定性约定
 
-改动 §1–§5 的任何签名 / 行为，视为**破坏性变更**，需：
+改动 §1–§6 的任何签名 / 行为，视为**破坏性变更**，需：
 1. 先更新本文档
 2. 跑 `tests/unit/test_embedded_contract.py` 确认（或同步更新测试）
 3. 通知宿主维护方

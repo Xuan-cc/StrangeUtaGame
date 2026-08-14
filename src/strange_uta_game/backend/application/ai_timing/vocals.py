@@ -396,13 +396,16 @@ class VocalPreparationService:
     Args:
         cache: AI 缓存。
         session_vocal_finder: 宿主注入的会话人声查找器
-            ``(media_sha256) -> Path | None``（embedded；standalone 为 None）。
+            ``(source_path, media_sha256) -> Path | None``（embedded；
+            standalone 为 None）。
     """
 
     def __init__(
         self,
         cache: AiCache,
-        session_vocal_finder: Optional[Callable[[str], Optional[Path]]] = None,
+        session_vocal_finder: Optional[
+            Callable[[Path, str], Optional[Path]]
+        ] = None,
     ):
         self._cache = cache
         self._session_vocal_finder = session_vocal_finder
@@ -420,7 +423,7 @@ class VocalPreparationService:
         """执行 §6.1 的发现顺序（不含分离本身）。"""
         # ① 宿主会话人声（身份匹配由 finder 自行校验）
         if self._session_vocal_finder is not None:
-            found = self._session_vocal_finder(media_sha256)
+            found = self._session_vocal_finder(Path(source_path), media_sha256)
             if found is not None and Path(found).is_file():
                 return VocalCandidate(
                     state="session",
