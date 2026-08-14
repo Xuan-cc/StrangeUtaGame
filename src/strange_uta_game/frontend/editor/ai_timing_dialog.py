@@ -409,9 +409,11 @@ class AiTimingDialog(QDialog):
             shown = message if len(message) <= 80 else message[:79] + "…"
             self.status_label.setText(shown)
         # 传输层给出真实速度/剩余时优先展示，否则退回百分比估算
-        if "MB/s" in message and "剩余约" in message:
-            parts = [p for p in message.split("，") if "MB/s" in p or "剩余约" in p]
-            self.eta_label.setText(self.tr("预计剩余 ") + parts[-1].replace("剩余约 ", ""))
+        if "MB/s" in message and "预计剩余" in message:
+            tail = message.split("，")[-1].rstrip("）")
+            self.eta_label.setText(tail + "　·　" + [
+                p for p in message.split("，") if "MB/s" in p
+            ][0])
         else:
             self.eta_label.setText(self._compute_eta(percent))
 

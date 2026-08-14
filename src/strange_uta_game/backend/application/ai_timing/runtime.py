@@ -232,6 +232,7 @@ class AiRuntimeManager:
 
         started = _time.monotonic()
         installed_pkgs = 0
+        fallback_lines = 0
 
         def _on_line(line: str) -> None:
             nonlocal installed_pkgs
@@ -240,8 +241,9 @@ class AiRuntimeManager:
                 return
             # 包粒度进度：pip 完成包安装会输出 Successfully installed ...
             if text.startswith("Successfully installed"):
-                installed_pkgs += len(
-                    [p for p in text.split() if p and not p.startswith("Successfully")]
+                installed_pkgs += max(
+                    0,
+                    len(text.split()) - 2,  # 去掉 Successfully/installed 两个词
                 )
                 if total_packages:
                     elapsed = int(_time.monotonic() - started)
@@ -253,8 +255,9 @@ class AiRuntimeManager:
                         f"（已耗时 {m}:{s:02d}）",
                     )
                     return
-            # 无总量模式：仅展示阶段文本（已由调用方截断长度）
-            progress(50, text)
+            # 无总量模式：渐进爬升（每行 +1，封顶 94），避免恒停导致 ETA 失效
+            fallback_lines += 1
+            progress(min(94, 10 + fallback_lines), text)
 
         import os
 
