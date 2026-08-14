@@ -48,6 +48,17 @@ from .models import (
     HfHubTransport,
 )
 from .runtime import AiRuntimeError, AiRuntimeManager, RuntimeStatus
+from .vocals import (
+    AiCache,
+    AiCacheError,
+    VocalCandidate,
+    VocalPreparationService,
+    alignment_cache_metadata,
+    default_ai_cache_root,
+    find_sibling_vocals,
+    sha256_of_path,
+    vocal_cache_metadata,
+)
 
 __all__ = [
     # 阶段 A
@@ -89,4 +100,14 @@ __all__ = [
     "AiRuntimeError",
     "AiRuntimeManager",
     "RuntimeStatus",
+    # 阶段 E
+    "AiCache",
+    "AiCacheError",
+    "VocalCandidate",
+    "VocalPreparationService",
+    "alignment_cache_metadata",
+    "default_ai_cache_root",
+    "find_sibling_vocals",
+    "sha256_of_path",
+    "vocal_cache_metadata",
 ]
