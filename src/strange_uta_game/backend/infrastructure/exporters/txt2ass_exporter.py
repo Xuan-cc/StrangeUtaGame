@@ -15,6 +15,11 @@
    global_timing_end_ms + post-roll。
 4. ASS 卡拉OK标签 \\k 的单位是厘秒(10ms)。每字时长 =
    下一个时间戳(或行末 sentence_end_ts) - 当前字时间戳，转厘秒。
+5. 句中停顿点（is_sentence_end 字符的 global_sentence_end_ts，即断句
+   轴点）是独立的 \\k 边界：停顿前的音不得吞掉停顿间隙。停顿前后的
+   无时间戳字符（标点/空格）拆分为独立 \\k 段（区间均分），间隙无字符
+   可挂时输出空文本间隙段 {\\k<N>}——ASS 解析器据此在重导入时把轴点
+   还原回 sentence_end_ts（roundtrip 契约）。
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -261,7 +266,10 @@ class ASSDirectExporter(BaseExporter):
             其中 `\\k20` 是「と」段时长，`\\k12` 是「ど」段时长。
 
         - 无时间戳字符（标点、未打轴的连词后续字）追加到**前一个 \\k 块尾**，
-            不产生新的 \\k 标签，避免时间轴偏移。
+          不产生新的 \\k 标签，避免时间轴偏移。
+        - 句中停顿点（断句轴点）例外：停顿前的无 ts 字符（标点）与前一音
+          均分 [前一 ts, 停顿点) 区间各自成段；停顿后的无 ts 字符（空格）
+          分食 [停顿点, 下一锚点)；间隙内无字符时输出空文本间隙段 {\\k<N>}。
         - 行首所有未打轴字符并入 pre-roll 占位 `{\\k0}` 后。
         - 行首/行尾固定输出 `{\\k0}` 占位符，让用户自行用 Aegisub 模板/特效填充。
 
@@ -300,7 +308,9 @@ class ASSDirectExporter(BaseExporter):
         #    末段的 dur 用 line_end_ms 兜底。
         flat_anchors: List[Tuple[int, int, int]] = []
         # 每项 = (char_idx, part_idx, ts_ms)；part_idx=0 表示该字第一段
+        flat_start_of_anchor: Dict[int, int] = {}  # anchor char_idx → 首段下标
         for ci in anchor_indices:
+            flat_start_of_anchor[ci] = len(flat_anchors)
             ch = chars[ci]
             for pi, ts in enumerate(ch.global_timestamps):
                 flat_anchors.append((ci, pi, ts))
@@ -310,13 +320,6 @@ class ASSDirectExporter(BaseExporter):
             if seg_idx + 1 < len(flat_anchors):
                 return flat_anchors[seg_idx + 1][2]
             return line_end_ms
-
-        # 4. 逐段渲染。无 ts 字符（标点等）追加到所属字符的「最后一段」尾巴。
-        #    所属字符 = 该字之前最近的一个有 ts 字符。
-        # 先建立映射：char_idx → 该字最后段在 flat_anchors 的下标
-        last_seg_of_char: Dict[int, int] = {}
-        for seg_idx, (ci, pi, _) in enumerate(flat_anchors):
-            last_seg_of_char[ci] = seg_idx
 
         # 预计算连词尾部字符：anchor ci 若 linked_to_next=True，则其后续
         # 无时间戳的 linked 字符链属于该连词，应并入 pi==0 的 kanji，不作 tail_text。
@@ -338,10 +341,108 @@ class ASSDirectExporter(BaseExporter):
                 compound_tail[ci] = tail
         compound_tail_set = {j for tails in compound_tail.values() for j in tails}
 
+        # 3.5 句中停顿（断句轴点）段规划。
+        # 默认（锚点间无停顿）：part 段时长 = 下一锚点 ts - 自身 ts，
+        # 无 ts 字符并入前一段尾部（legacy 行为）。
+        # 锚点间存在停顿点（is_sentence_end 的 global_sentence_end_ts，
+        # 由锚字自身或其后的无 ts 字符/连词尾字持有）且后面还有锚点时：
+        #   - 停顿点成为 \k 边界，前一段不再延伸到下一锚点（不吞轴点）；
+        #   - 停顿点与前一 ts 之间的无 ts 字符（标点）不再并入前段，与前一
+        #     part 均分该区间（厘秒精度，余数给靠前成员），各自成段；
+        #   - 停顿点与下一锚点之间的无 ts 字符（空格）各自成段分食间隙；
+        #   - 间隙内没有字符时输出空文本间隙段 {\k<N>}（roundtrip 契约：
+        #     ASS 解析器把非末尾空段的起点绑回前一字 sentence_end_ts）。
+        # 行末组的停顿点即行结束时刻，仍由 line_end_ms 兜底（legacy 行为）。
+        part_durs_cs: List[int] = [
+            max(0, next_ts(i) - flat_anchors[i][2]) // 10
+            for i in range(len(flat_anchors))
+        ]
+        # 插入段计划：key = 插入位置（下一锚点首段在 flat_anchors 的下标），
+        # 值 = [("plain", char_idx, dur_cs) / ("gap", -1, dur_cs), ...]
+        extra_blocks: Dict[int, List[Tuple[str, int, int]]] = {}
+        # 被拆分独立成段消费掉的无 ts 字符（不再并入 tail_text）
+        plain_consumed: set = set()
+
+        def _even_split_cs(start_ms: int, end_ms: int, n: int) -> List[int]:
+            """把 [start_ms, end_ms) 均分为 n 份厘秒时长，余数给靠前成员。"""
+            total_cs = max(0, end_ms - start_ms) // 10
+            base, rem = divmod(total_cs, n)
+            return [base + (1 if i < rem else 0) for i in range(n)]
+
+        for k, ci in enumerate(anchor_indices):
+            next_ci = anchor_indices[k + 1] if k + 1 < len(anchor_indices) else None
+            if next_ci is None:
+                continue  # 行末组：停顿点即行尾，由 line_end_ms 表达
+            anchor_ch = chars[ci]
+            run = [
+                j for j in range(ci + 1, next_ci) if j not in compound_tail_set
+            ]
+            if (
+                anchor_ch.is_sentence_end
+                and anchor_ch.global_sentence_end_ts is not None
+            ):
+                pause_ts = anchor_ch.global_sentence_end_ts
+                pre_chars: List[int] = []  # 锚字自身停顿：run 全部在停顿后
+                post_chars: List[int] = list(run)
+            else:
+                # 停顿点也可能由连词尾字持有（尾字渲染进 kanji 无法独立成段，
+                # 但停顿边界仍生效），所以扫描范围用原始区间而非 run
+                holder = next(
+                    (
+                        j for j in range(ci + 1, next_ci)
+                        if chars[j].is_sentence_end
+                        and chars[j].global_sentence_end_ts is not None
+                    ),
+                    None,
+                )
+                if holder is None:
+                    continue
+                pause_ts = chars[holder].global_sentence_end_ts
+                pre_chars = [j for j in run if j <= holder]
+                post_chars = [j for j in run if j > holder]
+
+            last_flat = (
+                flat_start_of_anchor[ci] + len(anchor_ch.global_timestamps) - 1
+            )
+            t_last = flat_anchors[last_flat][2]
+            u_next = chars[next_ci].global_timestamps[0]
+            pause_ts = min(max(pause_ts, t_last), u_next)
+
+            # 停顿前：末 part 与 pre_chars 均分 [t_last, pause_ts)
+            durs = _even_split_cs(t_last, pause_ts, 1 + len(pre_chars))
+            part_durs_cs[last_flat] = durs[0]
+            blocks: List[Tuple[str, int, int]] = [
+                ("plain", j, durs[m + 1]) for m, j in enumerate(pre_chars)
+            ]
+            # 停顿后：post_chars 分食 [pause_ts, u_next)；无字符则空文本间隙段
+            if post_chars:
+                post_durs = _even_split_cs(pause_ts, u_next, len(post_chars))
+                blocks.extend(
+                    ("plain", j, post_durs[m]) for m, j in enumerate(post_chars)
+                )
+            else:
+                gap_cs = max(0, u_next - pause_ts) // 10
+                if gap_cs > 0:
+                    blocks.append(("gap", -1, gap_cs))
+            if blocks:
+                extra_blocks.setdefault(
+                    flat_start_of_anchor[next_ci], []
+                ).extend(blocks)
+                plain_consumed.update(pre_chars)
+                plain_consumed.update(post_chars)
+
+        # 4. 逐段渲染。无 ts 字符（标点等）追加到所属字符的「最后一段」尾巴。
+        #    所属字符 = 该字之前最近的一个有 ts 字符。
+        #    已被 3.5 拆分独立成段的字符除外。
+        # 先建立映射：char_idx → 该字最后段在 flat_anchors 的下标
+        last_seg_of_char: Dict[int, int] = {}
+        for seg_idx, (ci, pi, _) in enumerate(flat_anchors):
+            last_seg_of_char[ci] = seg_idx
+
         # 收集「该 seg 结尾要追加的无 ts 字符文字」
         tail_text: Dict[int, str] = {}
         # 遍历 chars，把每个无 ts 字符塞到「前一个有 ts 字符的最后段」尾巴；
-        # 已归入 compound_tail 的字符跳过（它们并入了 kanji）。
+        # 已归入 compound_tail / 停顿拆分段的字符跳过。
         prev_anchor_ci: Optional[int] = None
         for j, ch in enumerate(chars):
             if ch.global_timestamps:
@@ -351,6 +452,8 @@ class ASSDirectExporter(BaseExporter):
                 continue  # 已并入 pre-roll
             if j in compound_tail_set:
                 continue  # 连词尾部字符，已并入 kanji，不重复追加
+            if j in plain_consumed:
+                continue  # 停顿拆分中已独立成段
             if prev_anchor_ci is None:
                 continue
             tail_seg = last_seg_of_char[prev_anchor_ci]
@@ -361,9 +464,17 @@ class ASSDirectExporter(BaseExporter):
         # 5. 渲染每个段
         prev_char_idx = -1
         prev_effective_id = ""
-        for seg_idx, (ci, pi, ts) in enumerate(flat_anchors):
-            dur_ms = max(0, next_ts(seg_idx) - ts)
-            k_cs = dur_ms // 10
+        for seg_idx, (ci, pi, _) in enumerate(flat_anchors):
+            # 先输出挂在本段前的停顿附加段（标点/空格独立段、空文本间隙段）
+            for kind, j, dur_cs in extra_blocks.get(seg_idx, []):
+                if kind == "gap":
+                    parts.append(f"{{\\k{dur_cs}}}")
+                else:
+                    parts.append(
+                        f"{{\\k{dur_cs}}}{self._escape_ass_text(chars[j].char)}"
+                    )
+
+            k_cs = part_durs_cs[seg_idx]
             ch = chars[ci]
 
             # 演唱者变化标记：在新字符的第一段前检测
