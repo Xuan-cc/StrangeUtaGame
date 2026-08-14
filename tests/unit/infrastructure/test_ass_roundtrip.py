@@ -199,6 +199,66 @@ def _make_project_basic() -> Project:
     return project
 
 
+def _make_project_midline_pause() -> Project:
+    """句中断句轴点（is_sentence_end 演唱停顿）场景。
+
+    - s1「て　不意に」：轴点在锚字「て」上（34430→35010），轴点后是
+      全角空格（无 ts）。导出契约：{\k58}て{\k24}　{\k20}不|<ふ。
+    - s2「奇跡？縁」：轴点在无 ts 标点「？」上（26200），前一音是
+      「跡」的续段 き@26090。导出契约：{\k6}#|き{\k5}？{\k34}縁|<え
+      （均分 + 空文本间隙段）。
+    """
+    from strange_uta_game.backend.domain import Ruby, RubyPart
+
+    project = Project()
+    project.metadata.title = "MidlinePauseCase"
+    s1 = project.singers[0]
+
+    sent = Sentence.from_text("て　不意に", s1.id)
+    c_te = sent.characters[0]
+    c_te.add_timestamp(34430)
+    c_te.is_sentence_end = True
+    c_te.set_sentence_end_ts(35010)
+    sent.characters[2].check_count = 1
+    sent.characters[2].set_ruby(Ruby(parts=[RubyPart(text="ふ")]))
+    sent.characters[2].add_timestamp(35250)
+    sent.characters[3].check_count = 1
+    sent.characters[3].set_ruby(Ruby(parts=[RubyPart(text="い")]))
+    sent.characters[3].add_timestamp(35450)
+    sent.characters[4].add_timestamp(35860)
+    sent.characters[4].set_sentence_end_ts(36220)
+    for ch in sent.characters:
+        ch.set_offset(0)
+    project.add_sentence(sent)
+
+    sent = Sentence.from_text("奇跡？縁", s1.id)
+    sent.characters[0].check_count = 1
+    sent.characters[0].set_ruby(Ruby(parts=[RubyPart(text="き")]))
+    sent.characters[0].add_timestamp(25680)
+    ch_seki = sent.characters[1]
+    ch_seki.check_count = 2
+    ch_seki.set_ruby(Ruby(parts=[RubyPart(text="せ"), RubyPart(text="き")]))
+    ch_seki.add_timestamp(25910, checkpoint_idx=0)
+    ch_seki.add_timestamp(26090, checkpoint_idx=1)
+    c_q = sent.characters[2]
+    c_q.is_sentence_end = True
+    c_q.set_sentence_end_ts(26200)
+    ch_en = sent.characters[3]
+    ch_en.check_count = 3
+    ch_en.set_ruby(
+        Ruby(parts=[RubyPart(text="え"), RubyPart(text="に"), RubyPart(text="し")])
+    )
+    ch_en.add_timestamp(26540, checkpoint_idx=0)
+    ch_en.add_timestamp(26710, checkpoint_idx=1)
+    ch_en.add_timestamp(26870, checkpoint_idx=2)
+    ch_en.set_sentence_end_ts(27500)
+    for ch in sent.characters:
+        ch.set_offset(0)
+    project.add_sentence(sent)
+
+    return project
+
+
 # ────────────────────────────────────────────────────────────────
 # tests
 # ────────────────────────────────────────────────────────────────
@@ -329,4 +389,63 @@ class TestASSRoundtrip:
         first_ts = parsed_lines[0].timetags[0][1]
         assert first_ts == 1000, (
             f"第三方 ASS 不应当被补偿: 首字 ts = {first_ts}, 期望 1000"
+        )
+
+    def test_midline_pause_export_contract(self):
+        """句中断句轴点导出契约（用户反馈 bug 的回归）：
+        - 轴点不被前一个音吞掉：{\k58}て{\k24}　{\k20}不|<ふ
+        - 轴点前标点均分 + 空文本间隙段：{\k6}#|き{\k5}？{\k34}
+        """
+        project = _make_project_midline_pause()
+        exporter = ASSDirectExporter()
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "r.ass")
+            exporter.export(project, path)
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+        assert "{\\k58}て{\\k24}　{\\k20}" in content, (
+            f"轴点间隙未切给空格:\n{content}"
+        )
+        assert "{\\k6}#|き{\\k5}？{\\k34}" in content, (
+            f"轴点前标点未均分/未输出间隙段:\n{content}"
+        )
+        # 旧的吞轴点行为不应再出现
+        assert "{\\k82}て" not in content
+        assert "{\\k45}#|き？" not in content
+
+    def test_midline_pause_roundtrip_idempotent(self):
+        """中断句点 export→import→export 幂等（空文本间隙段经
+        gap_pause_map 还原为 sentence_end_ts，二次导出不漂移）。
+        """
+        project = _make_project_midline_pause()
+        ass1, ass2, p2 = _roundtrip(project)
+        assert ass1 == ass2, (
+            "含中断句点的 ASS 二次导出漂移：\n"
+            f"--- round1 ---\n{ass1}\n"
+            f"--- round2 ---\n{ass2}\n"
+        )
+
+    def test_midline_pause_restored_on_reimport(self):
+        """空文本间隙段在重导入时绑回轴点：
+        - 「？」获得自身块起点 ts 26150 和 sentence_end_ts 26200；
+        - 「て　不意に」里空格承接间隙（ts 35010），行内 \k 边界保持。
+        """
+        project = _make_project_midline_pause()
+        _, _, p2 = _roundtrip(project)
+
+        sent2 = p2.sentences[1]  # 奇跡？縁
+        c_q = sent2.characters[2]
+        assert c_q.global_timestamps == [26150], (
+            f"「？」重导入 ts 错: {c_q.global_timestamps}"
+        )
+        assert c_q.is_sentence_end is True, "「？」的轴点标记丢失"
+        assert c_q.global_sentence_end_ts == 26200, (
+            f"「？」轴点释放 ts 错: {c_q.global_sentence_end_ts}"
+        )
+
+        sent1 = p2.sentences[0]  # て　不意に
+        c_space = sent1.characters[1]
+        assert c_space.global_timestamps == [35010], (
+            f"空格应承接轴点间隙 (ts 35010): {c_space.global_timestamps}"
         )

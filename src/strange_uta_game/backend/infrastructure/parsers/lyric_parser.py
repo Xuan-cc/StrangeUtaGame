@@ -54,6 +54,11 @@ class ParsedLine:
             ASS `#|` 续段给同字追加的内部 checkpoint 时间戳（不含首 ts）。
             parse_to_sentences 会全部 add_timestamp 进去，让 check_count 增长，
             使导出器能按 part 复原 `{\\k}` 时长。
+        gap_pause_map: char_idx → 句中停顿释放 ts。
+            ASS 非末尾空文本 \\k 段（`{\\k<N>}` 后无文字，SUG 导出器用它
+            表达断句轴点后的间隙）的段起点，绑给最近的有 ts 字符。
+            parse_to_sentences 会还原为该字的 sentence_end_ts
+            （is_sentence_end=True）。
         char_singer_map: char_idx → singer 显示名。
             ASS 的 `{\\sing_<name>}` per-char 演唱者切换标记解析产物。
             parse_to_sentences 在外部 (frontend lyric_loader) 把显示名映射成
@@ -65,6 +70,7 @@ class ParsedLine:
     line_end_ts: Optional[int] = None
     ruby_map: Dict[int, Tuple[List[str], int]] = field(default_factory=dict)
     extra_checkpoints_map: Dict[int, List[int]] = field(default_factory=dict)
+    gap_pause_map: Dict[int, int] = field(default_factory=dict)
     char_singer_map: Dict[int, str] = field(default_factory=dict)
 
 
@@ -1624,6 +1630,8 @@ def parse_to_sentences(
        sentence_end_ts；缺省时退化为「末 ts + 500ms」兜底拖音。
        行尾释放点绑定到「连词组尾字符」（沿 linked_to_next 向右走到链尾），
        而非简单的 last_idx_with_ts——否则连词链尾字符的 end_ts 会丢。
+    2b. ParsedLine.gap_pause_map（ASS 非末尾空文本 \\k 段的段起点，
+       SUG 断句轴点间隙）→ 对应字符的 sentence_end_ts（句中停顿）。
     3. ParsedLine.ruby_map（如 ASS 的 `汉字|<かな`）→ Character.set_ruby。
        多字 span（span>1）且单一 reading 段（parts_list 长度=1）的场景
        （SUG 导出的 `大冒険|<だいぼうけん` 连词语法）不做均分，整段读音
@@ -1685,6 +1693,18 @@ def parse_to_sentences(
             char = sentence.characters[char_idx]
             for ts in extra_ts_list:
                 char.add_timestamp(ts)
+
+        # ASS 非末尾空文本 \k 段（SUG 断句轴点间隙）→ 句中停顿释放点：
+        # 绑给对应字符的 sentence_end_ts（is_sentence_end=True）。
+        # 必须在 line_end_ts 行尾绑定之前执行——行尾绑定只覆写末字。
+        for char_idx, pause_ts in (parsed.gap_pause_map or {}).items():
+            if not (0 <= char_idx < len(sentence.characters)):
+                continue
+            char = sentence.characters[char_idx]
+            char.is_sentence_end = True
+            char.sentence_end_ts = pause_ts
+            if char.check_count == 0:
+                char.check_count = 1
 
         # 注入 ruby（统一新签名：(parts_list, span_length)）
         # - span=1, parts=N → 单字多 part（ASS 的 `#|` 续段产物）

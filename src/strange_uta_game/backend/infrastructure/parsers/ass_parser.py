@@ -2,6 +2,7 @@ r"""ASS 字幕格式解析器
 
 支持 ASS/SSA 字幕文件的解析。提取卡拉OK时间标签（\k/\kf/\ko/\K/\kF/\kO）、
 Aegisub 注音 (`{\k...}汉字|<かな`)，末尾 \k 的尾部时长（绑为句尾释放点），
+非末尾空文本 \k 段的段起点（绑为句中停顿/断句轴点释放 ts），
 以及 SUG 私有 `{\\sing_<name>}` per-char 演唱者切换标记。
 
 设计原则（与 entities.py 对齐）：
@@ -228,12 +229,17 @@ class ASSParser(LyricParser):
         声明该段（及之后段）的演唱者，直到下一次 `\sing_` 切换。
 
         策略：
-        - 先抽出全部 `\k...` 与 `\\sing_...` token，按位置排序。
-        - 按 `\k` 段切片，每段用 `_classify_segment` 区分种类。
+        - 先抽出全部 `\\k...` 与 `\\sing_...` token，按位置排序。
+        - 按 `\\k` 段切片，每段用 `_classify_segment` 区分种类。
         - 每段开始前若有 `\\sing_`，更新 current_singer。
         - "with_ruby"/"plain"：产生新字符 + 一条 timetag；首字写入 char_singer_map。
         - "continuation"：把 (上一字的 char_idx → ts) 写入 extra_checkpoints_map，
           把假名追加到该字 ruby_map 的 parts_list。
+        - 空文本 plain 段（`{\\k<N>}` 后无任何文字）：SUG 导出器用它表达
+          句中停顿（断句轴点）后的间隙。非末尾空段的**段起点**即停顿释放
+          ts，写入 gap_pause_map 绑给最近的有 ts 字符（parse_to_sentences
+          还原为该字的 sentence_end_ts）；末尾空段是行尾 post-roll 占位
+          `{\\k0}`，维持 line_end_ts 既有路径。
         - 累加 duration → 下一片的起始时间。
         - 末尾片的 duration 不丢弃，作为 `line_end_ts`。
         """
@@ -259,11 +265,15 @@ class ASSParser(LyricParser):
         # char_idx → (parts_list, span_length)
         ruby_map: Dict[int, Tuple[List[str], int]] = {}
         extra_checkpoints_map: Dict[int, List[int]] = {}
+        # char_idx → 句中停顿释放 ts（空文本 \k 间隙段的段起点）
+        gap_pause_map: Dict[int, int] = {}
         char_singer_map: Dict[int, str] = {}
         current_ms = start_ms
         char_idx = 0
         last_duration_ms = 0
         last_char_idx_for_ruby: Optional[int] = None
+        # 最近一个「有 ts」字符的 char_idx（空段停顿绑定的目标）
+        last_timed_char_idx: Optional[int] = None
         current_singer: str = ""
 
         for i, tag_match in enumerate(karaoke_tags):
@@ -295,6 +305,15 @@ class ASSParser(LyricParser):
             cleaned = self._strip_non_karaoke_tags(raw_segment)
             kind, main_text, ruby_text, _ = self._classify_segment(cleaned)
 
+            if kind == "plain" and not main_text:
+                # 空文本 \k 段：SUG 导出的句中停顿间隙段（{\k<N>} 后无文字）。
+                # 非末尾空段 = 断句轴点边界：段起点即停顿释放 ts，绑给最近的
+                # 有 ts 字符；末尾空段是行尾占位 {\k0}，走 line_end_ts 路径。
+                if i + 1 < len(karaoke_tags) and last_timed_char_idx is not None:
+                    gap_pause_map[last_timed_char_idx] = current_ms
+                current_ms += duration_ms
+                continue
+
             if kind == "continuation":
                 if last_char_idx_for_ruby is not None and ruby_text:
                     extra_checkpoints_map.setdefault(
@@ -306,6 +325,8 @@ class ASSParser(LyricParser):
                         ruby_map[last_char_idx_for_ruby] = (parts_list, span)
                     else:
                         ruby_map[last_char_idx_for_ruby] = ([ruby_text], 1)
+                if last_char_idx_for_ruby is not None:
+                    last_timed_char_idx = last_char_idx_for_ruby
                 current_ms += duration_ms
                 continue
 
@@ -328,6 +349,7 @@ class ASSParser(LyricParser):
                 for ch in main_text:
                     lyric_chars.append(ch)
                     char_idx += 1
+                last_timed_char_idx = char_idx - 1
 
             current_ms += duration_ms
 
@@ -348,6 +370,11 @@ class ASSParser(LyricParser):
             extra_checkpoints_map = {
                 ci - leading: ts_list
                 for ci, ts_list in extra_checkpoints_map.items()
+                if ci >= leading
+            }
+            gap_pause_map = {
+                ci - leading: ts
+                for ci, ts in gap_pause_map.items()
                 if ci >= leading
             }
             char_singer_map = {
@@ -374,5 +401,6 @@ class ASSParser(LyricParser):
             line_end_ts=line_end_ts,
             ruby_map=ruby_map,
             extra_checkpoints_map=extra_checkpoints_map,
+            gap_pause_map=gap_pause_map,
             char_singer_map=char_singer_map,
         )

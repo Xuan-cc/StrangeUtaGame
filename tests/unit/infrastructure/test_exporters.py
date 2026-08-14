@@ -282,6 +282,149 @@ class TestASSDirectExporter:
         assert not text.endswith("言葉{\\k0}"), f"言葉 被错误地追加到末尾: {text}"
         assert "ば言葉" not in text, f"言葉 混入续段尾部: {text}"
 
+    # ── 句中停顿（断句轴点）导出 ──
+    # 用户反馈的 bug：句中断句的轴点被合到前一个音，例如
+    #   [00:34.43]て[>00:35.01]　{不||[00:35.25]ふ}
+    # 旧逻辑输出 {\k82}て　{\k20}不（吞掉轴点），正确输出 {\k58}て{\k24}　{\k20}不。
+
+    @staticmethod
+    def _make_pause_space_sentence(singer_id: str) -> "Sentence":
+        """て(轴点3501) + 全角空格 + 不(ふ) + 意(い) + に(行尾释放3622)。"""
+        from strange_uta_game.backend.domain import Ruby, RubyPart
+
+        sent = Sentence.from_text("て　不意に", singer_id)
+        c_te = sent.characters[0]
+        c_te.add_timestamp(34430)
+        c_te.is_sentence_end = True
+        c_te.set_sentence_end_ts(35010)
+
+        sent.characters[2].check_count = 1
+        sent.characters[2].set_ruby(Ruby(parts=[RubyPart(text="ふ")]))
+        sent.characters[2].add_timestamp(35250)
+        sent.characters[3].check_count = 1
+        sent.characters[3].set_ruby(Ruby(parts=[RubyPart(text="い")]))
+        sent.characters[3].add_timestamp(35450)
+        sent.characters[4].add_timestamp(35860)
+        sent.characters[4].set_sentence_end_ts(36220)
+        return sent
+
+    def test_midline_pause_gap_goes_to_following_space(self):
+        r"""轴点后的空格独立成段吃掉间隙：{\k58}て{\k24}　{\k20}不|<ふ。"""
+        project = Project()
+        singer = project.singers[0]
+        sentence = self._make_pause_space_sentence(singer.id)
+        for ch in sentence.characters:
+            ch.set_offset(0)
+        project.add_sentence(sentence)
+
+        exporter = ASSDirectExporter()
+        line_start_ms = sentence.global_timing_start_ms
+        line_end_ms = exporter._compute_line_end_ms(sentence)
+        text = exporter._generate_karaoke_text(
+            sentence, line_start_ms, line_end_ms, singer_map=None
+        )
+
+        expected = (
+            "{\\k0}{\\k58}て{\\k24}　{\\k20}不|<ふ{\\k41}意|<い{\\k36}に{\\k0}"
+        )
+        assert text == expected, f"轴点间隙未切给空格:\n  got: {text}\n  exp: {expected}"
+
+    @staticmethod
+    def _make_pause_punct_sentence(singer_id: str) -> "Sentence":
+        """奇(き) 跡(せ|き) ？(轴点2620，无 ts) 縁(え|に|し，行尾释放2750)。"""
+        from strange_uta_game.backend.domain import Ruby, RubyPart
+
+        sent = Sentence.from_text("奇跡？縁", singer_id)
+
+        sent.characters[0].check_count = 1
+        sent.characters[0].set_ruby(Ruby(parts=[RubyPart(text="き")]))
+        sent.characters[0].add_timestamp(25680)
+
+        ch_seki = sent.characters[1]
+        ch_seki.check_count = 2
+        ch_seki.set_ruby(
+            Ruby(parts=[RubyPart(text="せ"), RubyPart(text="き")])
+        )
+        ch_seki.add_timestamp(25910, checkpoint_idx=0)
+        ch_seki.add_timestamp(26090, checkpoint_idx=1)
+
+        c_q = sent.characters[2]
+        c_q.is_sentence_end = True
+        c_q.set_sentence_end_ts(26200)
+
+        ch_en = sent.characters[3]
+        ch_en.check_count = 3
+        ch_en.set_ruby(
+            Ruby(
+                parts=[
+                    RubyPart(text="え"),
+                    RubyPart(text="に"),
+                    RubyPart(text="し"),
+                ]
+            )
+        )
+        ch_en.add_timestamp(26540, checkpoint_idx=0)
+        ch_en.add_timestamp(26710, checkpoint_idx=1)
+        ch_en.add_timestamp(26870, checkpoint_idx=2)
+        ch_en.set_sentence_end_ts(27500)
+        return sent
+
+    def test_midline_pause_punct_even_split_and_gap_block(self):
+        r"""轴点前标点与前一音均分时间，间隙输出空文本段：
+        {\k6}#|き{\k5}？{\k34}（不再把 ？ 并进注音段吞掉轴点）。
+        """
+        project = Project()
+        singer = project.singers[0]
+        sentence = self._make_pause_punct_sentence(singer.id)
+        for ch in sentence.characters:
+            ch.set_offset(0)
+        project.add_sentence(sentence)
+
+        exporter = ASSDirectExporter()
+        line_start_ms = sentence.global_timing_start_ms
+        line_end_ms = exporter._compute_line_end_ms(sentence)
+        text = exporter._generate_karaoke_text(
+            sentence, line_start_ms, line_end_ms, singer_map=None
+        )
+
+        expected = (
+            "{\\k0}{\\k23}奇|<き{\\k18}跡|<せ{\\k6}#|き{\\k5}？{\\k34}"
+            "{\\k17}縁|<え{\\k16}#|に{\\k63}#|し{\\k0}"
+        )
+        assert text == expected, (
+            f"轴点前标点未均分/未输出间隙段:\n  got: {text}\n  exp: {expected}"
+        )
+
+    def test_midline_pause_on_compound_tail(self):
+        r"""轴点由连词尾字持有：尾字渲染进 kanji，停顿边界仍生效，
+        间隙输出空文本段。{\k100}大冒険{\k50}{\k30}を。
+        """
+        project = Project()
+        singer = project.singers[0]
+        sent = Sentence.from_text("大冒険を", singer.id)
+        sent.characters[0].add_timestamp(7000)
+        sent.characters[0].linked_to_next = True
+        sent.characters[1].linked_to_next = True
+        sent.characters[2].is_sentence_end = True
+        sent.characters[2].set_sentence_end_ts(8000)
+        sent.characters[3].add_timestamp(8500)
+        sent.characters[3].set_sentence_end_ts(8800)
+        for ch in sent.characters:
+            ch.set_offset(0)
+        project.add_sentence(sent)
+
+        exporter = ASSDirectExporter()
+        line_start_ms = sent.global_timing_start_ms
+        line_end_ms = exporter._compute_line_end_ms(sent)
+        text = exporter._generate_karaoke_text(
+            sent, line_start_ms, line_end_ms, singer_map=None
+        )
+
+        expected = "{\\k0}{\\k100}大冒険{\\k50}{\\k30}を{\\k0}"
+        assert text == expected, (
+            f"连词尾字轴点未生效:\n  got: {text}\n  exp: {expected}"
+        )
+
 
 class TestNicokaraExporter:
     """测试 Nicokara 导出器"""
