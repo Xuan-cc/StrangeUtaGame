@@ -395,7 +395,8 @@ class HfHubTransport(ModelDownloadTransport):
                     if total:
                         progress(
                             min(99, int(done_bytes * 100 / total)),
-                            f"下载 {filename}（{done_bytes // 1024 // 1024}MB）",
+                            f"下载 {filename}"
+                            f"（{done_bytes // 1024 // 1024}MB / {total // 1024 // 1024}MB）",
                         )
         except ModelRegistryError:
             raise

@@ -2128,7 +2128,20 @@ class EditorInterface(QWidget):
         # 宿主能力查找：沿 parent 链找 MainWindow 上注入的 aiTimingHost
         host = self._resolve_ai_timing_host()
 
-        model_root = resolve_model_root(settings)
+        # 模型根：embedded 用宿主统一目录（与分离模型同源管理）；
+        # standalone 用 SUG 自己的设置/默认目录
+        if host is not None:
+            host_model_root = getattr(host, "model_root", None)
+            model_root_path = (
+                Path(host_model_root()) if callable(host_model_root) else None
+            )
+            if model_root_path is None:
+                model_root = resolve_model_root(settings)
+            else:
+                model_root = model_root_path
+                settings.model_root = str(model_root)
+        else:
+            model_root = resolve_model_root(settings)
         if host is not None:
             cache_root = Path(host.ai_cache_dir())
         elif settings.ai_cache_root:

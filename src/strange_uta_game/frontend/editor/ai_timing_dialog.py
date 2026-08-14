@@ -205,7 +205,8 @@ class AiTimingDialog(QDialog):
 
         hint = BodyLabel(
             self.tr(
-                "自动对齐会把歌词标注对齐到人声音频；成功后覆盖全部时间戳，"
+                "自动对齐会把歌词标注对齐到主唱人声；和声、重叠人声或伴唱"
+                "可能导致对齐偏差，完成后请人工复核。成功后覆盖全部时间戳，"
                 "可在工具栏撤销一次恢复。"
             ),
             self,
@@ -409,7 +410,7 @@ class AiTimingDialog(QDialog):
         first_t, first_p = self._eta_samples[0]
         elapsed = now - first_t
         gained = percent - first_p
-        if gained < 15 or elapsed < 3:
+        if gained < 5 or elapsed < 2:
             return self.tr("正在估算剩余时间…")
         rate = gained / elapsed  # 百分点 / 秒
         remaining = max(0, (100 - percent) / rate)
