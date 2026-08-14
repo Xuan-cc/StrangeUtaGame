@@ -2658,6 +2658,12 @@ class KaraokePreview(QWidget):
                 if not _ch or not _ch.strip():
                     continue
                 _br = main_fm.tightBoundingRect(_ch)
+                # 无字形码点（如孤立变体选择符 U+FE0F——⛰️ 一类 emoji 按码点
+                # 拆分后的残段）返回 Qt 空矩形哨兵值（top=100000/bottom=99999），
+                # 混入会把本行 ink_bottom 推到 +100000，轴点 marker 与打轴
+                # 指示线全部画出屏。高度非正即视为退化，跳过。
+                if _br.height() <= 0:
+                    continue
                 _ink_top_min = min(_ink_top_min, y_center + _br.top())
                 _ink_bottom_max = max(_ink_bottom_max, y_center + _br.bottom())
             if _ink_top_min < float("inf"):
