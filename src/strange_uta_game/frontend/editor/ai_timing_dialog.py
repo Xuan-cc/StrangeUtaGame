@@ -165,6 +165,7 @@ class AiTimingDialog(QDialog):
         on_applied: Callable,
         save_settings: Optional[Callable[[AiTimingSettings], None]] = None,
         download_proxy: str = "",
+        context_checker: Optional[Callable[[], bool]] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -179,6 +180,8 @@ class AiTimingDialog(QDialog):
         self._on_applied = on_applied
         self._save_settings = save_settings
         self._download_proxy = download_proxy
+        # 返回 True 表示打开时的工程/音频仍然有效（未切换/未关闭）
+        self._context_checker = context_checker
 
         self._snapshot: Optional[AiTimingSnapshot] = None
         self._thread: Optional[QThread] = None
@@ -408,7 +411,7 @@ class AiTimingDialog(QDialog):
         # 传输层给出真实速度/剩余时优先展示，否则退回百分比估算
         if "MB/s" in message and "剩余约" in message:
             parts = [p for p in message.split("，") if "MB/s" in p or "剩余约" in p]
-            self.eta_label.setText("　".join(parts))
+            self.eta_label.setText(self.tr("预计剩余 ") + parts[-1].replace("剩余约 ", ""))
         else:
             self.eta_label.setText(self._compute_eta(percent))
 
@@ -755,6 +758,19 @@ class AiTimingDialog(QDialog):
 
     def _on_run_clicked(self) -> None:
         if self._snapshot is None or not self._snapshot.ready:
+            return
+        if self._context_checker is not None and not self._context_checker():
+            InfoBar.warning(
+                title=self.tr("工程已变化"),
+                content=self.tr(
+                    "工程或音频在弹窗打开后发生了切换，请关闭本窗口后重新打开"
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=6000,
+                parent=self,
+            )
             return
         self._persist_settings()
         vocal_choice = None

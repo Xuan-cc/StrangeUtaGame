@@ -343,10 +343,13 @@ class AiCache:
             return False
         if not locks:
             return False
-        cutoff = time.time() - 24 * 3600
+        now = time.time()
+        cutoff = now - 24 * 3600
         for lock in locks:
             try:
-                if lock.stat().st_mtime >= cutoff:
+                mtime = lock.stat().st_mtime
+                # mtime 落在未来（时钟回拨痕迹）视为无效锁
+                if cutoff <= mtime <= now + 60:
                     return True
             except OSError:
                 continue

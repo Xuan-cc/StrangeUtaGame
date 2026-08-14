@@ -185,6 +185,37 @@ class AiRuntimeManager:
         if cancel():
             raise AiRuntimeError("已取消")
 
+        # dry-run 预估：包数 + 总下载量（失败则退化为无总量模式）
+        total_packages = 0
+        total_mb = 0.0
+        try:
+            import json as _json
+            import tempfile as _tf
+
+            report_path = _tf.gettempdir() + "/krok-pip-dryrun.json"
+            probe = subprocess.run(
+                [python_exe, *args, "--dry-run", "--report", report_path],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=getattr(self, "_pip_env", None),
+            )
+            if probe.returncode == 0:
+                with open(report_path, encoding="utf-8") as fh:
+                    report = _json.load(fh)
+                items = report.get("install", []) or []
+                total_packages = len(items)
+                total_mb = sum(
+                    float((it.get("download_info") or {}).get("archive_info", {}).get("size") or 0)
+                    for it in items
+                ) / 1024 / 1024
+        except Exception:
+            total_packages = 0
+        if total_packages:
+            progress(
+                8,
+                f"共 {total_packages} 个包，总下载量约 {total_mb:.0f}MB",
+            )
         progress(10, "安装对齐依赖（体积较大，可能需要数分钟）")
         args: List[str] = ["-m", "pip", "install", "--disable-pip-version-check"]
         if proxy:
@@ -197,15 +228,33 @@ class AiRuntimeManager:
             args += ["-i", mirror]
         args += list(requirements or RUNTIME_REQUIREMENTS)
 
-        lines_seen = 0
+        import time as _time
+
+        started = _time.monotonic()
+        installed_pkgs = 0
 
         def _on_line(line: str) -> None:
-            nonlocal lines_seen
-            lines_seen += 1
+            nonlocal installed_pkgs
             text = line.strip()
-            if text:
-                # pip 输出行数与总量无固定比例，用 10-95 区间渐近逼近
-                progress(min(95, 10 + lines_seen), text)
+            if not text:
+                return
+            # 包粒度进度：pip 完成包安装会输出 Successfully installed ...
+            if text.startswith("Successfully installed"):
+                installed_pkgs += len(
+                    [p for p in text.split() if p and not p.startswith("Successfully")]
+                )
+                if total_packages:
+                    elapsed = int(_time.monotonic() - started)
+                    m, s = divmod(elapsed, 60)
+                    pct = min(95, 10 + int(85 * installed_pkgs / total_packages))
+                    progress(
+                        pct,
+                        f"安装包 {min(installed_pkgs, total_packages)}/{total_packages}"
+                        f"（已耗时 {m}:{s:02d}）",
+                    )
+                    return
+            # 无总量模式：仅展示阶段文本（已由调用方截断长度）
+            progress(50, text)
 
         import os
 

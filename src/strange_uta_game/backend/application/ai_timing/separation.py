@@ -34,6 +34,9 @@ print("stage:separate:分离处理中", flush=True)
 outputs = sep.separate(inp)
 stem_files = [f for f in outputs if "Vocals" in f or "vocals" in f]
 if not stem_files:
+    # 轨名兜底：排除伴奏轨后取剩余（UVR 系输出通常仅人声/伴奏两条）
+    stem_files = [f for f in outputs if "nstrumental" not in f]
+if not stem_files:
     raise SystemExit("未找到人声输出轨: %r" % (outputs,))
 import os, shutil
 # audio-separator 输出名为 <stem>_Vocals_.wav → 归一为 <stem>_人声.wav
@@ -109,6 +112,10 @@ class StandaloneVocalSeparator:
                 continue
             if cancel():
                 proc.kill()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
                 raise RuntimeError("已取消人声分离")
             if line.startswith("stage:load"):
                 progress("separation", 10, line.split(":", 2)[2])

@@ -80,6 +80,16 @@ def main(argv=None) -> int:
             _emit({"type": "error", "message": "worker 未收到任务指令"})
             return 1
         message = decode_message(line)
+        if message.get("type") == "validate":
+            # 独立校验消息：只做 provider/模型描述校验，不加载模型
+            try:
+                model_spec = dict(message.get("model") or {})
+                provider = create_provider(model_spec)
+                provider.validate_model(model_spec)
+                _emit({"type": "result", "payload": {"valid": True}})
+            except Exception as exc:
+                _emit({"type": "error", "message": str(exc)})
+            return 0
         if message.get("type") != "align":
             _emit({"type": "error", "message": "worker 期望首条消息为 align"})
             return 1

@@ -2086,6 +2086,10 @@ class EditorInterface(QWidget):
             on_applied=self._apply_ai_timing_command,
             save_settings=self._save_ai_timing_settings,
             download_proxy=proxy,
+            context_checker=lambda: (
+                self._project is not None
+                and getattr(self, "_audio_file_path", None) == audio_path
+            ),
             parent=self,
         )
         self._ai_timing_dialog.show()

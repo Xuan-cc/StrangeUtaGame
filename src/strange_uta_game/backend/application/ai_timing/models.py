@@ -461,7 +461,15 @@ class ModelDownloadService:
                 raise ModelRegistryError("已取消")
             base = int(5 + 90 * i / len(files))
             span = int(90 / len(files))
-            progress(base, f"下载 {filename}（{i + 1}/{len(files)}）")
+            part = model_dir / (filename + PART_SUFFIX)
+            if part.is_file() and part.stat().st_size > 0:
+                progress(
+                    base,
+                    f"检测到断点（{part.stat().st_size // 1024 // 1024}MB），"
+                    f"续传 {filename}（{i + 1}/{len(files)}）",
+                )
+            else:
+                progress(base, f"下载 {filename}（{i + 1}/{len(files)}）")
             dest = model_dir / filename
             dest.parent.mkdir(parents=True, exist_ok=True)
             self._transport.download_file(

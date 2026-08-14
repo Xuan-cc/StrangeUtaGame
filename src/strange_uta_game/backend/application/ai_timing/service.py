@@ -310,6 +310,21 @@ class AiTimingService:
                 f"对齐运行环境解释器不存在：{runtime_python}。请重新安装对齐环境"
             )
 
+        # §8.1-6：磁盘空间预检（模型 ~1.3GB + 分离人声 wav + 对齐缓存，余量按 3GB）
+        import shutil as _shutil
+
+        try:
+            free = _shutil.disk_usage(vocal_source.anchor).free
+            if free < 3 * 1024 * 1024 * 1024:
+                raise AiTimingError(
+                    f"磁盘剩余空间不足（可用 {free // 1024 // 1024 // 1024}GB，"
+                    "至少需要 3GB 用于模型/人声与缓存）"
+                )
+        except AiTimingError:
+            raise
+        except Exception:
+            pass  # 空间查询失败不阻断
+
         # §8.1-2：标注解析（缺口在此时阻断）
         progress("prepare", 2, "分析歌词标注")
         plan = self._resolver.resolve_project(project, fill_missing=True)
