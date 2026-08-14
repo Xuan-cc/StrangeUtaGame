@@ -164,6 +164,7 @@ class AiTimingDialog(QDialog):
         download_service: ModelDownloadService,
         on_applied: Callable,
         save_settings: Optional[Callable[[AiTimingSettings], None]] = None,
+        download_proxy: str = "",
         parent=None,
     ):
         super().__init__(parent)
@@ -177,6 +178,7 @@ class AiTimingDialog(QDialog):
         self._download_service = download_service
         self._on_applied = on_applied
         self._save_settings = save_settings
+        self._download_proxy = download_proxy
 
         self._snapshot: Optional[AiTimingSnapshot] = None
         self._thread: Optional[QThread] = None
@@ -366,10 +368,12 @@ class AiTimingDialog(QDialog):
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(self._on_task_progress)
-        self._worker.finished.connect(on_done)
-        self._worker.failed.connect(self._on_task_failed)
+        # cleanup 先连：_done/_on_task_failed 执行时 busy 已复位，
+        # 其内部的 refresh() 才不会被挡掉（安装完成状态不刷新的根因）
         for sig in (self._worker.finished, self._worker.failed):
             sig.connect(self._cleanup_task)
+        self._worker.finished.connect(on_done)
+        self._worker.failed.connect(self._on_task_failed)
         self._thread.start()
 
     def _action_buttons(self) -> list:
@@ -398,7 +402,9 @@ class AiTimingDialog(QDialog):
     def _on_task_progress(self, stage: str, percent: int, message: str) -> None:
         self.progress.setValue(max(0, min(100, percent)))
         if message:
-            self.status_label.setText(message)
+            # pip 解析行可能极长，截断避免窗口被拉长
+            shown = message if len(message) <= 80 else message[:79] + "…"
+            self.status_label.setText(shown)
         # 传输层给出真实速度/剩余时优先展示，否则退回百分比估算
         if "MB/s" in message and "剩余约" in message:
             parts = [p for p in message.split("，") if "MB/s" in p or "剩余约" in p]
@@ -653,6 +659,7 @@ class AiTimingDialog(QDialog):
             status = self._runtime.install(
                 target,
                 mirror=self._settings.download_mirror,
+                proxy=self._download_proxy,
                 progress=lambda p, m: progress_cb("runtime", p, m),
                 cancel=cancel_check,
             )

@@ -398,7 +398,9 @@ class HfHubTransport(ModelDownloadTransport):
                     if total:
                         _elapsed = max(0.001, _time.monotonic() - _t0)
                         _rate = (done_bytes - _b0) / _elapsed / 1024 / 1024
-                        _eta = int((total - done_bytes) / max(_rate, 0.001))
+                        # 单位统一：剩余 MB ÷ MB/s；起步 3 秒内速率不稳，只报速度不报剩余
+                        _remain_mb = (total - done_bytes) / 1024 / 1024
+                        _eta = int(_remain_mb / max(_rate, 0.001))
                         _m, _s = divmod(_eta, 60)
                         progress(
                             min(99, int(done_bytes * 100 / total)),

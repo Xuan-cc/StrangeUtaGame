@@ -154,6 +154,7 @@ class AiRuntimeManager:
         self,
         target_dir: Path,
         *,
+        proxy: str = "",
         index_url: str = "",
         extra_index_url: str = "",
         mirror: str = "",
@@ -186,6 +187,8 @@ class AiRuntimeManager:
 
         progress(10, "安装对齐依赖（体积较大，可能需要数分钟）")
         args: List[str] = ["-m", "pip", "install", "--disable-pip-version-check"]
+        if proxy:
+            args += ["--proxy", proxy]
         if index_url:
             args += ["--index-url", index_url]
         if extra_index_url:
@@ -204,6 +207,13 @@ class AiRuntimeManager:
                 # pip 输出行数与总量无固定比例，用 10-95 区间渐近逼近
                 progress(min(95, 10 + lines_seen), text)
 
+        import os
+
+        pip_env = dict(os.environ)
+        if proxy:
+            pip_env["HTTP_PROXY"] = proxy
+            pip_env["HTTPS_PROXY"] = proxy
+        self._pip_env = pip_env
         returncode = self._pip_runner(python_exe, args, _on_line, cancel)
         if cancel():
             raise AiRuntimeError("已取消")
@@ -237,6 +247,7 @@ class AiRuntimeManager:
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=getattr(self, "_pip_env", None),
         )
         assert process.stdout is not None
         for line in process.stdout:

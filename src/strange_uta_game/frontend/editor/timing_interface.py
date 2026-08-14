@@ -2078,6 +2078,7 @@ class EditorInterface(QWidget):
             download_service=download_service,
             on_applied=self._apply_ai_timing_command,
             save_settings=self._save_ai_timing_settings,
+            download_proxy=proxy,
             parent=self,
         )
         self._ai_timing_dialog.show()
