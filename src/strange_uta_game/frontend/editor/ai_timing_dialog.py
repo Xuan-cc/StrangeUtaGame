@@ -185,6 +185,7 @@ class AiTimingDialog(QDialog):
         save_settings: Optional[Callable[[AiTimingSettings], None]] = None,
         download_proxy: str = "",
         managed_runtime_python: str = "",
+        embedded_mode: bool = False,
         context_checker: Optional[Callable[[], bool]] = None,
         parent=None,
     ):
@@ -201,8 +202,11 @@ class AiTimingDialog(QDialog):
         self._save_settings = save_settings
         self._download_proxy = download_proxy
         # 方案 B：宿主托管 Runtime 的 python.exe（embedded 注入）。
-        # 存在且有效时「安装/修复」走 install_shared 增量安装
+        # 存在且有效时「安装/修复」走 install_shared 增量安装；
+        # embedded 模式一律不允许裸装 venv（会与宿主 runtime 重复一份
+        # torch，实际测试中已造成过一次多装）
         self._managed_runtime_python = managed_runtime_python
+        self._embedded_mode = embedded_mode
         # 返回 True 表示打开时的工程/音频仍然有效（未切换/未关闭）
         self._context_checker = context_checker
 
@@ -837,6 +841,12 @@ class AiTimingDialog(QDialog):
                 )
             else:
                 self.row_runtime.set_state("ok", runtime.summary)
+        elif self._install_plan()[0] == "blocked":
+            # 嵌入模式宿主 Runtime 未安装：引导去第 2 步，不提供裸装
+            self.row_runtime.set_state(
+                "warn",
+                self.tr("请先在第 2 步「音频分离」安装工作台运行环境"),
+            )
         else:
             self.row_runtime.set_state(
                 "error",
@@ -925,15 +935,34 @@ class AiTimingDialog(QDialog):
 
     def _install_plan(self) -> tuple:
         """安装模式判定：('shared', python.exe) 复用宿主 Runtime /
-        ('venv', target_dir) 自建 venv。"""
+        ('venv', target_dir) 自建 venv（仅 standalone）/
+        ('blocked', '') 嵌入模式宿主 Runtime 未安装——引导去工作台
+        第 2 步安装，绝不裸装第二份环境。"""
         if self._managed_runtime_python and Path(
             self._managed_runtime_python
         ).is_file():
             return "shared", self._managed_runtime_python
+        if self._embedded_mode:
+            return "blocked", ""
         return "venv", resolve_model_root(self._settings).parent / "ai_runtime"
 
     def _on_install_runtime(self) -> None:
         mode, target = self._install_plan()
+        if mode == "blocked":
+            InfoBar.warning(
+                title=self.tr("需要工作台运行环境"),
+                content=self.tr(
+                    "嵌入模式与工作台共享托管运行环境：请先在第 2 步"
+                    "「音频分离」完成环境安装，再回到这里点「安装 / 修复」"
+                    "补装 AI 增量依赖（不会重复下载 torch）"
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=8000,
+                parent=self,
+            )
+            return
 
         def _task(progress_cb, cancel_check):
             if mode == "shared":

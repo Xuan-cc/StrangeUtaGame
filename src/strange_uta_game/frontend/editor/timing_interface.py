@@ -584,6 +584,9 @@ class EditorInterface(QWidget):
         self._store = store
         self._save_tooltip = None
         store.data_changed.connect(self._on_data_changed)
+        # 手动保存（工具栏保存/另存为、Ctrl+S 等）成功后记入最近项目；
+        # 编辑器与主窗口共享同一 store，这里一次连接覆盖全部保存入口。
+        store.save_finished.connect(self._file_loader._on_store_saved)
 
     def _get_setting_interface(self):
         """Return SUG's settings interface even when embedded in a host window."""
@@ -1785,6 +1788,7 @@ class EditorInterface(QWidget):
                 SugProjectParser,
             )
             SugProjectParser.save(self._project, path)
+            self._file_loader._record_recent_project(path)
             InfoBar.success(
                 title=self.tr("保存成功"),
                 content=path,
@@ -2095,6 +2099,7 @@ class EditorInterface(QWidget):
             save_settings=self._save_ai_timing_settings,
             download_proxy=proxy,
             managed_runtime_python=managed_runtime,
+            embedded_mode=host is not None,
             context_checker=lambda: (
                 self._project is not None
                 and getattr(self, "_audio_file_path", None) == audio_path

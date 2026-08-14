@@ -260,6 +260,29 @@ class TestAiTimingDialog:
         mode, target = dialog._install_plan()
         assert mode == "venv" and target.name == "ai_runtime"
 
+    def test_embedded_blocks_bare_venv_install(self, qapp, tmp_path):
+        """嵌入模式宿主 Runtime 未安装：禁止裸装 venv，引导去第 2 步。"""
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._embedded_mode = True
+        dialog._managed_runtime_python = ""  # 宿主未提供（未安装）
+        mode, target = dialog._install_plan()
+        assert mode == "blocked"
+
+        # 点安装/修复 → 只弹引导提示，不发起任何安装任务
+        started = []
+        dialog._run_task = lambda *a, **k: started.append(a)
+        dialog._on_install_runtime()
+        assert started == []
+
+        # 状态行给出去第 2 步的引导而非"缺少依赖请下载"
+        snap.runtime = RuntimeStatus(
+            available=False, message="缺少对齐依赖（transformers）"
+        )
+        dialog._on_snapshot_ready(snap)
+        assert dialog.row_runtime._state == "warn"
+        assert "音频分离" in dialog.row_runtime._state_label.text()
+
     def test_runtime_row_hints_cuda_upgrade(self, qapp, tmp_path):
         """CPU 版运行环境 + 检测到 NVIDIA 显卡：橙色提示可升级 CUDA 版。"""
         snap = _ready_snapshot()
