@@ -808,6 +808,36 @@ def _patch_round_menu() -> None:
         pass
 
 
+def _patch_tool_tip() -> None:
+    """统一修正 Fluent ToolTip（fluent_tooltips 悬停提示）的透明光晕。
+
+    qfluentwidgets 默认（与 RoundMenu 默认光晕同源）：
+    - shadowEffect blurRadius=25、offset=(0,5)
+    - 窗口布局 margins=(12,8,12,12)
+      → 提示框周围形成 8-12px 的透明光晕区域
+
+    修正为与 _patch_round_menu 一致的紧凑阴影：
+    - blurRadius=2、offset=(0,1)、margins=(1,1,1,2)
+
+    直接 patch ToolTip.__init__：ToolTipFilter（含 ItemViewToolTip 子类）
+    在运行时才创建提示实例，改类本身即可让全应用生效，
+    与 _patch_round_menu patch RoundMenu.__init__ 的方式对称。
+    """
+    try:
+        from qfluentwidgets.components.widgets.tool_tip import ToolTip
+        _orig_init = ToolTip.__init__
+
+        def _slim_init(self, *args, **kwargs):
+            _orig_init(self, *args, **kwargs)
+            self.shadowEffect.setBlurRadius(2)
+            self.shadowEffect.setOffset(0, 1)
+            self.layout().setContentsMargins(1, 1, 1, 2)
+
+        ToolTip.__init__ = _slim_init
+    except Exception:
+        pass
+
+
 def _patch_editable_combobox_disconnect() -> None:
     """修复 EditableComboBox 的通配符 disconnect 警告。
 
@@ -849,6 +879,7 @@ def _patch_editable_combobox_disconnect() -> None:
 
 
 _patch_round_menu()
+_patch_tool_tip()
 _patch_editable_combobox_disconnect()
 
 # 全局单例
