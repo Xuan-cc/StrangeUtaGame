@@ -743,7 +743,11 @@ class LLMRubyClient:
         reasoning_reported = False
         generation_started_at: Optional[float] = None
         last_rate_report_at = 0.0
-        for raw_line in resp.iter_lines(decode_unicode=True):
+        # 不用 iter_lines(decode_unicode=True)：部分兼容端点的 SSE 响应头
+        # ``text/event-stream`` 不带 charset，requests 会按 RFC 默认 ISO-8859-1
+        # 解码，UTF-8 日文被误解成乱码（surface 校验必败）。SSE 规范本身规定
+        # UTF-8，保持 bytes 由下方统一 decode。
+        for raw_line in resp.iter_lines():
             if time.time() - started_at > self._cfg.total_timeout_sec:
                 raise LLMRubyError(
                     f"LLM 请求超过总时限 {self._cfg.total_timeout_sec} 秒"
