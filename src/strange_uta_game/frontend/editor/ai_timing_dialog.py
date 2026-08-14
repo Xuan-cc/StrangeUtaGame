@@ -75,7 +75,8 @@ MODEL_PAGE_URL = (
     "https://huggingface.co/NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn"
 )
 MODEL_LICENSE_TEXT = (
-    f"默认模型 {DEFAULT_WAV2VEC2_MODEL_ID}（CC-BY-NC-SA-4.0，仅限非商业使用）"
+    f'<a href="{MODEL_PAGE_URL}">默认模型 {DEFAULT_WAV2VEC2_MODEL_ID}</a>'
+    "（CC-BY-NC-SA-4.0，仅限非商业使用，仅随默认微调模型）"
 )
 CREDIT_TEXT = "对齐思路参考开源项目 FA-Kara 与 yohane（本项目不内嵌其代码）"
 
@@ -223,14 +224,29 @@ class AiTimingDialog(QDialog):
 
         hint = BodyLabel(
             self.tr(
-                "自动对齐会把歌词标注对齐到主唱人声；和声、重叠人声或伴唱"
-                "可能导致对齐偏差，完成后请人工复核。成功后覆盖全部时间戳，"
+                "自动对齐会把歌词标注对齐到人声；成功后覆盖全部时间戳，"
                 "可在工具栏撤销一次恢复。"
             ),
             content,
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
+        # 重要警示（非普通提示）：和声/重叠人声需人工复查
+        self.warn_overlap = BodyLabel(
+            self.tr(
+                "⚠ 请注意：对齐针对主唱人声。含和声、重叠人声或伴唱的段落"
+                "可能出现错位，完成后务必人工复查这些段落。"
+            ),
+            content,
+        )
+        self.warn_overlap.setWordWrap(True)
+        self.warn_overlap.setStyleSheet("color:#f5a623;font-weight:bold;")
+        layout.addWidget(self.warn_overlap)
+        # 默认模型说明（许可证 + 非商业）——属说明信息，放说明区
+        model_credit = CaptionLabel(MODEL_LICENSE_TEXT, content)
+        model_credit.setOpenExternalLinks(True)
+        model_credit.setWordWrap(True)
+        layout.addWidget(model_credit)
 
         # ── 执行前状态 ──
         self._box_status = FluentGroupBox(self.tr("执行前状态"), content)
@@ -267,14 +283,6 @@ class AiTimingDialog(QDialog):
         self.vocal_combo.hide()
         self._box_status.contentLayout.addWidget(self.vocal_combo)
 
-        # 模型卡：许可证 + 非商业 + 可点击链接（§1.9/§3.3）
-        model_credit = BodyLabel(
-            f'<a href="{MODEL_PAGE_URL}">{MODEL_LICENSE_TEXT}</a>', content
-        )
-        model_credit.setOpenExternalLinks(True)
-        model_credit.setWordWrap(True)
-        self._box_status.contentLayout.addWidget(model_credit)
-
         self.blocking_label = BodyLabel("", content)
         self.blocking_label.setWordWrap(True)
         self.blocking_label.setStyleSheet("color:#e85555;")
@@ -288,10 +296,16 @@ class AiTimingDialog(QDialog):
         advanced.addWidget(BodyLabel(self.tr("对齐模型:"), content))
         self.combo_model = ComboBox(content)
         self.combo_model.addItems(
-            [self.tr("微调模型（效果优先）"), self.tr("MMS_FA（备选）")]
+            [
+                self.tr("微调模型（推荐 · 日文歌曲效果最佳）"),
+                self.tr("MMS_FA 基础模型（多语言 · 通用备选）"),
+            ]
         )
         self.combo_model.currentIndexChanged.connect(self._on_model_combo_changed)
         advanced.addWidget(self.combo_model)
+        self.model_desc = CaptionLabel("", content)
+        self.model_desc.setWordWrap(True)
+        self._update_model_desc(self.combo_model.currentIndex())
         advanced.addWidget(BodyLabel(self.tr("设备:"), content))
         self.combo_device = ComboBox(content)
         self.combo_device.addItems([self.tr("自动"), "CPU", "CUDA"])
@@ -300,6 +314,7 @@ class AiTimingDialog(QDialog):
         self.chk_tail_snap.setChecked(self._settings.tail_snap)
         advanced.addWidget(self.chk_tail_snap)
         self._box_adv.contentLayout.addLayout(advanced)
+        self._box_adv.contentLayout.addWidget(self.model_desc)
         mirror_row = QHBoxLayout()
         mirror_row.addWidget(BodyLabel(self.tr("下载镜像:"), content))
         self.edit_mirror = LineEdit(content)
@@ -536,8 +551,27 @@ class AiTimingDialog(QDialog):
             except Exception:
                 pass
 
+    MODEL_DESCRIPTIONS = {
+        0: (
+            "NextFire 日语卡拉 OK 微调模型（约 3 亿参数，MMS 架构）：针对"
+            "日文歌词的罗马字对齐专门微调，日文歌曲首选；首次使用需下载"
+            "约 1.2GB 权重。中英文歌曲也可使用，走拼音/读音转写。"
+        ),
+        1: (
+            "Meta MMS 多语言基础对齐模型（约 4.7 亿参数，torchaudio 内置"
+            "分发）：语言覆盖广、无需手动下载大文件，但对日文卡拉 OK 场景"
+            "的精度通常不如微调模型；作为兼容备选。"
+        ),
+    }
+
+    def _update_model_desc(self, index: int) -> None:
+        self.model_desc.setText(
+            self.tr(self.MODEL_DESCRIPTIONS.get(index, ""))
+        )
+
     def _on_model_combo_changed(self, *_args) -> None:
         """高级选项切换模型 → 立即持久化并刷新状态行（保持两处一致）。"""
+        self._update_model_desc(self.combo_model.currentIndex())
         if self._busy:
             return
         self._persist_settings()
@@ -905,13 +939,16 @@ class AiTimingDialog(QDialog):
             except Exception as exc:  # noqa: BLE001
                 self._on_task_failed(f"应用结果失败：{exc}")
                 return
-            InfoBar.success(
+            InfoBar.warning(
                 title=self.tr("AI 打轴完成"),
-                content=self.tr("已覆盖全部时间戳，可撤销一次恢复。"),
+                content=self.tr(
+                    "已覆盖全部时间戳，可撤销一次恢复。"
+                    "和声/重叠人声段落请人工复查！"
+                ),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
-                duration=4000,
+                duration=8000,
                 parent=self,
             )
             self.close()
