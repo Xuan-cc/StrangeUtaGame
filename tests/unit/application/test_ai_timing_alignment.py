@@ -341,8 +341,8 @@ class TestApplyAiTimingCommand:
         )
         cmd = ApplyAiTimingCommand(project, plan, request, result)
         cmd.execute()
-        # 句尾呼吸点被清空（旧时间轴产物）
-        assert project.sentences[0].characters[1].sentence_end_ts is None
+        # 句尾释放点由对齐推导：い 的 token 区间 (500,700) → 释放=700
+        assert project.sentences[0].characters[1].sentence_end_ts == 700
         cmd.undo()
         restored = project.sentences[0]
         assert restored.characters[0].timestamps == [1000, 1200]
@@ -561,7 +561,8 @@ class TestUnalignableChars:
         ch0, ch1 = project.sentences[0].characters
         assert len(ch0.timestamps) == ch0.check_count == 2
         assert len(ch1.timestamps) == ch1.check_count == 1
-        assert ch0.sentence_end_ts is None  # 旧释放点按设计清空
+        # 赤 是句尾字符：其末 token か 的区间终点（100,150）→ 释放点 150
+        assert ch0.sentence_end_ts == 150
         assert ch0.ruby is not None and ch0.ruby.timestamps == ch0.all_timestamps
         assert [p.text for p in ch0.ruby.parts] == ["あ", "か"]  # 既有标注原样
         assert ch0.is_sentence_end is True  # 结构标志不变

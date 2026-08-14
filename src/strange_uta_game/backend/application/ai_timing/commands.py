@@ -12,7 +12,7 @@ ApplyAiTimingCommand 把校验通过的 AlignmentResult 一次性应用到 Proje
 """
 
 from copy import deepcopy
-from typing import Dict
+from typing import Dict, Optional
 
 from strange_uta_game.backend.application.ai_timing.alignment import (
     AlignmentRequest,
@@ -121,13 +121,48 @@ class ApplyAiTimingCommand(Command):
                     ch.timestamps = [
                         ts_map.get(loc, 0) for loc in locations
                     ]
-                # 句尾呼吸点：旧时间轴的释放点，一律清空
-                ch.sentence_end_ts = None
+                # 句尾释放点（尾音）：由对齐结果推导而非清空——
+                # token 字符取其最后一个 token 的区间终点（尾音结束），
+                # 无 token 字符回退到自身末个 checkpoint 的插值时间
+                if ch.is_sentence_end:
+                    derived = self._derive_sentence_end(
+                        ch, line_idx, char_idx, line_units, span_map, ts_map
+                    )
+                    if derived is not None:
+                        ch.sentence_end_ts = derived
                 self._maybe_write_generated_ruby(
                     ch, line_idx, char_idx, line_units
                 )
                 ch._update_offset_timestamps()
                 ch.push_to_ruby()
+
+    @staticmethod
+    def _derive_sentence_end(
+        ch,
+        line_idx: int,
+        char_idx: int,
+        line_units: list,
+        span_map,
+        ts_map,
+    ) -> Optional[int]:
+        """推导句尾释放点时间：末 token 区间终点 > 末 checkpoint 插值 >
+        前一字符末时间 > 保留原值（绝不返回 None 造成尾音丢失）。"""
+        # 末个 token 的区间终点（尾音自然结束位置）
+        best = None
+        for u in line_units:
+            if u.char_idx != char_idx or u.is_sentence_end:
+                continue
+            span = span_map.get(u.location)
+            if span is not None:
+                best = span[1] if best is None else max(best, span[1])
+        if best is not None:
+            return best
+        # 无 token（结构字符）：末个 checkpoint 的插值时间
+        if ch.timestamps:
+            return max(ch.timestamps)
+        # 无任何可推导信号（check_count=0 且无 token）：返回 None，
+        # 调用方保留原释放点，绝不置空
+        return None
 
     def _maybe_write_generated_ruby(
         self, ch, line_idx: int, char_idx: int, line_units: list
