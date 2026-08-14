@@ -37,7 +37,7 @@ RUNTIME_REQUIREMENTS: List[str] = [
 
 _PROBE_CODE = (
     "import json;"
-    "import torch,transformers,soundfile;"
+    "import torch,transformers,soundfile,audio_separator;"
     "print(json.dumps({'torch': torch.__version__,"
     " 'cuda': bool(torch.cuda.is_available()),"
     " 'transformers': transformers.__version__}))"

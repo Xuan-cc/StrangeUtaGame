@@ -125,8 +125,9 @@ class AiTimingSnapshot:
             reasons.append("同目录存在多个人声文件，请先选择")
         elif self.vocal is not None and self.vocal.state == "separation":
             reasons.append(
-                "没有可复用的人声；分离环境未就绪时无法自动分离，"
-                "请先安装分离环境（自动对齐环境已包含）"
+                "没有可复用的人声，且分离组件未就绪：请点击「对齐环境 → "
+                "安装 / 修复」自动补装（已装过环境只会补缺失组件），"
+                "之后即可一键自动分离并对齐"
             )
         if self.runtime is not None and not self.runtime.available:
             reasons.append(self.runtime.message or "对齐运行环境不可用")

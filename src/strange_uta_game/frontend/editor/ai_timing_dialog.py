@@ -2,19 +2,21 @@
 
 按计划文档 §3.2/§3.3 一次展示全部前置状态与执行区，并包含：
 
-- 状态卡：原始音频（含时长）、歌词标注、人声素材（多候选时下拉选择）、
-  分离环境（embedded 显示「跟随工作台设置」）、对齐环境、对齐模型
-  （模型 ID、许可证与非商业提示、模型页链接）；
-- 存储位置：模型根 / AI 缓存根 / Runtime；
-- 高级选项：对齐模型（微调 / MMS_FA）、设备、尾音修正、下载镜像；
-- 动作：下载模型、安装环境、浏览模型 / Runtime 目录、更改模型 /
-  缓存位置、恢复推荐设置、深度重新校验；
-- 执行区：进度 + 平滑 ETA、二次确认取消；
+- 执行前状态（FluentGroupBox）：原始音频（含时长）、歌词标注、人声素材
+  （多候选时下拉选择）、分离环境、对齐环境、对齐模型（许可证与非商业
+  提示、模型页链接）；
+- 高级选项（FluentGroupBox）：对齐模型（微调 / MMS_FA，与状态行联动）、
+  设备、尾音修正、下载镜像；
+- 存储位置（FluentGroupBox）：模型目录 / AI 缓存 / 运行环境三行，
+  每行「名称 + 省略路径 + 浏览 + 更改…」统一样式；
+- 动作：下载模型、安装/修复环境（含分离组件补装）、深度校验、
+  恢复推荐设置；
+- 执行区（固定底部，不随滚动）：进度 + ETA、二次确认取消；
 - 底部标注：对齐思路参考 FA-Kara / yohane。
 
-复用现有 Fluent 组件与文案层级（§3.4）。对话框与工具栏其他弹窗
-（批量变更等）同构：原生 ``QDialog``（系统关闭按钮、跟随应用主题、
-不置顶）+ 内部 Fluent 控件 + ``tr()`` 多语言文案。
+主体内容放在 ScrollArea 内（批量变更弹窗同款），任何分辨率下不再
+出现窗口高度溢出。对话框与工具栏其他弹窗同构：原生 ``QDialog`` +
+内部 Fluent 控件 + ``tr()`` 多语言文案。
 """
 
 from __future__ import annotations
@@ -23,8 +25,9 @@ import time
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
-from PyQt6.QtWidgets import QDialog, QFileDialog, QVBoxLayout, QWidget
+from PyQt6.QtCore import QObject, QThread, Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -35,6 +38,7 @@ from qfluentwidgets import (
     PrimaryPushButton,
     ProgressBar,
     PushButton,
+    ScrollArea,
     StrongBodyLabel,
     SubtitleLabel,
 )
@@ -60,7 +64,10 @@ from strange_uta_game.frontend.editor.timing.dialogs import (
     FONT_DIALOG_BASE,
     char_dialog_font,
 )
-from strange_uta_game.frontend.fluent_widgets import message_question
+from strange_uta_game.frontend.fluent_widgets import (
+    FluentGroupBox,
+    message_question,
+)
 from strange_uta_game.frontend.window_sizing import fit_to_screen
 
 DEFAULT_WAV2VEC2_MODEL_ID = "NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn"
@@ -118,8 +125,6 @@ class _StateRow(QWidget):
         super().__init__(parent)
         self._name = name
         self._state = "busy"
-        from PyQt6.QtWidgets import QHBoxLayout
-
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -148,7 +153,7 @@ class AiTimingDialog(QDialog):
     """AI 打轴完整弹窗。
 
     与工具栏其他弹窗（批量变更等）同构：原生 QDialog（系统关闭按钮、
-    跟随系统与应用主题、不置顶）+ 内部 Fluent 控件；全部用户可见文案
+    跟随应用主题、不置顶）+ 内部 Fluent 控件；全部用户可见文案
     走 ``self.tr()`` 以支持多语言。
     """
 
@@ -196,17 +201,24 @@ class AiTimingDialog(QDialog):
     # ── UI ──
 
     def _build_ui(self) -> None:
-        from PyQt6.QtWidgets import QHBoxLayout
-
         self.setWindowTitle(self.tr("AI 打轴"))
-        fit_to_screen(self, 720, 700)
+        fit_to_screen(self, 720, 640)
         self.setFont(char_dialog_font(FONT_DIALOG_BASE))
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(8)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setSpacing(6)
 
-        title = SubtitleLabel(self.tr("AI 打轴"), self)
+        # ── 主体（可滚动）：状态 / 高级选项 / 存储位置 ──
+        scroll = ScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.enableTransparentBackground()
+        content = QWidget(self)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.setSpacing(6)
+
+        title = SubtitleLabel(self.tr("AI 打轴"), content)
         layout.addWidget(title)
 
         hint = BodyLabel(
@@ -215,22 +227,20 @@ class AiTimingDialog(QDialog):
                 "可能导致对齐偏差，完成后请人工复核。成功后覆盖全部时间戳，"
                 "可在工具栏撤销一次恢复。"
             ),
-            self,
+            content,
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        from strange_uta_game.frontend.fluent_widgets import FluentGroupBox
-
-        self._box_status = FluentGroupBox(self.tr("执行前状态"), self)
+        # ── 执行前状态 ──
+        self._box_status = FluentGroupBox(self.tr("执行前状态"), content)
         layout.addWidget(self._box_status)
-        # 状态卡
-        self.row_audio = _StateRow(self.tr("原始音频"), self)
-        self.row_annotations = _StateRow(self.tr("歌词标注"), self)
-        self.row_vocal = _StateRow(self.tr("人声素材"), self)
-        self.row_separation = _StateRow(self.tr("分离环境"), self)
-        self.row_runtime = _StateRow(self.tr("对齐环境"), self)
-        self.row_model = _StateRow(self.tr("对齐模型"), self)
+        self.row_audio = _StateRow(self.tr("原始音频"), content)
+        self.row_annotations = _StateRow(self.tr("歌词标注"), content)
+        self.row_vocal = _StateRow(self.tr("人声素材"), content)
+        self.row_separation = _StateRow(self.tr("分离环境"), content)
+        self.row_runtime = _StateRow(self.tr("对齐环境"), content)
+        self.row_model = _StateRow(self.tr("对齐模型"), content)
         for row in (
             self.row_audio,
             self.row_annotations,
@@ -240,8 +250,8 @@ class AiTimingDialog(QDialog):
             self.row_model,
         ):
             self._box_status.contentLayout.addWidget(row)
-        # 行内动作：对齐环境的「安装/修复」、模型的「下载」「校验」
-        # （检测到缺什么，同行直接给操作，不用去底部找）
+        # 行内动作：对齐环境的「安装/修复」（含分离组件补装）、
+        # 模型的「下载」「校验」（检测到缺什么，同行直接给操作）
         self.btn_install_runtime = self.row_runtime.add_action(
             self.tr("安装 / 修复"), self._on_install_runtime
         )
@@ -253,53 +263,59 @@ class AiTimingDialog(QDialog):
         )
 
         # 多人声候选选择（§6.1：多个严格候选时在弹窗内选择）
-        self.vocal_combo = ComboBox(self)
+        self.vocal_combo = ComboBox(content)
         self.vocal_combo.hide()
         self._box_status.contentLayout.addWidget(self.vocal_combo)
 
         # 模型卡：许可证 + 非商业 + 可点击链接（§1.9/§3.3）
         model_credit = BodyLabel(
-            f'<a href="{MODEL_PAGE_URL}">{MODEL_LICENSE_TEXT}</a>', self
+            f'<a href="{MODEL_PAGE_URL}">{MODEL_LICENSE_TEXT}</a>', content
         )
         model_credit.setOpenExternalLinks(True)
         model_credit.setWordWrap(True)
         self._box_status.contentLayout.addWidget(model_credit)
 
-        self.blocking_label = BodyLabel("", self)
+        self.blocking_label = BodyLabel("", content)
         self.blocking_label.setWordWrap(True)
         self.blocking_label.setStyleSheet("color:#e85555;")
         self.blocking_label.hide()
         self._box_status.contentLayout.addWidget(self.blocking_label)
 
-        self._box_opts = FluentGroupBox(self.tr("选项与存储"), self)
-        layout.addWidget(self._box_opts)
-        # 高级选项（§3.2）
+        # ── 高级选项（§3.2）──
+        self._box_adv = FluentGroupBox(self.tr("高级选项"), content)
+        layout.addWidget(self._box_adv)
         advanced = QHBoxLayout()
-        advanced.addWidget(BodyLabel(self.tr("模型:"), self))
-        self.combo_model = ComboBox(self)
-        self.combo_model.addItems([self.tr("微调模型（效果优先）"), self.tr("MMS_FA（备选）")])
+        advanced.addWidget(BodyLabel(self.tr("对齐模型:"), content))
+        self.combo_model = ComboBox(content)
+        self.combo_model.addItems(
+            [self.tr("微调模型（效果优先）"), self.tr("MMS_FA（备选）")]
+        )
+        self.combo_model.currentIndexChanged.connect(self._on_model_combo_changed)
         advanced.addWidget(self.combo_model)
-        advanced.addWidget(BodyLabel(self.tr("设备:"), self))
-        self.combo_device = ComboBox(self)
+        advanced.addWidget(BodyLabel(self.tr("设备:"), content))
+        self.combo_device = ComboBox(content)
         self.combo_device.addItems([self.tr("自动"), "CPU", "CUDA"])
         advanced.addWidget(self.combo_device)
-        self.chk_tail_snap = CheckBox(self.tr("尾音修正"), self)
+        self.chk_tail_snap = CheckBox(self.tr("尾音修正"), content)
         self.chk_tail_snap.setChecked(self._settings.tail_snap)
         advanced.addWidget(self.chk_tail_snap)
-        self._box_opts.contentLayout.addLayout(advanced)
+        self._box_adv.contentLayout.addLayout(advanced)
         mirror_row = QHBoxLayout()
-        mirror_row.addWidget(BodyLabel(self.tr("下载镜像:"), self))
-        self.edit_mirror = LineEdit(self)
+        mirror_row.addWidget(BodyLabel(self.tr("下载镜像:"), content))
+        self.edit_mirror = LineEdit(content)
         self.edit_mirror.setText(self._settings.download_mirror)
-        self.edit_mirror.setPlaceholderText(self.tr("留空使用官方源，如 https://hf-mirror.com"))
+        self.edit_mirror.setPlaceholderText(
+            self.tr("留空使用官方源，如 https://hf-mirror.com")
+        )
         mirror_row.addWidget(self.edit_mirror, 1)
-        self._box_opts.contentLayout.addLayout(mirror_row)
+        self._box_adv.contentLayout.addLayout(mirror_row)
 
-        # 存储位置（§3.2）：导出页行样式——名称 + 省略路径 + 行内动作
+        # ── 存储位置（§3.2）：统一行样式——名称 + 省略路径 + 浏览 + 更改… ──
+        self._box_store = FluentGroupBox(self.tr("存储位置"), content)
+        layout.addWidget(self._box_store)
+
         def _path_row(name, path_getter, buttons):
-            from PyQt6.QtWidgets import QHBoxLayout, QWidget
-
-            row = QWidget(self)
+            row = QWidget(content)
             h = QHBoxLayout(row)
             h.setContentsMargins(0, 0, 0, 0)
             h.setSpacing(8)
@@ -311,11 +327,8 @@ class AiTimingDialog(QDialog):
                 b.setFixedHeight(26)
                 b.clicked.connect(cb)
                 h.addWidget(b)
-            row._value = value
-            row._refresh = lambda: value.setText(
-                self._elide_text(path_getter())
-            )
-            self._box_opts.contentLayout.addWidget(row)
+            row._refresh = lambda: value.setText(self._elide_text(path_getter()))
+            self._box_store.contentLayout.addWidget(row)
             return row
 
         self._row_model_dir = _path_row(
@@ -334,41 +347,54 @@ class AiTimingDialog(QDialog):
             lambda: str(self._snapshot.cache_root)
             if self._snapshot and self._snapshot.cache_root
             else self.tr("默认（.cache）"),
-            [(self.tr("更改…"), self._on_change_cache_dir)],
-        )
-        self._row_runtime = _path_row(
-            self.tr("运行环境"),
-            lambda: self._settings.runtime_python
-            or self.tr("当前解释器"),
             [
                 (
                     self.tr("浏览"),
                     lambda: self._open_dir(
-                        resolve_model_root(self._settings).parent / "ai_runtime"
+                        self._snapshot.cache_root
+                        if self._snapshot and self._snapshot.cache_root
+                        else Path.home()
                     ),
-                )
+                ),
+                (self.tr("更改…"), self._on_change_cache_dir),
             ],
         )
-        # 恢复推荐（右对齐，与路径行动作同层级）
-        from PyQt6.QtWidgets import QHBoxLayout as _HBL
-        tail = _HBL()
+        self._row_runtime = _path_row(
+            self.tr("运行环境"),
+            lambda: self._settings.runtime_python or self.tr("当前解释器"),
+            [
+                (
+                    self.tr("浏览"),
+                    lambda: self._open_dir(
+                        Path(self._settings.runtime_python).parent
+                        if self._settings.runtime_python
+                        else resolve_model_root(self._settings).parent
+                        / "ai_runtime"
+                    ),
+                ),
+                (self.tr("更改…"), self._on_change_runtime),
+            ],
+        )
+        tail = QHBoxLayout()
         tail.addStretch(1)
-        self.btn_reset = PushButton(self.tr("恢复推荐设置"), self)
+        self.btn_reset = PushButton(self.tr("恢复推荐设置"), content)
         self.btn_reset.setFixedHeight(26)
         self.btn_reset.clicked.connect(self._on_reset_settings)
         tail.addWidget(self.btn_reset)
-        self._box_opts.contentLayout.addLayout(tail)
+        self._box_store.contentLayout.addLayout(tail)
 
         layout.addStretch(1)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
 
-        # 进度与执行区
+        # ── 执行区（固定底部）──
         self.progress = ProgressBar(self)
         self.progress.setValue(0)
-        layout.addWidget(self.progress)
+        outer.addWidget(self.progress)
         self.status_label = StrongBodyLabel(self.tr("就绪"), self)
-        layout.addWidget(self.status_label)
+        outer.addWidget(self.status_label)
         self.eta_label = BodyLabel("", self)
-        layout.addWidget(self.eta_label)
+        outer.addWidget(self.eta_label)
 
         run_row = QHBoxLayout()
         run_row.addStretch(1)
@@ -380,12 +406,12 @@ class AiTimingDialog(QDialog):
         self.btn_run.clicked.connect(self._on_run_clicked)
         run_row.addWidget(self.btn_cancel)
         run_row.addWidget(self.btn_run)
-        layout.addLayout(run_row)
+        outer.addLayout(run_row)
 
         # 参考标注（用户要求：UI 内标注参考 FA-Kara）
         credit = BodyLabel(CREDIT_TEXT, self)
         credit.setStyleSheet("color:#888888;")
-        layout.addWidget(credit)
+        outer.addWidget(credit)
 
     # ── 后台任务基础设施 ──
 
@@ -420,7 +446,7 @@ class AiTimingDialog(QDialog):
             self.btn_install_runtime,
             self.btn_recheck,
             self.btn_reset,
-        ]  # 全部已存在：前三个在状态行内，其余在存储动作行
+        ]
 
     def _cleanup_task(self) -> None:
         if self._thread is not None:
@@ -442,9 +468,11 @@ class AiTimingDialog(QDialog):
         # 传输层给出真实速度/剩余时优先展示，否则退回百分比估算
         if "MB/s" in message and "预计剩余" in message:
             tail = message.split("，")[-1].rstrip("）")
-            self.eta_label.setText(tail + "　·　" + [
-                p for p in message.split("，") if "MB/s" in p
-            ][0])
+            self.eta_label.setText(
+                tail
+                + "　·　"
+                + [p for p in message.split("，") if "MB/s" in p][0]
+            )
         else:
             self.eta_label.setText(self._compute_eta(percent))
 
@@ -508,6 +536,13 @@ class AiTimingDialog(QDialog):
             except Exception:
                 pass
 
+    def _on_model_combo_changed(self, *_args) -> None:
+        """高级选项切换模型 → 立即持久化并刷新状态行（保持两处一致）。"""
+        if self._busy:
+            return
+        self._persist_settings()
+        self.refresh()
+
     # ── 状态刷新 ──
 
     def refresh(self) -> None:
@@ -522,7 +557,7 @@ class AiTimingDialog(QDialog):
             self.row_runtime,
             self.row_model,
         ):
-            row.set_state("busy", "检查中…")
+            row.set_state("busy", self.tr("检查中…"))
         self.btn_run.setEnabled(False)
 
         def _task(progress_cb, cancel_check):
@@ -543,7 +578,9 @@ class AiTimingDialog(QDialog):
             if self._audio_duration_ms > 0:
                 secs = self._audio_duration_ms / 1000
                 duration = f"，时长 {int(secs // 60)}:{int(secs % 60):02d}"
-            self.row_audio.set_state("ok", Path(snapshot.audio_path).name + duration)
+            self.row_audio.set_state(
+                "ok", Path(snapshot.audio_path).name + duration
+            )
         else:
             self.row_audio.set_state("error", self.tr("未加载音频"))
 
@@ -555,7 +592,9 @@ class AiTimingDialog(QDialog):
                     f"{snapshot.pending_units} 个节奏点缺少读音 {detail}".strip(),
                 )
             else:
-                self.row_annotations.set_state("ok", self.tr("既有标注优先，缺口已补足"))
+                self.row_annotations.set_state(
+                    "ok", self.tr("既有标注优先，缺口已补足")
+                )
         else:
             self.row_annotations.set_state("error", self.tr("工程没有可对齐正文"))
 
@@ -573,17 +612,28 @@ class AiTimingDialog(QDialog):
                 "separated": self.tr("本次分离的人声"),
             }
             self.row_vocal.set_state(
-                "ok", self.tr("可复用（{source}）").format(source=source_names.get(vocal.state, vocal.state))
+                "ok",
+                self.tr("可复用（{source}）").format(
+                    source=source_names.get(vocal.state, vocal.state)
+                ),
             )
         elif vocal.state == "needs_choice":
-            self.row_vocal.set_state("warn", self.tr("同目录存在多个人声文件，请选择"))
+            self.row_vocal.set_state(
+                "warn", self.tr("同目录存在多个人声文件，请选择")
+            )
             for path in vocal.choices:
                 self.vocal_combo.addItem(path.name, userData=str(path))
             if vocal.choices:
                 self.vocal_combo.setCurrentIndex(0)
             self.vocal_combo.show()
         else:
-            self.row_vocal.set_state("warn", self.tr("需要分离人声"))
+            # 分离组件就绪时这不再是阻断：执行阶段会自动分离
+            self.row_vocal.set_state(
+                "warn" if not snapshot.separation_available else "busy",
+                self.tr("将自动分离人声")
+                if snapshot.separation_available
+                else self.tr("需要分离人声"),
+            )
 
         # 分离环境（§3.2/§6.2）：embedded 跟随工作台设置；
         # standalone = 共享 Runtime（含 audio-separator）是否已装
@@ -598,7 +648,10 @@ class AiTimingDialog(QDialog):
         else:
             self.row_separation.set_state(
                 "warn",
-                self.tr("未安装：点击「对齐环境 → 安装 / 修复」可一并安装分离能力"),
+                self.tr(
+                    "未安装：点击「对齐环境 → 安装 / 修复」自动补装"
+                    "（已装过环境只会补缺失组件）"
+                ),
             )
 
         runtime = snapshot.runtime
@@ -616,7 +669,7 @@ class AiTimingDialog(QDialog):
         self.btn_recheck.setVisible(not is_mms)
         if is_mms:
             self.row_model.set_state(
-                "ok", "MMS_FA（备选）：随对齐环境自动获取，无需下载"
+                "ok", self.tr("MMS_FA（备选）：随对齐环境自动获取，无需下载")
             )
         elif model is not None and model.is_ready:
             self.row_model.set_state("ok", self._elide_text(model.model_dir))
@@ -636,8 +689,7 @@ class AiTimingDialog(QDialog):
         reasons = snapshot.blocking_reasons
         if reasons:
             self.blocking_label.setText(
-                self.tr("执行前需解决：\n")
-                + "\n".join(reasons)
+                self.tr("执行前需解决：\n") + "\n".join(reasons)
             )
             self.blocking_label.show()
             self.btn_run.setEnabled(False)
@@ -652,12 +704,13 @@ class AiTimingDialog(QDialog):
         text = str(text)
         if len(text) <= width:
             return text
-        return text[: width // 2 - 4] + "…" + text[-width // 2:]
+        return text[: width // 2 - 4] + "…" + text[-width // 2 :]
 
-    @staticmethod
-    def _open_dir(path: Path) -> None:
+    def _open_dir(self, path: Path) -> None:
+        """在系统资源管理器中打开目录（不存在则先创建）。"""
+        path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
-        QFileDialog.getOpenFileName(None, self.tr("选择目录内任意文件以打开该目录"), str(path))
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def _on_download_model(self) -> None:
         model_id = self._service.effective_model_id
@@ -715,6 +768,22 @@ class AiTimingDialog(QDialog):
 
         self._run_task(_task, _done, self.tr("正在安装对齐环境…"))
 
+    def _notify_saved_reopen(self) -> None:
+        """模型/缓存根变更提示：设置已落盘，重新打开窗口后生效。
+
+        模型注册表与 AI 缓存实例在弹窗打开时构建并固定根目录，
+        原地更换设置不会迁移它们——因此提示用户重开窗口（重建栈）。
+        """
+        InfoBar.info(
+            title=self.tr("已保存"),
+            content=self.tr("位置已更新，重新打开本窗口后生效。"),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=4000,
+            parent=self,
+        )
+
     def _on_change_model_dir(self) -> None:
         chosen = QFileDialog.getExistingDirectory(
             self, self.tr("选择模型根目录"), str(resolve_model_root(self._settings))
@@ -722,7 +791,8 @@ class AiTimingDialog(QDialog):
         if chosen:
             self._settings.model_root = chosen
             self._persist_settings()
-            self.refresh()
+            self._notify_saved_reopen()
+            self.close()
 
     def _on_change_cache_dir(self) -> None:
         chosen = QFileDialog.getExistingDirectory(
@@ -733,9 +803,22 @@ class AiTimingDialog(QDialog):
         if chosen:
             self._settings.ai_cache_root = chosen
             self._persist_settings()
+            self._notify_saved_reopen()
+            self.close()
+
+    def _on_change_runtime(self) -> None:
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self,
+            self.tr("选择对齐运行环境的 python.exe"),
+            self._settings.runtime_python or str(Path.home()),
+            "python (python.exe python3 python);;All files (*)",
+        )
+        if chosen:
+            self._settings.runtime_python = chosen
+            self._persist_settings()
             InfoBar.info(
-                title=self.tr("缓存位置已更新"),
-                content=self.tr("独立运行模式将使用新位置；嵌入模式由工作台注入。"),
+                title=self.tr("已保存"),
+                content=self.tr("运行环境已更新，将立即生效。"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -854,7 +937,10 @@ class AiTimingDialog(QDialog):
             reply = message_question(
                 self,
                 self.tr("任务进行中"),
-                self.tr("AI 打轴任务仍在进行，关闭窗口将取消任务并丢弃未应用的结果。确定关闭吗？"),
+                self.tr(
+                    "AI 打轴任务仍在进行，关闭窗口将取消任务并丢弃未应用的结果。"
+                    "确定关闭吗？"
+                ),
                 yes_text=self.tr("取消并关闭"),
                 no_text=self.tr("继续任务"),
                 default_cancel=True,
