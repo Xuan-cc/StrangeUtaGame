@@ -38,13 +38,52 @@ RUNTIME_REQUIREMENTS: List[str] = [
     "librosa==0.10.2.post1",
 ]
 
+# Windows 上 PyPI 的 torch 默认是 CPU-only wheel，GPU 推理必须显式走
+# PyTorch 官方 CUDA 索引（cu128 为当前稳定完整索引，cp313/cp314
+# win_amd64 wheel 已确认存在；RTX 50 系 Blackwell 需要 cu128 及以上）。
+TORCH_CUDA_TAG = "cu128"
+TORCH_CUDA_INDEX_URL = f"https://download.pytorch.org/whl/{TORCH_CUDA_TAG}"
+
+# CUDA 路由的版本钉子。两个原因都必须钉到「版本+cu128 本地标签」：
+# 1. PyPI 的 torch 版本可能高于 CUDA 索引（实测 PyPI 2.13.0+cpu vs
+#    cu128 索引 2.11.0+cu128），不钉版本 pip 依旧选 PyPI 的 CPU wheel；
+# 2. 只钉 ``torch==2.11.0`` 时，已装的 2.11.0+cpu torchaudio 会被视为
+#    已满足——CPU 变体 torchaudio 与 CUDA 变体 torch 混装不受支持。
+# 升级 Runtime 基线时同步 bump 版本与 TORCH_CUDA_TAG。
+TORCH_CUDA_VERSION = "2.11.0"
+
+# CUDA 版运行环境的磁盘需求（torch cu wheel 约 3GB 下载 / 6GB 落盘，
+# 加依赖与缓存余量）
+CUDA_RUNTIME_DISK_GB = 8
+
 _PROBE_CODE = (
     "import json;"
     "import torch,transformers,soundfile,audio_separator;"
     "print(json.dumps({'torch': torch.__version__,"
     " 'cuda': bool(torch.cuda.is_available()),"
+    " 'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else '',"
     " 'transformers': transformers.__version__}))"
 )
+
+
+def detect_nvidia_gpu() -> str:
+    """探测 NVIDIA GPU 名称（nvidia-smi）；无独显/无驱动/失败返回空串。
+
+    在宿主进程执行即可——探测的解释器与本机是同一块显卡；CPU 版
+    torch 看不到 CUDA 设备，但 nvidia-smi 与 torch 版本无关。
+    """
+    try:
+        completed = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if completed.returncode == 0:
+            return (completed.stdout or "").strip().splitlines()[0].strip()
+    except (OSError, subprocess.TimeoutExpired, IndexError):
+        pass
+    return ""
 
 
 class AiRuntimeError(RuntimeError):
@@ -58,6 +97,8 @@ class RuntimeStatus:
     torch_version: str = ""
     transformers_version: str = ""
     cuda_available: bool = False
+    gpu_name: str = ""
+    """NVIDIA GPU 名称（CUDA 可用时来自 torch，否则来自 nvidia-smi）。"""
     message: str = ""
 
     @property
@@ -139,6 +180,7 @@ class AiRuntimeManager:
             torch_version=str(info.get("torch", "")),
             transformers_version=str(info.get("transformers", "")),
             cuda_available=bool(info.get("cuda", False)),
+            gpu_name=str(info.get("gpu", "")) or detect_nvidia_gpu(),
         )
 
     @staticmethod
@@ -175,7 +217,37 @@ class AiRuntimeManager:
         cancel = cancel or (lambda: False)
 
         target_dir = Path(target_dir)
-        progress(2, f"创建虚拟环境：{target_dir}")
+
+        # GPU 策略最先确定（探测在本机执行，与解释器无关）：检测到
+        # NVIDIA 显卡时走 PyTorch 官方 CUDA 索引——PyPI 的 Windows
+        # torch 默认是 CPU-only wheel，不显式指定索引 GPU 永远不会被
+        # 用到；-U 让已装的 CPU 版原地升级到 +cu128 本地版本
+        gpu_name = detect_nvidia_gpu()
+        use_cuda = bool(gpu_name)
+        if use_cuda:
+            progress(2, f"检测到 NVIDIA GPU（{gpu_name}），安装 CUDA 版运行环境")
+            import shutil as _shutil
+
+            try:
+                free_gb = (
+                    _shutil.disk_usage(target_dir.anchor or target_dir.parent).free
+                    / 1024
+                    / 1024
+                    / 1024
+                )
+                if free_gb < CUDA_RUNTIME_DISK_GB:
+                    raise AiRuntimeError(
+                        f"CUDA 版运行环境约需 {CUDA_RUNTIME_DISK_GB}GB 磁盘，"
+                        f"当前剩余 {free_gb:.1f}GB。请清理磁盘后重试"
+                    )
+            except AiRuntimeError:
+                raise
+            except Exception:
+                pass  # 空间查询失败不阻断，交给 pip 自身的磁盘错误
+        else:
+            progress(2, "未检测到 NVIDIA GPU，安装 CPU 版运行环境")
+
+        progress(4, f"创建虚拟环境：{target_dir}")
         try:
             venv.create(target_dir, with_pip=True, clear=False)
         except (OSError, ValueError) as exc:
@@ -198,9 +270,32 @@ class AiRuntimeManager:
             args += ["--index-url", index_url]
         if extra_index_url:
             args += ["--extra-index-url", extra_index_url]
+        elif use_cuda:
+            args += ["--extra-index-url", TORCH_CUDA_INDEX_URL]
         elif mirror:
             args += ["-i", mirror]
-        args += list(requirements or RUNTIME_REQUIREMENTS)
+        requirements = list(requirements or RUNTIME_REQUIREMENTS)
+        if use_cuda:
+            # 钉住 torch/torchaudio 到 CUDA 索引可用的版本（见常量注释），
+            # 其余依赖不受影响
+            cuda_pin = f"=={TORCH_CUDA_VERSION}+{TORCH_CUDA_TAG}"
+            pinned = []
+            for req in requirements:
+                name = (
+                    req.split("=")[0]
+                    .split(">")[0]
+                    .split("<")[0]
+                    .split("[")[0]
+                    .strip()
+                )
+                if name in ("torch", "torchaudio"):
+                    pinned.append(f"{name}{cuda_pin}")
+                else:
+                    pinned.append(req)
+            requirements = pinned
+        if use_cuda:
+            args += ["-U"]
+        args += list(requirements)
 
         import os
         import time as _time
@@ -231,7 +326,7 @@ class AiRuntimeManager:
                 text = line.strip()
                 if text:
                     dry_lines += 1
-                    progress(min(9, 3 + dry_lines // 3), f"解析依赖：{text}")
+                    progress(min(9, 5 + dry_lines // 3), f"解析依赖：{text}")
 
             dry_rc = self._pip_runner(
                 python_exe,

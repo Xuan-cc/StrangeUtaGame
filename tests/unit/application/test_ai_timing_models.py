@@ -376,6 +376,138 @@ class TestRuntimeInstall:
         with pytest.raises(AiRuntimeError, match="已取消"):
             manager.install(tmp_path / "rt", cancel=lambda: True)
 
+    def test_install_uses_cuda_index_when_gpu_present(
+        self, tmp_path, monkeypatch
+    ):
+        """检测到 NVIDIA GPU：走 PyTorch CUDA 索引 + -U（CPU 版原地升级）。
+
+        回归：PyPI 的 Windows torch 默认 CPU-only wheel，此前安装器
+        从不指定 CUDA 索引，装出来的环境 GPU 永远不可用。
+        """
+        self._fake_venv(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "RTX 4080")
+        seen = {}
+
+        def fake_runner(exe, args, on_line, cancel):
+            seen.setdefault("args", args)
+            return 0
+
+        events = []
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        status = manager.install(
+            tmp_path / "rt", progress=lambda p, m: events.append((p, m))
+        )
+        assert status.available
+        args = seen["args"]
+        i = args.index("--extra-index-url")
+        assert args[i + 1] == rt.TORCH_CUDA_INDEX_URL
+        assert "-U" in args
+        # PyPI torch 版本可能高于 CUDA 索引：必须钉「版本+cu128 本地标签」
+        # 才能命中 CUDA wheel（且不会被已装的同版本 CPU 变体视为已满足）
+        pin = f"=={rt.TORCH_CUDA_VERSION}+{rt.TORCH_CUDA_TAG}"
+        assert f"torch{pin}" in args
+        assert f"torchaudio{pin}" in args
+        assert "librosa==0.10.2.post1" in args  # 既有钉子不受影响
+        assert any("CUDA 版" in m for _, m in events)
+
+    def test_install_cpu_route_without_gpu(self, tmp_path, monkeypatch):
+        """无 NVIDIA GPU：不加 CUDA 索引/-U，镜像参数不受影响。"""
+        self._fake_venv(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
+        seen = {}
+
+        def fake_runner(exe, args, on_line, cancel):
+            seen.setdefault("args", args)
+            return 0
+
+        events = []
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        manager.install(
+            tmp_path / "rt",
+            mirror="https://pypi.example/simple",
+            progress=lambda p, m: events.append((p, m)),
+        )
+        args = seen["args"]
+        assert "--extra-index-url" not in args
+        assert "-U" not in args
+        assert "-i" in args and "https://pypi.example/simple" in args
+        assert any("CPU 版" in m for _, m in events)
+
+
+class TestGpuDetection:
+    def test_detect_nvidia_gpu_parses_name(self, monkeypatch):
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        class _C:
+            returncode = 0
+            stdout = "NVIDIA GeForce RTX 4080\n"
+
+        monkeypatch.setattr(rt.subprocess, "run", lambda *a, **k: _C())
+        assert rt.detect_nvidia_gpu() == "NVIDIA GeForce RTX 4080"
+
+    def test_detect_no_gpu_returns_empty(self, monkeypatch):
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        def _raise(*a, **k):
+            raise OSError("nvidia-smi 不存在")
+
+        monkeypatch.setattr(rt.subprocess, "run", _raise)
+        assert rt.detect_nvidia_gpu() == ""
+
+    def test_probe_fills_gpu_name_from_torch_or_sm(self, monkeypatch):
+        """CUDA 可用时用 torch 的设备名；CPU 版环境退回 nvidia-smi。"""
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        class _C:
+            def __init__(self, stdout):
+                self.returncode = 0
+                self.stdout = stdout
+
+        outputs = {
+            "cuda": _C(
+                '{"torch": "2.9.1+cu128", "cuda": true, '
+                '"gpu": "NVIDIA GeForce RTX 4080", '
+                '"transformers": "5.15.0"}'
+            ),
+            "cpu": _C(
+                '{"torch": "2.9.1", "cuda": false, "gpu": "", '
+                '"transformers": "5.15.0"}'
+            ),
+        }
+        monkeypatch.setattr(
+            rt.subprocess, "run", lambda *a, **k: outputs["cuda"]
+        )
+        manager = rt.AiRuntimeManager()
+        status = manager.probe("")  # 空 = 当前解释器，跳过路径存在检查
+        assert status.cuda_available
+        assert status.gpu_name == "NVIDIA GeForce RTX 4080"
+
+        monkeypatch.setattr(
+            rt.subprocess, "run", lambda *a, **k: outputs["cpu"]
+        )
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "RTX 4080")
+        status = manager.probe("")
+        assert not status.cuda_available
+        assert status.gpu_name == "RTX 4080"
+
 
 class TestSettings:
     def test_roundtrip(self):

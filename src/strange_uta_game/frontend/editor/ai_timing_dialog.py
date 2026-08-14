@@ -824,7 +824,17 @@ class AiTimingDialog(QDialog):
 
         runtime = snapshot.runtime
         if runtime is not None and runtime.available:
-            self.row_runtime.set_state("ok", runtime.summary)
+            if not runtime.cuda_available and runtime.gpu_name:
+                # CPU 版运行环境 + 检测到 NVIDIA 显卡：一键升级 CUDA 版
+                self.row_runtime.set_state(
+                    "warn",
+                    runtime.summary
+                    + self.tr(
+                        "（检测到 {gpu}，点「安装 / 修复」可升级 CUDA 版）"
+                    ).format(gpu=runtime.gpu_name),
+                )
+            else:
+                self.row_runtime.set_state("ok", runtime.summary)
         else:
             self.row_runtime.set_state(
                 "error",

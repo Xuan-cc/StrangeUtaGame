@@ -390,9 +390,13 @@ class Wav2Vec2LatnProvider(_TorchProviderBase):
             ) from exc
         self._model_id = str(model_spec.get("model_id") or DEFAULT_WAV2VEC2_MODEL)
         device = str(model_spec.get("device") or "auto")
-        self._device = torch.device(
-            device if device != "auto" else ("cuda" if torch.cuda.is_available() else "cpu")
-        )
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        elif device == "cuda" and not torch.cuda.is_available():
+            # CPU 版 torch 被显式要求 CUDA：回退而不是崩溃
+            progress(18, "未检测到可用 CUDA，回退 CPU 推理")
+            device = "cpu"
+        self._device = torch.device(device)
         progress(20, f"加载对齐模型 {self._model_id}")
         _cancelled_check(cancel)
         try:
@@ -484,9 +488,12 @@ class MmsFaProvider(_TorchProviderBase):
 
         self._model_id = "MMS_FA"
         device = str(model_spec.get("device") or "auto")
-        self._device = torch.device(
-            device if device != "auto" else ("cuda" if torch.cuda.is_available() else "cpu")
-        )
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        elif device == "cuda" and not torch.cuda.is_available():
+            progress(18, "未检测到可用 CUDA，回退 CPU 推理")
+            device = "cpu"
+        self._device = torch.device(device)
         progress(20, "加载 MMS_FA 对齐模型")
         _cancelled_check(cancel)
         try:

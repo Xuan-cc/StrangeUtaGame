@@ -222,6 +222,32 @@ class TestAiTimingDialog:
         assert dialog.row_vocal._state == "warn"
         assert not dialog.btn_run.isEnabled()
 
+    def test_runtime_row_hints_cuda_upgrade(self, qapp, tmp_path):
+        """CPU 版运行环境 + 检测到 NVIDIA 显卡：橙色提示可升级 CUDA 版。"""
+        snap = _ready_snapshot()
+        snap.runtime = RuntimeStatus(
+            available=True,
+            torch_version="2.9.1",
+            transformers_version="5.15.0",
+            cuda_available=False,
+            gpu_name="NVIDIA GeForce RTX 4080",
+        )
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._on_snapshot_ready(snap)
+        assert dialog.row_runtime._state == "warn"
+        combined = (
+            dialog.row_runtime._state_label.text()
+            + dialog.row_runtime._state_label.toolTip()
+        )
+        assert "安装 / 修复" in combined and "RTX 4080" in combined
+        # 运行环境本身可用：不进阻断理由，执行按钮不受影响
+        assert dialog.btn_run.isEnabled()
+
+        # 无显卡信息时保持正常绿色状态
+        snap2 = _ready_snapshot()
+        dialog._on_snapshot_ready(snap2)
+        assert dialog.row_runtime._state == "ok"
+
 
 class TestToolbarButton:
     def test_toolbar_has_ai_timing_button(self, qapp):
