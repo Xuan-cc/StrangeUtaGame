@@ -382,6 +382,9 @@ class HfHubTransport(ModelDownloadTransport):
 
         total = expected_size or int(resp.headers.get("Content-Length", 0)) + offset
         done_bytes = offset
+        import time as _time
+        _t0 = _time.monotonic()
+        _b0 = done_bytes
         try:
             mode = "ab" if offset and resp.status_code == 206 else "wb"
             with part.open(mode) as fh:
@@ -393,10 +396,14 @@ class HfHubTransport(ModelDownloadTransport):
                     fh.write(chunk)
                     done_bytes += len(chunk)
                     if total:
+                        _elapsed = max(0.001, _time.monotonic() - _t0)
+                        _rate = (done_bytes - _b0) / _elapsed / 1024 / 1024
+                        _eta = int((total - done_bytes) / max(_rate, 0.001))
+                        _m, _s = divmod(_eta, 60)
                         progress(
                             min(99, int(done_bytes * 100 / total)),
                             f"下载 {filename}"
-                            f"（{done_bytes // 1024 // 1024}MB / {total // 1024 // 1024}MB）",
+                            f"({done_bytes // 1024 // 1024}MB / {total // 1024 // 1024}MB，{_rate:.1f}MB/s，剩余约 {_m}:{_s:02d}）",
                         )
         except ModelRegistryError:
             raise

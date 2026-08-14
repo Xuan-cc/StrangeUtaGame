@@ -290,6 +290,7 @@ class AiTimingDialog(QDialog):
 
         # 存储位置的动作（§3.3 浏览/更改/恢复推荐；下载与安装已上移到对应行内）
         actions = QHBoxLayout()
+        actions.addStretch(1)
         self.btn_browse_model = PushButton(self.tr("浏览模型目录"), self)
         self.btn_browse_model.clicked.connect(
             lambda: self._open_dir(resolve_model_root(self._settings))
@@ -398,7 +399,12 @@ class AiTimingDialog(QDialog):
         self.progress.setValue(max(0, min(100, percent)))
         if message:
             self.status_label.setText(message)
-        self.eta_label.setText(self._compute_eta(percent))
+        # 传输层给出真实速度/剩余时优先展示，否则退回百分比估算
+        if "MB/s" in message and "剩余约" in message:
+            parts = [p for p in message.split("，") if "MB/s" in p or "剩余约" in p]
+            self.eta_label.setText("　".join(parts))
+        else:
+            self.eta_label.setText(self._compute_eta(percent))
 
     def _compute_eta(self, percent: int) -> str:
         """平滑 ETA：样本不足时显示「正在估算」（§8.2）。"""
@@ -575,14 +581,9 @@ class AiTimingDialog(QDialog):
             )
 
         # 存储位置（§3.2）：分行明确标注，避免与状态行混淆
-        mode = (
-            self.tr("嵌入模式")
-            if snapshot.separation_follows_host
-            else self.tr("独立模式")
-        )
         lines = [
-            self.tr("[{mode}] 模型目录：{path}").format(
-                mode=mode, path=resolve_model_root(self._settings)
+            self.tr("模型目录：{path}").format(
+                path=resolve_model_root(self._settings)
             )
         ]
         if snapshot.cache_root is not None:

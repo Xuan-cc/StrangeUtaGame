@@ -2184,6 +2184,7 @@ class EditorInterface(QWidget):
             separation_executor=executor,
             separation_identity=identity_fn,
             separation_prober=prober,
+            separation_follows_host=host is not None,
         )
         # 代理：embedded 用宿主（工作台网络设置）；standalone 用 SUG 自己
         # 「设置 → 网络与代理」的代理模式（updater.proxy.resolve_proxy）

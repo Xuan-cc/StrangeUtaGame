@@ -153,6 +153,7 @@ class AiTimingService:
         resolver: Optional[PronunciationResolver] = None,
         worker_factory: Optional[Callable[[str], WorkerLike]] = None,
         separation_prober: Optional[Callable[[], bool]] = None,
+        separation_follows_host: bool = False,
         separation_executor: Optional[
             Callable[[Path, ProgressFn, CancelFn], Path]
         ] = None,
@@ -182,6 +183,7 @@ class AiTimingService:
         )
         self._worker_factory = worker_factory or self._default_worker_factory
         self._separation_prober = separation_prober
+        self._separation_follows_host = separation_follows_host
         self._separation_executor = separation_executor
         self._separation_identity = separation_identity or (
             lambda: {"model": "unknown", "stem": "人声", "params": {}}
@@ -242,14 +244,16 @@ class AiTimingService:
         if probe_runtime:
             snap.runtime = self._runtime.probe(self._worker_python())
         snap.model = self._registry.validate(self.effective_model_id)
-        snap.separation_follows_host = self._separation_executor is not None
+        snap.separation_follows_host = self._separation_follows_host
         if self._separation_prober is not None:
             try:
                 snap.separation_available = bool(self._separation_prober())
             except Exception:
                 snap.separation_available = False
         else:
-            snap.separation_available = self._separation_executor is not None
+            snap.separation_available = (
+                self._separation_executor is not None
+            )
         snap.cache_root = self._cache.root
         return snap
 
