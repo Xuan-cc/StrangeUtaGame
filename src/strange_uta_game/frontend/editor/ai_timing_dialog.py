@@ -219,6 +219,10 @@ class AiTimingDialog(QDialog):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
+        from strange_uta_game.frontend.fluent_widgets import FluentGroupBox
+
+        self._box_status = FluentGroupBox(self.tr("执行前状态"), self)
+        layout.addWidget(self._box_status)
         # 状态卡
         self.row_audio = _StateRow(self.tr("原始音频"), self)
         self.row_annotations = _StateRow(self.tr("歌词标注"), self)
@@ -234,7 +238,7 @@ class AiTimingDialog(QDialog):
             self.row_runtime,
             self.row_model,
         ):
-            layout.addWidget(row)
+            self._box_status.contentLayout.addWidget(row)
         # 行内动作：对齐环境的「安装/修复」、模型的「下载」「校验」
         # （检测到缺什么，同行直接给操作，不用去底部找）
         self.btn_install_runtime = self.row_runtime.add_action(
@@ -250,7 +254,7 @@ class AiTimingDialog(QDialog):
         # 多人声候选选择（§6.1：多个严格候选时在弹窗内选择）
         self.vocal_combo = ComboBox(self)
         self.vocal_combo.hide()
-        layout.addWidget(self.vocal_combo)
+        self._box_status.contentLayout.addWidget(self.vocal_combo)
 
         # 模型卡：许可证 + 非商业 + 可点击链接（§1.9/§3.3）
         model_credit = BodyLabel(
@@ -258,14 +262,16 @@ class AiTimingDialog(QDialog):
         )
         model_credit.setOpenExternalLinks(True)
         model_credit.setWordWrap(True)
-        layout.addWidget(model_credit)
+        self._box_status.contentLayout.addWidget(model_credit)
 
         self.blocking_label = BodyLabel("", self)
         self.blocking_label.setWordWrap(True)
         self.blocking_label.setStyleSheet("color:#e85555;")
         self.blocking_label.hide()
-        layout.addWidget(self.blocking_label)
+        self._box_status.contentLayout.addWidget(self.blocking_label)
 
+        self._box_opts = FluentGroupBox(self.tr("选项与存储"), self)
+        layout.addWidget(self._box_opts)
         # 高级选项（§3.2）
         advanced = QHBoxLayout()
         advanced.addWidget(BodyLabel(self.tr("模型:"), self))
@@ -279,19 +285,19 @@ class AiTimingDialog(QDialog):
         self.chk_tail_snap = CheckBox(self.tr("尾音修正"), self)
         self.chk_tail_snap.setChecked(self._settings.tail_snap)
         advanced.addWidget(self.chk_tail_snap)
-        layout.addLayout(advanced)
+        self._box_opts.contentLayout.addLayout(advanced)
         mirror_row = QHBoxLayout()
         mirror_row.addWidget(BodyLabel(self.tr("下载镜像:"), self))
         self.edit_mirror = LineEdit(self)
         self.edit_mirror.setText(self._settings.download_mirror)
         self.edit_mirror.setPlaceholderText(self.tr("留空使用官方源，如 https://hf-mirror.com"))
         mirror_row.addWidget(self.edit_mirror, 1)
-        layout.addLayout(mirror_row)
+        self._box_opts.contentLayout.addLayout(mirror_row)
 
         # 存储位置（§3.2）
         self.storage_label = BodyLabel("", self)
         self.storage_label.setWordWrap(True)
-        layout.addWidget(self.storage_label)
+        self._box_opts.contentLayout.addWidget(self.storage_label)
 
         # 存储位置的动作（§3.3 浏览/更改/恢复推荐；下载与安装已上移到对应行内）
         actions = QHBoxLayout()
@@ -322,7 +328,7 @@ class AiTimingDialog(QDialog):
             b.setFixedHeight(26)
             actions.addWidget(b)
         actions.addStretch(1)
-        layout.addLayout(actions)
+        self._box_opts.contentLayout.addLayout(actions)
 
         layout.addStretch(1)
 
@@ -588,7 +594,7 @@ class AiTimingDialog(QDialog):
                 "ok", "MMS_FA（备选）：随对齐环境自动获取，无需下载"
             )
         elif model is not None and model.is_ready:
-            self.row_model.set_state("ok", str(model.model_dir))
+            self.row_model.set_state("ok", self._elide_text(model.model_dir))
         else:
             # 告知目标位置：用户在下载前就知道模型会放到哪里（可更改）
             self.row_model.set_state(
@@ -632,6 +638,13 @@ class AiTimingDialog(QDialog):
             self.btn_run.setEnabled(True)
 
     # ── 动作 ──
+
+    @staticmethod
+    def _elide_text(text, width=48):
+        text = str(text)
+        if len(text) <= width:
+            return text
+        return text[: width // 2 - 4] + "…" + text[-width // 2:]
 
     @staticmethod
     def _open_dir(path: Path) -> None:
