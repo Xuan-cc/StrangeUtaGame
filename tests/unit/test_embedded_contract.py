@@ -287,7 +287,7 @@ class TestEmbeddedUIContract:
         assert standalone.btn_export_to_next is None
         assert standalone._export_button_row.count() == 1
         assert embedded.btn_export_to_next is not None
-        assert embedded.btn_export_to_next.text() == "导出到下一步"
+        assert embedded.btn_export_to_next.text() == "进入下一步"
         assert embedded._export_button_row.count() == 2
         assert embedded._export_button_row.stretch(0) == 1
         assert embedded._export_button_row.stretch(1) == 1
