@@ -157,6 +157,9 @@ def english_word_syllables(word: str) -> List[str]:
 
     e2k 命中：片假名按拍切分后走与日文路径相同的罗马字转换器
     （take→テイク→["te","i","ku"]）。结果按词缓存。
+
+    音素路径（``english_word_phoneme_syllables``）未命中时的回退口径，
+    词内 token 仍由 provider 按比例切分。
     """
     word = word.strip()
     if not word:
@@ -187,6 +190,162 @@ def english_word_syllables(word: str) -> List[str]:
 
     _ENGLISH_CACHE[key] = list(result)
     return list(result)
+
+
+# ── 英文：CMU 音素 → 音节罗马字（FA-Kara 口径，MIT）──
+# 与 e2k（词→片假名→按拍）不同：读音直接来自 cmudict ARPAbet 音素，
+# 按「最大节首辅音原则」切成音节后逐音素映射成罗马字，再合并到
+# pyphen 拼写音节数——token 粒度=拼写音节，每个音节可独立对齐
+# （e2k 按拍口径词内边界靠比例切分，实测不如音素口径准）。
+# 音素映射表取自 https://github.com/moriwx/FA-Kara（MIT），未内嵌其代码。
+
+_CMU_PHONEME_ROMAJI = {
+    'AA': 'a', 'AE': 'a', 'AH': 'a', 'AO': 'o', 'AW': 'au', 'AY': 'ai',
+    'B': 'b', 'CH': 'ch', 'D': 'd', 'DH': 'z', 'EH': 'e', 'ER': 'a',
+    'EY': 'ei', 'F': 'f', 'G': 'g', 'HH': 'h', 'IH': 'i', 'IY': 'i',
+    'JH': 'j', 'K': 'k', 'L': 'r', 'M': 'm', 'N': 'n', 'NG': 'ng',
+    'OW': 'o', 'OY': 'oi', 'P': 'p', 'R': 'r', 'S': 's', 'SH': 'sh',
+    'T': 't', 'TH': 's', 'UH': 'u', 'UW': 'u', 'V': 'v', 'W': 'w',
+    'Y': 'y', 'Z': 'z', 'ZH': 'j',
+}
+
+_CMU_VOWELS = {
+    'AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY',
+    'IH', 'IY', 'OW', 'OY', 'UH', 'UW',
+}
+
+_CMU_LOOKUP_CACHE: Optional[Callable[[str], Optional[List[str]]]] = None
+"""惰性持有的 cmudict 查询函数（word_lower → 首选音素序列）；测试可整体替换。"""
+
+_PHONEME_CACHE: dict = {}
+
+
+def _cmu_lookup(word: str) -> Optional[List[str]]:
+    """cmudict-0.7b 查询（首选发音；文件缺失/解析失败返回 None）。"""
+    global _CMU_LOOKUP_CACHE
+    if _CMU_LOOKUP_CACHE is None:
+        table: dict = {}
+
+        def _load() -> Callable[[str], Optional[List[str]]]:
+            try:
+                from strange_uta_game.backend.infrastructure.parsers.e2k_engine import (
+                    EnglishToKanaEngine,
+                )
+
+                path = EnglishToKanaEngine._resolve_cmudict_path()
+            except Exception:
+                return lambda w: None
+            if path is None:
+                return lambda w: None
+            try:
+                with open(path, "r", encoding="latin-1", errors="ignore") as f:
+                    for line in f:
+                        parts = line.split()
+                        if len(parts) < 2:
+                            continue
+                        raw = parts[0]
+                        # 变体 WORD(2)/… 跳过，仅取首选发音
+                        if raw.endswith(")") and "(" in raw:
+                            continue
+                        if not raw or not raw[0].isalpha():
+                            continue
+                        table[raw.lower()] = parts[1:]
+            except Exception:
+                return lambda w: None
+            return table.get
+
+        _CMU_LOOKUP_CACHE = _load()
+    return _CMU_LOOKUP_CACHE(word)
+
+
+def _phoneme_syllabify(phonemes: List[str]) -> List[List[str]]:
+    """音素序列 → 音节分组（元音为核，节首辅音最大化；FA-Kara 同款）。
+
+    两个元音之间的辅音串：多于一个时第一个辅音归前一音节的节尾，
+    其余归下一音节节首；词尾剩余辅音并入最后一个音节。
+    """
+    vowel_positions = [
+        i
+        for i, ph in enumerate(phonemes)
+        if ph.rstrip("012") in _CMU_VOWELS
+    ]
+    if not vowel_positions:
+        return [list(phonemes)]
+    syllables: List[List[str]] = []
+    prev = -1
+    for vi in vowel_positions:
+        if not syllables:
+            syllables.append(list(phonemes[: vi + 1]))
+        else:
+            consonants = phonemes[prev + 1 : vi]
+            if consonants:
+                onset_start = 0
+                if len(consonants) > 1:
+                    syllables[-1].append(consonants[0])
+                    onset_start = 1
+                syllables.append(consonants[onset_start:] + [phonemes[vi]])
+            else:
+                syllables.append([phonemes[vi]])
+        prev = vi
+    if prev < len(phonemes) - 1:
+        syllables[-1].extend(phonemes[prev + 1 :])
+    return syllables
+
+
+def _merge_to_count(items: List[str], count: int) -> List[str]:
+    """把较长的读音音节列表均匀合并到 count 个（FA-Kara 对齐口径：
+    后面的段多分一个元素），数量相符时原样返回。"""
+    if len(items) <= count:
+        return list(items)
+    base, extra = divmod(len(items), count)
+    merged: List[str] = []
+    start = 0
+    for i in range(count):
+        size = base + (1 if i >= count - extra else 0)
+        merged.append("".join(items[start : start + size]))
+        start += size
+    return merged
+
+
+def english_word_phoneme_syllables(word: str) -> Optional[List[str]]:
+    """英文词 → 音素口径的音节罗马字列表；CMU 未收录返回 None。
+
+    FA-Kara 口径：pyphen 拼写音节数决定 token 数，读音音节多于拼写
+    音节时按段合并（take→T EY K→["tei","k"]→拼写 1 音节→["teik"]）。
+    命中结果逐音节独立对齐（alignment 侧不进 word_groups）。
+    """
+    word = word.strip()
+    if not word:
+        return None
+    if word == "a":
+        return ["a"]
+    if word == "A":
+        return ["ei"]
+    key = word.lower()
+    if key in _PHONEME_CACHE:
+        return list(_PHONEME_CACHE[key]) if _PHONEME_CACHE[key] else None
+
+    result: Optional[List[str]] = None
+    phonemes = _cmu_lookup(key)
+    dic = _pyphen_dic()
+    if phonemes and dic is not None:
+        surface_count = len(
+            [s for s in dic.inserted(word).split("-") if s]
+        ) or 1
+        groups = _phoneme_syllabify(phonemes)
+        roms = [
+            "".join(
+                _CMU_PHONEME_ROMAJI.get(ph.rstrip("012"), "")
+                for ph in group
+            )
+            for group in groups
+        ]
+        roms = [r for r in roms if r]
+        if roms:
+            result = _merge_to_count(roms, surface_count)
+
+    _PHONEME_CACHE[key] = list(result) if result else []
+    return list(result) if result else None
 
 
 # ── 数字 → 英文读音（FA-Kara number_to_english 移植）──
@@ -259,17 +418,20 @@ def number_to_english(number_str: str) -> str:
 
 
 def english_number_reading(number_str: str) -> str:
-    """数字 → 英文读法 → e2k 罗马字（单一 token 文本；失败返回空串）。
+    """数字 → 英文读法 → 音素口径罗马字（单一 token 文本；失败返回空串）。
 
     数字单位通常是一个时间点（整段读唱），与 FA-Kara 的 surf=False
-    同口径：全部音节读音拼成一个字符串。
+    同口径：全部音节读音拼成一个字符串。读音优先走 CMU 音素表，
+    未收录回退 e2k 按拍口径。
     """
     words = number_to_english(number_str).split()
     if not words:
         return ""
     parts: List[str] = []
     for word in words:
-        syllables = english_word_syllables(word)
+        syllables = english_word_phoneme_syllables(word)
+        if syllables is None:
+            syllables = english_word_syllables(word)
         if syllables:
             parts.append("".join(syllables))
     return "".join(parts).strip()
@@ -278,6 +440,7 @@ def english_number_reading(number_str: str) -> str:
 __all__ = [
     "pinyin_to_phonetic",
     "english_word_syllables",
+    "english_word_phoneme_syllables",
     "number_to_english",
     "english_number_reading",
 ]

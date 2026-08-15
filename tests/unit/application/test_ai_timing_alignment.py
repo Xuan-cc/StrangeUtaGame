@@ -87,7 +87,7 @@ def _resolved_project(sentences):
 
 @pytest.fixture(autouse=True)
 def _hermetic_transcription(monkeypatch):
-    """封闭转写环境：默认禁用 e2k/pyphen（英文回退表面拼写）。
+    """封闭转写环境：默认禁用 e2k/cmudict/pyphen（英文回退表面拼写）。
 
     涉及转写行为的测试各自用类级 fixture 覆盖（后应用者生效）。
     """
@@ -96,8 +96,10 @@ def _hermetic_transcription(monkeypatch):
     )
 
     monkeypatch.setattr(transcription, "_E2K_LOOKUP_CACHE", lambda w: None)
+    monkeypatch.setattr(transcription, "_CMU_LOOKUP_CACHE", lambda w: None)
     monkeypatch.setattr(transcription, "_PYPhen_CACHE", False)
     monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
+    monkeypatch.setattr(transcription, "_PHONEME_CACHE", {})
     yield
 
 
@@ -635,6 +637,63 @@ class TestLatinWordGroups:
         payload = serialize_request(request)
         payload.pop("word_groups")
         assert deserialize_request(payload).word_groups == []
+
+
+class TestPhonemeLatinPath:
+    """CMU 音素口径（FA-Kara 映射）：逐音节独立对齐，不进词组。"""
+
+    @pytest.fixture(autouse=True)
+    def _pin_phoneme(self, monkeypatch):
+        import pyphen
+
+        from strange_uta_game.backend.application.ai_timing import (
+            transcription,
+        )
+
+        fake_cmu = {
+            "take": ["T", "EY1", "K"],
+            "abandoned": ["AH0", "B", "AE1", "N", "D", "AH0", "N", "D"],
+            "ta": ["T", "AA1"],
+            "ke": ["K", "EH1"],
+        }
+        monkeypatch.setattr(transcription, "_CMU_LOOKUP_CACHE", fake_cmu.get)
+        monkeypatch.setattr(
+            transcription, "_PYPhen_CACHE", pyphen.Pyphen(lang="en_US")
+        )
+        monkeypatch.setattr(transcription, "_PHONEME_CACHE", {})
+        monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
+
+    def test_single_word_phoneme_token_not_grouped(self):
+        s = _sentence([("x", 1, ["take"], False)])
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        # T EY K → "teik"（尾辅音并入音节），独立对齐不进词组
+        assert [t.text for t in request.tokens] == ["teik"]
+        assert request.word_groups == []
+
+    def test_multisyllable_merges_to_surface_count(self):
+        s = _sentence([("x", 1, ["abandoned"], False)])
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        # 读音音节 a/ban/dand，pyphen 拼写音节 aban-doned=2 → 后段合并
+        assert [t.text for t in request.tokens] == ["a", "bandand"]
+        assert request.word_groups == []
+
+    def test_adjacent_dictionary_words_align_independently(self):
+        s = _sentence([("T", 1, ["Ta"], False), ("a", 1, ["ke"], False)])
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        # 两个词都在词典里：逐音节独立对齐，不再按词组比例切分
+        assert [t.text for t in request.tokens] == ["ta", "ke"]
+        assert request.word_groups == []
+
+    def test_oov_word_falls_back_to_grouped_path(self):
+        s = _sentence([("x", 1, ["xy"], False), ("y", 1, ["lo"], False)])
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        # cmudict/e2k 均未命中 → pyphen 表面拼写，保持词组口径
+        assert [t.text for t in request.tokens] == ["xy", "lo"]
+        assert request.word_groups == [[0, 1]]
 
 
 class TestSentenceEndPlaceholder:

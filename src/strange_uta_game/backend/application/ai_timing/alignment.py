@@ -161,7 +161,8 @@ def _build_tokens_and_word_groups(
 
     拉丁词组：同一行内**位置相邻**且都是 LATIN token 单位（中间无空白/
     停顿/其他脚本单元）视为同一英文词——手工按音节/字母拆分的时间单
-    位由此成组，供 provider 词内比例切分。
+    位由此成组，供 provider 词内比例切分。CMU 音素口径命中的词逐音节
+    独立对齐（FA-Kara 做法），不进词组。
     """
     pending = plan.pending_units
     if pending:
@@ -210,23 +211,28 @@ def _build_tokens_and_word_groups(
                 word_groups.append(list(current_run))
             current_run.clear()
 
-        def _unit_token_texts(u, rom: str) -> List[str]:
-            """单元 → 对齐 token 文本列表（0-多个：多音节英文词拆音节）。
+        def _unit_token_texts(u, rom: str) -> Tuple[List[str], bool]:
+            """单元 → (对齐 token 文本列表, 是否独立对齐)。
 
-            中文模式下的汉字拉丁读音按拼音→表音转写；拉丁词走
-            e2k 词典→片假名→按拍罗马字（SUG 自有数据；未收录回退
-            pyphen/整词，transcription 模块内部静默降级）。
+            0-多个 token：多音节英文词拆音节。独立对齐的 token 不进
+            word_groups（CTC 逐音节直接定位，FA-Kara 音素口径）；
+            回退口径（e2k 按拍等）仍按词组比例切分。
+
+            中文模式下的汉字拉丁读音按拼音→表音转写；拉丁词优先走
+            CMU 音素→音节（transcription 模块），未收录回退 e2k/
+            pyphen（模块内部静默降级）。
             """
             from strange_uta_game.backend.application.ai_timing.pronunciation import (
                 ScriptKind,
             )
             from strange_uta_game.backend.application.ai_timing.transcription import (
                 english_number_reading,
+                english_word_phoneme_syllables,
                 english_word_syllables,
                 pinyin_to_phonetic,
             )
 
-            # 数字 → 英文读法 → e2k 罗马字：此前数字 token 文本原样透传，
+            # 数字 → 英文读法 → 罗马字：此前数字 token 文本原样透传，
             # worker 归一化后为空串，数字实际从未对齐过（仅相邻插值）
             if (
                 u.script == ScriptKind.NUMBER
@@ -236,7 +242,7 @@ def _build_tokens_and_word_groups(
             ):
                 reading = english_number_reading(rom.strip())
                 if reading:
-                    return [reading]
+                    return [reading], False
             if (
                 plan.chinese_mode
                 and u.script == ScriptKind.KANJI
@@ -244,22 +250,27 @@ def _build_tokens_and_word_groups(
                 and not _contains_kana(rom)
             ):
                 converted = pinyin_to_phonetic(rom)
-                return [converted] if converted else [_strip_diacritics(rom)]
+                text = converted if converted else _strip_diacritics(rom)
+                return [text], False
             if u.script == ScriptKind.LATIN and rom and not _contains_kana(rom):
-                syllables = english_word_syllables(
-                    _strip_diacritics(rom)
-                )
+                stripped = _strip_diacritics(rom)
+                phoneme = english_word_phoneme_syllables(stripped)
+                if phoneme is not None:
+                    # 音素口径：逐音节独立对齐，不按词组比例切分
+                    return phoneme, True
+                syllables = english_word_syllables(stripped)
                 if syllables:
-                    return syllables
+                    return syllables, False
             text = _strip_diacritics(rom) if not _contains_kana(rom) else rom
-            return [text]
+            return [text], False
 
-        def _append_unit_tokens(u) -> List[int]:
+        def _append_unit_tokens(u) -> Tuple[List[int], bool]:
             """为单元生成 1..N 个 token（多音节英文词=多 token 同 location），
-            返回这些 token 的索引列表。"""
+            返回 (token 索引列表, 是否独立对齐)。"""
             rom = rom_by_id.get(id(u), u.reading or "")
+            texts, independent = _unit_token_texts(u, rom)
             indexes = []
-            for text in _unit_token_texts(u, rom):
+            for text in texts:
                 idx = len(tokens)
                 tokens.append(
                     AlignmentToken(
@@ -271,7 +282,7 @@ def _build_tokens_and_word_groups(
                     )
                 )
                 indexes.append(idx)
-            return indexes
+            return indexes, independent
 
         for pos, u in enumerate(ordered_units):
             is_latin_token = (
@@ -283,7 +294,12 @@ def _build_tokens_and_word_groups(
                 if id(u) in tokenizable_ids:
                     _append_unit_tokens(u)
                 continue
-            new_indexes = _append_unit_tokens(u)
+            new_indexes, independent = _append_unit_tokens(u)
+            if independent:
+                # 音素口径音节：独立对齐，打断相邻词组（不与比例切分混用）
+                _flush_run()
+                prev_latin_pos = -2
+                continue
             if pos == prev_latin_pos + 1 and current_run:
                 current_run.extend(new_indexes)
             else:
