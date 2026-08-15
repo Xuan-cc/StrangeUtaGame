@@ -95,7 +95,8 @@ class TestStandaloneSeparator:
     def test_success_flow_and_normalized_output(self, tmp_path, monkeypatch):
         vocal = tmp_path / "song_人声.wav"
         lines = [
-            "stage:load:加载分离模型",
+            "stage:engine:初始化分离引擎",
+            "stage:model:下载/加载分离模型",
             "stage:separate:分离处理中",
             "done:" + str(vocal),
         ]
@@ -107,6 +108,46 @@ class TestStandaloneSeparator:
         assert out == vocal
         assert not proc.killed
         assert events[-1][1] == 100
+
+    def test_stage_ladder_engine_model(self, tmp_path, monkeypatch):
+        """加载阶段细分：引擎初始化 12%、模型下载/加载 15%。"""
+        lines = [
+            "stage:engine:初始化分离引擎",
+            "stage:model:下载/加载分离模型",
+            "done:" + str(tmp_path / "song_人声.wav"),
+        ]
+        sep, _, _, _ = _separator(tmp_path, monkeypatch, lines)
+        events = []
+        sep.separate(
+            tmp_path / "song.flac", lambda *a: events.append(a), lambda: False
+        )
+        pcts = {e[2]: e[1] for e in events}
+        assert pcts["初始化分离引擎"] == 12
+        assert pcts["下载/加载分离模型"] == 15
+
+    def test_download_progress_parsed(self, tmp_path, monkeypatch):
+        """模型下载的 tqdm 字节条（_Auto runtime 实测格式：单位带 iB、
+        大小写混用）折算到 15-55% 进度（含量/速度/ETA）。"""
+        lines = [
+            "stage:model:下载/加载分离模型",
+            "  0%|          | 0.00/63.2M [00:00<?, ?iB/s]",
+            " 20%|\u2588\u2588 | 12.7M/63.2M [00:12<00:48, 1.07MiB/s]",
+            "done:" + str(tmp_path / "song_人声.wav"),
+        ]
+        sep, _, _, _ = _separator(tmp_path, monkeypatch, lines)
+        events = []
+        sep.separate(
+            tmp_path / "song.flac", lambda *a: events.append(a), lambda: False
+        )
+        downloads = [e for e in events if "下载分离模型" in e[2]]
+        assert len(downloads) == 2
+        # 首帧无 ETA、当前量无单位（tqdm 对 0 不加单位）：只有量
+        assert "0.00/63.2MB" in downloads[0][2]
+        assert downloads[0][1] == 15
+        stage, pct, msg = downloads[1]
+        assert stage == "separation"
+        assert pct == 15 + int(40 * (12.7 / 63.2))
+        assert "12.7MB/63.2MB" in msg and "1.07MiB/s" in msg and "0:48" in msg
 
     def test_cancel_kills_and_waits_process(self, tmp_path, monkeypatch):
         lines = ["stage:load:加载分离模型", "stage:separate:分离处理中"]

@@ -191,8 +191,9 @@ inp, out_dir, model_dir = sys.argv[1], sys.argv[2], sys.argv[3]
 # 收到模型下载/加载阶段的输出（否则该阶段取消无响应、无进度）
 import logging
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
-print("stage:load:加载分离模型", flush=True)
+print("stage:engine:初始化分离引擎", flush=True)
 from audio_separator.separator import Separator
+print("stage:model:下载/加载分离模型", flush=True)
 sep = Separator(
     model_file_dir=model_dir,
     output_dir=out_dir,
@@ -377,8 +378,27 @@ class StandaloneVocalSeparator:
         _ansi_re = _re.compile("\x1b\\[[0-9;]*[A-Za-z]|[\x00-\x08\x0b-\x1f]")
         # tqdm 进度行（audio_separator 分块处理）形如：
         #   " 50%|█████| 1/2 [00:02<00:02,  2.21s/it]"（\r 分隔、可能同行多段）
-        # —— 解析出 k/N 与 tqdm 自带的剩余时间，喂给进度回调（速度+ETA）
-        _tqdm_re = _re.compile(r"(\d+)/(\d+) \[[^\]<]*<(\d+):(\d{2})")
+        # 首帧 ETA 为 "?"。—— 解析出 k/N 与剩余时间，喂给进度回调；
+        # 与下载字节条互斥：块条是纯数字比（无单位字母），先于下载
+        # 正则检查，块首帧必须在此分支消费（否则漏网被误判为下载）
+        _tqdm_re = _re.compile(
+            r"(\d+)/(\d+) \[[^\]<]*(?:<(\d+):(\d{2})|<\?)?"
+        )
+        # 模型下载的字节条（_Auto 打包 runtime 实测格式，\r 前缀无换行）：
+        #   " 0.00/3.54k [00:00<?, ?iB/s]" → " 12.7M/63.2M [00:12<00:48, 1.07MiB/s]"
+        # 单位大小写混用（k 小写 / M 大写）、当前量为 0 时无单位字母，
+        # ETA 未知时为 "?"；与块条互斥：字节条带单位字母，块条纯数字
+        _download_re = _re.compile(
+            r"(\d+(?:\.\d+)?)\s*([kKmMgGtT])?i?B?\s*/\s*"
+            r"(\d+(?:\.\d+)?)\s*([kKmMgGtT])?i?B?\s*\["
+            r"[^\]<]*(?:<(\d+):(\d{2})|<\?)?"
+            r"(?:[^\]]*?([\d.]+\s*[kKmMgGtT]i?B/s))?"
+            r"[^\]]*\]"
+        )
+        _unit_pow = {"k": 1, "m": 2, "g": 3, "t": 4}
+        # 子进程 stage 行 → 百分比阶梯：引擎初始化 12 → 模型下载/加载
+        # 15（下载字节条插值 15-55）→ 分离 60（块进度 60-95）
+        _stage_pct = {"engine": 12, "model": 15, "separate": 60}
         while True:
             try:
                 raw_line = line_queue.get(timeout=0.25)
@@ -395,17 +415,48 @@ class StandaloneVocalSeparator:
                 m = m2  # 取最后一段（\r 覆盖写时同行会有多个状态）
             if m is not None:
                 done, total = int(m.group(1)), int(m.group(2))
-                rem_s = int(m.group(3)) * 60 + int(m.group(4))
                 if total > 0 and done <= total:
                     pct = 60 + int(35 * done / total)
-                    rate = (rem_s / (total - done)) if done < total else 0.0
-                    progress(
-                        "separation",
-                        min(95, pct),
-                        f"分离处理 {done}/{total} 块，"
-                        f"预计剩余 {int(rem_s // 60)}:{rem_s % 60:02d}"
-                        + (f"（{rate:.1f}s/块）" if rate else ""),
-                    )
+                    parts = [f"分离处理 {done}/{total} 块"]
+                    if m.group(3) is not None:
+                        rem_s = int(m.group(3)) * 60 + int(m.group(4))
+                        rate = (rem_s / (total - done)) if done < total else 0.0
+                        parts.append(
+                            f"预计剩余 {int(rem_s // 60)}:{rem_s % 60:02d}"
+                        )
+                        if rate:
+                            parts.append(f"{rate:.1f}s/块")
+                    message = parts[0]
+                    if len(parts) > 1:
+                        message += "（" + "，".join(parts[1:]) + "）"
+                    progress("separation", min(95, pct), message)
+                continue
+            dm = None
+            for d2 in _download_re.finditer(raw_line):
+                dm = d2  # \r 覆盖写：同行取最后一段
+            if dm is not None:
+                cur_raw, cu_raw = dm.group(1), dm.group(2)
+                tot_raw, tu_raw = dm.group(3), dm.group(4)
+                cu = cu_raw.lower() if cu_raw else ""
+                tu = tu_raw.lower() if tu_raw else ""
+                cur = float(cur_raw) * (1024 ** _unit_pow.get(cu, 0))
+                total_b = float(tot_raw) * (1024 ** _unit_pow.get(tu, 0))
+                if total_b > 0:
+                    frac = min(1.0, cur / total_b)
+                    cur_disp = cur_raw + (cu_raw + "B" if cu_raw else "")
+                    tot_disp = tot_raw + (tu_raw + "B" if tu_raw else "")
+                    parts = [f"下载分离模型 {cur_disp}/{tot_disp}"]
+                    if dm.group(5) is not None:
+                        rem_s = int(dm.group(5)) * 60 + int(dm.group(6))
+                        parts.append(
+                            f"预计剩余 {int(rem_s // 60)}:{rem_s % 60:02d}"
+                        )
+                    if dm.group(7):
+                        parts.append(dm.group(7).strip())
+                    message = parts[0]
+                    if len(parts) > 1:
+                        message += "（" + "，".join(parts[1:]) + "）"
+                    progress("separation", 15 + int(40 * frac), message)
                 continue
             line = _ansi_re.sub("", raw_line)
             line = line.replace("\r", " ").strip()
@@ -414,10 +465,13 @@ class StandaloneVocalSeparator:
             if len(line) > 160:
                 line = line[:159] + "…"
             tail.append(line)
-            if line.startswith("stage:load"):
-                progress("separation", 10, line.split(":", 2)[2])
-            elif line.startswith("stage:separate"):
-                progress("separation", 60, line.split(":", 2)[2])
+            stage_m = _re.match(r"stage:(\w+):(.+)", line)
+            if stage_m is not None and stage_m.group(1) in _stage_pct:
+                progress(
+                    "separation",
+                    _stage_pct[stage_m.group(1)],
+                    stage_m.group(2),
+                )
             elif line.startswith("done:"):
                 result_path = Path(line.split(":", 1)[1])
                 progress("separation", 100, "分离完成")
