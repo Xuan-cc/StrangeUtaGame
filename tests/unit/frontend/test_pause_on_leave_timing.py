@@ -101,20 +101,20 @@ def test_host_visibility_notifications_are_idempotent():
     assert editor.sync_count == 2
 
 
-def test_host_hide_honors_pause_setting_but_still_syncs_mode():
+def test_host_hide_pauses_even_when_pause_setting_is_disabled():
     window, editor = _window(enabled=False)
 
     MainWindow.on_host_visibility_changed(window, False)
 
-    assert editor.pause_count == 0
+    assert editor.pause_count == 1
     assert editor.sync_count == 1
 
 
-def test_host_hide_does_not_pause_when_sug_is_on_another_internal_page():
+def test_host_hide_pauses_when_sug_is_on_another_internal_page():
     window, editor = _window()
     window._current_interface = object()
 
     MainWindow.on_host_visibility_changed(window, False)
 
-    assert editor.pause_count == 0
+    assert editor.pause_count == 1
     assert editor.sync_count == 1

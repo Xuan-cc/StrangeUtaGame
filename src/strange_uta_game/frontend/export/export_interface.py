@@ -346,7 +346,7 @@ class ExportInterface(QWidget):
         self.btn_export_to_next = None
         if self._embedded:
             self.btn_export_to_next = PrimaryPushButton(
-                self.tr("导出到下一步"), self
+                self.tr("进入下一步"), self
             )
             self.btn_export_to_next.setIcon(FIF.RIGHT_ARROW)
             self.btn_export_to_next.setMinimumHeight(45)

@@ -1715,8 +1715,10 @@ class MainWindow(MSFluentWindow):
         """接收宿主对整个 SUG 控件的可见性生命周期通知（公开 API）。
 
         宿主应在切出 SUG 前传入 ``False``，在切入 SUG 后传入 ``True``。
-        离开时沿用“离开打轴界面时暂停”设置；进入和离开都会从音频服务
-        重新同步编辑器模式，避免音频已暂停但快捷键仍处于打轴模式。
+        离开意味着整个 SUG 控件被宿主隐藏，只要音频仍在播放就立即暂停，
+        不依赖“离开打轴界面时暂停”设置——那项设置只约束 SUG 内部的
+        页面切换；进入和离开都会从音频服务重新同步编辑器模式，避免
+        音频已暂停但快捷键仍处于打轴模式。
 
         本方法可重复调用：只有实际仍在播放时才会触发暂停。
         """
@@ -1727,8 +1729,6 @@ class MainWindow(MSFluentWindow):
 
         if (
             not visible
-            and getattr(self, "_current_interface", None) is editor
-            and self._pause_on_leave_timing_enabled()
             and timing_service is not None
             and timing_service.is_playing()
         ):
