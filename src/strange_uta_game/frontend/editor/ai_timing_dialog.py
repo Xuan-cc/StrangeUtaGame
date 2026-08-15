@@ -156,7 +156,7 @@ class _StateRow(QWidget):
         self._state = state
         # 状态文本统一中间省略（单行显示，超长路径会把滚动区最小宽度撑爆、
         # 导致窗口显示不全）；完整内容放 tooltip 供悬停查看
-        shown = text if len(text) <= 64 else text[:30] + "…" + text[-30:]
+        shown = text if len(text) <= 48 else text[:22] + "…" + text[-22:]
         self._state_label.setText(f"<b style='color:{color}'>●</b> {shown}")
         self._state_label.setToolTip(text if text != shown else "")
 
@@ -250,7 +250,9 @@ class AiTimingDialog(QDialog):
 
     def _build_ui(self) -> None:
         self.setWindowTitle(self.tr("AI 打轴（Beta）"))
-        fit_to_screen(self, 720, 640)
+        # 默认加宽：720 时存储/状态行的「名称+省略文本+多个按钮」会把
+        # 滚动区最小宽度撑过视口，开窗即出现横向滚动条（实测反馈）
+        fit_to_screen(self, 880, 660)
         self.setFont(char_dialog_font(FONT_DIALOG_BASE))
 
         outer = QVBoxLayout(self)

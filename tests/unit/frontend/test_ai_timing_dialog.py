@@ -514,3 +514,27 @@ class TestDiskUsageReminder:
         dialog._on_install_runtime()
         # 增量路径体积小：不弹确认，直接开始
         assert called == [] and len(started) == 1
+
+
+class TestDefaultWidthFits:
+    """默认 880px 宽度下，滚动区内容不应出现横向滚动条。"""
+
+    def test_no_horizontal_overflow_at_default_width(self, qapp, tmp_path):
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog.resize(880, 660)
+        dialog.show()
+        qapp.processEvents()
+        from qfluentwidgets import ScrollArea
+
+        overflow = []
+        for sa in dialog.findChildren(ScrollArea):
+            content = sa.widget()
+            if content is None:
+                continue
+            need = content.minimumSizeHint().width()
+            have = sa.viewport().width()
+            if need > have:
+                overflow.append((need, have))
+        assert overflow == [], f"内容超出视口: {overflow}"
+        dialog.close()
