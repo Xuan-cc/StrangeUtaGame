@@ -239,8 +239,13 @@ class TestProviderRegistry:
 
         assert isinstance(create_provider({}), Wav2Vec2LatnProvider)
 
-    def test_missing_runtime_converted_to_chinese_error(self):
-        """本机无 PyTorch：load 应转换为中文错误而非 ImportError。"""
+    def test_missing_runtime_converted_to_chinese_error(self, monkeypatch):
+        """模拟无 PyTorch：load 应转换为中文错误而非 ImportError。
+
+        sys.modules 中置 None 可使 ``import torch`` 抛 ImportError，
+        测试因此不依赖本机是否真实安装 PyTorch（与 _fake_venv 的
+        ``sys.modules`` 注入手法一致）。
+        """
         from strange_uta_game.backend.application.ai_timing.worker.providers import (
             AlignmentProviderError,
             Wav2Vec2LatnProvider,
@@ -248,12 +253,9 @@ class TestProviderRegistry:
         )
 
         provider = create_provider({"provider": "wav2vec2"})
-        try:
-            import torch  # noqa: F401
+        import sys as _sys
 
-            pytest.skip("本机已安装 PyTorch，跳过缺运行环境路径测试")
-        except ImportError:
-            pass
+        monkeypatch.setitem(_sys.modules, "torch", None)
         with pytest.raises(AlignmentProviderError, match="对齐运行环境"):
             provider.load(
                 {"provider": "wav2vec2"},

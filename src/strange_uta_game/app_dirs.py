@@ -93,8 +93,14 @@ def _read_redirect() -> Optional[Path]:
 def config_dir() -> Path:
     """配置 / 项目目录（已确保存在且可写）。
 
-    优先级：``.config_redirect`` > 平台默认 > ``~/.strange_uta_game`` 兜底。
+    优先级：``SUG_CONFIG_DIR`` 环境变量 > ``.config_redirect`` > 平台默认
+    > ``~/.strange_uta_game`` 兜底。环境变量最高优先，供测试 / 嵌入宿主
+    把配置重定向到隔离位置（与 ``SUG_CACHE_DIR`` / ``SUG_BACKUP_DIR`` 口径
+    一致，避免测试读写开发者的真实 config.json）。
     """
+    env_dir = os.environ.get("SUG_CONFIG_DIR")
+    if env_dir:
+        return _first_writable(Path(env_dir), _FALLBACK_ROOT)
     redirected = _read_redirect()
     if redirected is not None:
         return _first_writable(redirected, _FALLBACK_ROOT)

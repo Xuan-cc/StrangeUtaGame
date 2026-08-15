@@ -5,7 +5,6 @@ SugConcatWorker 拼接逻辑和 SugConcatDialog 对话框。
 """
 
 import json
-import os
 import struct
 from pathlib import Path
 
@@ -13,7 +12,6 @@ import pytest
 
 # ---- offscreen QApplication 夹具 ----
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 @pytest.fixture(scope="module")
