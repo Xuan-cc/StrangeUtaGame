@@ -1638,5 +1638,17 @@
   "打包版将下载官方运行环境发行包并安装（含 PyTorch，下载缓存安装成功后自动清理）。": "The packaged app will download and install the official runtime release (PyTorch included; download cache is cleaned up after success).",
   "未安装（点击下方「安装 / 修复」）": "Not installed (use \"Install / Repair\" below)",
   "（安装日志：{p}）": " (install log: {p})",
-  "{e}\n详细安装日志：{p}": "{e}\nInstall log: {p}"
+  "{e}\n详细安装日志：{p}": "{e}\nInstall log: {p}",
+  "人声分离需要 FFmpeg，但未在系统中找到。请在「设置 → 关于/语言」中配置 FFmpeg 路径（或安装 FFmpeg 并加入系统 PATH）后重试": "Vocal separation requires FFmpeg, but it was not found on this system. Set the FFmpeg path in \"Settings → About/Language\" (or install FFmpeg and add it to PATH), then retry",
+  "人声分离需要 FFmpeg，但未找到可用的 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置后重试": "Vocal separation requires FFmpeg, but no usable FFmpeg was found. In embedded mode FFmpeg is managed by the workbench; check the FFmpeg configuration in workbench settings and retry",
+  "FFmpeg 不可用：请在「设置 → 关于/语言」配置 FFmpeg 路径后重试": "FFmpeg is unavailable: set the FFmpeg path in \"Settings → About/Language\" and retry",
+  "FFmpeg 不可用：请检查工作台设置中的 FFmpeg 配置": "FFmpeg is unavailable: check the FFmpeg configuration in workbench settings",
+  "分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（可在「设置 → 网络与代理」配置代理）后重试": "The separation model downloads from GitHub on first use and the download just failed: check the network (a proxy can be configured in \"Settings → Network & proxy\") and retry",
+  "分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（代理跟随工作台的网络设置）后重试": "The separation model downloads from GitHub on first use and the download just failed: check the network and retry (the proxy follows the workbench network settings)",
+  "分离环境未安装：请先在弹窗中安装对齐环境（含分离能力）": "Separation environment not installed: install the alignment environment (which includes separation) in the dialog first",
+  "已取消人声分离": "Vocal separation cancelled",
+  "人声分离失败（返回码 {code}）。": "Vocal separation failed (exit code {code}).",
+  "子进程输出：{output}": "Subprocess output: {output}",
+  "人声分离失败（返回码 {code}）。请确认分离环境已完整安装后重试": "Vocal separation failed (exit code {code}). Make sure the separation environment is fully installed, then retry",
+  "工作台分离环境未配置，使用 AI 运行环境内置分离": "Workbench separation environment not configured; using the separation built into the AI runtime"
 }
