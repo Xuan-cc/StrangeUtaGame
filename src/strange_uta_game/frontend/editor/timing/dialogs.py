@@ -651,6 +651,12 @@ def _build_guide_chars(sentence, char_idx, symbol, count, duration_ms, reverse):
                     clamped = True
                 new_ch.add_timestamp(ts)
             guide_chars.append(new_ch)
+    # 反向导唱的尾部 [>…] 标记：外部渲染软件要求在最后一个导唱字符上
+    # 附上被插入字符的起始时间戳（无需按间隔推算），非反向不插入。
+    if reverse and ref_ts is not None and guide_chars:
+        last_ch = guide_chars[-1]
+        last_ch.is_sentence_end = True
+        last_ch.set_sentence_end_ts(ref_ts)
     return guide_chars, clamped
 
 

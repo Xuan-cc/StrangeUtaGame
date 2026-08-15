@@ -1,4 +1,8 @@
 from strange_uta_game.backend.domain import Character, Project, Sentence
+from strange_uta_game.backend.infrastructure.parsers.annotated_text import (
+    parse_timed_line,
+    sentence_to_timed_line,
+)
 from strange_uta_game.frontend.editor.timing.auto_guide import (
     AutoGuideParams,
     apply_auto_guide_candidates,
@@ -91,6 +95,79 @@ def test_apply_replace_marks_chars_and_clears_todo():
     assert [c.timestamps for c in chars[:2]] == [[3000], [4000]]
     assert all(c.is_guide for c in chars[:2])
     assert target.needs_guide is False
+
+
+def test_reverse_appends_end_marker_with_target_start_ts():
+    target = _ch("歌", 44_010, todo=True)
+    project = _project([target])
+    candidate = scan_auto_guide_candidates(project, 3000)[0]
+
+    apply_auto_guide_candidates(
+        project,
+        [(
+            candidate,
+            AutoGuideParams(symbol="●", count=3, duration_ms=1000, reverse=True),
+        )],
+    )
+
+    chars = project.sentences[0].characters
+    assert [c.timestamps for c in chars[:3]] == [[43_010], [42_010], [41_010]]
+    assert chars[2].is_sentence_end is True
+    assert chars[2].sentence_end_ts == 44_010
+    assert not any(c.is_sentence_end for c in chars[:2])
+    assert target.is_sentence_end is False
+
+
+def test_non_reverse_guides_have_no_end_marker():
+    target = _ch("歌", 44_010, todo=True)
+    project = _project([target])
+    candidate = scan_auto_guide_candidates(project, 3000)[0]
+
+    apply_auto_guide_candidates(
+        project,
+        [(candidate, AutoGuideParams(symbol="●", count=3, duration_ms=1000))],
+    )
+
+    chars = project.sentences[0].characters
+    assert [c.timestamps for c in chars[:3]] == [[41_010], [42_010], [43_010]]
+    assert not any(c.is_sentence_end for c in chars[:3])
+
+
+def test_reverse_guide_serialization_round_trip():
+    # 多个：块内最后一个导唱字符带 [>目标起始] 尾标记
+    target = _ch("歌", 44_010, todo=True)
+    project = _project([target])
+    candidate = scan_auto_guide_candidates(project, 3000)[0]
+    apply_auto_guide_candidates(
+        project,
+        [(
+            candidate,
+            AutoGuideParams(symbol="●", count=3, duration_ms=1000, reverse=True),
+        )],
+    )
+    line, _ = sentence_to_timed_line(project.sentences[0].characters)
+    assert "{●●●||[00:43.01],[00:42.01],[00:41.01][>00:44.01]}" in line
+
+    parsed = parse_timed_line(line)[0]
+    guides = [c for c in parsed if c.is_guide]
+    assert guides[-1].is_sentence_end is True
+    assert guides[-1].sentence_end_ts == 44_010
+
+    # 单个：独立字符直接跟 [ts]○[>目标起始]
+    target = _ch("歌", 45_010, todo=True)
+    project = _project([target])
+    candidate = scan_auto_guide_candidates(project, 3000)[0]
+    apply_auto_guide_candidates(
+        project,
+        [(candidate, AutoGuideParams(symbol="○", duration_ms=1000, reverse=True))],
+    )
+    line, _ = sentence_to_timed_line(project.sentences[0].characters)
+    assert "[00:44.01]○[>00:45.01]" in line
+
+    parsed = parse_timed_line(line)[0]
+    guides = [c for c in parsed if c.is_guide]
+    assert guides[-1].is_sentence_end is True
+    assert guides[-1].sentence_end_ts == 45_010
 
 
 def test_fixed_interval_unknown_left_is_executable_but_fill_is_not():
