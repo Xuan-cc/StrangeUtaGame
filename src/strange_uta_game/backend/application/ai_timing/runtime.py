@@ -42,10 +42,6 @@ RUNTIME_REQUIREMENTS: List[str] = [
     # audio-separator 0.44.x 使用旧版 librosa API（get_duration(filename=)），
     # 0.11 起已移除该参数——必须钉住
     "librosa==0.10.2.post1",
-    # 对齐转写（FA-Kara 口径）：CMU 音素词典（英文音节读音）与
-    # pyphen（词典外回退切分）；缺失时 worker 静默回退表面拼写
-    "nltk",
-    "pyphen",
 ]
 
 # Windows 上 PyPI 的 torch 默认是 CPU-only wheel，GPU 推理必须显式走
@@ -796,6 +792,8 @@ class AiRuntimeManager:
         # torchaudio 必须与 torch 同版本同变体（混装不受支持）；PyPI 的
         # torchaudio 可能比官方索引新，按「版本+本地标签」精确钉住
         index_url = f"https://download.pytorch.org/whl/{torch_tag}"
+        # 注：对齐转写（拼音表音/CMU 英文音节）发生在主进程构建请求时
+        # （transcription.py，主程序自带 pyphen/nltk），worker 无需这些依赖
         requirements: List[str] = [
             f"torchaudio=={torch_version}+{torch_tag}",
             PINNED_TRANSFORMERS,
@@ -803,8 +801,6 @@ class AiRuntimeManager:
             "huggingface_hub",
             "audio-separator[cpu]",
             "librosa==0.10.2.post1",
-            "nltk",
-            "pyphen",
         ]
         progress(
             2,

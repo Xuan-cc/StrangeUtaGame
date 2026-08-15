@@ -85,6 +85,22 @@ def _resolved_project(sentences):
     return project, plan
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_transcription(monkeypatch):
+    """封闭转写环境：默认禁用 e2k/pyphen（英文回退表面拼写）。
+
+    涉及转写行为的测试各自用类级 fixture 覆盖（后应用者生效）。
+    """
+    from strange_uta_game.backend.application.ai_timing import (
+        transcription,
+    )
+
+    monkeypatch.setattr(transcription, "_E2K_LOOKUP_CACHE", lambda w: None)
+    monkeypatch.setattr(transcription, "_PYPhen_CACHE", False)
+    monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
+    yield
+
+
 def _spans_from_tokens(request, start_ms_list):
     """按 token 顺序给出固定区间起点，构造固定 emission 结果。"""
     spans = []
@@ -576,18 +592,6 @@ class TestUnalignableChars:
 class TestLatinWordGroups:
     """拉丁词组：手工按音节/字母拆分的英文单位成组（假名/拼音不受影响）。"""
 
-    @pytest.fixture(autouse=True)
-    def _hermetic_transcription(self, monkeypatch):
-        """封闭转写：CMU/pyphen 缺席时英文回退表面拼写，断言才稳定。"""
-        from strange_uta_game.backend.application.ai_timing import (
-            transcription,
-        )
-
-        monkeypatch.setattr(transcription, "_CMU_CACHE", {})
-        monkeypatch.setattr(transcription, "_PYPhen_CACHE", False)
-        monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
-        yield
-
     def test_adjacent_latin_units_grouped(self):
         s = _sentence(
             [
@@ -703,15 +707,15 @@ class TestTranscriptionIntegration:
     """转写接线：中文模式拼音表音、拉丁多音节词多 token、checkpoint 合并。"""
 
     @pytest.fixture(autouse=True)
-    def _pin_cmu(self, monkeypatch):
+    def _pin_e2k(self, monkeypatch):
         from strange_uta_game.backend.application.ai_timing import (
             transcription,
         )
 
         monkeypatch.setattr(
             transcription,
-            "_CMU_CACHE",
-            {"beautiful": [["B", "Y", "UW1", "T", "AH0", "F", "UH0", "L"]]},
+            "_E2K_LOOKUP_CACHE",
+            lambda w: {"beautiful": "ビューティファル"}.get(w),
         )
         monkeypatch.setattr(transcription, "_PYPhen_CACHE", False)
         monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
@@ -754,14 +758,15 @@ class TestTranscriptionIntegration:
         project.sentences = [_sentence([("b", 1, ["beautiful"], False)])]
         project_resolved, plan = _resolved_project([project.sentences[0]])
         request = build_alignment_request(plan)
-        # 三音节 → 三个 token，共享同一 location
-        assert [t.text for t in request.tokens] == ["byu", "ta", "fur"]
+        # 四拍 → 四个 token，共享同一 location
+        assert [t.text for t in request.tokens] == ["byuu", "ti", "fa", "ru"]
         assert len({t.location for t in request.tokens}) == 1
         # checkpoint 合并：首 token 起点 / 末 token 终点
         spans = [
-            EmissionSpan(0, 100, 200),
-            EmissionSpan(1, 200, 300),
-            EmissionSpan(2, 300, 500),
+            EmissionSpan(0, 100, 180),
+            EmissionSpan(1, 180, 260),
+            EmissionSpan(2, 260, 380),
+            EmissionSpan(3, 380, 500),
         ]
         result = AlignmentResult(
             annotation_digest=request.annotation_digest,

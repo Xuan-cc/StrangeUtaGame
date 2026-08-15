@@ -2,23 +2,22 @@
 """读音 → 罗马字风格表音转写（对齐 token 预处理，2026-08）。
 
 默认对齐模型在日文罗马字分布上微调：拼音/英文按原样透传与模型分布
-不匹配，是纯中文/纯英文歌曲对齐精度低的主因。本模块按 FA-Kara
-（MIT，haruraw2norm.py）的口径转写：
+不匹配，是纯中文/纯英文歌曲对齐精度低的主因。本模块按参考项目口径
+转写（转写发生在主进程构建对齐请求时，worker 无需额外依赖）：
 
-- 中文：拼音 → 表音拼写（声母/韵母映射表 + 整体认读特例），
-  如 zhong→jong、xiao→shyao、lü→ryu、zhi→jru；
-- 英文：CMU 词典音素 → 按元音切音节 → ARPAbet→罗马字映射
-  （如 take→teik、beautiful→bjutafur）；词典外回退 pyphen 表面
-  切分，再回退整词小写。
-
-重型依赖（nltk/pyphen）惰性导入：运行环境未装或词典缺失时静默
-回退，绝不阻断对齐。
+- 中文（FA-Kara 口径）：拼音 → 表音拼写（声母/韵母映射表 + 整体
+  认读特例），如 zhong→jong、xiao→shyao、lü→ryu、zhi→jru；
+- 英文（SUG 自有技术优先）：e2k.txt 词典（CMU 加工的英単語→片假名，
+  ``EnglishRubyLookup``）查片假名 → 按拍切分（拗音/长音附前拍）→
+  走与日文路径同一个罗马字转换器（take→テイク→te/i/ku）。词典
+  未收录回退 pyphen 表面切分，再回退整词小写——pyphen 缺席时
+  仍不阻断对齐。
 """
 
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional
+from typing import Callable, List, Optional
 
 # ── 中文：拼音 → 表音（FA-Kara PINYIN_TO_PHONETIC 移植）──
 
@@ -99,49 +98,46 @@ def pinyin_to_phonetic(pinyin: str) -> str:
     return phonetic_initial + phonetic_final
 
 
-# ── 英文：CMU 音素 → 罗马字（FA-Kara phoneme_map 移植）──
+# ── 英文：e2k 词典 → 片假名 → 按拍罗马字（SUG 自有数据）──
 
-_ARPABET_TO_ROMAJI = {
-    'AA': 'a', 'AE': 'a', 'AH': 'a', 'AO': 'o', 'AW': 'au', 'AY': 'ai',
-    'B': 'b', 'CH': 'ch', 'D': 'd', 'DH': 'z', 'EH': 'e', 'ER': 'a',
-    'EY': 'ei', 'F': 'f', 'G': 'g', 'HH': 'h', 'IH': 'i', 'IY': 'i',
-    'JH': 'j', 'K': 'k', 'L': 'r', 'M': 'm', 'N': 'n', 'NG': 'ng',
-    'OW': 'o', 'OY': 'oi', 'P': 'p', 'R': 'r', 'S': 's', 'SH': 'sh',
-    'T': 't', 'TH': 's', 'UH': 'u', 'UW': 'u', 'V': 'v', 'W': 'w',
-    'Y': 'y', 'Z': 'z', 'ZH': 'j',
-}
+_E2K_LOOKUP_CACHE: Optional[Callable[[str], Optional[str]]] = None
+"""惰性持有的 e2k 查询函数；测试可整体替换（封闭环境）。"""
 
-_ARPABET_VOWELS = frozenset(
-    {"AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY",
-     "IH", "IY", "OW", "OY", "UH", "UW"}
-)
-
-_CMU_CACHE: Optional[Dict[str, list]] = None
 _PYPhen_CACHE: Optional[object] = None
-_ENGLISH_CACHE: Dict[str, List[str]] = {}
+_ENGLISH_CACHE: dict = {}
+
+# 拗音/合拗音的小假名与长音符：附到前一拍
+_ATTACH_TO_PREV = set("ァィゥェォャュョヮー")
 
 
-def _cmu_dict() -> Optional[Dict[str, list]]:
-    global _CMU_CACHE
-    if _CMU_CACHE is not None:
-        return _CMU_CACHE
-    try:
-        from nltk.corpus import cmudict
-
-        _CMU_CACHE = cmudict.dict()
-    except LookupError:
+def _e2k_lookup(word: str) -> Optional[str]:
+    """e2k.txt 词表查询（EnglishRubyLookup 单例，首次调用加载）。"""
+    global _E2K_LOOKUP_CACHE
+    if _E2K_LOOKUP_CACHE is None:
         try:
-            import nltk
+            from strange_uta_game.backend.infrastructure.parsers.english_ruby import (
+                EnglishRubyLookup,
+            )
 
-            nltk.download("cmudict", quiet=True)
-            from nltk.corpus import cmudict
-
-            _CMU_CACHE = cmudict.dict()
+            inst = EnglishRubyLookup.instance()
+            if inst.has():
+                _E2K_LOOKUP_CACHE = inst.lookup
+            else:
+                _E2K_LOOKUP_CACHE = lambda w: None
         except Exception:
-            _CMU_CACHE = {}
-    except Exception:
-        _CMU_CACHE = {}
-    return _CMU_CACHE
+            _E2K_LOOKUP_CACHE = lambda w: None
+    return _E2K_LOOKUP_CACHE(word)
+
+
+def _katakana_mora(text: str) -> List[str]:
+    """片假名切拍：拗音小假名与长音符附到前一拍。"""
+    moras: List[str] = []
+    for ch in text:
+        if moras and ch in _ATTACH_TO_PREV:
+            moras[-1] += ch
+        else:
+            moras.append(ch)
+    return moras
 
 
 def _pyphen_dic():
@@ -156,43 +152,11 @@ def _pyphen_dic():
     return _PYPhen_CACHE or None
 
 
-def _split_phonemes_syllables(phonemes: List[str]) -> List[List[str]]:
-    """按元音位置切音节（最大节首辅音：辅音串>1 时第一个归前音节）。"""
-    positions = [
-        i for i, ph in enumerate(phonemes) if ph.rstrip("012") in _ARPABET_VOWELS
-    ]
-    if not positions:
-        return [list(phonemes)]
-
-    syllables: List[List[str]] = []
-    prev = -1
-    for idx_no, vowel_idx in enumerate(positions):
-        if idx_no == 0:
-            syllables.append(list(phonemes[: vowel_idx + 1]))
-        else:
-            consonants = phonemes[prev + 1: vowel_idx]
-            if consonants:
-                onset_start = 0
-                if len(consonants) > 1:
-                    syllables[-1].append(consonants[0])
-                    onset_start = 1
-                syllables.append(
-                    list(consonants[onset_start:]) + [phonemes[vowel_idx]]
-                )
-            else:
-                syllables.append([phonemes[vowel_idx]])
-        prev = vowel_idx
-    if prev < len(phonemes) - 1:
-        syllables[-1].extend(phonemes[prev + 1:])
-    return syllables
-
-
 def english_word_syllables(word: str) -> List[str]:
-    """英文词 → 每音节的罗马字风格读音列表。
+    """英文词 → 每拍罗马字读音列表（e2k → pyphen → 整词小写逐级回退）。
 
-    CMU 词典命中：音素切音节后逐音素映射（FA-Kara 口径）；
-    未命中：pyphen 表面切分小写；连 pyphen 都没有：整词小写。
-    结果缓存（词级），无读音可推导时返回空列表。
+    e2k 命中：片假名按拍切分后走与日文路径相同的罗马字转换器
+    （take→テイク→["te","i","ku"]）。结果按词缓存。
     """
     word = word.strip()
     if not word:
@@ -202,17 +166,17 @@ def english_word_syllables(word: str) -> List[str]:
         return list(_ENGLISH_CACHE[key])
 
     result: List[str] = []
-    cmu = _cmu_dict()
-    entry = cmu.get(key) if cmu else None
-    if entry:
-        phonemes = entry[0]
-        for syllable in _split_phonemes_syllables(phonemes):
-            romaji = "".join(
-                _ARPABET_TO_ROMAJI.get(ph.rstrip("012"), "")
-                for ph in syllable
-            ).strip()
-            if romaji:
-                result.append(romaji)
+    kana = _e2k_lookup(key)
+    if kana:
+        try:
+            from strange_uta_game.backend.application.ai_timing.alignment import (
+                romanize_ruby_parts,
+            )
+
+            roms = romanize_ruby_parts(_katakana_mora(kana))
+            result = [r for r in roms if r and r.strip()]
+        except Exception:
+            result = []
     if not result:
         dic = _pyphen_dic()
         if dic is not None:

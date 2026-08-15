@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""对齐转写（FA-Kara 口径移植）：拼音→表音、英文 CMU→罗马字音节。"""
+"""对齐转写：拼音→表音（FA-Kara 口径）、英文 e2k→片假名→按拍罗马字。"""
 
 import pytest
 
@@ -8,8 +8,8 @@ from strange_uta_game.backend.application.ai_timing import transcription
 
 @pytest.fixture(autouse=True)
 def _hermetic(monkeypatch):
-    """封闭环境：不触网、不依赖本机 nltk/pyphen。"""
-    monkeypatch.setattr(transcription, "_CMU_CACHE", {})
+    """封闭环境：不加载真词典、不依赖本机 pyphen。"""
+    monkeypatch.setattr(transcription, "_E2K_LOOKUP_CACHE", lambda w: None)
     monkeypatch.setattr(transcription, "_PYPhen_CACHE", False)
     monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
     yield
@@ -43,33 +43,43 @@ class TestPinyinToPhonetic:
         assert transcription.pinyin_to_phonetic("zzz") == "zzz"
 
 
-class TestEnglishWordSyllables:
-    def test_cmu_route(self, monkeypatch):
+class TestEnglishE2K:
+    def test_e2k_route_per_mora_romaji(self, monkeypatch):
         monkeypatch.setattr(
             transcription,
-            "_CMU_CACHE",
-            {
-                "take": [["T", "EY1", "K"]],
-                "beautiful": [["B", "Y", "UW1", "T", "AH0", "F", "UH0", "L"]],
-            },
+            "_E2K_LOOKUP_CACHE",
+            lambda w: {"take": "テイク", "beautiful": "ビューティファル"}.get(w),
         )
-        # T→t EY→ei K→k
-        assert transcription.english_word_syllables("take") == ["teik"]
-        # B,Y,UW | T,AH | F,UH,L（辅音串>1 时第一个归前音节）
-        parts = transcription.english_word_syllables("beautiful")
-        assert len(parts) == 3
-        assert "".join(parts) == "byutafur"
+        # テ|イ|ク（拗音/长音附前拍）
+        assert transcription.english_word_syllables("take") == [
+            "te", "i", "ku",
+        ]
+        # ビュー|ティ|ファ|ル
+        assert transcription.english_word_syllables("beautiful") == [
+            "byuu", "ti", "fa", "ru",
+        ]
 
     def test_fallback_without_dicts(self):
-        # CMU/pyphen 均不可用：整词小写
+        # e2k 未收录且 pyphen 缺席：整词小写
         assert transcription.english_word_syllables("ZZZ") == ["zzz"]
         assert transcription.english_word_syllables("") == []
 
     def test_cache_reuse(self, monkeypatch):
-        monkeypatch.setattr(
-            transcription, "_CMU_CACHE", {"take": [["T", "EY1", "K"]]}
-        )
+        calls = []
+
+        def _fake(w):
+            calls.append(w)
+            return "テイク"
+
+        monkeypatch.setattr(transcription, "_E2K_LOOKUP_CACHE", _fake)
         first = transcription.english_word_syllables("take")
-        monkeypatch.setattr(transcription, "_CMU_CACHE", {})
-        # 第二次命中缓存，不再查词典
-        assert transcription.english_word_syllables("take") == first == ["teik"]
+        assert transcription.english_word_syllables("take") == first
+        assert calls == ["take"]  # 第二次命中缓存，不再查词典
+
+    def test_real_bundled_dictionary(self, monkeypatch):
+        """e2k.txt 随仓库分发：真实词典可用且转换链路稳定。"""
+        monkeypatch.setattr(transcription, "_E2K_LOOKUP_CACHE", None)
+        monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
+        assert transcription.english_word_syllables("take") == [
+            "te", "i", "ku",
+        ]

@@ -213,9 +213,9 @@ def _build_tokens_and_word_groups(
         def _unit_token_texts(u, rom: str) -> List[str]:
             """单元 → 对齐 token 文本列表（0-多个：多音节英文词拆音节）。
 
-            中文模式下的汉字拉丁读音按拼音→表音转写；拉丁词按
-            CMU/pyphen 切音节给读音（FA-Kara 口径，transcription 模块
-            内部对缺失依赖静默回退表面拼写）。
+            中文模式下的汉字拉丁读音按拼音→表音转写；拉丁词走
+            e2k 词典→片假名→按拍罗马字（SUG 自有数据；未收录回退
+            pyphen/整词，transcription 模块内部静默降级）。
             """
             from strange_uta_game.backend.application.ai_timing.pronunciation import (
                 ScriptKind,
