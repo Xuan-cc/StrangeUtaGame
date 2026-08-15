@@ -1348,18 +1348,25 @@ class AiTimingDialog(QDialog):
                 self._on_task_failed(f"应用结果失败：{exc}")
                 return
             # 不自动关窗：成功提示与保存提醒必须可见（此前挂在本弹窗上
-            # 随 close 瞬间消失，造成“静默失败”错觉；数据实际已应用）
+            # 随 close 瞬间消失，造成“静默失败”错觉；数据实际已应用）。
+            # success 样式 + 首句明确「已写入工程、可关窗」：曾有用户把
+            # 旧的警告样式 + 「尚未保存」开头误读为打轴未成功，追问
+            # 是否必须 Ctrl+S 才能关窗
             self.status_label.setText(
-                self.tr("完成：已覆盖全部时间戳。请保存工程（Ctrl+S）落盘")
+                self.tr(
+                    "完成：时间轴已写入工程，可直接关闭本窗口"
+                    "（Ctrl+S 保存落盘）"
+                )
             )
             self.eta_label.setText("")
             self.btn_run.setEnabled(False)
-            InfoBar.warning(
-                title=self.tr("AI 打轴完成"),
+            InfoBar.success(
+                title=self.tr("AI 打轴成功"),
                 content=self.tr(
-                    "已覆盖全部时间戳并写入工程（尚未保存，请按 Ctrl+S 落盘；"
-                    "可撤销一次恢复）。结果仅供辅助，请人工校准；和声/重叠"
-                    "人声段落务必人工复查！"
+                    "时间轴已全部生成并写入当前工程，可直接关闭本窗口"
+                    "继续编辑。Ctrl+S 保存后落盘；如需恢复原时间轴，可在"
+                    "工具栏撤销一次。结果仅供辅助，请人工校准；和声/重叠"
+                    "人声段落务必人工复查。"
                 ),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,

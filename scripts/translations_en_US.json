@@ -1703,5 +1703,8 @@
   "从打轴界面切换至其他页面时自动暂停音乐": "Automatically pause the music when switching from the Timing page to another page",
   "离开打轴界面时暂停": "Pause when leaving Timing",
   "分离模型数据表已损坏，已重置（将自动重新下载）": "The separation model data table was corrupted and has been reset (it will be re-downloaded automatically)",
-  "分离模型文件不完整（下载中断残留），已自动删除，将在下次分离时重新下载": "The separation model file is incomplete (leftover from an interrupted download). It has been deleted and will be re-downloaded on the next separation"
+  "分离模型文件不完整（下载中断残留），已自动删除，将在下次分离时重新下载": "The separation model file is incomplete (leftover from an interrupted download). It has been deleted and will be re-downloaded on the next separation",
+  "完成：时间轴已写入工程，可直接关闭本窗口（Ctrl+S 保存落盘）": "Done: timestamps written to the project. You can close this window now (Ctrl+S to save)",
+  "AI 打轴成功": "AI timing succeeded",
+  "时间轴已全部生成并写入当前工程，可直接关闭本窗口继续编辑。Ctrl+S 保存后落盘；如需恢复原时间轴，可在工具栏撤销一次。结果仅供辅助，请人工校准；和声/重叠人声段落务必人工复查。": "All timestamps have been generated and written to the project — you can close this window and keep editing. Press Ctrl+S to save; one undo from the toolbar restores the previous timestamps. Results are for reference only: please proofread manually, and always double-check harmonies and overlapping vocals."
 }

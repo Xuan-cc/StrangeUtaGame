@@ -328,7 +328,7 @@
 <context>
     <name>AiTimingDialog</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1397" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1404" />
         <source>AI 打轴任务仍在进行，关闭窗口将取消任务并丢弃未应用的结果。确定关闭吗？</source>
         <translation>An AI timing task is still running. Closing this window will cancel it and discard unapplied results. Close anyway?</translation>
     </message>
@@ -338,14 +338,14 @@
         <translation>AI Timing Failed</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1358" />
-        <source>AI 打轴完成</source>
-        <translation>AI Timing Complete</translation>
-    </message>
-    <message>
         <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="685" />
         <source>AI 打轴已取消，未应用任何结果。</source>
         <translation>AI timing was cancelled. No results were applied.</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1364" />
+        <source>AI 打轴成功</source>
+        <translation>AI timing succeeded</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="271" />
@@ -417,7 +417,7 @@ Install log: {p}</translation>
         <translation>Vocal source</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1396" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1403" />
         <source>任务进行中</source>
         <translation>Task in progress</translation>
     </message>
@@ -454,17 +454,17 @@ Install log: {p}</translation>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1382" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1389" />
         <source>取消 AI 打轴</source>
         <translation>Cancel AI Timing</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1384" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1391" />
         <source>取消任务</source>
         <translation>Cancel Task</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1401" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1408" />
         <source>取消并关闭</source>
         <translation>Cancel and Close</translation>
     </message>
@@ -489,7 +489,7 @@ Install log: {p}</translation>
         <translation>Processing…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1375" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1382" />
         <source>处理中…（模型加载期间无中间输出，大文件 CPU 需数分钟）</source>
         <translation>Processing… (no intermediate output while the model loads; large files may take minutes on CPU)</translation>
     </message>
@@ -514,9 +514,9 @@ Install log: {p}</translation>
         <translation>Install the AI runtime (PyTorch and dependencies included).</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1353" />
-        <source>完成：已覆盖全部时间戳。请保存工程（Ctrl+S）落盘</source>
-        <translation>Done: all timestamps overwritten. Save the project (Ctrl+S) to persist</translation>
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1356" />
+        <source>完成：时间轴已写入工程，可直接关闭本窗口（Ctrl+S 保存落盘）</source>
+        <translation>Done: timestamps written to the project. You can close this window now (Ctrl+S to save)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="330" />
@@ -603,11 +603,6 @@ Install log: {p}</translation>
         <translation>Elapsed {m}:{s:02d}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1359" />
-        <source>已覆盖全部时间戳并写入工程（尚未保存，请按 Ctrl+S 落盘；可撤销一次恢复）。结果仅供辅助，请人工校准；和声/重叠人声段落务必人工复查！</source>
-        <translation>All timestamps were overwritten in the project (not saved yet - press Ctrl+S to persist; one undo available). Results are assistive only: calibrate manually, and always review harmony/overlapping-vocal sections!</translation>
-    </message>
-    <message>
         <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1065" />
         <source>当前工作台分离环境未使用托管 PyMSS（或尚未安装）。可以独立安装一份 AI 运行环境（与工作台环境互不影响），或先去第 2 步「音频分离」安装托管环境。</source>
         <translation>The workbench separation environment is not using the managed PyMSS runtime (or is not installed). You can install a standalone AI runtime (independent of the workbench environment), or set up the managed environment in step 2 "Vocal Separation" first.</translation>
@@ -648,6 +643,11 @@ Install log: {p}</translation>
         <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="805" />
         <source>既有标注优先，缺口已补足</source>
         <translation>Existing readings take priority; gaps auto-filled</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1365" />
+        <source>时间轴已全部生成并写入当前工程，可直接关闭本窗口继续编辑。Ctrl+S 保存后落盘；如需恢复原时间轴，可在工具栏撤销一次。结果仅供辅助，请人工校准；和声/重叠人声段落务必人工复查。</source>
+        <translation>All timestamps have been generated and written to the project — you can close this window and keep editing. Press Ctrl+S to save; one undo from the toolbar restores the previous timestamps. Results are for reference only: please proofread manually, and always double-check harmonies and overlapping vocals.</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="432" />
@@ -754,7 +754,7 @@ Install log: {p}</translation>
         <translation>Estimating remaining time…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1390" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1397" />
         <source>正在取消…</source>
         <translation>Cancelling…</translation>
     </message>
@@ -769,7 +769,7 @@ Install log: {p}</translation>
         <translation>Installing… (venv creation and large package downloads may produce no output for minutes)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1374" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1381" />
         <source>正在执行自动对齐…</source>
         <translation>Running auto alignment…</translation>
     </message>
@@ -816,7 +816,7 @@ Install log: {p}</translation>
         <translation>Leave empty for the official source, e.g. https://hf-mirror.com</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1383" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1390" />
         <source>确定取消 AI 打轴吗？当前尚未应用的结果将被丢弃。</source>
         <translation>Cancel AI timing? Unapplied results will be discarded.</translation>
     </message>
@@ -831,12 +831,12 @@ Install log: {p}</translation>
         <translation>Continue</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1402" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1409" />
         <source>继续任务</source>
         <translation>Keep running</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1385" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1392" />
         <source>继续执行</source>
         <translation>Keep going</translation>
     </message>
@@ -960,12 +960,12 @@ Install log: {p}</translation>
         <translation>FFmpeg is unavailable: check the FFmpeg configuration in workbench settings</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="404" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="488" />
         <source>人声分离失败（返回码 {code}）。</source>
         <translation>Vocal separation failed (exit code {code}).</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="409" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="493" />
         <source>人声分离失败（返回码 {code}）。请确认分离环境已完整安装后重试</source>
         <translation>Vocal separation failed (exit code {code}). Make sure the separation environment is fully installed, then retry</translation>
     </message>
@@ -1000,22 +1000,22 @@ Install log: {p}</translation>
         <translation>The separation model downloads from GitHub on first use and the download just failed: check the network (a proxy can be configured in "Settings → Network &amp; proxy") and retry</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="290" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="291" />
         <source>分离环境未安装：请先在弹窗中安装对齐环境（含分离能力）</source>
         <translation>Separation environment not installed: install the alignment environment (which includes separation) in the dialog first</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="406" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="490" />
         <source>子进程输出：{output}</source>
         <translation>Subprocess output: {output}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="442" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="526" />
         <source>工作台分离环境未配置，使用 AI 运行环境内置分离</source>
         <translation>Workbench separation environment not configured; using the separation built into the AI runtime</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="386" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="376" />
         <source>已取消人声分离</source>
         <translation>Vocal separation cancelled</translation>
     </message>
