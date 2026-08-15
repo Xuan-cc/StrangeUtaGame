@@ -16,7 +16,6 @@ CI 仅覆盖 probe/编排逻辑。
 import json
 import subprocess
 import sys
-import venv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
@@ -25,10 +24,17 @@ PROGRESS_CB = Callable[[int, str], None]
 CANCEL_CB = Callable[[], bool]
 
 # 对齐 worker 的依赖集（版本由 Runtime 构建基线统一 pin，§11 阶段 H）
+# 对齐 Runtime 的依赖集（版本由 Runtime 构建基线统一 pin，§11 阶段 H）。
+# transformers 钉在实测与默认模型（NextFire/mms-300m，config 含
+# spectrogram_scale）兼容的 5.15.0：托管 runtime 上装到更新版本时
+# from_pretrained 以 Unexpected keyword argument 'spectrogram_scale'
+# 拒绝加载模型（2026-08 实测），升级基线前不要解开。
+PINNED_TRANSFORMERS = "transformers==5.15.0"
+
 RUNTIME_REQUIREMENTS: List[str] = [
     "torch",
     "torchaudio",
-    "transformers",
+    PINNED_TRANSFORMERS,
     "soundfile",
     "huggingface_hub",
     # standalone 人声分离（UVR/MDX 系模型；CPU 也可跑，模型自动下载）
@@ -286,6 +292,16 @@ class AiRuntimeManager:
 
         progress(4, f"创建虚拟环境：{target_dir}")
         try:
+            # 懒加载：嵌入式 Python 发行版（托管 PyMSS runtime）没有 venv
+            # 模块——worker 子进程也会导入本模块，顶层 import 会让对齐
+            # 直接崩掉（ModuleNotFoundError: No module named 'venv'）
+            import venv
+        except ImportError as exc:
+            raise AiRuntimeError(
+                "该解释器是嵌入式发行版，不支持创建虚拟环境；"
+                "请使用共享运行环境安装（install_shared）"
+            ) from exc
+        try:
             venv.create(target_dir, with_pip=True, clear=False)
         except (OSError, ValueError) as exc:
             raise AiRuntimeError(f"创建虚拟环境失败：{exc}") from exc
@@ -377,7 +393,7 @@ class AiRuntimeManager:
         index_url = f"https://download.pytorch.org/whl/{torch_tag}"
         requirements: List[str] = [
             f"torchaudio=={torch_version}+{torch_tag}",
-            "transformers",
+            PINNED_TRANSFORMERS,
             "soundfile",
             "huggingface_hub",
             "audio-separator[cpu]",

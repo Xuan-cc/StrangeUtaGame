@@ -505,3 +505,66 @@ class TestTailSilenceCriterion:
         b = _silence_boundary(energies, sum(energies) / len(energies), 5, 40)
         assert b == 30  # 第一段 ≥4 帧静音的起点
         assert TAIL_SILENCE_MIN_FRAMES == 4
+
+
+class TestExternalInterpreterBootstrap:
+    """外部解释器（托管 PyMSS runtime 等）的 worker 启动方式。
+
+    嵌入式 Python 发行版带 ``pythonXXX._pth``，会完全忽略 PYTHONPATH：
+    ``-m`` 直接 ModuleNotFoundError。必须用 runpy 引导把包根注入
+    sys.path（2026-08 托管 runtime 上实测复现并验证）。
+    """
+
+    def _capture_popen(self, monkeypatch):
+        captured = {}
+
+        class _FakeProc:
+            def __init__(self):
+                self.stdin = None
+                self.stdout = None
+
+            def poll(self):
+                return 0
+
+        def _fake_popen(cmd, **kwargs):
+            captured["cmd"] = list(cmd)
+            captured["env"] = kwargs.get("env")
+            return _FakeProc()
+
+        monkeypatch.setattr(
+            "strange_uta_game.backend.application.ai_timing.worker.client.subprocess.Popen",
+            _fake_popen,
+        )
+        return captured
+
+    def test_external_interpreter_uses_runpy_bootstrap(self, monkeypatch):
+        from strange_uta_game.backend.application.ai_timing.worker.client import (
+            AlignmentWorkerClient,
+        )
+
+        captured = self._capture_popen(monkeypatch)
+        client = AlignmentWorkerClient(python_exe="C:/managed/python.exe")
+        client._ensure_started()
+        cmd = captured["cmd"]
+        assert cmd[0] == "C:/managed/python.exe"
+        assert cmd[1] == "-c"
+        # 包根作为 argv 注入，模块名进 runpy 代码
+        assert len(cmd) == 4 and cmd[3].endswith("src")
+        assert "strange_uta_game.backend.application.ai_timing.worker" in cmd[2]
+        assert "runpy" in cmd[2]
+
+    def test_same_interpreter_keeps_dash_m(self, monkeypatch):
+        import sys as _sys
+
+        from strange_uta_game.backend.application.ai_timing.worker.client import (
+            AlignmentWorkerClient,
+        )
+
+        captured = self._capture_popen(monkeypatch)
+        client = AlignmentWorkerClient(python_exe=_sys.executable)
+        client._ensure_started()
+        cmd = captured["cmd"]
+        assert cmd[1:3] == [
+            "-m",
+            "strange_uta_game.backend.application.ai_timing.worker",
+        ]

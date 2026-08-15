@@ -470,6 +470,15 @@ class AiTimingService:
             if "取消" in str(exc):
                 raise AiTimingError(str(exc)) from exc
             raise AiTimingError(f"AI 打轴执行失败：{exc}") from exc
+        finally:
+            # 生命周期卫生：无论成败都回收 worker 进程/管道/临时文件，
+            # 模型内存随一次性子进程退出由系统释放
+            closer = getattr(worker, "close", None)
+            if callable(closer):
+                try:
+                    closer()
+                except Exception:
+                    pass
         _check_cancel()
 
         # 校验与缓存

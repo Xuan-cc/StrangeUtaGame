@@ -267,8 +267,12 @@ class TestRuntimeProbe:
 
 class TestRuntimeInstall:
     def _fake_venv(self, monkeypatch, tmp_path_factory):
-        """把 venv.create 替换为只放置假 python.exe 的轻量实现。"""
-        import strange_uta_game.backend.application.ai_timing.runtime as rt
+        """把 venv.create 替换为只放置假 python.exe 的轻量实现。
+
+        runtime.install 懒加载 venv（嵌入式 Python 没有 venv 模块，
+        顶层 import 会让 worker 崩溃），因此这里注入 sys.modules 假模块。
+        """
+        import types
 
         def fake_create(target, **kwargs):
             target = Path(target)
@@ -280,7 +284,9 @@ class TestRuntimeInstall:
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_text("#fake", encoding="utf-8")
 
-        monkeypatch.setattr(rt.venv, "create", fake_create)
+        fake_module = types.ModuleType("venv")
+        fake_module.create = fake_create
+        monkeypatch.setitem(sys.modules, "venv", fake_module)
 
     def test_install_with_injected_pip_runner(self, tmp_path, monkeypatch):
         self._fake_venv(monkeypatch, tmp_path)
@@ -727,7 +733,7 @@ class TestSharedRuntimeInstall:
         assert args[i + 1] == "https://download.pytorch.org/whl/cu128"
         assert "-i" in args and "https://pypi.example/simple" in args
         assert "torch" not in args and "torch==2.7.1+cu128" not in args
-        assert "transformers" in args and "librosa==0.10.2.post1" in args
+        assert "transformers==5.15.0" in args and "librosa==0.10.2.post1" in args
         assert any("增量" in m or "复用" in m for _, m in events)
         assert events[-1][1] == "运行环境就绪"
 

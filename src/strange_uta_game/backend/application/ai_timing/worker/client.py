@@ -143,14 +143,29 @@ class AlignmentWorkerClient:
                 encoding="utf-8",
                 errors="replace",
             )
+            if self._is_same_interpreter():
+                cmd = [self._python_exe, "-m", self.WORKER_MODULE]
+                env = self._build_env(propagate_sys_path=True)
+            else:
+                # 外部解释器用 runpy 引导而不是 PYTHONPATH：嵌入式 Python
+                # 发行版（托管 PyMSS runtime 就是）带 python312._pth，
+                # 该文件存在时解释器完全忽略 PYTHONPATH，-m 会直接
+                # ModuleNotFoundError。把包根作为 argv 注入 sys.path 后
+                # runpy 等价于 -m。
+                root = str(self._package_root())
+                bootstrap = (
+                    "import sys, runpy; sys.path.insert(0, sys.argv.pop(1));"
+                    f" runpy.run_module({self.WORKER_MODULE!r},"
+                    " run_name='__main__')"
+                )
+                cmd = [self._python_exe, "-c", bootstrap, root]
+                env = self._build_env(propagate_sys_path=False)
             self._proc = subprocess.Popen(
-                [self._python_exe, "-m", self.WORKER_MODULE],
+                cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=self._stderr_file,
-                env=self._build_env(
-                    propagate_sys_path=self._is_same_interpreter()
-                ),
+                env=env,
                 text=True,
                 encoding="utf-8",
                 cwd=None,

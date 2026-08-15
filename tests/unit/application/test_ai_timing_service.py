@@ -393,3 +393,32 @@ class TestExecutePrechecks:
         assert cmd is not None
         _, used_audio, _ = worker.calls[0]
         assert Path(used_audio) == chosen
+
+
+class TestWorkerLifecycleClose:
+    """生命周期卫生：execute 结束（成败皆然）回收 worker 进程/管道。"""
+
+    def test_worker_closed_on_success_and_failure(self, tmp_path):
+        closed = []
+
+        class _ClosableWorker(_FakeWorker):
+            def close(self):
+                closed.append(1)
+
+        # 成功路径也回收
+        ok_dir = tmp_path / "ok"
+        ok_dir.mkdir()
+        service, audio = _make_service(ok_dir, worker=_ClosableWorker())
+        cmd = service.execute(_project(), str(audio), vocal_choice=None)
+        assert cmd is not None and closed == [1]
+
+        # 失败路径同样回收（独立目录，避免命中上一次的对齐缓存）
+        closed.clear()
+        bad_dir = tmp_path / "bad"
+        bad_dir.mkdir()
+        service, audio = _make_service(
+            bad_dir, worker=_ClosableWorker(fail=True)
+        )
+        with pytest.raises(Exception, match="AI 打轴执行失败"):
+            service.execute(_project(), str(audio), vocal_choice=None)
+        assert closed == [1]
