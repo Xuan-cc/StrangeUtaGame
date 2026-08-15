@@ -525,6 +525,18 @@ class TestDefaultWidthFits:
         dialog.resize(880, 660)
         dialog.show()
         qapp.processEvents()
+        # 等构造函数触发的异步 refresh 落地：worker 的 finished 信号是
+        # 跨线程排队投递，需要主线程持续派发事件才会复位 _busy。否则
+        # close() 会命中 closeEvent 的「任务进行中」模态框，offscreen 下
+        # 无人可点 → 整个测试会话挂起（单文件跑靠线程调度碰巧通过，
+        # 与其他文件组合运行必现）
+        import time as _time
+
+        for _ in range(200):
+            if not dialog._busy:
+                break
+            qapp.processEvents()
+            _time.sleep(0.01)
         from qfluentwidgets import ScrollArea
 
         overflow = []
