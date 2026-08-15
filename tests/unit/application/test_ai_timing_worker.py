@@ -582,6 +582,30 @@ class TestExternalInterpreterBootstrap:
         assert "strange_uta_game.backend.application.ai_timing.worker" in cmd[2]
         assert "runpy" in cmd[2]
 
+    def test_bootstrap_appends_package_root_not_insert(self, monkeypatch):
+        """包根必须 append 到 sys.path 尾部（不能 insert(0)）。
+
+        回归：frozen 包根（_internal）里混着 PyInstaller 为宿主 Python
+        （3.13）收集的 stdlib 扩展与 pythonXXX.dll；insert(0) 会让运行
+        环境（嵌入式 3.12）import unicodedata 时加载到 3.13 版 .pyd，
+        直接 "Module use of python313.dll conflicts"（打包版实测）。
+        append 保证运行环境自带 stdlib 优先，包根仅作兜底。
+        """
+        from strange_uta_game.backend.application.ai_timing.worker.client import (
+            AlignmentWorkerClient,
+        )
+
+        captured = self._capture_popen(monkeypatch)
+        client = AlignmentWorkerClient(python_exe="C:/managed/python.exe")
+        client._ensure_started()
+        bootstrap = captured["cmd"][2]
+        assert "sys.path.append(sys.argv.pop(1))" in bootstrap
+        assert "insert" not in bootstrap
+        # 包根也不进 PYTHONPATH：对非嵌入式 Python 它排在 stdlib 前，
+        # 同样会遮蔽运行环境自带版本
+        env = captured["env"]
+        assert "PYTHONPATH" not in env
+
     def test_same_interpreter_keeps_dash_m(self, monkeypatch):
         import sys as _sys
 

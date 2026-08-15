@@ -117,10 +117,13 @@ class AlignmentWorkerClient:
             ]
             env["PYTHONPATH"] = path_sep.join(entries + ([existing] if existing else []))
         else:
-            # 外部解释器：只带上 SUG 包根（worker 模块代码在那里），其余
-            # 交给 venv 自身的 site-packages（torch/transformers 等）
+            # 外部解释器：包根通过 -c 引导脚本的 argv 注入（见
+            # _ensure_started）。绝不把包根设进 PYTHONPATH——对非嵌入式
+            # Python 它排在 stdlib 之前，frozen 包根（_internal）里
+            # PyInstaller 收集的本宿主版本 stdlib 扩展会遮蔽运行环境
+            # 自带的版本（python313.dll vs 3.12 runtime 的
+            # "Module use of pythonXXX.dll conflicts" 崩溃）
             env.pop("PYTHONPATH", None)
-            env["PYTHONPATH"] = str(self._package_root())
         # 强制子进程 stdout/stderr 为文本协议通道友好的环境
         env.setdefault("PYTHONIOENCODING", "utf-8")
         # 模型走受控本地目录：杜绝 from_pretrained 的网络探测/遥测卡顿
@@ -172,11 +175,17 @@ class AlignmentWorkerClient:
                 # 外部解释器用 runpy 引导而不是 PYTHONPATH：嵌入式 Python
                 # 发行版（托管 PyMSS runtime 就是）带 python312._pth，
                 # 该文件存在时解释器完全忽略 PYTHONPATH，-m 会直接
-                # ModuleNotFoundError。把包根作为 argv 注入 sys.path 后
+                # ModuleNotFoundError。包根经 argv 注入 sys.path 后
                 # runpy 等价于 -m。
+                # 注意是 append 而不是 insert(0)：frozen 包根（_internal）
+                # 里混着 PyInstaller 为宿主 Python（如 3.13）收集的
+                # stdlib 扩展与 pythonXXX.dll——排在运行环境（3.12）
+                # 自带 stdlib 之前会让 import unicodedata 等加载到版本
+                # 不符的 .pyd，直接 "Module use of python313.dll
+                # conflicts with this version of Python"（打包版实测）
                 root = str(self._package_root())
                 bootstrap = (
-                    "import sys, runpy; sys.path.insert(0, sys.argv.pop(1));"
+                    "import sys, runpy; sys.path.append(sys.argv.pop(1));"
                     f" runpy.run_module({self.WORKER_MODULE!r},"
                     " run_name='__main__')"
                 )
