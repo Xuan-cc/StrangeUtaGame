@@ -432,7 +432,13 @@ class AiTimingDialog(QDialog):
         )
         self._row_runtime = _path_row(
             self.tr("运行环境"),
-            lambda: self._settings.runtime_python or self.tr("当前解释器"),
+            # 打包版没有「当前解释器」：未安装时应明确提示而不是误导
+            lambda: self._settings.runtime_python
+            or (
+                self.tr("未安装（点击下方「安装 / 修复」）")
+                if getattr(sys, "frozen", False)
+                else self.tr("当前解释器")
+            ),
             [
                 (
                     self.tr("浏览"),
