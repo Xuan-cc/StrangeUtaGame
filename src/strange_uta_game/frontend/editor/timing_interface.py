@@ -2080,6 +2080,7 @@ class EditorInterface(QWidget):
             proxy,
             managed_runtime,
             open_separation,
+            embedded,
         ) = parts
         duration_ms = 0
         if self._timing_service:
@@ -2100,7 +2101,7 @@ class EditorInterface(QWidget):
             save_settings=self._save_ai_timing_settings,
             download_proxy=proxy,
             managed_runtime_python=managed_runtime,
-            embedded_mode=host is not None,
+            embedded_mode=embedded,
             open_separation_page=open_separation,
             context_checker=lambda: (
                 self._project is not None
@@ -2295,6 +2296,7 @@ class EditorInterface(QWidget):
             proxy,
             managed_runtime,
             open_separation,
+            host is not None,
         )
 
     def _save_ai_timing_settings(self, settings) -> None:

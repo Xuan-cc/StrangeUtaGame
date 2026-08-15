@@ -384,3 +384,40 @@ class TestToolbarButton:
         actions = [a.text() for a in bar.btn_edit.menu().actions()]
         assert "插入导唱符" in actions
         assert "自动插入导唱符" in actions
+
+
+class TestServicePartsArity:
+    """入口接线守卫：_build_ai_timing_service 的返回元数必须与
+    _on_ai_timing_clicked 的解包元数一致（2026-08 曾因在入口引用了
+    builder 内部变量 host 直接 NameError，UI 入口无覆盖难发现）。"""
+
+    def test_parts_tuple_arity_matches_unpack(self):
+        import ast
+        import inspect
+
+        from strange_uta_game.frontend.editor import timing_interface
+
+        tree = ast.parse(inspect.getsource(timing_interface))
+        fns = {
+            n.name: n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.FunctionDef)
+        }
+        build = fns["_build_ai_timing_service"]
+        rets = [
+            n
+            for n in ast.walk(build)
+            if isinstance(n, ast.Return) and isinstance(n.value, ast.Tuple)
+        ]
+        assert rets, "builder 必须返回元组"
+        ret_arity = len(rets[-1].value.elts)
+
+        click = fns["_on_ai_timing_clicked"]
+        unpacks = [
+            n
+            for n in ast.walk(click)
+            if isinstance(n, ast.Assign)
+            and isinstance(n.targets[0], ast.Tuple)
+        ]
+        assert unpacks, "入口必须解包 parts"
+        assert len(unpacks[0].targets[0].elts) == ret_arity
