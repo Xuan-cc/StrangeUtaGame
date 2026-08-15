@@ -750,3 +750,270 @@ class TestSharedRuntimeInstall:
         manager = AiRuntimeManager(pip_runner=lambda *a: 0)
         with pytest.raises(AiRuntimeError, match="不存在"):
             manager.install_shared(str(tmp_path / "nope" / "python.exe"))
+
+
+class TestPortableRuntimePath:
+    """runtime_python 相对路径持久化：基准目录内收相对，读回展开。"""
+
+    def test_relativize_resolve_roundtrip(self, tmp_path, monkeypatch):
+        from strange_uta_game.backend.application.ai_timing import settings as st
+
+        monkeypatch.setattr(st, "portable_base_dir", lambda: tmp_path)
+        exe = tmp_path / "ai_runtime" / "Scripts" / "python.exe"
+        rel = st.relativize_runtime_python(str(exe))
+        assert not Path(rel).is_absolute()
+        assert st.resolve_runtime_python(rel) == str(exe)
+
+        outside = "C:/elsewhere/python.exe"
+        assert st.relativize_runtime_python(outside) == outside
+        assert st.resolve_runtime_python(outside) == outside
+        assert st.resolve_runtime_python("") == ""
+
+    def test_save_load_roundtrip(self, tmp_path, monkeypatch):
+        from strange_uta_game.backend.application.ai_timing import settings as st
+
+        monkeypatch.setattr(st, "portable_base_dir", lambda: tmp_path)
+        exe = tmp_path / "ai_runtime" / "Scripts" / "python.exe"
+        store = {}
+        st.save_ai_timing_settings(
+            lambda p, v: store.__setitem__(p, v),
+            AiTimingSettings(runtime_python=str(exe)),
+        )
+        stored = store["ai_timing.runtime_python"]
+        assert not Path(stored).is_absolute()  # 持久化为相对
+        loaded = st.load_ai_timing_settings(
+            lambda p, d=None: store.get(p, d)
+        )
+        assert loaded.runtime_python == str(exe)  # 读回展开为绝对
+
+
+class TestReleaseVariant:
+    """分支 B：release 变体选择与契约 URL。"""
+
+    def test_driver_gate_parsing(self, monkeypatch):
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        class _C:
+            def __init__(self, stdout, rc=0):
+                self.stdout = stdout
+                self.returncode = rc
+
+        monkeypatch.setattr(
+            rt.subprocess, "run", lambda *a, **k: _C("570.80\n")
+        )
+        assert rt.nvidia_driver_supports_cu128() is True
+        monkeypatch.setattr(
+            rt.subprocess, "run", lambda *a, **k: _C("560.12\n")
+        )
+        assert rt.nvidia_driver_supports_cu128() is False
+        monkeypatch.setattr(
+            rt.subprocess, "run", lambda *a, **k: _C("", rc=1)
+        )
+        assert rt.nvidia_driver_supports_cu128() is False
+
+    def test_variant_routing(self, monkeypatch):
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "RTX 5080")
+        monkeypatch.setattr(rt, "nvidia_driver_supports_cu128", lambda: True)
+        assert rt.release_variant_for_host() == rt.RUNTIME_VARIANT_CUDA
+        monkeypatch.setattr(rt, "nvidia_driver_supports_cu128", lambda: False)
+        assert rt.release_variant_for_host() == rt.RUNTIME_VARIANT_CPU
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
+        assert rt.release_variant_for_host() == rt.RUNTIME_VARIANT_CPU
+
+    def test_manifest_url_shape(self):
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        url = rt.release_manifest_url("windows-cu128")
+        assert rt.RUNTIME_RELEASE_REPO in url
+        assert rt.RUNTIME_RELEASE_TAG in url
+        assert url.endswith(
+            "KaraokeStudio-PyMSS-windows-cu128-v2.0.18-r1.json"
+        )
+
+    def test_safe_extract_path(self, tmp_path):
+        from strange_uta_game.backend.application.ai_timing.runtime import (
+            _safe_extract_path,
+        )
+
+        ok = _safe_extract_path(tmp_path, "runtime/python.exe")
+        assert ok == (tmp_path / "runtime" / "python.exe").resolve()
+        assert _safe_extract_path(tmp_path, "../escape") is None
+        assert _safe_extract_path(tmp_path, "C:/abs") is None
+        assert _safe_extract_path(tmp_path, "") is None
+
+
+class TestInstallFromRelease:
+    """分支 B：托管底座下载安装的离线全流程。"""
+
+    def _fixture(self, tmp_path):
+        import hashlib
+        import io
+        import zipfile
+
+        payload = tmp_path / "fixture"
+        (payload / "runtime").mkdir(parents=True)
+        (payload / "runtime" / "python.exe").write_text(
+            "#fake-python", encoding="utf-8"
+        )
+        (payload / "manifests").mkdir()
+        (payload / "manifests" / "installed.json").write_text(
+            "{}", encoding="utf-8"
+        )
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            # 底座 zip 的条目相对 runtime 根（无 runtime/ 前缀，同 KS 契约）
+            zf.write(payload / "runtime" / "python.exe", "python.exe")
+            zf.write(
+                payload / "manifests" / "installed.json",
+                "manifests/installed.json",
+            )
+        data = buf.getvalue()
+        part_file = tmp_path / "runtime.zip.001"
+        part_file.write_bytes(data)
+        wheel_file = tmp_path / "torch-2.7.1+cpu.whl"
+        wheel_file.write_bytes(b"FAKEWHEEL" * 100)
+
+        def _sha(p):
+            return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+        manifest = {
+            "schema": 1,
+            "pymss_version": "2.0.18",
+            "runtime_version": "1",
+            "archive": {
+                "parts": [
+                    {
+                        "url": "http://fixture/part1",
+                        "size": len(data),
+                        "sha256": _sha(part_file),
+                    }
+                ]
+            },
+            "files": [
+                {
+                    "path": "python.exe",
+                    "size": len("#fake-python"),
+                    "sha256": "",
+                },
+                {
+                    "path": "manifests/installed.json",
+                    "size": 2,
+                    "sha256": "",
+                },
+            ],
+            "torch": {
+                "version": "2.7.1",
+                "wheel": {
+                    "filename": "torch-2.7.1+cpu.whl",
+                    "url": "http://fixture/wheel",
+                    "size": wheel_file.stat().st_size,
+                    "sha256": _sha(wheel_file),
+                },
+            },
+        }
+        return manifest, {
+            "http://fixture/part1": part_file,
+            "http://fixture/wheel": wheel_file,
+        }
+
+    def test_full_offline_flow(self, tmp_path, monkeypatch):
+        import shutil
+
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        manifest, url_map = self._fixture(tmp_path)
+        target = tmp_path / "rt"
+
+        def _fake_download(url, dest, **kwargs):
+            shutil.copyfile(url_map[url], dest)
+
+        monkeypatch.setattr(rt, "_download_verified", _fake_download)
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
+        monkeypatch.setattr(
+            rt, "release_variant_for_host", lambda: rt.RUNTIME_VARIANT_CPU
+        )
+        monkeypatch.setattr(
+            rt, "detect_torch_build", lambda exe: ("2.7.1", "cpu")
+        )
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        seen = {}
+
+        def fake_runner(python, args, on_line, cancel):
+            seen.setdefault("calls", []).append((str(python), list(args)))
+            on_line("Successfully installed torch\n")
+            return 0
+
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        events = []
+        status = manager.install_from_release(
+            target,
+            manifest_fetch=lambda v, proxy="": manifest,
+            progress=lambda p, m: events.append((p, m)),
+        )
+        assert status.available
+        assert (target / "runtime" / "python.exe").is_file()
+        calls = seen["calls"]
+        # torch wheel 安装（本地 wheel 路径进 pip 参数）
+        assert any(
+            any("torch-2.7.1+cpu.whl" in str(x) for x in args)
+            for _, args in calls
+        )
+        # AI 增量：torchaudio 与探测到的 torch 版本/变体配对
+        assert any("torchaudio==2.7.1+cpu" in args for _, args in calls)
+        assert events[-1][1] == "运行环境就绪"
+        assert any("CPU 版托管运行环境" in m for _, m in events)
+
+    def test_existing_runtime_skips_download(self, tmp_path, monkeypatch):
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        target = tmp_path / "rt"
+        (target / "runtime").mkdir(parents=True)
+        (target / "runtime" / "python.exe").write_text(
+            "#fake", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        monkeypatch.setattr(
+            rt, "detect_torch_build", lambda exe: ("2.7.1", "cpu")
+        )
+        fetched = []
+        manager = AiRuntimeManager(pip_runner=lambda *a: 0)
+        status = manager.install_from_release(
+            target,
+            manifest_fetch=lambda v, proxy="": fetched.append(v) or {},
+            progress=lambda p, m: None,
+        )
+        assert status.available
+        assert fetched == []  # 已有环境：未拉清单未下载
+
+    def test_frozen_install_delegates_to_release(self, tmp_path, monkeypatch):
+        import sys as _sys
+
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        called = {}
+        manager = AiRuntimeManager(pip_runner=lambda *a: 0)
+
+        def _fake_release(target, **kwargs):
+            called["target"] = Path(target)
+            return RuntimeStatus(
+                available=True,
+                python_path=str(Path(target) / "runtime" / "python.exe"),
+            )
+
+        monkeypatch.setattr(manager, "install_from_release", _fake_release)
+        status = manager.install(tmp_path / "rt")
+        assert called["target"] == tmp_path / "rt"
+        assert status.available

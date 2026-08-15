@@ -12,6 +12,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable
 
+import sys
+
 from strange_uta_game.app_dirs import config_dir
 
 SETTINGS_SECTION = "ai_timing"
@@ -59,6 +61,38 @@ def resolve_model_root(settings: AiTimingSettings) -> Path:
     return Path(settings.model_root) if settings.model_root else default_model_root()
 
 
+def portable_base_dir() -> Path:
+    """便携基准目录：frozen = exe 所在目录；源码运行 = 仓库 src 的父目录。
+
+    ``runtime_python`` 位于基准目录内时以相对路径持久化——便携包整体
+    移动/换机后路径不失配（frozen 打包态的关键行为）。
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[3]
+
+
+def resolve_runtime_python(raw: str) -> str:
+    """读取时的规范化：相对路径按便携基准目录展开为绝对路径。"""
+    if not raw:
+        return ""
+    path = Path(raw)
+    if path.is_absolute():
+        return raw
+    return str(portable_base_dir() / path)
+
+
+def relativize_runtime_python(path: str) -> str:
+    """写入时的规范化：基准目录内的绝对路径收为相对，其余原样保留。"""
+    if not path:
+        return path
+    try:
+        rel = Path(path).resolve().relative_to(portable_base_dir().resolve())
+        return str(rel)
+    except ValueError:
+        return path
+
+
 Getter = Callable[[str, object], object]
 """``getter(path, default) -> value`` 适配器。"""
 
@@ -76,8 +110,8 @@ def load_ai_timing_settings(getter: Getter) -> AiTimingSettings:
         download_mirror=str(
             getter(f"{SETTINGS_SECTION}.download_mirror", base.download_mirror)
         ),
-        runtime_python=str(
-            getter(f"{SETTINGS_SECTION}.runtime_python", base.runtime_python)
+        runtime_python=resolve_runtime_python(
+            str(getter(f"{SETTINGS_SECTION}.runtime_python", base.runtime_python))
         ),
         ai_cache_root=str(
             getter(f"{SETTINGS_SECTION}.ai_cache_root", base.ai_cache_root)
@@ -92,8 +126,15 @@ def load_ai_timing_settings(getter: Getter) -> AiTimingSettings:
 def save_ai_timing_settings(
     setter: Callable[[str, object], None], settings: AiTimingSettings
 ) -> None:
-    """把全部字段写回设置存储（由调用方负责持久化/保存触发）。"""
-    for key, value in asdict(settings).items():
+    """把全部字段写回设置存储（由调用方负责持久化/保存触发）。
+
+    ``runtime_python`` 以相对形式持久化（基准目录内时），便携移动不失配。
+    """
+    payload = asdict(settings)
+    payload["runtime_python"] = relativize_runtime_python(
+        payload["runtime_python"]
+    )
+    for key, value in payload.items():
         setter(f"{SETTINGS_SECTION}.{key}", value)
 
 
@@ -102,6 +143,9 @@ __all__ = [
     "AiTimingSettings",
     "default_model_root",
     "resolve_model_root",
+    "portable_base_dir",
+    "resolve_runtime_python",
+    "relativize_runtime_python",
     "load_ai_timing_settings",
     "save_ai_timing_settings",
 ]

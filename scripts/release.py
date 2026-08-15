@@ -1012,6 +1012,28 @@ def _pack_parts(
     return app_zip, runtime_zip, app_targets, runtime_targets
 
 
+def _copy_worker_src(dist_root: Path) -> None:
+    """把 SUG 源码树复制到 ``dist/<app>/sug_worker_src/``。
+
+    AI 打轴的对齐 worker 由外部解释器（托管 PyMSS runtime / 自建 venv）
+    以 runpy 方式加载 ``strange_uta_game`` 包；PyInstaller 的 PYZ 里没有
+    真实 ``.py`` 文件路径，外部解释器 import 不到。携带完整源码树
+    （排除缓存），worker 客户端在 frozen 下自动指向该目录。
+    """
+    src = ROOT / "src"
+    dst = dist_root / "sug_worker_src"
+    if not src.is_dir():
+        raise SystemExit(f"[worker-src] 源码目录不存在：{src}")
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(
+        src,
+        dst,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+    )
+    print(f"  ✓ worker 源码落盘 → {dst.relative_to(ROOT)}")
+
+
 def _generate_updater_deps(dist_root: Path) -> None:
     """扫描 UpdaterEx 构建产物的 ``_internal/`` 顶层条目，写入两份产物：
 
@@ -1163,6 +1185,11 @@ def cmd_build(
 
     # 2. 主程序
     _run_main_build(clean=clean, variant=vcfg.variant)
+
+    # 2.05 worker 源码落盘：AI 打轴的外部解释器（托管 runtime）无法
+    # import PYZ 里的代码，需要随包携带真实源码树（client._package_root
+    # 在 frozen 下指向 exe 同级 sug_worker_src/）
+    _copy_worker_src(vcfg.dist_dir)
 
     # 2.1 生成更新器依赖清单（供运行时选择性复制 _internal 使用）
     if vcfg.has_updater_exe and sys.platform == "win32":

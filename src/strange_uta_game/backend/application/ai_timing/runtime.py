@@ -62,6 +62,22 @@ TORCH_CUDA_VERSION = "2.11.0"
 # 加依赖与缓存余量）
 CUDA_RUNTIME_DISK_GB = 8
 
+# ── 托管 Runtime Release 契约（分支 B：standalone 复用工作台底座）──
+# 与 krok_helper/audio_processing/separation/integration.py 同源；工作台
+# 发新 runtime release 时需同步 bump 这里（两仓耦合点，见 EMBEDDING.md）。
+RUNTIME_RELEASE_REPO = "karaoke-studio/karaoke-studio-runtime"
+RUNTIME_RELEASE_PYMSS_VERSION = "2.0.18"
+RUNTIME_RELEASE_REVISION = "1"
+RUNTIME_RELEASE_TAG = (
+    f"pymss-runtime-v{RUNTIME_RELEASE_PYMSS_VERSION}"
+    f"-r{RUNTIME_RELEASE_REVISION}"
+)
+RUNTIME_RELEASE_ASSET_PREFIX = "KaraokeStudio-PyMSS"
+RUNTIME_VARIANT_CPU = "windows-cpu"
+RUNTIME_VARIANT_CUDA = "windows-cu128"
+# cu128 wheel 需要的最低 NVIDIA 驱动（与工作台同口径）
+CUDA_12_8_MIN_WINDOWS_DRIVER = (570, 65)
+
 _PROBE_CODE = (
     "import json;"
     "import torch,transformers,soundfile,audio_separator;"
@@ -127,6 +143,174 @@ def detect_torch_build(python_exe: str) -> Optional[Tuple[str, str]]:
     if not version or not tag:
         return None
     return version, tag
+
+
+def nvidia_driver_supports_cu128() -> bool:
+    """NVIDIA 驱动是否满足 cu128 wheel 的最低要求（570.65）。"""
+    try:
+        completed = subprocess.run(
+            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if completed.returncode != 0:
+        return False
+    for line in (completed.stdout or "").splitlines():
+        fields = line.strip().split(".")
+        if len(fields) < 2 or not fields[0].isdigit() or not fields[1].isdigit():
+            continue
+        if (int(fields[0]), int(fields[1])) >= CUDA_12_8_MIN_WINDOWS_DRIVER:
+            return True
+    return False
+
+
+def release_variant_for_host() -> str:
+    """按本机硬件选择 runtime release 变体（cu128 需显卡且驱动达标）。"""
+    if detect_nvidia_gpu() and nvidia_driver_supports_cu128():
+        return RUNTIME_VARIANT_CUDA
+    return RUNTIME_VARIANT_CPU
+
+
+def release_manifest_url(variant: str) -> str:
+    name = (
+        f"{RUNTIME_RELEASE_ASSET_PREFIX}-{variant}"
+        f"-v{RUNTIME_RELEASE_PYMSS_VERSION}-r{RUNTIME_RELEASE_REVISION}.json"
+    )
+    return (
+        f"https://github.com/{RUNTIME_RELEASE_REPO}/releases/download/"
+        f"{RUNTIME_RELEASE_TAG}/{name}"
+    )
+
+
+def fetch_runtime_release_manifest(
+    variant: str, *, proxy: str = ""
+) -> dict:
+    """拉取并校验 runtime release 的 JSON 清单（schema 1）。"""
+    import requests
+
+    url = release_manifest_url(variant)
+    try:
+        resp = requests.get(
+            url,
+            timeout=(10, 30),
+            proxies=({"http": proxy, "https": proxy} if proxy else None),
+        )
+        resp.raise_for_status()
+        manifest = resp.json()
+    except Exception as exc:
+        raise AiRuntimeError(f"获取运行环境清单失败：{exc}") from exc
+    if manifest.get("schema") != 1:
+        raise AiRuntimeError("运行环境清单格式不受支持")
+    parts = ((manifest.get("archive") or {}).get("parts")) or []
+    if not parts:
+        raise AiRuntimeError("运行环境清单缺少下载分片")
+    return manifest
+
+
+def _safe_extract_path(base: Path, rel: str) -> Optional[Path]:
+    """解压目标安全化：拒绝绝对路径与 ``..`` 逃逸。"""
+    if not rel or Path(rel).is_absolute():
+        return None
+    candidate = (base / rel).resolve()
+    try:
+        candidate.relative_to(base.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+def _download_verified(
+    url: str,
+    dest: Path,
+    *,
+    expected_size: int,
+    expected_sha256: str,
+    proxy: str = "",
+    progress: Optional[PROGRESS_CB] = None,
+    cancel: Optional[CANCEL_CB] = None,
+    base_pct: int = 0,
+    span_pct: int = 10,
+    label: str = "",
+) -> None:
+    """流式下载到 ``.part`` 并做 sha256 校验（字节级进度 + 速度/ETA 文案）。
+
+    已存在且校验通过的文件直接复用（修复重装不重下大文件）。
+    """
+    import hashlib
+
+    sha = hashlib.sha256()
+
+    def _ok(path: Path) -> bool:
+        if not path.is_file() or path.stat().st_size != expected_size:
+            return False
+        digest = hashlib.sha256()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest() == expected_sha256
+
+    if _ok(dest):
+        progress(base_pct + span_pct, f"{label}已存在且校验通过，复用")
+        return
+
+    part = dest.with_name(dest.name + ".part")
+    part.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import requests
+
+        resp = requests.get(
+            url,
+            stream=True,
+            timeout=(10, 60),
+            proxies=({"http": proxy, "https": proxy} if proxy else None),
+        )
+        resp.raise_for_status()
+    except Exception as exc:
+        raise AiRuntimeError(f"下载失败（{label or url}）：{exc}") from exc
+
+    import time as _time
+
+    done = 0
+    t0 = _time.monotonic()
+    try:
+        with part.open("wb") as fh:
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                if cancel and cancel():
+                    raise AiRuntimeError("已取消")
+                if not chunk:
+                    continue
+                fh.write(chunk)
+                sha.update(chunk)
+                done += len(chunk)
+                if expected_size and progress:
+                    elapsed = max(0.001, _time.monotonic() - t0)
+                    rate = done / elapsed / 1024 / 1024
+                    remain_s = (
+                        int((expected_size - done) / 1024 / 1024 / max(rate, 0.001))
+                        if rate > 0.001
+                        else 0
+                    )
+                    m, s = divmod(remain_s, 60)
+                    progress(
+                        base_pct
+                        + int(span_pct * min(1.0, done / max(1, expected_size))),
+                        f"{label}{done // 1024 // 1024}MB/"
+                        f"{expected_size // 1024 // 1024}MB"
+                        f"（{rate:.1f}MB/s，预计剩余 {m}:{s:02d}）",
+                    )
+    except AiRuntimeError:
+        raise
+    except Exception as exc:
+        raise AiRuntimeError(f"下载失败（{label or url}）：{exc}") from exc
+
+    if sha.hexdigest() != expected_sha256 or (
+        expected_size and done != expected_size
+    ):
+        raise AiRuntimeError(f"下载校验失败（{label or url}），请重试")
+    part.replace(dest)
 
 
 class AiRuntimeError(RuntimeError):
@@ -261,6 +445,18 @@ class AiRuntimeManager:
 
         target_dir = Path(target_dir)
 
+        if getattr(sys, "frozen", False):
+            # frozen 宿主建不了 venv（应用 exe 没有 venv/ensurepip 机制）：
+            # 走托管 runtime release 下载路线（内嵌 Python 底座，整机
+            # 无需系统 Python），torch wheel 与 AI 增量随之安装
+            return self.install_from_release(
+                target_dir,
+                mirror=mirror,
+                proxy=proxy,
+                progress=progress,
+                cancel=cancel,
+            )
+
         # GPU 策略最先确定（探测在本机执行，与解释器无关）：检测到
         # NVIDIA 显卡时走 PyTorch 官方 CUDA 索引——PyPI 的 Windows
         # torch 默认是 CPU-only wheel，不显式指定索引 GPU 永远不会被
@@ -352,6 +548,211 @@ class AiRuntimeManager:
         return self._pip_install_requirements(
             python_exe, args, progress=progress, cancel=cancel
         )
+
+    def install_from_release(
+        self,
+        target_dir: Path,
+        *,
+        mirror: str = "",
+        proxy: str = "",
+        progress: Optional[PROGRESS_CB] = None,
+        cancel: Optional[CANCEL_CB] = None,
+        manifest_fetch=None,
+    ) -> RuntimeStatus:
+        """分支 B：从 karaoke-studio-runtime release 下载托管底座并安装。
+
+        流程：选变体 → 拉清单 → 下载分卷底座 zip（sha256 校验）→ 解压
+        校验出 ``runtime/python.exe``（内嵌 Python，整机无需系统 Python）
+        → 下载 torch wheel 并用底座自带 pip 安装 → 复用 ``install_shared``
+        装 AI 增量依赖。已有可用 runtime 时跳过下载直接增量。
+
+        Args:
+            manifest_fetch: 可注入的清单获取函数（测试用，默认
+                ``fetch_runtime_release_manifest``）。
+        """
+        import zipfile
+
+        progress = progress or (lambda p, m: None)
+        cancel = cancel or (lambda: False)
+        target_dir = Path(target_dir)
+        runtime_dir = target_dir / "runtime"
+        python_exe = runtime_dir / (
+            "python.exe" if sys.platform == "win32" else "bin" / "python"
+        )
+
+        # 快路径：已有可用环境（修复重装）直接增量
+        if python_exe.is_file():
+            existing = self.probe(str(python_exe))
+            if existing.available:
+                progress(60, "检测到已安装的运行环境，跳过下载")
+
+                def _scaled(p: int, m: str) -> None:
+                    progress(60 + int(p * 0.39), m)
+
+                status = self.install_shared(
+                    str(python_exe),
+                    mirror=mirror,
+                    proxy=proxy,
+                    progress=_scaled,
+                    cancel=cancel,
+                )
+                progress(100, "运行环境就绪")
+                return status
+
+        variant = release_variant_for_host()
+        gpu = detect_nvidia_gpu()
+        if variant == RUNTIME_VARIANT_CUDA:
+            progress(
+                2, f"检测到 NVIDIA GPU（{gpu}），下载 CUDA 版托管运行环境"
+            )
+        else:
+            progress(2, "未检测到可用 NVIDIA GPU/驱动，下载 CPU 版托管运行环境")
+
+        fetch = manifest_fetch or fetch_runtime_release_manifest
+        manifest = fetch(variant, proxy=proxy)
+        if cancel():
+            raise AiRuntimeError("已取消")
+        parts = manifest["archive"]["parts"]
+        torch_info = (manifest.get("torch") or {}).get("wheel") or {}
+        total_bytes = sum(int(p.get("size") or 0) for p in parts) + int(
+            torch_info.get("size") or 0
+        )
+        staging = target_dir / "staging"
+        staging.mkdir(parents=True, exist_ok=True)
+
+        # 分卷底座 + torch wheel 按字节摊进度（5-60）
+        done_bytes = 0
+        zip_parts: List[Path] = []
+        for idx, part_info in enumerate(parts):
+            part_dest = staging / f"runtime-{variant}.zip.{idx + 1:03d}"
+
+            def _part_progress(p: int, m: str, _pi=part_info, _base=done_bytes):
+                # 每个文件的子进度折算到全局字节刻度
+                frac = _base / max(1, total_bytes) + (
+                    (p / 100.0) * int(_pi.get("size") or 0) / max(1, total_bytes)
+                )
+                progress(5 + int(55 * min(1.0, frac)), m)
+
+            _download_verified(
+                str(part_info.get("url", "")),
+                part_dest,
+                expected_size=int(part_info.get("size") or 0),
+                expected_sha256=str(part_info.get("sha256", "")),
+                proxy=proxy,
+                progress=_part_progress,
+                cancel=cancel,
+                label=f"底座分卷 {idx + 1}/{len(parts)} ",
+            )
+            zip_parts.append(part_dest)
+            done_bytes += int(part_info.get("size") or 0)
+
+        wheel_dest = None
+        if torch_info:
+            wheel_dest = staging / str(torch_info.get("filename") or "torch.whl")
+
+            def _wheel_progress(p: int, m: str):
+                frac = done_bytes / max(1, total_bytes) + (
+                    (p / 100.0) * int(torch_info.get("size") or 0)
+                    / max(1, total_bytes)
+                )
+                progress(5 + int(55 * min(1.0, frac)), m)
+
+            _download_verified(
+                str(torch_info.get("url", "")),
+                wheel_dest,
+                expected_size=int(torch_info.get("size") or 0),
+                expected_sha256=str(torch_info.get("sha256", "")),
+                proxy=proxy,
+                progress=_wheel_progress,
+                cancel=cancel,
+                label="PyTorch wheel ",
+            )
+
+        # 拼接分卷 → 解压校验（60-75）
+        import io as _io
+
+        progress(60, "解压运行环境底座…")
+        payload = staging / "payload"
+        if payload.exists():
+            import shutil as _shutil
+
+            _shutil.rmtree(payload)
+        payload.mkdir(parents=True)
+        try:
+            with _io.BytesIO() as joined:
+                for part in zip_parts:
+                    joined.write(part.read_bytes())
+                joined.seek(0)
+                with zipfile.ZipFile(joined) as zf:
+                    zf.extractall(payload)
+        except Exception as exc:
+            raise AiRuntimeError(f"解压运行环境失败：{exc}") from exc
+
+        files = manifest.get("files") or []
+        for entry in files:
+            rel = str(entry.get("path", ""))
+            target = _safe_extract_path(payload, rel)
+            if target is None or not target.is_file():
+                raise AiRuntimeError(f"运行环境底座缺少文件：{rel}")
+            if entry.get("size") and target.stat().st_size != int(entry["size"]):
+                raise AiRuntimeError(f"运行环境底座文件大小不符：{rel}")
+        # 底座 zip 的文件相对 runtime 根（无 runtime/ 前缀，同 KS 契约）
+        payload_python = payload / python_exe.relative_to(runtime_dir)
+        if not payload_python.is_file():
+            raise AiRuntimeError(
+                "运行环境底座缺少 python.exe（清单与实际不符）"
+            )
+
+        # 替换正式 runtime 目录（60-75 末）
+        if runtime_dir.exists():
+            import shutil as _shutil
+
+            _shutil.rmtree(runtime_dir)
+        payload.replace(runtime_dir)
+
+        # torch wheel 安装（75-85）：底座自带 pip，依赖走常规索引
+        if wheel_dest is not None:
+            progress(75, "安装 PyTorch（体积较大）…")
+            pip_args = [
+                str(python_exe),
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                str(wheel_dest),
+            ]
+            if proxy:
+                pip_args += ["--proxy", proxy]
+            if mirror:
+                pip_args += ["-i", mirror]
+            returncode = self._pip_runner(
+                str(python_exe),
+                pip_args[1:],
+                lambda line: progress(
+                    80, line.strip()[:80] if line.strip() else "安装 PyTorch…"
+                ),
+                cancel,
+            )
+            if cancel():
+                raise AiRuntimeError("已取消")
+            if returncode != 0:
+                raise AiRuntimeError(
+                    f"PyTorch 安装失败（pip 返回码 {returncode}）"
+                )
+
+        # AI 增量依赖（85-99）：torch 已就位，动态配对 torchaudio
+        def _scaled(p: int, m: str) -> None:
+            progress(85 + int(p * 0.14), m)
+
+        status = self.install_shared(
+            str(python_exe),
+            mirror=mirror,
+            proxy=proxy,
+            progress=_scaled,
+            cancel=cancel,
+        )
+        progress(100, "运行环境就绪")
+        return status
 
     def install_shared(
         self,
@@ -581,9 +982,17 @@ __all__ = [
     "TORCH_CUDA_INDEX_URL",
     "TORCH_CUDA_VERSION",
     "CUDA_RUNTIME_DISK_GB",
+    "RUNTIME_RELEASE_REPO",
+    "RUNTIME_RELEASE_TAG",
+    "RUNTIME_VARIANT_CPU",
+    "RUNTIME_VARIANT_CUDA",
     "AiRuntimeError",
     "RuntimeStatus",
     "AiRuntimeManager",
     "detect_nvidia_gpu",
     "detect_torch_build",
+    "nvidia_driver_supports_cu128",
+    "release_variant_for_host",
+    "release_manifest_url",
+    "fetch_runtime_release_manifest",
 ]
