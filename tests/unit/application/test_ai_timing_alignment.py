@@ -695,6 +695,48 @@ class TestPhonemeLatinPath:
         assert [t.text for t in request.tokens] == ["xy", "lo"]
         assert request.word_groups == [[0, 1]]
 
+    def test_word_checkpoint_spans_first_to_last_syllable(self):
+        """整词（单节奏点）：音节 token 区间 min/max 合并回传——
+        词内边界来自各音节的独立 CTC 区间，不再是比例切分。"""
+        from strange_uta_game.backend.application.ai_timing.alignment import (
+            AlignmentResult,
+            checkpoint_timestamps,
+        )
+
+        s = _sentence([("x", 1, ["abandoned"], False)])
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        assert [t.text for t in request.tokens] == ["a", "bandand"]
+        spans = _spans_from_tokens(request, [100, 400])  # 每拍固定 200ms
+        span_map = checkpoint_timestamps(
+            AlignmentResult(
+                annotation_digest=request.annotation_digest, spans=spans
+            ),
+            request,
+        )
+        # 节奏点 = 首音节起点 100 → 末音节终点 600
+        assert span_map == {(0, 0, 0): (100, 600)}
+
+    def test_split_pieces_get_own_token_spans(self):
+        """手工按音节拆词（多节奏点）：每片独立对齐，各节奏点拿
+        自己 token 的真实区间。"""
+        from strange_uta_game.backend.application.ai_timing.alignment import (
+            AlignmentResult,
+            checkpoint_timestamps,
+        )
+
+        s = _sentence([("T", 1, ["Ta"], False), ("a", 1, ["ke"], False)])
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        spans = _spans_from_tokens(request, [100, 400])
+        span_map = checkpoint_timestamps(
+            AlignmentResult(
+                annotation_digest=request.annotation_digest, spans=spans
+            ),
+            request,
+        )
+        assert span_map == {(0, 0, 0): (100, 300), (0, 1, 0): (400, 600)}
+
 
 class TestSentenceEndPlaceholder:
     """句尾呼吸占位（0cp 无法标注字符）：尾音释放点取行内末 token 终点。"""
