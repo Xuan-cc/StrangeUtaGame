@@ -102,8 +102,17 @@ def test_playback_tick_repaints_only_dynamic_row(qapp, monkeypatch):
     assert 0 < rect.height() < preview.height()
 
 
-@pytest.mark.parametrize("scroll_mode", ["auto", "always", "never"])
-def test_scroll_mode_keeps_editor_current_line_visual(qapp, monkeypatch, scroll_mode):
+@pytest.mark.parametrize(
+    "scroll_mode,expected_visual",
+    [("auto", 6), ("always", 6), ("never", 2)],
+)
+def test_visual_current_follows_playback_when_auto_scrolling(
+    qapp, monkeypatch, scroll_mode, expected_visual
+):
+    """1.5.0 语义：自动滚动激活时播放行就是视觉当前行（大字号/行号高亮）。
+
+    从不滚动模式没有播放行跟随，视觉当前行回落到编辑光标行。
+    """
     monkeypatch.setattr(preview_module, "theme", _DummyTheme())
     preview = preview_module.KaraokePreview()
     preview.set_project(_plain_project(line_count=8, chars_per_line=1))
@@ -112,11 +121,11 @@ def test_scroll_mode_keeps_editor_current_line_visual(qapp, monkeypatch, scroll_
     preview._is_playing = True
     preview.set_scroll_mode(scroll_mode)
 
-    assert preview._effective_current_line() == 2
+    assert preview._effective_current_line() == expected_visual
     assert preview._current_line_idx == 2
 
 
-@pytest.mark.parametrize("scroll_mode", ["auto", "always", "never"])
+@pytest.mark.parametrize("scroll_mode", ["auto", "always"])
 def test_playback_line_change_never_changes_current_line(
     qapp, monkeypatch, scroll_mode
 ):
@@ -133,18 +142,31 @@ def test_playback_line_change_never_changes_current_line(
     preview.set_current_time_ms(250)
 
     assert preview._current_line_idx == 2
-    if scroll_mode == "never":
-        assert preview._last_auto_scroll_line_idx == 0
-        assert preview._scroll_center_line == 2.0
-    else:
-        assert preview._last_auto_scroll_line_idx == 6
-        assert preview._scroll_center_line == 6.0
+    assert preview._last_auto_scroll_line_idx == 6
+    assert preview._scroll_center_line == 6.0
+
+
+def test_playback_line_change_never_scrolls_in_never_mode(qapp, monkeypatch):
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.set_project(_plain_project(line_count=8, chars_per_line=1))
+    preview._line_switch_points = [(100, 0), (200, 6)]
+    preview._current_line_idx = 2
+    preview._scroll_center_line = 2.0
+    preview._last_auto_scroll_line_idx = 0
+    preview._is_playing = True
+    preview.set_scroll_mode("never")
+
+    preview.set_current_time_ms(250)
+
+    assert preview._current_line_idx == 2
+    assert preview._last_auto_scroll_line_idx == 0
+    assert preview._scroll_center_line == 2.0
 
 
 @pytest.mark.parametrize("scroll_mode", ["auto", "always"])
-def test_follow_scroll_repaints_playback_row_without_moving_current(
-    qapp, monkeypatch, scroll_mode
-):
+def test_follow_scroll_repaint_covers_playback_row(qapp, monkeypatch, scroll_mode):
+    """自动滚动播放中：播放行（视觉当前行）行带必须被逐帧重绘覆盖。"""
     monkeypatch.setattr(preview_module, "theme", _DummyTheme())
     preview = preview_module.KaraokePreview()
     preview.resize(800, 560)
@@ -153,14 +175,66 @@ def test_follow_scroll_repaints_playback_row_without_moving_current(
     preview._last_auto_scroll_line_idx = 6
     preview._is_playing = True
     preview.set_scroll_mode(scroll_mode)
+    # 自动滚动激活时视口跟随播放行，居中到行 6
+    preview._scroll_center_line = 6.0
     dirty = []
     monkeypatch.setattr(preview, "update", lambda *args: dirty.append(args))
 
     preview._update_dynamic_playback_rows()
 
     assert dirty and len(dirty[-1]) == 1
-    expected = preview._line_repaint_rect(2).united(preview._line_repaint_rect(6))
-    assert dirty[-1][0] == expected
+    expected = preview._line_repaint_rect(6)
+    assert dirty[-1][0].contains(expected)
+
+
+def test_never_scroll_playback_wipe_rows_still_repainted(qapp, monkeypatch):
+    """回归（1.5.1）：从不滚动模式下播放行走字曾整体冻结。
+
+    播放行不进 ``_last_auto_scroll_line_idx``（never 模式不更新它），
+    局部重绘必须通过 wipe 时间区间把播放行带出来；编辑光标行照常刷新。
+    """
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    singer_id = "s"
+    preview = preview_module.KaraokePreview()
+    preview.resize(800, 560)
+    preview.set_project(
+        _project_from([_stamped_line(singer_id, (i + 1) * 1000) for i in range(8)])
+    )
+    preview.set_current_position(2, 0)
+    preview.set_scroll_mode("never")
+    preview._is_playing = True
+    preview.set_current_time_ms(6500)  # 首帧：时间从 0 跳入 → 全量
+
+    dirty = []
+    monkeypatch.setattr(preview, "update", lambda *args: dirty.append(args))
+
+    preview.set_current_time_ms(6600)  # 行 5 演唱中，正常帧间推进
+
+    assert dirty and len(dirty[-1]) == 1
+    rect = dirty[-1][0]
+    assert rect.contains(preview._line_repaint_rect(5))   # 播放行走字
+    assert rect.contains(preview._line_repaint_rect(2))   # 编辑光标行
+    assert 0 < rect.height() < preview.height()           # 仍是局部重绘
+
+
+def test_seek_jump_requests_full_repaint(qapp, monkeypatch):
+    """大跨度 seek 跨过多行 wipe 区间 → 受影响行过多，回退全量重绘。"""
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    singer_id = "s"
+    preview = preview_module.KaraokePreview()
+    preview.resize(800, 560)
+    preview.set_project(
+        _project_from([_stamped_line(singer_id, (i + 1) * 1000) for i in range(8)])
+    )
+    preview.set_scroll_mode("never")
+    preview._is_playing = True
+    preview.set_current_time_ms(1500)
+    dirty = []
+    monkeypatch.setattr(preview, "update", lambda *args: dirty.append(args))
+
+    preview.set_current_time_ms(7500)
+
+    assert dirty and dirty[-1] == ()
 
 
 def test_playback_line_change_requests_full_repaint(qapp, monkeypatch):
@@ -200,6 +274,49 @@ def test_partial_lyric_repaint_matches_full_render(qapp, monkeypatch):
     full = preview.grab().toImage()
 
     assert partial == full
+
+
+def test_line_repaint_rect_covers_ruby_ink_and_checkpoint_markers(
+    qapp, monkeypatch
+):
+    """回归（1.5.1）：重绘行带按几何行带（height/可见行数）裁剪时，
+    22 号字当前行的 Ruby 顶端会落在重绘区外，走字出现"只有下半在动"。
+
+    行带必须覆盖行内容真实外沿：Ruby wipe 裁剪区顶端（基线上方
+    ascent + ruby_spacing + ruby 字高 + 2px）与节奏点 marker 底端
+    （基线下方 descent + cp_spacing + marker 字高 + 2px）。
+    """
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.resize(800, 560)
+    preview.set_project(_plain_project(line_count=8, chars_per_line=4))
+    preview._scroll_center_line = 4.0
+
+    for line_idx, is_current_row in ((4, True), (2, False)):
+        rect = preview._line_repaint_rect(line_idx)
+        line_height = preview.height() / preview._visible_lines
+        y_center = (
+            preview.height() / 2.0
+            + (line_idx - preview._scroll_center_line) * line_height
+        )
+        fm_main = preview._fm_current if is_current_row else preview._fm_context
+        ruby_clip_top = (
+            y_center
+            - fm_main.ascent()
+            - preview._ruby_spacing
+            - preview._fm_ruby.ascent()
+            - 2
+        )
+        marker_bottom = (
+            y_center
+            + fm_main.descent()
+            + preview._cp_spacing
+            + preview._fm_checkpoint.height()
+            + 2
+        )
+        assert rect.top() <= ruby_clip_top, line_idx
+        assert rect.bottom() >= marker_bottom - 1, line_idx
+        assert rect.height() < preview.height()
 
 
 def test_line_invalidation_advances_uncached_line_version(qapp, monkeypatch):

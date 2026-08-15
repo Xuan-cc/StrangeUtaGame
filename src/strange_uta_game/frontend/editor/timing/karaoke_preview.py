@@ -611,6 +611,9 @@ class KaraokePreview(QWidget):
                     break
             # 预渲染所有句子到缓存
             self._prewarm_all_sentences()
+        # 换工程后换行快照必须重建：旧快照的行号指向新工程会找错播放行
+        # （暂停 seek / 未播放时局部重绘也依赖此快照定位受影响行）
+        self._build_line_switch_points()
         self._update_scrollbar_range()
         self._sync_scrollbar_to_scroll_center()
         self._mark_horizontal_layout_dirty()
@@ -746,6 +749,7 @@ class KaraokePreview(QWidget):
         },
     )
     def set_current_time_ms(self, time_ms: int):
+        prev_time = self._current_time_ms
         self._current_time_ms = time_ms
         # 播放期间按就近扩散顺序预热少量邻近行，降低视口内首帧卡顿
         if self._is_playing:
@@ -764,31 +768,90 @@ class KaraokePreview(QWidget):
                     if not self._auto_scroll_suspended:
                         self._scroll_to_line(target_line_idx)
         if line_changed:
+            # 换行瞬间：视口滚动 + 播放行切换大字体 + 上一行走字收尾，
+            # 受影响像素遍布视口，全量重绘
             self.update()
         else:
-            self._update_dynamic_playback_rows()
+            self._update_dynamic_playback_rows(prev_time)
 
     def _line_repaint_rect(self, line_idx: int) -> QRect:
-        """Return the viewport band occupied by one lyric row, with AA padding."""
+        """单行重绘带：覆盖该行实际绘制内容的完整外沿。
+
+        行内容垂直分布（以行基线 y_center 为基准）：
+        - 上方：Ruby（基线 ``y - ascent - ruby_spacing``，墨水再向上一个
+          ruby 字高；wipe 裁剪区比墨水再高 2px、连词框再高 1px）。
+        - 下方：节奏点 marker（``descent + cp_spacing + marker 字高``）。
+
+        注意不能直接用 ``height / _visible_lines`` 的几何行带：紧凑行距 /
+        大字号下几何行带小于内容高度，按它裁剪会把 Ruby 顶端留在重绘区
+        外，走字出现"只有下半在动"的横向截断条带。这里按内容包络计算，
+        光标行与上下文行字号不同，取两者较大值，光标移动时重绘带不收缩。
+        """
         if self.height() <= 0 or self._visible_lines <= 0:
             return self.rect()
         line_height = self.height() / self._visible_lines
         center_y = self.height() / 2.0
         y_center = center_y + (line_idx - self._scroll_center_line) * line_height
-        top = math.floor(y_center - line_height / 2.0) - 3
-        bottom = math.ceil(y_center + line_height / 2.0) + 3
+        ascent = max(self._fm_current.ascent(), self._fm_context.ascent())
+        descent = max(self._fm_current.descent(), self._fm_context.descent())
+        pad = 4  # AA 边缘 + wipe 裁剪/连词框超出墨水的 1~2px + y_center 取整
+        top = math.floor(
+            y_center - ascent - self._ruby_spacing - self._fm_ruby.height() - pad
+        )
+        bottom = math.ceil(
+            y_center + descent + self._cp_spacing + self._fm_checkpoint.height() + pad
+        )
         return QRect(0, top, self.width(), max(1, bottom - top)).intersected(self.rect())
 
-    def _update_dynamic_playback_rows(self) -> None:
-        """Repaint only rows whose wipe/guide pixels can change this frame.
+    def _wipe_affected_lines(self, t0: Optional[int], t1: int) -> Optional[set[int]]:
+        """返回 ``[t0, t1]`` 之间 wipe 状态可能变化的行集合；跨多行返回 None。
 
-        Qt's backing store retains the context rows, effectively separating the
-        static lyric layer from the dynamic playback rows without a large pixmap.
+        wipe 是 ``_current_time_ms`` 的纯函数，与自动滚动开关、播放状态均
+        无关。受影响行 = 新旧时间各自所在的行 + 区间内开始演唱的行 ± 1 个
+        邻居（夹在两个已打轴行之间的未打轴行由邻行时间戳插值走字，不会
+        出现在换行快照里）。区间跨过多行（大跨度 seek）时返回 None，调用
+        方回退全量重绘。
+        """
+        if not self._project or not self._project.sentences:
+            return set()
+        if not self._line_switch_points:
+            # 暂停 seek / 加载后未播放过时快照可能尚未构建
+            self._build_line_switch_points()
+        if not self._line_switch_points:
+            return set()
+        if t0 is None or t0 == t1:
+            lo = hi = t1
+        else:
+            lo, hi = (t0, t1) if t0 <= t1 else (t1, t0)
+        total = len(self._project.sentences)
+        rows: set[int] = set()
+        for tv in (lo, hi):
+            li = self._find_line_for_time(tv)
+            if li is not None:
+                rows.add(li)
+        for ts, li in self._line_switch_points:
+            if lo < ts <= hi and 0 <= li < total:
+                rows.add(li)
+        rows |= {
+            li + d for li in list(rows) for d in (-1, 1) if 0 <= li + d < total
+        }
+        if len(rows) > 5:
+            return None
+        return rows
+
+    def _update_dynamic_playback_rows(self, prev_time: Optional[int] = None) -> None:
+        """逐帧只重绘走字状态会变化的行带，其余像素由 backing store 保留。
+
+        行集合必须覆盖所有 wipe 随时间变化的行，而不是仅编辑光标行
+        （1.5.1 曾因此回归：从不滚动模式下已打轴行失去光标后走字冻结）：
+        - 从不滚动模式：``_last_auto_scroll_line_idx`` 不更新，播放行靠
+          ``_wipe_affected_lines`` 按时间区间带出。
+        - 暂停 seek：新旧时间所在行的 wipe 显示都会变化。
+        - 大跨度 seek：受影响行过多，回退全量重绘。
         """
         rows = {self._effective_current_line()}
-        # 自动滚动只让视口跟随播放行；编辑当前行仍由
-        # ``_current_line_idx`` 表示。播放行可能因此不是视觉“当前行”，但其
-        # wipe 仍需逐帧重绘。
+        # 播放行与编辑光标行可能不同（滚动挂起 / 从不滚动），二者都要刷新；
+        # 自动滚动激活时 effective_current 已是播放行，此处为幂等兜底。
         if (
             self._is_playing
             and self._auto_scroll_enabled
@@ -797,6 +860,11 @@ class KaraokePreview(QWidget):
             rows.add(self._last_auto_scroll_line_idx)
         if self._preview_guide_enabled:
             rows.add(self._current_line_idx)
+        wipe_rows = self._wipe_affected_lines(prev_time, self._current_time_ms)
+        if wipe_rows is None:
+            self.update()
+            return
+        rows.update(wipe_rows)
         dirty = QRect()
         for line_idx in rows:
             dirty = dirty.united(self._line_repaint_rect(line_idx))
@@ -1152,12 +1220,13 @@ class KaraokePreview(QWidget):
         self._horizontal_layout_dirty = True
 
     def _effective_current_line(self) -> int:
-        """返回编辑当前行；播放行和视窗位置不得改变此语义。
-
-        ``_last_auto_scroll_line_idx`` 仅表示播放行，供视窗跟随和走字刷新；
-        ``_scroll_center_line`` 仅表示视窗中心。二者都不能替代编辑光标行，
-        否则当前字符指示框、当前行字体和行号高亮会随播放滚动漂移。
-        """
+        if (
+            self._is_playing
+            and self._auto_scroll_enabled
+            and not self._auto_scroll_suspended
+            and self._last_auto_scroll_line_idx >= 0
+        ):
+            return self._last_auto_scroll_line_idx
         return self._current_line_idx
 
     def _line_start_x(self, total_text_width: int, left: int, right: int) -> int:
