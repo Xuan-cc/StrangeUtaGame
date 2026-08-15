@@ -50,6 +50,7 @@ from strange_uta_game.backend.application.ai_timing.models import (
     ModelRegistry,
 )
 from strange_uta_game.backend.application.ai_timing.runtime import (
+    INSTALL_LOG_NAME,
     AiRuntimeManager,
 )
 from strange_uta_game.backend.application.ai_timing.service import (
@@ -91,6 +92,20 @@ DISK_EST_RELEASE_CUDA_GB = 6.0
 DISK_EST_RELEASE_CPU_GB = 2.0
 DISK_EST_SHARED_GB = 0.5
 DISK_EST_MODEL_GB = 1.2
+
+
+def _install_log_file_for(mode: str, target) -> Optional[Path]:
+    """安装日志文件路径（与 runtime.open_install_log 的目录口径一致）。
+
+    shared 模式的 target 是解释器路径：日志在其上级目录；venv 模式
+    的 target 是运行环境目录本身。
+    """
+    try:
+        if mode == "shared":
+            return Path(target).resolve().parents[1] / INSTALL_LOG_NAME
+        return Path(target) / INSTALL_LOG_NAME
+    except Exception:
+        return None
 
 # 上游进度消息中的速度/剩余时间片段（下载 MB/s、分离 s/块、pip 包/分）；
 # ETA 优先采信上游自带值，百分比推算只作为无值阶段的兜底
@@ -1095,33 +1110,55 @@ class AiTimingDialog(QDialog):
             pass
 
         def _task(progress_cb, cancel_check):
-            if mode == "shared":
-                # 方案 B：向宿主托管解释器增量安装（不建 venv、不重装
-                # torch，torchaudio 按其 torch 版本自动配对）
-                status = self._runtime.install_shared(
-                    str(target),
-                    mirror=self._settings.download_mirror,
-                    proxy=self._download_proxy,
-                    progress=lambda p, m: progress_cb("runtime", p, m),
-                    cancel=cancel_check,
-                )
-            else:
-                status = self._runtime.install(
-                    target,
-                    mirror=self._settings.download_mirror,
-                    proxy=self._download_proxy,
-                    progress=lambda p, m: progress_cb("runtime", p, m),
-                    cancel=cancel_check,
-                )
+            try:
+                if mode == "shared":
+                    # 方案 B：向宿主托管解释器增量安装（不建 venv、不重装
+                    # torch，torchaudio 按其 torch 版本自动配对）
+                    status = self._runtime.install_shared(
+                        str(target),
+                        mirror=self._settings.download_mirror,
+                        proxy=self._download_proxy,
+                        progress=lambda p, m: progress_cb("runtime", p, m),
+                        cancel=cancel_check,
+                    )
+                else:
+                    status = self._runtime.install(
+                        target,
+                        mirror=self._settings.download_mirror,
+                        proxy=self._download_proxy,
+                        progress=lambda p, m: progress_cb("runtime", p, m),
+                        cancel=cancel_check,
+                    )
+            except Exception as exc:
+                # 失败原因补进安装日志，并把日志路径附给错误弹窗——
+                # 状态行只留最后一行且会丢失，排查全靠日志
+                try:
+                    self._runtime.log_line(f"失败：{exc}")
+                except Exception:
+                    pass
+                log_file = _install_log_file_for(mode, target)
+                if log_file is not None and log_file.is_file():
+                    raise RuntimeError(
+                        self.tr("{e}\n详细安装日志：{p}").format(
+                            e=exc, p=log_file
+                        )
+                    ) from exc
+                raise
             # 安装成功后记录解释器路径（_done 里持久化）
             self._settings.runtime_python = status.python_path
             return status
 
         def _done(status) -> None:
             self._persist_settings()
+            log_file = _install_log_file_for(mode, target)
             InfoBar.success(
                 title=self.tr("对齐环境就绪"),
-                content=status.summary,
+                content=(
+                    status.summary
+                    + self.tr("（安装日志：{p}）").format(p=log_file)
+                    if log_file is not None
+                    else status.summary
+                ),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,

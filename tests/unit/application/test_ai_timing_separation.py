@@ -83,6 +83,37 @@ class TestStandaloneSeparator:
         assert ident["stem"] == "人声"
         assert ident["params"] == {}
 
+    def test_callable_runtime_python_resolved_lazily(self, tmp_path, monkeypatch):
+        """解释器路径惰性读取：安装完成后路径才写入设置，同一分离器
+        实例的 available() 必须立即反映新值（分离环境行不再卡在未安装）。"""
+        state = {"python": ""}
+        probed = []
+
+        def _fake_run(cmd, **kwargs):
+            probed.append(cmd[0])
+            rc = 0 if cmd[0] == state["python"] else 1
+
+            class _C:
+                returncode = rc
+
+            return _C()
+
+        monkeypatch.setattr(sep_mod.subprocess, "run", _fake_run)
+        sep = StandaloneVocalSeparator(lambda: state["python"], None)
+        assert sep.available() is False  # 未安装：路径为空
+        assert probed == []  # 空路径不 spawn 子进程
+
+        exe = tmp_path / "runtime" / "python.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"")
+        state["python"] = str(exe)
+        assert sep.available() is True
+        assert probed == [str(exe)]
+
+        # 字符串形式（旧用法）仍然可用
+        sep2 = StandaloneVocalSeparator(str(exe), None)
+        assert sep2.available() is True
+
 
 class TestHostFirstSeparation:
     """embedded 分离编排：宿主优先，宿主未配置时回落 AI Runtime 内置分离。"""

@@ -424,6 +424,15 @@ class TestRuntimeInstall:
         assert f"torchaudio{pin}" in args
         assert "librosa==0.10.2.post1" in args  # 既有钉子不受影响
         assert any("CUDA 版" in m for _, m in events)
+        # Scripts 目录 PATH 警告对内嵌 runtime 无意义，且会漏进弹窗
+        # 底部状态行干扰用户
+        assert "--no-warn-script-location" in args
+        # 安装自动落日志（含会话头与进度行）
+        log_file = tmp_path / "rt" / "install.log"
+        assert log_file.is_file()
+        text = log_file.read_text(encoding="utf-8")
+        assert "安装会话开始" in text
+        assert "安装完成" in text
 
     def test_install_cpu_route_without_gpu(self, tmp_path, monkeypatch):
         """无 NVIDIA GPU：不加 CUDA 索引/-U，镜像参数不受影响。"""
@@ -978,6 +987,31 @@ class TestInstallFromRelease:
         assert any("torchaudio==2.7.1+cpu" in args for _, args in calls)
         assert events[-1][1] == "运行环境就绪"
         assert any("CPU 版托管运行环境" in m for _, m in events)
+        # 安装日志：单会话头（install_shared 复用外层日志），含关键进度
+        log_text = (target / "install.log").read_text(encoding="utf-8")
+        assert log_text.count("安装会话开始") == 1
+        assert "运行环境就绪" in log_text
+
+    def test_open_install_log_and_throttled_progress(self, tmp_path):
+        """日志助手：会话追加 + 进度包装限噪（消息变化立即记）。"""
+        from strange_uta_game.backend.application.ai_timing.runtime import (
+            open_install_log,
+            wrap_progress_with_log,
+        )
+
+        log = open_install_log(tmp_path)
+        log("hello")
+        seen = []
+        wrapped = wrap_progress_with_log(lambda p, m: seen.append((p, m)), log)
+        wrapped(5, "同消息")  # 消息变化 → 记录
+        wrapped(6, "同消息")  # 2 秒内同消息 → 不记录
+        wrapped(7, "新消息")  # 消息变化 → 记录
+        assert seen == [(5, "同消息"), (6, "同消息"), (7, "新消息")]
+        text = (tmp_path / "install.log").read_text(encoding="utf-8")
+        assert "安装会话开始" in text
+        assert "hello" in text
+        assert text.count("同消息") == 1
+        assert "新消息" in text
 
     def test_existing_runtime_skips_download(self, tmp_path, monkeypatch):
         import strange_uta_game.backend.application.ai_timing.runtime as rt

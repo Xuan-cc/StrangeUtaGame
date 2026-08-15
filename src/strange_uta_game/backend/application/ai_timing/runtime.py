@@ -256,6 +256,69 @@ def _replace_dir_with_retry(src: Path, dst: Path) -> None:
     raise AiRuntimeError(f"替换运行环境目录失败：{last}")
 
 
+INSTALL_LOG_NAME = "install.log"
+_INSTALL_LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
+def install_log_dir_for_target(target_dir: Path) -> Path:
+    """安装日志所在目录：与运行环境同目录（ai_runtime/ 下，浏览按钮可达）。"""
+    return Path(target_dir)
+
+
+def open_install_log(directory: Path) -> Callable[[str], None]:
+    """打开追加式安装日志（会话头 + 时间戳行；超过 5MB 轮转为 .old）。
+
+    下载/安装的每条进度与 pip 输出都会落盘——弹窗状态行只保留最后一
+    条且会丢失，排查「网络波动停顿」「pip 警告」「中途失败」全靠它。
+    打不开（目录只读等）时静默退化为无日志。
+    """
+    import time as _time
+    from datetime import datetime as _dt
+
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        path = Path(directory) / INSTALL_LOG_NAME
+        try:
+            if path.exists() and path.stat().st_size > _INSTALL_LOG_MAX_BYTES:
+                path.replace(path.with_name(INSTALL_LOG_NAME + ".old"))
+        except OSError:
+            pass
+        handle = open(path, "a", encoding="utf-8", buffering=1)
+    except OSError:
+        return lambda msg: None
+    handle.write(
+        f"\n===== {_dt.now():%Y-%m-%d %H:%M:%S} 安装会话开始 "
+        f"(pid {__import__('os').getpid()}) =====\n"
+    )
+
+    def _write(message: str) -> None:
+        try:
+            handle.write(f"[{_dt.now():%H:%M:%S}] {message}\n")
+        except OSError:
+            pass
+
+    _write(f"python={sys.version.split()[0]} frozen={bool(getattr(sys, 'frozen', False))}")
+    return _write
+
+
+def wrap_progress_with_log(
+    progress: PROGRESS_CB, log: Callable[[str], None]
+) -> PROGRESS_CB:
+    """给进度回调接上日志：消息变化立即记，否则最多每 2 秒一条（限噪）。"""
+    import time as _time
+
+    state = {"t": 0.0, "m": ""}
+
+    def _wrapped(p: int, m: str) -> None:
+        now = _time.time()
+        if m != state["m"] or now - state["t"] >= 2.0:
+            log(f"{p:>3}% {m}")
+            state.update(t=now, m=m)
+        progress(p, m)
+
+    return _wrapped
+
+
 def _download_verified(
     url: str,
     dest: Path,
@@ -389,6 +452,18 @@ class AiRuntimeManager:
         ] = None,
     ):
         self._pip_runner = pip_runner or self._default_pip_runner
+        # 最近一次安装会话的日志写入函数（open_install_log 产物）；
+        # 供 UI 在任务失败时补写失败原因（详见 log_line）
+        self._install_log: Optional[Callable[[str], None]] = None
+
+    def log_line(self, message: str) -> None:
+        """向当前安装日志补写一行（无活动日志时静默跳过）。"""
+        cb = self._install_log
+        if cb is not None:
+            try:
+                cb(message)
+            except Exception:
+                pass
 
     # ── 探测 ──
 
@@ -511,6 +586,9 @@ class AiRuntimeManager:
         # NVIDIA 显卡时走 PyTorch 官方 CUDA 索引——PyPI 的 Windows
         # torch 默认是 CPU-only wheel，不显式指定索引 GPU 永远不会被
         # 用到；-U 让已装的 CPU 版原地升级到 +cu128 本地版本
+        log = open_install_log(install_log_dir_for_target(target_dir))
+        self._install_log = log
+        progress = wrap_progress_with_log(progress, log)
         gpu_name = detect_nvidia_gpu()
         use_cuda = bool(gpu_name)
         if use_cuda:
@@ -564,7 +642,15 @@ class AiRuntimeManager:
         # pip 参数一次构建：dry-run 预估与正式安装复用同一组参数
         # （此前 dry-run 引用了尚未定义的 args，UnboundLocalError 被静默
         # 吞掉，包数量预估从未生效，pip 进度一直退化为逐行 +1 模式）
-        args: List[str] = ["-m", "pip", "install", "--disable-pip-version-check"]
+        args: List[str] = [
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            # Scripts 目录不在 PATH 的警告对内嵌 runtime 无意义，只会
+            # 漏进弹窗底部状态行干扰用户
+            "--no-warn-script-location",
+        ]
         if proxy:
             args += ["--proxy", proxy]
         if index_url:
@@ -597,9 +683,11 @@ class AiRuntimeManager:
         if use_cuda:
             args += ["-U"]
         args += list(requirements)
-        return self._pip_install_requirements(
+        status = self._pip_install_requirements(
             python_exe, args, progress=progress, cancel=cancel
         )
+        log(f"安装完成：{status.python_path}")
+        return status
 
     def install_from_release(
         self,
@@ -632,6 +720,10 @@ class AiRuntimeManager:
             "python.exe" if sys.platform == "win32" else "bin" / "python"
         )
 
+        log = open_install_log(install_log_dir_for_target(target_dir))
+        self._install_log = log
+        progress = wrap_progress_with_log(progress, log)
+
         # 快路径：已有可用环境（修复重装）直接增量。判定用「torch 可导入」
         # 而非完整 probe——半装状态（torch 就位、AI 依赖缺失）也能免重下
         # 3GB wheel，直接补装依赖
@@ -648,6 +740,7 @@ class AiRuntimeManager:
                     proxy=proxy,
                     progress=_scaled,
                     cancel=cancel,
+                    log=log,
                 )
                 progress(100, "运行环境就绪")
                 return status
@@ -797,6 +890,7 @@ class AiRuntimeManager:
                 "pip",
                 "install",
                 "--disable-pip-version-check",
+                "--no-warn-script-location",
                 str(wheel_dest),
             ]
             if proxy:
@@ -828,6 +922,7 @@ class AiRuntimeManager:
             proxy=proxy,
             progress=_scaled,
             cancel=cancel,
+            log=log,
         )
         # 成功后清理 staging（底座分卷 + torch wheel 共约 3.2GB）；
         # 失败路径保留，供重试时断点复用
@@ -845,6 +940,7 @@ class AiRuntimeManager:
         proxy: str = "",
         progress: Optional[PROGRESS_CB] = None,
         cancel: Optional[CANCEL_CB] = None,
+        log: Optional[Callable[[str], None]] = None,
     ) -> RuntimeStatus:
         """向宿主托管的 Runtime（工作台 PyMSS runtime）增量安装 AI 依赖。
 
@@ -852,6 +948,10 @@ class AiRuntimeManager:
         （托管 runtime 已带，按其变体只装配对的 torchaudio），直接向
         该解释器 pip 安装 AI 增量包。方案 B：embedded 与分离共享同一
         份 torch（含 CUDA），避免重复下载约 3GB。
+
+        Args:
+            log: 复用外层安装日志（install_from_release 传入，避免一次
+                安装写两个会话头）；缺省时在解释器上级目录自开。
 
         Raises:
             AiRuntimeError: 解释器不存在 / 托管环境缺 torch（提示先在
@@ -864,6 +964,11 @@ class AiRuntimeManager:
             raise AiRuntimeError(f"托管运行环境解释器不存在：{python_exe}")
         if cancel():
             raise AiRuntimeError("已取消")
+        if log is None:
+            # 日志落在解释器的上级目录（<ai_runtime>/ 或工作台安装目录）
+            log = open_install_log(exe.resolve().parents[1])
+            self._install_log = log
+        progress = wrap_progress_with_log(progress, log)
 
         build = detect_torch_build(str(exe))
         if build is None:
@@ -890,7 +995,15 @@ class AiRuntimeManager:
             f"复用工作台运行环境（PyTorch {torch_version}+{torch_tag}），"
             "仅安装 AI 增量依赖（不重复下载 torch，预计新增约 0.5GB）",
         )
-        args: List[str] = ["-m", "pip", "install", "--disable-pip-version-check"]
+        args: List[str] = [
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            # Scripts 目录不在 PATH 的警告对内嵌 runtime 无意义，只会
+            # 漏进弹窗底部状态行干扰用户
+            "--no-warn-script-location",
+        ]
         if proxy:
             args += ["--proxy", proxy]
         args += ["--extra-index-url", index_url]
@@ -1081,4 +1194,8 @@ __all__ = [
     "release_variant_for_host",
     "release_manifest_url",
     "fetch_runtime_release_manifest",
+    "INSTALL_LOG_NAME",
+    "install_log_dir_for_target",
+    "open_install_log",
+    "wrap_progress_with_log",
 ]

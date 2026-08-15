@@ -2191,6 +2191,10 @@ class EditorInterface(QWidget):
         # 回落 AI Runtime 内置分离（安装器本身携带 audio-separator，
         # 只为 AI 打轴的用户不必强配工作台分离环境）
         follows_host = False
+        # 解释器路径惰性读取：安装/修复完成后路径才写回设置，同一弹窗
+        # 会话内的分离 prober/执行器必须能立即反映（否则分离环境行
+        # 一直显示未安装，重复点「安装 / 修复」也不恢复）
+        runtime_python_getter = lambda: settings.runtime_python  # noqa: E731
         if host is not None:
             from strange_uta_game.backend.application.ai_timing.separation import (
                 StandaloneVocalSeparator,
@@ -2198,7 +2202,7 @@ class EditorInterface(QWidget):
             )
 
             standalone_sep = StandaloneVocalSeparator(
-                settings.runtime_python, model_root
+                runtime_python_getter, model_root
             )
             executor, identity_fn, prober, follows_host = (
                 host_first_separation(host, standalone_sep)
@@ -2209,7 +2213,7 @@ class EditorInterface(QWidget):
             )
 
             separator = StandaloneVocalSeparator(
-                settings.runtime_python, model_root
+                runtime_python_getter, model_root
             )
             executor = separator.separate
             identity_fn = separator.identity

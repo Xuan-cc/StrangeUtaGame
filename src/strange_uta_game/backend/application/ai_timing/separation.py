@@ -55,20 +55,27 @@ class StandaloneVocalSeparator:
     """用共享 Runtime 子进程执行一次人声分离。
 
     Args:
-        runtime_python: AI Runtime 的 python.exe（空 = 当前解释器，
-            仅在主环境恰好装有 audio-separator 时可用）。
+        runtime_python: AI Runtime 的 python.exe 路径，或返回路径的
+            零参 callable（惰性读取：安装/修复完成后路径才写入设置，
+            同一次弹窗会话内 prober 必须能立即反映新值）。空 = 当前
+            解释器，仅在主环境恰好装有 audio-separator 时可用。
         model_root: 统一模型根（分离模型与对齐模型同源）。
     """
 
-    def __init__(self, runtime_python: str, model_root: Path):
+    def __init__(self, runtime_python, model_root: Path):
         self._python = runtime_python
         self._model_root = Path(model_root) if model_root else None
+
+    def _python_exe(self) -> str:
+        value = self._python() if callable(self._python) else self._python
+        return str(value or "")
 
     def identity(self) -> dict:
         return {"model": SEPARATION_MODEL, "stem": VOCAL_STEM, "params": {}}
 
     def available(self) -> bool:
-        if not self._python or not Path(self._python).is_file():
+        python = self._python_exe()
+        if not python or not Path(python).is_file():
             return False
         try:
             # 必须探测真实入口：顶层包可导入不代表 separator 模块可用
@@ -79,7 +86,7 @@ class StandaloneVocalSeparator:
 
             completed = subprocess.run(
                 [
-                    self._python,
+                    python,
                     "-c",
                     "from audio_separator.separator import Separator",
                 ],
@@ -98,13 +105,14 @@ class StandaloneVocalSeparator:
         cancel: CancelFn,
     ) -> Path:
         source = Path(source_path)
-        if not self.available():
+        python = self._python_exe()
+        if not python or not Path(python).is_file() or not self.available():
             raise RuntimeError(
                 "分离环境未安装：请先在弹窗中安装对齐环境（含分离能力）"
             )
         out_dir = source.parent
         cmd = [
-            self._python,
+            python,
             "-c",
             _SCRIPT,
             str(source),
