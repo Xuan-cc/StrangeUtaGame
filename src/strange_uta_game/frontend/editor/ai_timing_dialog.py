@@ -1054,14 +1054,15 @@ class AiTimingDialog(QDialog):
 
         if mode == "venv":
             # 占用提醒（实测口径：CUDA venv 约 5GB / CPU venv 约 2GB；
-            # 安装期间含下载缓存的峰值更高，由安装内预检把关）
-            from strange_uta_game.backend.application.ai_timing.runtime import (
-                detect_nvidia_gpu,
+            # 安装期间含下载缓存的峰值更高，由安装内预检把关）。
+            # GPU 判定用快照里探测好的 gpu_name——UI 线程上再起
+            # nvidia-smi 子进程会卡界面并闪黑框（打包版实测）
+            runtime_status = (
+                self._snapshot.runtime if self._snapshot is not None else None
             )
-
             estimate = (
                 DISK_EST_VENV_CUDA_GB
-                if detect_nvidia_gpu()
+                if runtime_status is not None and runtime_status.gpu_name
                 else DISK_EST_VENV_CPU_GB
             )
             if not self._confirm_disk_usage(

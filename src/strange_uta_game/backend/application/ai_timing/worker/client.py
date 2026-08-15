@@ -71,7 +71,12 @@ class AlignmentWorkerClient:
         env: Optional[Dict[str, str]] = None,
         cancel_grace_s: float = 5.0,
     ):
-        self._python_exe = python_exe or sys.executable
+        if not python_exe and getattr(sys, "frozen", False):
+            # 打包应用的 sys.executable 是应用 exe，不是解释器：
+            # 空解释器直接报错（否则会把整个应用再启动一遍）
+            self._python_exe = ""
+        else:
+            self._python_exe = python_exe or sys.executable
         self._env_override = env
         self._cancel_grace_s = cancel_grace_s
         self._proc: Optional[subprocess.Popen] = None
@@ -141,6 +146,10 @@ class AlignmentWorkerClient:
     def _ensure_started(self) -> subprocess.Popen:
         if self._proc is not None and self._proc.poll() is None:
             return self._proc
+        if not self._python_exe:
+            raise AlignmentWorkerError(
+                "未配置对齐运行环境：请先在弹窗中「安装 / 修复」后再执行"
+            )
         self._cancel_requested.clear()
         self._finished.clear()
         try:
@@ -173,6 +182,10 @@ class AlignmentWorkerClient:
                 )
                 cmd = [self._python_exe, "-c", bootstrap, root]
                 env = self._build_env(propagate_sys_path=False)
+            from strange_uta_game.backend.infrastructure.windows import (
+                hidden_subprocess_kwargs,
+            )
+
             self._proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
@@ -182,6 +195,7 @@ class AlignmentWorkerClient:
                 text=True,
                 encoding="utf-8",
                 cwd=None,
+                **hidden_subprocess_kwargs(),
             )
         except OSError as exc:
             raise AlignmentWorkerError(f"无法启动对齐进程：{exc}") from exc

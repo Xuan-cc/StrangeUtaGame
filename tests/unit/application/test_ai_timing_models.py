@@ -1017,3 +1017,55 @@ class TestInstallFromRelease:
         status = manager.install(tmp_path / "rt")
         assert called["target"] == tmp_path / "rt"
         assert status.available
+
+
+class TestFrozenInterpreterGuards:
+    """打包版空解释器守卫：绝不把应用 exe 当 python 启动（幽灵进程）。"""
+
+    def test_probe_frozen_empty_interpreter_never_spawns(self, monkeypatch):
+        import sys as _sys
+
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        spawned = []
+        monkeypatch.setattr(
+            rt.subprocess,
+            "run",
+            lambda *a, **k: spawned.append(a) or None,
+        )
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        status = rt.AiRuntimeManager().probe("")
+        assert spawned == []  # 没有任何子进程
+        assert not status.available
+        assert "安装 / 修复" in status.message
+
+    def test_detect_torch_build_empty_interpreter_returns_none(self):
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        assert rt.detect_torch_build("") is None
+
+    def test_client_frozen_empty_interpreter_raises(self, monkeypatch):
+        import sys as _sys
+
+        from strange_uta_game.backend.application.ai_timing.worker.client import (
+            AlignmentWorkerClient,
+            AlignmentWorkerError,
+        )
+
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        client = AlignmentWorkerClient()
+        assert client._python_exe == ""
+        with pytest.raises(AlignmentWorkerError, match="安装 / 修复"):
+            client._ensure_started()
+
+    def test_hidden_subprocess_kwargs_shape(self):
+        from strange_uta_game.backend.infrastructure.windows import (
+            hidden_subprocess_kwargs,
+        )
+
+        kw = hidden_subprocess_kwargs()
+        if sys.platform == "win32":
+            assert kw.get("creationflags")
+            assert "startupinfo" in kw
+        else:
+            assert kw == {}

@@ -78,6 +78,10 @@ RUNTIME_VARIANT_CUDA = "windows-cu128"
 # cu128 wheel 需要的最低 NVIDIA 驱动（与工作台同口径）
 CUDA_12_8_MIN_WINDOWS_DRIVER = (570, 65)
 
+from strange_uta_game.backend.infrastructure.windows import (
+    hidden_subprocess_kwargs,
+)
+
 _PROBE_CODE = (
     "import json;"
     "import torch,transformers,soundfile,audio_separator;"
@@ -100,6 +104,7 @@ def detect_nvidia_gpu() -> str:
             capture_output=True,
             text=True,
             timeout=5,
+            **hidden_subprocess_kwargs(),
         )
         if completed.returncode == 0:
             return (completed.stdout or "").strip().splitlines()[0].strip()
@@ -117,6 +122,10 @@ def detect_torch_build(python_exe: str) -> Optional[Tuple[str, str]]:
     增量安装（方案 B）用它动态配对 torchaudio：托管 runtime 升级
     torch 后无需改代码，配对版本自动跟随。
     """
+    if not python_exe:
+        # 空解释器（打包未装环境）绝不回落 sys.executable——那会把
+        # 打包应用当 python 启动（整个应用再开一遍的幽灵进程）
+        return None
     try:
         completed = subprocess.run(
             [python_exe, "-c", "import torch; print(torch.__version__)"],
@@ -125,6 +134,7 @@ def detect_torch_build(python_exe: str) -> Optional[Tuple[str, str]]:
             encoding="utf-8",
             errors="replace",
             timeout=90,
+            **hidden_subprocess_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -153,6 +163,7 @@ def nvidia_driver_supports_cu128() -> bool:
             capture_output=True,
             text=True,
             timeout=5,
+            **hidden_subprocess_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -361,6 +372,14 @@ class AiRuntimeManager:
     def probe(self, python_exe: str = "", timeout_s: float = 30.0) -> RuntimeStatus:
         """子进程探测目标解释器是否具备对齐依赖。"""
         exe = python_exe or sys.executable
+        if not python_exe and getattr(sys, "frozen", False):
+            # 打包应用的 sys.executable 是应用 exe：拿它当解释器探测
+            # 会把整个应用再启动一遍（实测幽灵 SUG 的来源）
+            return RuntimeStatus(
+                available=False,
+                python_path="",
+                message="尚未安装对齐运行环境，请点击「安装 / 修复」",
+            )
         if not Path(exe).is_file() and exe != sys.executable:
             return RuntimeStatus(
                 available=False,
@@ -375,6 +394,7 @@ class AiRuntimeManager:
                 encoding="utf-8",
                 errors="replace",
                 timeout=timeout_s,
+                **hidden_subprocess_kwargs(),
             )
         except subprocess.TimeoutExpired:
             return RuntimeStatus(
@@ -977,6 +997,7 @@ class AiRuntimeManager:
             encoding="utf-8",
             errors="replace",
             env=getattr(self, "_pip_env", None),
+            **hidden_subprocess_kwargs(),
         )
         assert process.stdout is not None
         for line in process.stdout:

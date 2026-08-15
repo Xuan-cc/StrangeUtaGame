@@ -467,11 +467,10 @@ class TestDiskUsageReminder:
         self, qapp, tmp_path, monkeypatch
     ):
         import strange_uta_game.frontend.editor.ai_timing_dialog as dlg_mod
-        import strange_uta_game.backend.application.ai_timing.runtime as rt
 
         snap = _ready_snapshot()
         dialog = self._dialog(qapp, tmp_path, snap)
-        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "RTX 5080")
+        dialog._on_snapshot_ready(snap)  # 快照就位（gpu_name 来源）
         texts = []
 
         def _capture(parent, title, text, **kwargs):
@@ -481,13 +480,21 @@ class TestDiskUsageReminder:
         monkeypatch.setattr(dlg_mod, "message_question", _capture)
         started = []
         dialog._run_task = lambda *a, **k: started.append(a)
+
+        # 快照探测到 GPU → CUDA 估算；UI 线程零子进程
+        snap.runtime = RuntimeStatus(
+            available=True, gpu_name="RTX 5080"
+        )
+        dialog._on_snapshot_ready(snap)
         dialog._on_install_runtime()
         assert started == []
-        assert "5GB" in texts[-1]  # CUDA 估算
+        assert "5GB" in texts[-1]
 
-        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
+        # 无 GPU 信息 → CPU 估算
+        snap.runtime = RuntimeStatus(available=False, message="未装")
+        dialog._on_snapshot_ready(snap)
         dialog._on_install_runtime()
-        assert "2GB" in texts[-1]  # CPU 估算
+        assert "2GB" in texts[-1]
 
     def test_shared_install_skips_confirmation(self, qapp, tmp_path, monkeypatch):
         import strange_uta_game.frontend.editor.ai_timing_dialog as dlg_mod

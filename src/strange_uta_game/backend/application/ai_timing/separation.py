@@ -73,6 +73,10 @@ class StandaloneVocalSeparator:
         try:
             # 必须探测真实入口：顶层包可导入不代表 separator 模块可用
             # （裸 audio-separator 缺 onnxruntime/audioread 时顶层仍成功）
+            from strange_uta_game.backend.infrastructure.windows import (
+                hidden_subprocess_kwargs,
+            )
+
             completed = subprocess.run(
                 [
                     self._python,
@@ -81,6 +85,7 @@ class StandaloneVocalSeparator:
                 ],
                 capture_output=True,
                 timeout=30,
+                **hidden_subprocess_kwargs(),
             )
             return completed.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
@@ -111,6 +116,10 @@ class StandaloneVocalSeparator:
         env = dict(os.environ)
         # 中文 Windows 子进程默认按 GBK 写管道，宿主按 UTF-8 读会乱码
         env["PYTHONIOENCODING"] = "utf-8"
+        from strange_uta_game.backend.infrastructure.windows import (
+            hidden_subprocess_kwargs,
+        )
+
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -119,6 +128,7 @@ class StandaloneVocalSeparator:
             encoding="utf-8",
             errors="replace",
             env=env,
+            **hidden_subprocess_kwargs(),
         )
         result_path: Optional[Path] = None
         assert proc.stdout is not None
