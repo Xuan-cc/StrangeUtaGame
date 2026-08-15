@@ -85,14 +85,15 @@ class AlignmentWorkerClient:
     def _package_root() -> "Path":
         """SUG 包根目录（含 ``strange_uta_game/`` 的目录，即 src 布局的 src）。
 
-        frozen（PyInstaller）：代码在 PYZ 里没有真实文件路径，外部解释器
-        无法 import——构建时把源码树复制到 exe 同级 ``sug_worker_src/``
-        （scripts/release.py），这里指向它。
+        frozen（PyInstaller onedir）：spec 的 datas 已把 ``src/strange_uta_game``
+        整树原样收进 ``_internal``（运行时即 ``sys._MEIPASS``），外部解释器
+        直接从那里 import——无需任何额外的源码落盘步骤。
         """
         from pathlib import Path
 
         if getattr(sys, "frozen", False):
-            return Path(sys.executable).resolve().parent / "sug_worker_src"
+            base = getattr(sys, "_MEIPASS", "")
+            return Path(base) if base else Path(sys.executable).resolve().parent
 
         import strange_uta_game
 

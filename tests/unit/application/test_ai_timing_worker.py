@@ -627,3 +627,39 @@ class TestWordGroupResplit:
             [(5, 8), (3, 2)], [[1], [2]], [[0, 1]]
         )
         assert out2 == [(5, 8), (3, 2)]
+
+
+class TestFrozenPackageRoot:
+    """frozen 包根：spec datas 已把源码树收进 _internal（sys._MEIPASS）。"""
+
+    def test_frozen_uses_meipass(self, monkeypatch, tmp_path):
+        import sys as _sys
+        from pathlib import Path
+
+        from strange_uta_game.backend.application.ai_timing.worker.client import (
+            AlignmentWorkerClient,
+        )
+
+        internal = tmp_path / "_internal"
+        internal.mkdir()
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        monkeypatch.setattr(_sys, "_MEIPASS", str(internal), raising=False)
+        assert AlignmentWorkerClient._package_root() == internal
+        # frozen 宿主永远走外部解释器路径（runpy 引导）
+        assert AlignmentWorkerClient()._is_same_interpreter() is False
+
+    def test_frozen_without_meipass_falls_back_to_exe_dir(
+        self, monkeypatch
+    ):
+        import sys as _sys
+        from pathlib import Path
+
+        from strange_uta_game.backend.application.ai_timing.worker.client import (
+            AlignmentWorkerClient,
+        )
+
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        monkeypatch.delattr(_sys, "_MEIPASS", raising=False)
+        assert AlignmentWorkerClient._package_root() == Path(
+            _sys.executable
+        ).resolve().parent
