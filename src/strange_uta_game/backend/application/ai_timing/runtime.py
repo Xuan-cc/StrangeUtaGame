@@ -448,7 +448,14 @@ class AiRuntimeManager:
         if getattr(sys, "frozen", False):
             # frozen 宿主建不了 venv（应用 exe 没有 venv/ensurepip 机制）：
             # 走托管 runtime release 下载路线（内嵌 Python 底座，整机
-            # 无需系统 Python），torch wheel 与 AI 增量随之安装
+            # 无需系统 Python），torch wheel 与 AI 增量随之安装。
+            # runtime release 目前只有 Windows 资产：macOS 打包版给明确
+            # 提示（源码运行的 macOS 走上面的 venv 路径，完全可用）
+            if sys.platform != "win32":
+                raise AiRuntimeError(
+                    "macOS 打包版暂不支持自动安装运行环境；"
+                    "源码运行的 macOS 可直接使用（安装/修复走 venv 路径）"
+                )
             return self.install_from_release(
                 target_dir,
                 mirror=mirror,
@@ -476,8 +483,10 @@ class AiRuntimeManager:
                 )
                 if free_gb < CUDA_RUNTIME_DISK_GB:
                     raise AiRuntimeError(
-                        f"CUDA 版运行环境约需 {CUDA_RUNTIME_DISK_GB}GB 磁盘，"
-                        f"当前剩余 {free_gb:.1f}GB。请清理磁盘后重试"
+                        f"CUDA 版运行环境安装期间（含下载缓存）约需"
+                        f"{CUDA_RUNTIME_DISK_GB}GB 磁盘，当前剩余 "
+                        f"{free_gb:.1f}GB（完成后实际占用约 5GB）。"
+                        "请清理磁盘后重试"
                     )
             except AiRuntimeError:
                 raise
@@ -805,7 +814,7 @@ class AiRuntimeManager:
         progress(
             2,
             f"复用工作台运行环境（PyTorch {torch_version}+{torch_tag}），"
-            "仅安装 AI 增量依赖（不重复下载 torch）",
+            "仅安装 AI 增量依赖（不重复下载 torch，预计新增约 0.5GB）",
         )
         args: List[str] = ["-m", "pip", "install", "--disable-pip-version-check"]
         if proxy:

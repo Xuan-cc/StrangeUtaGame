@@ -421,3 +421,89 @@ class TestServicePartsArity:
         ]
         assert unpacks, "入口必须解包 parts"
         assert len(unpacks[0].targets[0].elts) == ret_arity
+
+
+class TestDiskUsageReminder:
+    """大体积下载/安装前的占用提醒：预计大小 + 磁盘剩余实测口径。"""
+
+    def _dialog(self, qapp, tmp_path, snap):
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        return dialog
+
+    def test_confirm_shows_estimate_and_free(self, qapp, tmp_path, monkeypatch):
+        import strange_uta_game.frontend.editor.ai_timing_dialog as dlg_mod
+
+        snap = _ready_snapshot()
+        dialog = self._dialog(qapp, tmp_path, snap)
+        captured = {}
+
+        def _capture(parent, title, text, **kwargs):
+            captured["title"] = title
+            captured["text"] = text
+            return True
+
+        monkeypatch.setattr(dlg_mod, "message_question", _capture)
+        assert dialog._confirm_disk_usage(
+            5.0, "安装 AI 运行环境（含 PyTorch 与依赖）。"
+        )
+        assert captured["title"] == "磁盘占用提醒"
+        assert "5GB" in captured["text"]
+        assert "磁盘剩余" in captured["text"]  # 真实磁盘可查
+
+    def test_cancel_blocks_download(self, qapp, tmp_path, monkeypatch):
+        import strange_uta_game.frontend.editor.ai_timing_dialog as dlg_mod
+
+        snap = _ready_snapshot()
+        dialog = self._dialog(qapp, tmp_path, snap)
+        monkeypatch.setattr(
+            dlg_mod, "message_question", lambda *a, **k: False
+        )
+        started = []
+        dialog._run_task = lambda *a, **k: started.append(a)
+        dialog._on_download_model()
+        assert started == []  # 未确认不开始下载
+
+    def test_venv_install_asks_with_gpu_aware_estimate(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        import strange_uta_game.frontend.editor.ai_timing_dialog as dlg_mod
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        snap = _ready_snapshot()
+        dialog = self._dialog(qapp, tmp_path, snap)
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "RTX 5080")
+        texts = []
+
+        def _capture(parent, title, text, **kwargs):
+            texts.append(text)
+            return False  # 取消
+
+        monkeypatch.setattr(dlg_mod, "message_question", _capture)
+        started = []
+        dialog._run_task = lambda *a, **k: started.append(a)
+        dialog._on_install_runtime()
+        assert started == []
+        assert "5GB" in texts[-1]  # CUDA 估算
+
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
+        dialog._on_install_runtime()
+        assert "2GB" in texts[-1]  # CPU 估算
+
+    def test_shared_install_skips_confirmation(self, qapp, tmp_path, monkeypatch):
+        import strange_uta_game.frontend.editor.ai_timing_dialog as dlg_mod
+
+        snap = _ready_snapshot()
+        exe = tmp_path / "managed" / "python.exe"
+        exe.parent.mkdir(parents=True, exist_ok=True)
+        exe.write_text("#m", encoding="utf-8")
+        dialog = self._dialog(qapp, tmp_path, snap)
+        dialog._managed_runtime_python = str(exe)
+        called = []
+        monkeypatch.setattr(
+            dlg_mod, "message_question", lambda *a, **k: called.append(a) or False
+        )
+        started = []
+        dialog._run_task = lambda *a, **k: started.append(a)
+        dialog._on_install_runtime()
+        # 增量路径体积小：不弹确认，直接开始
+        assert called == [] and len(started) == 1

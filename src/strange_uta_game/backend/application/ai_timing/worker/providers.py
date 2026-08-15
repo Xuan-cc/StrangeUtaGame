@@ -146,22 +146,64 @@ def _cancelled_check(cancel: CancelFn) -> None:
 
 
 def _find_encoder_layers(model: Any) -> List[Any]:
-    """定位 transformer encoder 层列表（HF / torchaudio 两种结构兼容）。
+    """定位 transformer encoder 层列表（HF / torchaudio 各版本结构兼容）。
 
-    - HF ``Wav2Vec2ForCTC``: ``model.wav2vec2.encoder.layers``
-    - torchaudio ``Wav2Vec2Model``: ``model.encoder.layers``
+    - HF ``Wav2Vec2ForCTC``: ``wav2vec2.encoder.layers``
+    - torchaudio 新版（MMS_FA 包装器）: ``model.encoder.transformer.layers``
+    - torchaudio 旧版: ``encoder.layers``
 
+    按 ``named_modules`` 扫描名字以 ``layers`` 结尾、路径含 encoder/
+    transformer 的层容器，取最长者（transformer 块数最多、主导耗时）；
     找不到（结构变化/新版库）时返回空列表，调用方退化为无层进度。
     """
-    base = getattr(model, "wav2vec2", model)
-    encoder = getattr(base, "encoder", None)
-    layers = getattr(encoder, "layers", None)
-    if layers is None or not hasattr(layers, "__len__"):
-        return []
-    try:
-        return list(layers)
-    except TypeError:
-        return []
+    best: List[Any] = []
+    walker = getattr(model, "named_modules", None)
+    if callable(walker):
+        try:
+            for name, mod in walker():
+                if not name or not name.endswith("layers"):
+                    continue
+                if "encoder" not in name and "transformer" not in name:
+                    continue
+                try:
+                    layers = list(mod)
+                except TypeError:
+                    continue
+                if layers and len(layers) > len(best):
+                    best = layers
+        except Exception:
+            pass
+    if best:
+        return best
+    # 兜底：旧式显式属性路径（named_modules 缺失/异常的普通对象也可用）
+    seen = set()
+    for cand in (getattr(model, "wav2vec2", None), model):
+        if cand is None or id(cand) in seen:
+            continue
+        seen.add(id(cand))
+        encoder = getattr(cand, "encoder", None)
+        layers = getattr(encoder, "layers", None)
+        if layers is None or not hasattr(layers, "__len__"):
+            continue
+        try:
+            return list(layers)
+        except TypeError:
+            continue
+    return []
+
+
+def resolve_device_pref(
+    preference: str, cuda_available: bool, mps_available: bool
+) -> str:
+    """设备选择：auto 优先 CUDA → MPS → CPU；显式设备不可用时回退 CPU
+    的判定由调用方给提示。纯函数便于单测（macOS 支持引入 MPS）。"""
+    if preference == "auto":
+        if cuda_available:
+            return "cuda"
+        if mps_available:
+            return "mps"
+        return "cpu"
+    return preference
 
 
 class FakeProvider(ForcedAlignmentProvider):
@@ -242,6 +284,21 @@ class _TorchProviderBase(ForcedAlignmentProvider):
         self._model: Any = None
         self._device: Any = None
         self._model_id: str = ""
+
+    def _select_device(self, torch, preference: str, progress) -> Any:
+        """按偏好选设备：auto = CUDA → MPS（Apple 芯片）→ CPU；
+        显式 CUDA/MPS 不可用时回退 CPU 并给出提示而非崩溃。"""
+        cuda = bool(torch.cuda.is_available())
+        mps = False
+        try:
+            mps = bool(torch.backends.mps.is_available())
+        except Exception:
+            mps = False
+        device = resolve_device_pref(preference, cuda, mps)
+        if device in ("cuda", "mps") and not (cuda if device == "cuda" else mps):
+            progress(18, f"未检测到可用的 {device.upper()}，回退 CPU 推理")
+            device = "cpu"
+        return torch.device(device)
 
     def _import_torch(self):
         try:
@@ -507,13 +564,7 @@ class Wav2Vec2LatnProvider(_TorchProviderBase):
             ) from exc
         self._model_id = str(model_spec.get("model_id") or DEFAULT_WAV2VEC2_MODEL)
         device = str(model_spec.get("device") or "auto")
-        if device == "auto":
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        elif device == "cuda" and not torch.cuda.is_available():
-            # CPU 版 torch 被显式要求 CUDA：回退而不是崩溃
-            progress(18, "未检测到可用 CUDA，回退 CPU 推理")
-            device = "cpu"
-        self._device = torch.device(device)
+        self._device = self._select_device(torch, device, progress)
         progress(20, f"加载对齐模型 {self._model_id}")
         _cancelled_check(cancel)
         try:
@@ -607,12 +658,7 @@ class MmsFaProvider(_TorchProviderBase):
 
         self._model_id = "MMS_FA"
         device = str(model_spec.get("device") or "auto")
-        if device == "auto":
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        elif device == "cuda" and not torch.cuda.is_available():
-            progress(18, "未检测到可用 CUDA，回退 CPU 推理")
-            device = "cpu"
-        self._device = torch.device(device)
+        self._device = self._select_device(torch, device, progress)
         progress(20, "加载 MMS_FA 对齐模型")
         _cancelled_check(cancel)
         try:

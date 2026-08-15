@@ -81,6 +81,13 @@ MODEL_LICENSE_TEXT = (
 )
 CREDIT_TEXT = "对齐思路参考开源项目 FA-Kara 与 yohane（本项目不内嵌其代码）"
 
+# 磁盘占用估算（2026-08 实测口径：CUDA venv 4.88GB / 模型 1.18GB /
+# 共享增量合计约 0.4GB；CPU venv 按去掉 CUDA torch 加 CPU torch 推算）
+DISK_EST_VENV_CUDA_GB = 5.0
+DISK_EST_VENV_CPU_GB = 2.0
+DISK_EST_SHARED_GB = 0.5
+DISK_EST_MODEL_GB = 1.2
+
 # 上游进度消息中的速度/剩余时间片段（下载 MB/s、分离 s/块、pip 包/分）；
 # ETA 优先采信上游自带值，百分比推算只作为无值阶段的兜底
 _SPEED_PATTERN = re.compile(
@@ -265,7 +272,8 @@ class AiTimingDialog(QDialog):
         hint = BodyLabel(
             self.tr(
                 "自动对齐会把歌词标注对齐到人声；成功后覆盖全部时间戳，"
-                "可在工具栏撤销一次恢复。"
+                "可在工具栏撤销一次恢复。结果仅供辅助参考，请务必人工"
+                "校准后再使用。"
             ),
             content,
         )
@@ -287,19 +295,8 @@ class AiTimingDialog(QDialog):
         model_credit.setOpenExternalLinks(True)
         model_credit.setWordWrap(True)
         layout.addWidget(model_credit)
-        # 平台限制（Beta）：运行环境/分离链路当前仅在 Windows 上验证
-        self._mac_supported = sys.platform == "win32"
-        if not self._mac_supported:
-            warn_mac = BodyLabel(
-                self.tr(
-                    "⚠ macOS 暂不支持：对齐/分离运行环境当前仅在 Windows 上"
-                    "提供与验证，预计随后续版本支持。"
-                ),
-                content,
-            )
-            warn_mac.setWordWrap(True)
-            warn_mac.setStyleSheet("color:#e85555;font-weight:bold;")
-            layout.addWidget(warn_mac)
+        # macOS：设备「自动」会优先 MPS（Apple 芯片加速，worker 内
+        # CUDA→MPS→CPU 逐级回落）；运行环境安装走 venv（源码运行）
 
         # ── 执行前状态 ──
         self._box_status = FluentGroupBox(self.tr("执行前状态"), content)
@@ -366,7 +363,9 @@ class AiTimingDialog(QDialog):
         self._update_model_desc(self.combo_model.currentIndex())
         advanced.addWidget(BodyLabel(self.tr("设备:"), content))
         self.combo_device = ComboBox(content)
-        self.combo_device.addItems([self.tr("自动"), "CPU", "CUDA"])
+        self.combo_device.addItems(
+            [self.tr("自动"), "CPU", "CUDA", self.tr("MPS（Apple 芯片）")]
+        )
         advanced.addWidget(self.combo_device)
         self._box_adv.contentLayout.addLayout(advanced)
         self._box_adv.contentLayout.addWidget(self.model_desc)
@@ -683,7 +682,7 @@ class AiTimingDialog(QDialog):
         self._settings.provider = (
             "wav2vec2" if self.combo_model.currentIndex() == 0 else "mms_fa"
         )
-        self._settings.device = ("auto", "cpu", "cuda")[
+        self._settings.device = ("auto", "cpu", "cuda", "mps")[
             self.combo_device.currentIndex()
         ]
         self._settings.download_mirror = self.edit_mirror.text().strip()
@@ -914,8 +913,45 @@ class AiTimingDialog(QDialog):
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
+    def _confirm_disk_usage(self, estimate_gb: float, detail: str = "") -> bool:
+        """大体积下载/安装前的占用提醒：预计大小 + 磁盘实际剩余。"""
+        import shutil as _shutil
+
+        free_gb = None
+        try:
+            root = resolve_model_root(self._settings)
+            free_gb = (
+                _shutil.disk_usage(root.anchor or root.parent).free
+                / 1024
+                / 1024
+                / 1024
+            )
+        except Exception:
+            pass
+        if free_gb is not None:
+            free_text = self.tr("，磁盘剩余 {g:.0f}GB").format(g=free_gb)
+            if free_gb < estimate_gb:
+                free_text += self.tr("（空间不足！）")
+        else:
+            free_text = ""
+        return message_question(
+            self,
+            self.tr("磁盘占用提醒"),
+            self.tr("{detail}预计占用约 {e:g}GB{free}，是否继续？").format(
+                detail=detail, e=estimate_gb, free=free_text
+            ),
+            yes_text=self.tr("继续"),
+            no_text=self.tr("取消"),
+            default_cancel=False,
+        )
+
     def _on_download_model(self) -> None:
         model_id = self._service.effective_model_id
+        if not self._confirm_disk_usage(
+            DISK_EST_MODEL_GB,
+            self.tr("下载默认对齐模型（权重约 1.2GB）。"),
+        ):
+            return
 
         def _task(progress_cb, cancel_check):
             return self._download_service.download(
@@ -1001,9 +1037,8 @@ class AiTimingDialog(QDialog):
                 self.tr("独立安装 AI 运行环境"),
                 self.tr(
                     "当前工作台分离环境未使用托管 PyMSS（或尚未安装）。"
-                    "可以独立安装一份 AI 运行环境（约 3-6GB，与工作台"
-                    "环境互不影响），或先去第 2 步「音频分离」安装"
-                    "托管环境。"
+                    "可以独立安装一份 AI 运行环境（与工作台环境互不影响），"
+                    "或先去第 2 步「音频分离」安装托管环境。"
                 ),
                 yes_text=self.tr("独立安装"),
                 no_text=self.tr("取消"),
@@ -1016,6 +1051,27 @@ class AiTimingDialog(QDialog):
                 "venv",
                 resolve_model_root(self._settings).parent / "ai_runtime",
             )
+
+        if mode == "venv":
+            # 占用提醒（实测口径：CUDA venv 约 5GB / CPU venv 约 2GB；
+            # 安装期间含下载缓存的峰值更高，由安装内预检把关）
+            from strange_uta_game.backend.application.ai_timing.runtime import (
+                detect_nvidia_gpu,
+            )
+
+            estimate = (
+                DISK_EST_VENV_CUDA_GB
+                if detect_nvidia_gpu()
+                else DISK_EST_VENV_CPU_GB
+            )
+            if not self._confirm_disk_usage(
+                estimate,
+                self.tr("安装 AI 运行环境（含 PyTorch 与依赖）。"),
+            ):
+                return
+        elif mode == "shared":
+            # 增量路径体积小：不拦确认，开始消息里注明预估
+            pass
 
         def _task(progress_cb, cancel_check):
             if mode == "shared":
@@ -1180,19 +1236,6 @@ class AiTimingDialog(QDialog):
         )
 
     def _on_run_clicked(self) -> None:
-        if not getattr(self, "_mac_supported", True):
-            InfoBar.error(
-                title=self.tr("平台不支持"),
-                content=self.tr(
-                    "AI 打轴当前仅支持 Windows，macOS 支持将在后续版本提供。"
-                ),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=6000,
-                parent=self,
-            )
-            return
         if self._snapshot is None or not self._snapshot.ready:
             return
         if self._context_checker is not None and not self._context_checker():
@@ -1239,7 +1282,8 @@ class AiTimingDialog(QDialog):
                 title=self.tr("AI 打轴完成"),
                 content=self.tr(
                     "已覆盖全部时间戳并写入工程（尚未保存，请按 Ctrl+S 落盘；"
-                    "可撤销一次恢复）。和声/重叠人声段落请人工复查！"
+                    "可撤销一次恢复）。结果仅供辅助，请人工校准；和声/重叠"
+                    "人声段落务必人工复查！"
                 ),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,

@@ -1616,5 +1616,15 @@
   "低配置电脑可选择 30 帧；仅降低界面动画刷新率，不影响打轴时间戳精度": "Choose 30 fps on low-spec machines; only UI animation refresh drops, timing precision is unaffected",
   "性能": "Performance",
   "打轴界面刷新率": "Timing UI refresh rate",
-  "流畅（60 帧）": "Smooth (60 fps)"
+  "流畅（60 帧）": "Smooth (60 fps)",
+  "自动对齐会把歌词标注对齐到人声；成功后覆盖全部时间戳，可在工具栏撤销一次恢复。结果仅供辅助参考，请务必人工校准后再使用。": "Auto alignment maps lyric readings onto the vocals; on success all timestamps are overwritten (one undo available from the toolbar). Results are for reference only - always calibrate them manually before use.",
+  "已覆盖全部时间戳并写入工程（尚未保存，请按 Ctrl+S 落盘；可撤销一次恢复）。结果仅供辅助，请人工校准；和声/重叠人声段落务必人工复查！": "All timestamps were overwritten in the project (not saved yet - press Ctrl+S to persist; one undo available). Results are assistive only: calibrate manually, and always review harmony/overlapping-vocal sections!",
+  "MPS（Apple 芯片）": "MPS (Apple silicon)",
+  "磁盘占用提醒": "Disk usage notice",
+  "{detail}预计占用约 {e:g}GB{free}，是否继续？": "{detail}Estimated disk usage: about {e:g}GB{free}. Continue?",
+  "，磁盘剩余 {g:.0f}GB": ", {g:.0f}GB free on disk",
+  "（空间不足！）": " (insufficient space!)",
+  "下载默认对齐模型（权重约 1.2GB）。": "Download the default alignment model (weights ~1.2GB).",
+  "安装 AI 运行环境（含 PyTorch 与依赖）。": "Install the AI runtime (PyTorch and dependencies included).",
+  "当前工作台分离环境未使用托管 PyMSS（或尚未安装）。可以独立安装一份 AI 运行环境（与工作台环境互不影响），或先去第 2 步「音频分离」安装托管环境。": "The workbench separation environment is not using the managed PyMSS runtime (or is not installed). You can install a standalone AI runtime (independent of the workbench environment), or set up the managed environment in step 2 \"Vocal Separation\" first."
 }

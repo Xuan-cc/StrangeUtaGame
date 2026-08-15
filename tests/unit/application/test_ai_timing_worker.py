@@ -369,6 +369,35 @@ class TestLayerProgressForward:
             provider._forward_with_layer_progress(_boom, lambda p, m: None)
         assert all(not layer.hooks for layer in layers)
 
+    def test_find_layers_torchaudio_modern_shape(self):
+        """新版 torchaudio（MMS_FA 包装器）：model.encoder.transformer.layers。"""
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            _find_encoder_layers,
+        )
+
+        class _NS:
+            pass
+
+        layers = self._fake_layers(24)
+        root = _NS()  # _Wav2Vec2Model 包装器（真实模型有 named_modules）
+        root.named_modules = lambda: [
+            ("model.encoder.transformer.layers", layers)
+        ]
+        assert _find_encoder_layers(root) == layers
+
+    def test_resolve_device_pref_priority(self):
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            resolve_device_pref,
+        )
+
+        # auto：CUDA > MPS > CPU
+        assert resolve_device_pref("auto", True, True) == "cuda"
+        assert resolve_device_pref("auto", False, True) == "mps"
+        assert resolve_device_pref("auto", False, False) == "cpu"
+        # 显式偏好原样（不可用回退由 _select_device 处理）
+        assert resolve_device_pref("mps", True, False) == "mps"
+        assert resolve_device_pref("cuda", False, False) == "cuda"
+
     def test_no_layer_structure_degrades_silently(self):
         from strange_uta_game.backend.application.ai_timing.worker.providers import (
             Wav2Vec2LatnProvider,
