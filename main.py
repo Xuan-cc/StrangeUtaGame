@@ -219,6 +219,13 @@ def main():
 
     from PyQt6.QtCore import QTimer
 
+    # 后台预热字体缓存：本地化字体名的磁盘扫描进后台线程，Qt 侧枚举（字体
+    # 选择器条目等）延后到主线程空闲，字体库庞大的用户首次打开字体选择器
+    # 不再等待。见 frontend/font_cache.py。
+    from strange_uta_game.frontend import font_cache
+
+    font_cache.prewarm_async()
+
     # 在事件循环启动后强制补设图标：
     # QTimer.singleShot(0, _preload) 会在第一个 tick 运行并可能重置图标，
     # 用 100ms 延迟确保在 _preload 之后再补设一次。

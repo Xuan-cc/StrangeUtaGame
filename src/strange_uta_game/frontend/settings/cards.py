@@ -292,7 +292,7 @@ class FontSettingCard(SettingCard):
     @staticmethod
     def _label_for(family: str) -> str:
         try:
-            from strange_uta_game.frontend.settings.font_picker_dialog import font_display_label
+            from strange_uta_game.frontend.font_cache import font_display_label
 
             return font_display_label(family) or family
         except Exception:

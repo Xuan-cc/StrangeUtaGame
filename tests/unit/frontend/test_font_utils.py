@@ -15,7 +15,7 @@ from strange_uta_game.frontend.localization import install_translators, localiza
 
 def test_ui_font_changes_with_language(qapp, monkeypatch):
     monkeypatch.setattr(
-        "strange_uta_game.frontend.font_utils.QFontDatabase.families",
+        "strange_uta_game.frontend.font_cache.QFontDatabase.families",
         lambda: ["Microsoft YaHei UI", "Yu Gothic UI", "Segoe UI"],
     )
 
@@ -31,7 +31,7 @@ def test_ui_font_changes_with_language(qapp, monkeypatch):
 
 def test_language_manager_updates_application_font(qapp, monkeypatch):
     monkeypatch.setattr(
-        "strange_uta_game.frontend.font_utils.QFontDatabase.families",
+        "strange_uta_game.frontend.font_cache.QFontDatabase.families",
         lambda: ["Microsoft YaHei UI", "Yu Gothic UI", "Segoe UI"],
     )
     previous = QFont(qapp.font())
@@ -58,7 +58,7 @@ def test_user_override_precedes_language_font_and_keeps_fallbacks(qapp, monkeypa
     )
 
     monkeypatch.setattr(
-        "strange_uta_game.frontend.font_utils.QFontDatabase.families",
+        "strange_uta_game.frontend.font_cache.QFontDatabase.families",
         lambda: ["Arial", "Yu Gothic UI", "Segoe UI"],
     )
     try:

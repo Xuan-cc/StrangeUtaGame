@@ -4,71 +4,24 @@
 支持双击直接选用。每个列表项以该字体自身渲染，便于预览。
 
 显示与搜索均支持字体的本地化名称（如日文「HG教科書体」、中文「微软雅黑」），
-不再只能通过英文/罗马名查找；解析来自 :mod:`...frontend.font_names`。
-仅列出可平滑缩放的字体，排除 Terminal/Fixedsys 等位图字体
-（DirectWrite 无法加载会刷 ``CreateFontFaceFromHDC() failed`` 报错）。
+不再只能通过英文/罗马名查找。条目（含逐族的平滑缩放/书写系统查询与本地化
+名解析）由 :mod:`...frontend.font_cache` 进程级缓存并提供启动预热，字体库
+庞大的机器上重复打开不再重新枚举全部字体。仅列出可平滑缩放的字体，排除
+Terminal/Fixedsys 等位图字体（DirectWrite 无法加载会刷
+``CreateFontFaceFromHDC() failed`` 报错）。
 """
 
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont, QFontDatabase
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QListWidgetItem
 from qfluentwidgets import BodyLabel, ListWidget, MessageBoxBase, SearchLineEdit, SubtitleLabel
 
-# 写法系统 → 优先本地化语言ID（用于为字体挑选「自己语言」的名字显示）
-_WS = QFontDatabase.WritingSystem
-_WS_LANG_PREF = [
-    (_WS.Japanese, (0x0411,)),
-    (_WS.Korean, (0x0412,)),
-    (_WS.SimplifiedChinese, (0x0804, 0x1004)),
-    (_WS.TraditionalChinese, (0x0404, 0x0C04)),
-]
+from strange_uta_game.frontend.font_cache import font_picker_entries
 
 _FAMILY_ROLE = Qt.ItemDataRole.UserRole
 _SEARCH_ROLE = Qt.ItemDataRole.UserRole + 1
-
-
-def _has_cjk(text: str) -> bool:
-    return any(ord(c) > 0x7F for c in text)
-
-
-def _alias_map() -> dict:
-    try:
-        from strange_uta_game.frontend.font_names import localized_alias_map
-
-        return localized_alias_map()
-    except Exception:
-        return {}
-
-
-def preferred_native(family: str, natives: dict[int, str] | None = None) -> str:
-    """按字体支持的书写系统挑选其「母语」名；否则取任一非 ASCII 名，无则空串。"""
-    if natives is None:
-        natives = _alias_map().get(family, {})
-    if not natives:
-        return ""
-    try:
-        ws = set(QFontDatabase.writingSystems(family))
-    except Exception:
-        ws = set()
-    for system, langs in _WS_LANG_PREF:
-        if system in ws:
-            for lid in langs:
-                if lid in natives:
-                    return natives[lid]
-    for name in natives.values():
-        if _has_cjk(name):
-            return name
-    return ""
-
-
-def font_display_label(family: str) -> str:
-    """字体的友好显示名：有本地化名时为「本地名 (英文族名)」，否则为英文族名。"""
-    if not family:
-        return ""
-    native = preferred_native(family)
-    return f"{native}  ({family})" if native and native != family else family
 
 
 class FontPickerDialog(MessageBoxBase):
@@ -84,7 +37,7 @@ class FontPickerDialog(MessageBoxBase):
     def __init__(self, current: str = "", title: str = "", parent=None):
         super().__init__(parent)
         self._selected = current or ""
-        self._entries = self._build_entries()  # [(family, display, search)]
+        self._entries = font_picker_entries()  # [(family, display, search)]，进程级缓存
 
         # title 默认走 tr("选择字体")——参数为空时取本地化默认；调用方传入自定义
         # 标题（如带前缀）时使用原值。
@@ -112,23 +65,6 @@ class FontPickerDialog(MessageBoxBase):
         self.searchEdit.textChanged.connect(self._on_filter)
         self.listWidget.currentItemChanged.connect(self._on_current_changed)
         self.listWidget.itemDoubleClicked.connect(self._on_double_clicked)
-
-    # ── 构建条目 ──
-
-    def _build_entries(self) -> list[tuple[str, str, str]]:
-        """返回 [(qt_family, 显示名, 搜索文本)]，仅含可平滑缩放字体，附本地化名。"""
-        alias_map = _alias_map()
-        entries: list[tuple[str, str, str]] = []
-        for fam in QFontDatabase.families():
-            if not QFontDatabase.isSmoothlyScalable(fam):
-                continue  # 排除位图字体（Terminal/Fixedsys/System…）
-            natives = alias_map.get(fam, {})
-            native = preferred_native(fam, natives)
-            display = f"{native}  ({fam})" if native and native != fam else fam
-            # 搜索文本含 Qt 族名 + 所有本地化名
-            search = " ".join([fam, *natives.values()]).lower()
-            entries.append((fam, display, search))
-        return entries
 
     # ── 列表填充/选择 ──
 

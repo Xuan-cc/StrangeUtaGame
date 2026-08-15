@@ -153,9 +153,23 @@ embedded 语义（对应主仓库 AI 打轴计划 §6.2）：跟随工作台当�
 - 启动时一次性迁移老 SUG 配置（`migrate_strange_uta_game_settings`）
 - `KaraokeAiTimingHost`（实现 §6 的 `AiTimingHost` 协议，注入给 SUG AI 打轴）
 
-## 8. 契约稳定性约定
+## 8. 字体缓存与预热（宿主可选复用）
 
-改动 §1–§6 的任何签名 / 行为，视为**破坏性变更**，需：
+`frontend/font_cache.py` —— SUG 所有字体枚举的进程级缓存。宿主进程同样可能携带庞大字体库（数百上千族），可直接复用：
+
+| 接口 | 语义 |
+|---|---|
+| `prewarm(include_picker_entries=True)` | 同步预热：字体族快照 + 字体选择器条目。适合放在宿主启动的空闲阶段（如闪屏/加载页）。**Qt 侧调用须在主线程。** |
+| `prewarm_async(qt_delay_ms=1500, include_picker_entries=True)` | 后台预热：本地化字体名磁盘扫描（纯 stdlib）进后台线程；Qt 侧枚举经 `QTimer.singleShot` 排回主线程。幂等，重复调用不会重建缓存。SUG standalone 启动即自行调用，嵌入时宿主可再调一次（成本为零）。 |
+| `invalidate(clear_alias_map=True)` | 清空缓存。宿主运行期安装/卸载系统字体、或调用 `QFontDatabase.addApplicationFont` 之后必须调用，否则 SUG 界面看不到新字体。`clear_alias_map=False` 可保留昂贵的字体文件名扫描结果（确认字体文件未变时）。 |
+| `installed_families()` / `installed_family_map()` / `has_installed_family(family)` | 缓存的字体族枚举（供宿主自己的字体 UI 复用，避免各自重复枚举）。 |
+| `font_picker_entries()` | 缓存的 `[(族名, 显示名, 搜索文本)]` 条目（含本地化名，已过滤位图字体）。 |
+
+不调用任何接口也安全：缓存全部懒加载，首次访问自动构建——预热只是把成本从"用户首次打开字体选择器"挪到启动空闲期。
+
+## 9. 契约稳定性约定
+
+改动 §1–§6 及 §8 的任何签名 / 行为，视为**破坏性变更**，需：
 1. 先更新本文档
 2. 跑 `tests/unit/test_embedded_contract.py` 确认（或同步更新测试）
 3. 通知宿主维护方

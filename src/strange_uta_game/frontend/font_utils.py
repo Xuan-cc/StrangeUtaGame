@@ -5,13 +5,18 @@
 - 字宽统计（ch 单位）测量时所选字体缺少全角参考字形 ``一`` 的回退。
 
 界面字体会随 UI 语言选择对应平台的常用字体；歌词预览字体仍由用户设置控制。
+
+字体族枚举结果统一走 :mod:`...frontend.font_cache` 的进程级缓存；运行期
+安装/卸载字体后需调用 ``font_cache.invalidate()``。
 """
 
 from __future__ import annotations
 
 import sys
 
-from PyQt6.QtGui import QFont, QFontDatabase, QFontMetrics
+from PyQt6.QtGui import QFont, QFontMetrics
+
+from strange_uta_game.frontend import font_cache
 
 
 def _platform_default_font_family() -> str:
@@ -70,7 +75,7 @@ def _installed_font_family(family: str | None) -> str:
     """返回系统中的规范字体族名；未安装或为空时返回空串。"""
     if not family:
         return ""
-    installed = {name.casefold(): name for name in QFontDatabase.families()}
+    installed = font_cache.installed_family_map()
     return installed.get(family.casefold(), "")
 
 
@@ -88,7 +93,7 @@ def ui_font_families(language_code: str | None = None) -> list[str]:
     西文字体不含中日文字形时出现方框。
     """
     candidates = _ui_font_candidates(language_code or _active_ui_language)
-    installed = {family.casefold(): family for family in QFontDatabase.families()}
+    installed = font_cache.installed_family_map()
     available: list[str] = []
     if _ui_font_override:
         available.append(_ui_font_override)
@@ -99,7 +104,7 @@ def ui_font_families(language_code: str | None = None) -> list[str]:
         and installed[name.casefold()].casefold() not in {f.casefold() for f in available}
     )
 
-    system_family = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont).family()
+    system_family = font_cache.system_general_family()
     if system_family and system_family.casefold() not in {f.casefold() for f in available}:
         available.append(system_family)
     if not available:
@@ -213,7 +218,7 @@ def ui_font(point_size: int, weight: QFont.Weight = QFont.Weight.Normal) -> QFon
 
 def resolve_font_family(family: str | None) -> str:
     """返回系统中可用的字体族名；不存在则回退到 :data:`DEFAULT_FONT_FAMILY`。"""
-    if family and family in QFontDatabase.families():
+    if family and font_cache.has_installed_family(family):
         return family
     return DEFAULT_FONT_FAMILY
 

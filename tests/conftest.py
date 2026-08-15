@@ -17,6 +17,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def pytest_configure(config):
     basetemp = Path(__file__).resolve().parents[1] / ".test_tmp"
@@ -38,3 +40,19 @@ os.environ.setdefault(
     "SUG_CONFIG_DIR",
     str(Path(__file__).resolve().parents[1] / ".test_tmp" / "config"),
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_font_cache():
+    """每个测试前后清空进程级字体缓存。
+
+    不少测试会 monkeypatch ``QFontDatabase.families``；字体枚举走
+    ``font_cache`` 快照后，上一个测试留下的快照会让 monkeypatch 失效。
+    本地化字体名的磁盘扫描昂贵（Windows 约 1~2 秒）且没有测试 mock 它，
+    保留其缓存不清（``clear_alias_map=False``）。
+    """
+    from strange_uta_game.frontend import font_cache
+
+    font_cache.invalidate(clear_alias_map=False)
+    yield
+    font_cache.invalidate(clear_alias_map=False)
