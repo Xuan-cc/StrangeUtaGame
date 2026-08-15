@@ -303,6 +303,43 @@ class RubySubsetAnalyzeWorker(QObject):
 
 
 # ──────────────────────────────────────────────
+# 通用项目任务
+# ──────────────────────────────────────────────
+
+
+class ProjectTaskWorker(QObject):
+    """在后台线程对项目副本执行任意任务（罗马字转换、按类型删除注音等）。
+
+    任务签名 ``task(project, progress_callback)``：对传入的项目副本就地修改，
+    通过 ``(phase, current, total)`` 回调上报文字进度；计算结果经闭包盒子带回
+    主线程，finished 信号携带处理完的项目副本。与 RubyAnalyzeWorker 不同，
+    本类不绑定注音管线，供轻量的整项目批处理复用。
+    """
+
+    progress = pyqtSignal(str, int, int)  # (phase, current, total)
+    finished = pyqtSignal(object)         # processed project copy
+    error = pyqtSignal(str)
+
+    def __init__(self, project_copy: Project, task):
+        super().__init__()
+        self._project = project_copy
+        self._task = task
+
+    def run(self) -> None:
+        try:
+            try:
+                from winrt._winrt import STA, init_apartment
+                init_apartment(STA)
+            except Exception:
+                pass
+
+            self._task(self._project, self.progress.emit)
+            self.finished.emit(self._project)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+# ──────────────────────────────────────────────
 # LLM 注音连通性测试
 # ──────────────────────────────────────────────
 

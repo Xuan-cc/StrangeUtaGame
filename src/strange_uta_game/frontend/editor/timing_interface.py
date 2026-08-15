@@ -51,7 +51,7 @@ from strange_uta_game.backend.application import (
     TimingService,
 )
 from strange_uta_game.backend.application.auto_check_service import (
-    get_kanji_linked_indices,
+    delete_rubies_by_type_names,
 )
 from strange_uta_game.backend.application.export_service import ExportService
 from strange_uta_game.backend.domain import Character, Project, Sentence
@@ -2592,19 +2592,37 @@ class EditorInterface(QWidget):
                 self._store.notify("lyrics")
 
     def _on_delete_rubies_by_type(self):
-        """工具栏「按类型删除注音」入口。
+        """工具栏「按类型删除注音」入口（异步）。
 
-        与全文本编辑界面的同名功能逻辑保持一致（复用 DeleteRubyByTypeDialog 与
-        扩展类型集合规则），但通过 :py:meth:`_execute_structural_edit` 包装为
-        SentenceSnapshotCommand，支持撤销/重做并自动同步 timing_service。
+        与全文本编辑界面的同名功能及自动注音管线复用同一后端实现
+        （DeleteRubyByTypeDialog + delete_rubies_by_type_names）。删除在
+        后台线程对项目副本执行，StateToolTip 显示「删除注音 当前/总数」
+        文字进度；完成后经 SentenceSnapshotCommand 纳入撤销/重做栈并自动
+        同步 timing_service。
 
         勾选 HIRAGANA → 同时移除小假名(ぁぃ等)与促音 っ；
         勾选 KATAKANA → 同时移除小假名(ァィ等)与促音 ッ。
         """
         if not self._project:
             return
+        # 与异步注音分析互斥，避免并发改写句子结构
+        if getattr(self, "_ruby_analyzing", False) or getattr(
+            self, "_ruby_subset_analyzing", False
+        ):
+            InfoBar.warning(
+                title=self.tr("注音分析进行中"),
+                content=self.tr("请等待当前注音分析完成后再试"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2500,
+                parent=self,
+            )
+            return
+
         # 复用 fulltext_interface 的对话框（CharType 复选 + 默认勾选平假名/片假名）
         from strange_uta_game.frontend.settings.settings_interface import AppSettings
+        from strange_uta_game.frontend.workers import ProjectTaskWorker
 
         from .fulltext_interface import DeleteRubyByTypeDialog
 
@@ -2616,94 +2634,136 @@ class EditorInterface(QWidget):
             return
 
         selected = dlg.selected_types()
+        type_names = dlg.selected_type_names()
 
         # 保存用户选择到配置（无论是否有变化）
-        app_settings.set("auto_check.delete_ruby_types", dlg.selected_type_names())
+        app_settings.set("auto_check.delete_ruby_types", type_names)
         app_settings.save()
 
         if not selected:
             return
 
-        # 拆解选中项：区分普通 CharType 与片假名子类型
-        from .fulltext_interface import _ruby_is_all_hiragana
-        ct_selected = {x for x in selected if isinstance(x, CharType)}
-        delete_kata_hira = "katakana_hiragana_ruby" in selected
-        delete_kata_eng = "katakana_english_ruby" in selected
+        before_sentences = deepcopy(self._project.sentences)
+        undo_pos = (self._current_line_idx, self.preview._current_char_idx)
+        focus_line_idx = self._current_line_idx
+        focus_char_idx = self.preview._current_char_idx
 
-        extended = set(ct_selected)
-        if CharType.HIRAGANA in ct_selected:
-            extended.add(CharType.SOKUON)  # 平假名选中时同时处理促音っ
-
+        project_copy = deepcopy(self._project)
         removed_box = [0]
 
-        def _mutate() -> Optional[tuple[int, int, Optional[int], str]]:
-            assert self._project is not None
-            removed = 0
-            for sentence in self._project.sentences:
-                kanji_linked = get_kanji_linked_indices(sentence.characters)
-                for idx, ch in enumerate(sentence.characters):
-                    if not ch.ruby:
-                        continue
-                    # 含汉字的连词块整体按汉字类型匹配：删除其他类型时保留，
-                    # 明确选择“汉字”时则应正常删除。
-                    ct = CharType.KANJI if idx in kanji_linked else get_char_type(ch.char)
+        def _task(proj, progress_cb):
+            removed_box[0] = delete_rubies_by_type_names(
+                proj, type_names, progress_callback=progress_cb
+            )
 
-                    # 片假名（不含促音ッ，ッ/っ 由 SOKUON 路径独立处理）
-                    is_kata_family = ct == CharType.KATAKANA
-                    if is_kata_family:
-                        if delete_kata_hira or delete_kata_eng:
-                            is_hira = _ruby_is_all_hiragana(ch.ruby.text)
-                            if (is_hira and delete_kata_hira) or (not is_hira and delete_kata_eng):
-                                ch.set_ruby(None)
-                                ch.linked_to_next = False
-                                if idx > 0:
-                                    sentence.characters[idx - 1].linked_to_next = False
-                                removed += 1
-                        continue
+        green = theme.status_complete.name()
+        state_tooltip = StateToolTip(self.tr("正在删除注音"), self.tr("准备中..."), self)
+        state_tooltip.setStyleSheet(f"""
+            StateToolTip {{
+                background-color: {green};
+                border: 1px solid {green};
+                border-radius: 8px;
+            }}
+            StateToolTip QLabel {{
+                color: white;
+            }}
+        """)
+        state_tooltip.move(state_tooltip.getSuitablePos())
+        state_tooltip.show()
+        self._ruby_analyzing = True
 
-                    if ct in extended:
-                        if ct == CharType.SOKUON and ch.char == "っ" and CharType.HIRAGANA not in ct_selected:
-                            continue
-                        ch.set_ruby(None)
-                        # 英文整词的 ruby 通常只在首字母；删除英文注音后仍需
-                        # 保留连词链，确保全文本把整个单词放进同一个块。
-                        if ct != CharType.ALPHABET:
-                            ch.linked_to_next = False
-                            if idx > 0:
-                                sentence.characters[idx - 1].linked_to_next = False
-                        removed += 1
-            if removed == 0:
-                return None
-            removed_box[0] = removed
+        worker = ProjectTaskWorker(project_copy, _task)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+
+        # 保存强引用，防止 PyQt6 弱引用机制在函数返回后回收 worker/thread
+        self._ruby_delete_worker = worker
+        self._ruby_delete_thread = thread
+
+        def _on_progress(phase: str, current: int, total: int) -> None:
+            state_tooltip.setContent(f"{phase} {current}/{total}")
+
+        def _cleanup() -> None:
+            self._ruby_delete_worker = None
+            self._ruby_delete_thread = None
+            self._ruby_analyzing = False
+
+        def _on_finished(analyzed_project) -> None:
+            state_tooltip.setState(True)
+            _cleanup()
+
+            if removed_box[0] == 0:
+                InfoBar.info(
+                    title=self.tr("无变化"),
+                    content=self.tr("所选类型范围内没有需要删除的注音"),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2500,
+                    parent=self,
+                )
+                return
+
+            after_sentences = analyzed_project.sentences
+            command_manager = (
+                self._timing_service.command_manager if self._timing_service else None
+            )
+            if command_manager is not None:
+                command = SentenceSnapshotCommand(
+                    self._project, before_sentences, after_sentences, "按类型删除注音"
+                )
+                command.undo_position = undo_pos
+                command.redo_position = (focus_line_idx, focus_char_idx)
+                command_manager.execute(command)
+            else:
+                self._project.sentences = deepcopy(after_sentences)
+
             # 焦点保持在当前位置；ruby 变更使用 "rubies" 通道刷新（与 fulltext 一致）
-            return (self._current_line_idx, self.preview._current_char_idx, None, "rubies")
+            self._sync_after_structure_change(
+                change_type="rubies",
+                focus_line_idx=focus_line_idx,
+                focus_char_idx=focus_char_idx,
+                checkpoint_idx=None,
+                move_cp=True,
+            )
 
-        ok = self._execute_structural_edit("按类型删除注音", _mutate)
-        if not ok:
-            InfoBar.info(
-                title=self.tr("无变化"),
-                content=self.tr("所选类型范围内没有需要删除的注音"),
+            labels = ", ".join(
+                label for ct, label in DeleteRubyByTypeDialog._TYPE_LABELS if ct in selected
+            )
+            InfoBar.success(
+                title=self.tr("删除完成"),
+                content=self.tr("已删除 {n} 个注音（类型: {labels}）").format(
+                    n=removed_box[0], labels=labels),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
-                duration=2500,
+                duration=4000,
                 parent=self,
             )
-            return
 
-        labels = ", ".join(
-            label for ct, label in DeleteRubyByTypeDialog._TYPE_LABELS if ct in selected
-        )
-        InfoBar.success(
-            title=self.tr("删除完成"),
-            content=self.tr("已删除 {n} 个注音（类型: {labels}）").format(
-                n=removed_box[0], labels=labels),
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=4000,
-            parent=self,
-        )
+        def _on_error(err: str) -> None:
+            state_tooltip.setState(True)
+            _cleanup()
+            InfoBar.warning(
+                title=self.tr("删除注音失败"),
+                content=err,
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+
+        thread.started.connect(worker.run)
+        worker.progress.connect(_on_progress)
+        worker.finished.connect(_on_finished)
+        worker.error.connect(_on_error)
+        worker.finished.connect(thread.quit)
+        worker.error.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+
+        thread.start()
 
     def _on_set_singer_by_line(self):
         """工具栏「按行设置演唱者」入口。
@@ -8704,15 +8764,16 @@ class EditorInterface(QWidget):
         self._on_analyze_rubies_selected(update_checkpoints=False)
 
     def _on_romanize_all_rubies(self):
-        """工具栏「全部转为罗马字注音」。
+        """工具栏「全部转为罗马字注音」（异步）。
 
         读取现有全部注音结构、保留结构把假名 ruby 转为赫本式罗马音；无 ruby 的
         单假名（平假名/片假名/促音/长音）补自注音再转罗马音。罗马音读音随上下文
         变化（促音双写、は/へ/を 助词读音）。
 
-        单例同步操作：不调用注音引擎、不更新节奏点、不删除注音；与正在进行的异步
-        注音分析互斥。变更经 :py:meth:`_execute_structural_edit` 纳入撤销/重做栈，
-        ruby 通道刷新（move_cp=False，不触碰节奏点）。
+        不调用注音引擎、不更新节奏点、不删除注音；转换在后台线程对项目副本
+        执行，StateToolTip 显示「罗马字转换 当前/总数」文字进度，并与正在
+        进行的异步注音分析互斥。变更经 SentenceSnapshotCommand 纳入撤销/重做
+        栈，ruby 通道刷新（move_cp=False，不触碰节奏点）。
         """
         if not self._project:
             return
@@ -8730,31 +8791,94 @@ class EditorInterface(QWidget):
                 parent=self,
             )
             return
-        # 单例：防止重入（同步操作下事件循环阻塞，理论上不会重入，仍显式守卫）
-        if getattr(self, "_romanizing_all", False):
-            return
 
         from strange_uta_game.backend.infrastructure.parsers.romaji import (
             romanize_project_to_self_ruby,
         )
+        from strange_uta_game.frontend.workers import ProjectTaskWorker
 
+        before_sentences = deepcopy(self._project.sentences)
+        undo_pos = (self._current_line_idx, self.preview._current_char_idx)
+        focus_line_idx = self._current_line_idx
+        focus_char_idx = self.preview._current_char_idx
+
+        project_copy = deepcopy(self._project)
         changed_box = [0]
 
-        def _mutate() -> Optional[tuple[int, int, Optional[int], str]]:
-            assert self._project is not None
-            self._romanizing_all = True
-            try:
-                changed_box[0] = romanize_project_to_self_ruby(self._project)
-            finally:
-                self._romanizing_all = False
-            if changed_box[0] == 0:
-                return None
-            return (self._current_line_idx, self.preview._current_char_idx, None, "rubies")
+        def _task(proj, progress_cb):
+            changed_box[0] = romanize_project_to_self_ruby(
+                proj, progress_callback=progress_cb
+            )
 
-        ok = self._execute_structural_edit(
-            "全部转为罗马字注音", _mutate, move_cp=False
-        )
-        if ok:
+        green = theme.status_complete.name()
+        state_tooltip = StateToolTip(self.tr("正在转换罗马字注音"), self.tr("准备中..."), self)
+        state_tooltip.setStyleSheet(f"""
+            StateToolTip {{
+                background-color: {green};
+                border: 1px solid {green};
+                border-radius: 8px;
+            }}
+            StateToolTip QLabel {{
+                color: white;
+            }}
+        """)
+        state_tooltip.move(state_tooltip.getSuitablePos())
+        state_tooltip.show()
+        self._ruby_analyzing = True
+
+        worker = ProjectTaskWorker(project_copy, _task)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+
+        self._romanize_worker = worker
+        self._romanize_thread = thread
+
+        def _on_progress(phase: str, current: int, total: int) -> None:
+            state_tooltip.setContent(f"{phase} {current}/{total}")
+
+        def _cleanup() -> None:
+            self._romanize_worker = None
+            self._romanize_thread = None
+            self._ruby_analyzing = False
+
+        def _on_finished(analyzed_project) -> None:
+            state_tooltip.setState(True)
+            _cleanup()
+
+            if changed_box[0] == 0:
+                InfoBar.info(
+                    title=self.tr("无变化"),
+                    content=self.tr("没有可转为罗马字的注音或单假名"),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2500,
+                    parent=self,
+                )
+                return
+
+            after_sentences = analyzed_project.sentences
+            command_manager = (
+                self._timing_service.command_manager if self._timing_service else None
+            )
+            if command_manager is not None:
+                command = SentenceSnapshotCommand(
+                    self._project, before_sentences, after_sentences, "全部转为罗马字注音"
+                )
+                command.undo_position = undo_pos
+                command.redo_position = (focus_line_idx, focus_char_idx)
+                command.move_cp = False
+                command_manager.execute(command)
+            else:
+                self._project.sentences = deepcopy(after_sentences)
+
+            self._sync_after_structure_change(
+                change_type="rubies",
+                focus_line_idx=focus_line_idx,
+                focus_char_idx=focus_char_idx,
+                checkpoint_idx=None,
+                move_cp=False,
+            )
             InfoBar.success(
                 title=self.tr("已转为罗马字注音"),
                 content=self.tr("共处理 {n} 行").format(n=changed_box[0]),
@@ -8764,16 +8888,30 @@ class EditorInterface(QWidget):
                 duration=2500,
                 parent=self,
             )
-        else:
-            InfoBar.info(
-                title=self.tr("无变化"),
-                content=self.tr("没有可转为罗马字的注音或单假名"),
+
+        def _on_error(err: str) -> None:
+            state_tooltip.setState(True)
+            _cleanup()
+            InfoBar.warning(
+                title=self.tr("罗马字转换失败"),
+                content=err,
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
-                duration=2500,
+                duration=3000,
                 parent=self,
             )
+
+        thread.started.connect(worker.run)
+        worker.progress.connect(_on_progress)
+        worker.finished.connect(_on_finished)
+        worker.error.connect(_on_error)
+        worker.finished.connect(thread.quit)
+        worker.error.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+
+        thread.start()
 
     def _on_open_fulltext(self):
         """工具栏「全文本编辑」— 以对话框打开全文本注音编辑界面。"""

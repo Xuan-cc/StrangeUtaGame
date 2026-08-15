@@ -1626,5 +1626,13 @@
   "（空间不足！）": " (insufficient space!)",
   "下载默认对齐模型（权重约 1.2GB）。": "Download the default alignment model (weights ~1.2GB).",
   "安装 AI 运行环境（含 PyTorch 与依赖）。": "Install the AI runtime (PyTorch and dependencies included).",
-  "当前工作台分离环境未使用托管 PyMSS（或尚未安装）。可以独立安装一份 AI 运行环境（与工作台环境互不影响），或先去第 2 步「音频分离」安装托管环境。": "The workbench separation environment is not using the managed PyMSS runtime (or is not installed). You can install a standalone AI runtime (independent of the workbench environment), or set up the managed environment in step 2 \"Vocal Separation\" first."
+  "当前工作台分离环境未使用托管 PyMSS（或尚未安装）。可以独立安装一份 AI 运行环境（与工作台环境互不影响），或先去第 2 步「音频分离」安装托管环境。": "The workbench separation environment is not using the managed PyMSS runtime (or is not installed). You can install a standalone AI runtime (independent of the workbench environment), or set up the managed environment in step 2 \"Vocal Separation\" first.",
+  "删除注音失败": "Failed to delete ruby",
+  "正在删除注音": "Deleting ruby",
+  "正在转换罗马字注音": "Converting ruby to romaji",
+  "罗马字转换失败": "Romaji conversion failed",
+  "注音操作进行中": "Ruby operation in progress",
+  "请等待当前注音操作完成后再关闭窗口": "Please wait for the current ruby operation to finish before closing the window",
+  "正在更新节奏点": "Updating checkpoints",
+  "请等待当前注音操作完成后再试": "Please wait for the current ruby operation to finish"
 }
