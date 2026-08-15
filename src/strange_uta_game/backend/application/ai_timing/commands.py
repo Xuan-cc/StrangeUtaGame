@@ -146,7 +146,7 @@ class ApplyAiTimingCommand(Command):
         ts_map,
     ) -> Optional[int]:
         """推导句尾释放点时间：末 token 区间终点 > 末 checkpoint 插值 >
-        前一字符末时间 > 保留原值（绝不返回 None 造成尾音丢失）。"""
+        行内末个 token 终点 > 保留原值（绝不返回 None 造成尾音丢失）。"""
         # 末个 token 的区间终点（尾音自然结束位置）
         best = None
         for u in line_units:
@@ -160,6 +160,13 @@ class ApplyAiTimingCommand(Command):
         # 无 token（结构字符）：末个 checkpoint 的插值时间
         if ch.timestamps:
             return max(ch.timestamps)
+        # 句尾字符自身无节奏点（如「け!」的呼吸占位 0cp）：取行内最后
+        # 一个 token 的区间终点——占位字符无法标注不该让尾音停留在
+        # 陈旧原值上（2026-08 实测：否则新轴下释放点丢失）
+        for u in reversed(line_units):
+            span = span_map.get(u.location)
+            if span is not None:
+                return span[1]
         # 无任何可推导信号（check_count=0 且无 token）：返回 None，
         # 调用方保留原释放点，绝不置空
         return None
