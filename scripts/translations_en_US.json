@@ -1701,5 +1701,7 @@
   "自动导唱完成": "Auto-guide complete",
   "自动插入导唱符（{n} 处）": "Auto-insert guide symbols ({n} positions)",
   "从打轴界面切换至其他页面时自动暂停音乐": "Automatically pause the music when switching from the Timing page to another page",
-  "离开打轴界面时暂停": "Pause when leaving Timing"
+  "离开打轴界面时暂停": "Pause when leaving Timing",
+  "分离模型数据表已损坏，已重置（将自动重新下载）": "The separation model data table was corrupted and has been reset (it will be re-downloaded automatically)",
+  "分离模型文件不完整（下载中断残留），已自动删除，将在下次分离时重新下载": "The separation model file is incomplete (leftover from an interrupted download). It has been deleted and will be re-downloaded on the next separation"
 }

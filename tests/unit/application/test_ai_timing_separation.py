@@ -2,6 +2,7 @@
 """standalone 分离执行器：假子进程端到端测试（stdout 协议、取消、兜底轨名）。"""
 
 import io
+import json
 import os
 from pathlib import Path
 
@@ -192,6 +193,89 @@ class TestStandaloneSeparator:
         message = str(excinfo.value)
         assert "工作台" in message
         assert "设置 → 关于/语言" not in message
+
+    def test_corrupt_model_deleted_before_spawn(self, tmp_path, monkeypatch):
+        """分离启动前的模型体检：残缺模型自动删除并提示重下
+        （audio-separator 非原子下载的中断残留，实测打包版复现）。"""
+        vocal = tmp_path / "song_人声.wav"
+        lines = ["done:" + str(vocal)]
+        sep, _, _, _ = _separator(tmp_path, monkeypatch, lines)
+        models = tmp_path / "models"
+        model = models / sep_mod.SEPARATION_MODEL
+        model.parent.mkdir(parents=True, exist_ok=True)
+        model.write_bytes(b"truncated-payload")
+        (models / "mdx_model_data.json").write_text(
+            json.dumps({"00000000000000000000000000000000": {}}),
+            encoding="utf-8",
+        )
+        messages = []
+        sep.separate(
+            tmp_path / "song.flac",
+            lambda s, p, m: messages.append(m),
+            lambda: False,
+        )
+        assert any("重新下载" in m for m in messages)
+        assert not model.exists()
+
+
+class TestSeparationModelPreflight:
+    """ensure_separation_model：与 audio-separator 子进程同口径的体检自愈。"""
+
+    @staticmethod
+    def _write_table(models: Path, hashes):
+        models.mkdir(parents=True, exist_ok=True)
+        (models / "mdx_model_data.json").write_text(
+            json.dumps({h: {} for h in hashes}), encoding="utf-8"
+        )
+
+    def test_healthy_model_passes_silently(self, tmp_path):
+        models = tmp_path / "models"
+        models.mkdir(parents=True)
+        model = models / sep_mod.SEPARATION_MODEL
+        model.write_bytes(b"model-bytes")
+        good = sep_mod._uvr_partial_md5(model)
+        self._write_table(models, [good])
+        assert sep_mod.ensure_separation_model(models) == ""
+        assert model.is_file()
+
+    def test_partial_hash_matches_audio_separator_algorithm(self, tmp_path):
+        """末 10MB 取样口径：小于窗口时等于全文件 MD5。"""
+        import hashlib
+
+        p = tmp_path / "m.bin"
+        p.write_bytes(b"abc")
+        assert (
+            sep_mod._uvr_partial_md5(p)
+            == hashlib.md5(b"abc").hexdigest()
+        )
+
+    def test_corrupt_model_deleted_with_note(self, tmp_path):
+        models = tmp_path / "models"
+        models.mkdir(parents=True)
+        model = models / sep_mod.SEPARATION_MODEL
+        model.write_bytes(b"truncated")
+        self._write_table(models, ["ffffffffffffffffffffffffffffffff"])
+        note = sep_mod.ensure_separation_model(models)
+        assert "不完整" in note and "重新下载" in note
+        assert not model.exists()
+
+    def test_broken_data_table_reset_model_kept(self, tmp_path):
+        """数据表损坏 → 只重置表；无有效表可查时不误删模型。"""
+        models = tmp_path / "models"
+        models.mkdir(parents=True)
+        model = models / sep_mod.SEPARATION_MODEL
+        model.write_bytes(b"maybe-good")
+        (models / "mdx_model_data.json").write_text(
+            "{broken-json", encoding="utf-8"
+        )
+        note = sep_mod.ensure_separation_model(models)
+        assert "数据表" in note
+        assert not (models / "mdx_model_data.json").exists()
+        assert model.is_file()
+
+    def test_missing_model_or_root_is_noop(self, tmp_path):
+        assert sep_mod.ensure_separation_model(tmp_path / "models") == ""
+        assert sep_mod.ensure_separation_model(None) == ""
 
     def test_vocal_track_fallback_in_script(self):
         """UVR 轨名兜底：脚本包含排除伴奏轨的回退逻辑。"""

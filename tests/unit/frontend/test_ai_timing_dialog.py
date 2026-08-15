@@ -515,6 +515,46 @@ class TestDiskUsageReminder:
         # 增量路径体积小：不弹确认，直接开始
         assert called == [] and len(started) == 1
 
+    def test_install_task_runs_model_preflight(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """安装/修复任务开头执行分离模型体检：自愈说明走进度行，
+        且不阻断后续环境安装。"""
+        from strange_uta_game.backend.application.ai_timing import (
+            separation as sep_mod,
+        )
+
+        snap = _ready_snapshot()
+        exe = tmp_path / "managed" / "python.exe"
+        exe.parent.mkdir(parents=True, exist_ok=True)
+        exe.write_text("#m", encoding="utf-8")
+        dialog = self._dialog(qapp, tmp_path, snap)
+        dialog._managed_runtime_python = str(exe)
+
+        monkeypatch.setattr(
+            sep_mod, "ensure_separation_model", lambda root: "体检说明"
+        )
+        captured = {}
+        dialog._run_task = lambda fn, *a, **k: captured.update(fn=fn)
+        installed = []
+
+        def _fake_install_shared(python, **kwargs):
+            installed.append(python)
+            return RuntimeStatus(available=True, python_path=python)
+
+        monkeypatch.setattr(
+            dialog._runtime, "install_shared", _fake_install_shared
+        )
+        dialog._on_install_runtime()
+        assert "fn" in captured  # shared 路径不弹确认，直接开始
+
+        messages = []
+        captured["fn"](
+            lambda stage, pct, msg: messages.append(msg), lambda: False
+        )
+        assert "体检说明" in messages
+        assert installed == [str(exe)]
+
 
 class TestDefaultWidthFits:
     """默认 880px 宽度下，滚动区内容不应出现横向滚动条。"""

@@ -328,7 +328,7 @@
 <context>
     <name>AiTimingDialog</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1379" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1397" />
         <source>AI 打轴任务仍在进行，关闭窗口将取消任务并丢弃未应用的结果。确定关闭吗？</source>
         <translation>AIタイミング処理が実行中です。ウィンドウを閉じるとタスクをキャンセルし、未適用の結果は破棄されます。閉じますか？</translation>
     </message>
@@ -338,7 +338,7 @@
         <translation>AIタイミング失敗</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1340" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1358" />
         <source>AI 打轴完成</source>
         <translation>AIタイミング完了</translation>
     </message>
@@ -380,7 +380,7 @@
         <translation>{detail}約 {e:g}GB{free} を使用する見込みです。続行しますか？</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1142" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1160" />
         <source>{e}
 详细安装日志：{p}</source>
         <translation>{e}
@@ -392,7 +392,7 @@
         <translation>⚠ ご注意：アラインメントはリードボーカルを対象とします。ハーモニー・重ねボーカル・コーラスを含む区間はずれる場合があるため、完了後に必ず手動で確認してください。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1274" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1292" />
         <source>下载未完成</source>
         <translation>ダウンロード未完了</translation>
     </message>
@@ -417,12 +417,12 @@
         <translation>ボーカル素材</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1378" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1396" />
         <source>任务进行中</source>
         <translation>タスク実行中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1195" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1213" />
         <source>位置已更新，重新打开本窗口后生效。</source>
         <translation>場所を更新しました。このウィンドウを開き直すと反映されます。</translation>
     </message>
@@ -454,17 +454,17 @@
         <translation>キャンセル</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1364" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1382" />
         <source>取消 AI 打轴</source>
         <translation>AIタイミングをキャンセル</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1366" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1384" />
         <source>取消任务</source>
         <translation>タスクをキャンセル</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1383" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1401" />
         <source>取消并关闭</source>
         <translation>キャンセルして閉じる</translation>
     </message>
@@ -489,7 +489,7 @@
         <translation>処理中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1357" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1375" />
         <source>处理中…（模型加载期间无中间输出，大文件 CPU 需数分钟）</source>
         <translation>処理中…（モデル読み込み中は中間出力なし。CPU では大ファイルに数分かかります）</translation>
     </message>
@@ -514,7 +514,7 @@
         <translation>AI ランタイムをインストールします（PyTorch と依存パッケージを含む）。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1335" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1353" />
         <source>完成：已覆盖全部时间戳。请保存工程（Ctrl+S）落盘</source>
         <translation>完了：すべてのタイムスタンプを上書きしました。Ctrl+S でプロジェクトを保存してください</translation>
     </message>
@@ -544,7 +544,7 @@
         <translation>アラインメント環境が利用できません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1155" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1173" />
         <source>对齐环境就绪</source>
         <translation>アラインメント環境の準備ができました</translation>
     </message>
@@ -570,12 +570,12 @@
         <translation>ワークベンチのセッションボーカル</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1301" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1319" />
         <source>工程已变化</source>
         <translation>プロジェクトが変更されました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1302" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1320" />
         <source>工程或音频在弹窗打开后发生了切换，请关闭本窗口后重新打开</source>
         <translation>このウィンドウを開いた後にプロジェクトまたはオーディオが切り替わりました。閉じて開き直してください</translation>
     </message>
@@ -585,8 +585,8 @@
         <translation>アラインメントできる歌詞本文がありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1194" />
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1240" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1212" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1258" />
         <source>已保存</source>
         <translation>保存しました</translation>
     </message>
@@ -603,7 +603,7 @@
         <translation>経過 {m}:{s:02d}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1341" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1359" />
         <source>已覆盖全部时间戳并写入工程（尚未保存，请按 Ctrl+S 落盘；可撤销一次恢复）。结果仅供辅助，请人工校准；和声/重叠人声段落务必人工复查！</source>
         <translation>すべてのタイムスタンプをプロジェクトに上書きしました（未保存です。Ctrl+S で保存してください。元に戻すのは1回可能です）。結果は補助ですので手動で調整し、ハーモニー・重ねボーカル区間は必ず手動で確認してください！</translation>
     </message>
@@ -692,17 +692,17 @@
         <translation>検証</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1273" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1291" />
         <source>校验失败</source>
         <translation>検証失敗</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1267" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1285" />
         <source>校验完成</source>
         <translation>検証完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1272" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1290" />
         <source>校验通过</source>
         <translation>検証合格</translation>
     </message>
@@ -717,12 +717,12 @@
         <translation>モデルのダウンロードが完了しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1275" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1293" />
         <source>模型未安装</source>
         <translation>モデル未インストール</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1278" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1296" />
         <source>模型深度校验</source>
         <translation>モデルの詳細検証</translation>
     </message>
@@ -754,22 +754,22 @@
         <translation>残り時間を推定中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1372" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1390" />
         <source>正在取消…</source>
         <translation>キャンセル中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1173" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1191" />
         <source>正在安装对齐环境…</source>
         <translation>アラインメント環境をインストール中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1174" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1192" />
         <source>正在安装（创建虚拟环境与下载大包期间可能数分钟没有输出）…</source>
         <translation>インストール中…（仮想環境の作成と大容量パッケージのダウンロード中は数分出力がないことがあります）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1356" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1374" />
         <source>正在执行自动对齐…</source>
         <translation>自動アラインメント実行中…</translation>
     </message>
@@ -779,7 +779,7 @@
         <translation>ランタイムを確認中（初回は PyTorch の読み込みに数十秒かかることがあります）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1293" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1311" />
         <source>正在校验（大模型哈希计算需要一些时间）…</source>
         <translation>検証中（大きなモデルのハッシュ計算には時間がかかります）</translation>
     </message>
@@ -789,7 +789,7 @@
         <translation>実行条件を確認中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1292" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1310" />
         <source>正在深度校验模型…</source>
         <translation>モデルを詳細検証中…</translation>
     </message>
@@ -816,7 +816,7 @@
         <translation>空欄で公式ソースを使用。例：https://hf-mirror.com</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1365" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1383" />
         <source>确定取消 AI 打轴吗？当前尚未应用的结果将被丢弃。</source>
         <translation>AIタイミングをキャンセルしますか？未適用の結果は破棄されます。</translation>
     </message>
@@ -831,12 +831,12 @@
         <translation>続行</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1384" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1402" />
         <source>继续任务</source>
         <translation>タスクを続行</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1367" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1385" />
         <source>继续执行</source>
         <translation>実行を続ける</translation>
     </message>
@@ -886,22 +886,22 @@
         <translation>ランタイム</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1241" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1259" />
         <source>运行环境已更新，将立即生效。</source>
         <translation>ランタイムを更新しました。即時反映されます。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1218" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1236" />
         <source>选择 AI 缓存根目录（独立运行模式生效）</source>
         <translation>AIキャッシュのルートを選択（スタンドアローンモードで有効）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1232" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1250" />
         <source>选择对齐运行环境的 python.exe</source>
         <translation>アラインメント ランタイムの python.exe を選択</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1205" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1223" />
         <source>选择模型根目录</source>
         <translation>モデルのルートディレクトリを選択</translation>
     </message>
@@ -927,7 +927,7 @@
         <translation>デフォルト（.cache）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1158" />
+        <location filename="src/strange_uta_game/frontend/editor/ai_timing_dialog.py" line="1176" />
         <source>（安装日志：{p}）</source>
         <translation>（インストールログ：{p}）</translation>
     </message>
@@ -950,62 +950,72 @@
 <context>
     <name>AiTimingSeparation</name>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="83" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="162" />
         <source>FFmpeg 不可用：请在「设置 → 关于/语言」配置 FFmpeg 路径后重试</source>
         <translation>FFmpeg を利用できません：「設定 → 情報/言語」で FFmpeg のパスを設定してから再試行してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="82" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="161" />
         <source>FFmpeg 不可用：请检查工作台设置中的 FFmpeg 配置</source>
         <translation>FFmpeg を利用できません：ワークベンチ設定の FFmpeg 設定を確認してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="321" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="404" />
         <source>人声分离失败（返回码 {code}）。</source>
         <translation>ボーカル分離に失敗しました（終了コード {code}）。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="326" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="409" />
         <source>人声分离失败（返回码 {code}）。请确认分离环境已完整安装后重试</source>
         <translation>ボーカル分離に失敗しました（終了コード {code}）。分離環境が完全にインストールされていることを確認して再試行してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="43" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="44" />
         <source>人声分离需要 FFmpeg，但未在系统中找到。请在「设置 → 关于/语言」中配置 FFmpeg 路径（或安装 FFmpeg 并加入系统 PATH）后重试</source>
         <translation>ボーカル分離には FFmpeg が必要ですが、システム内に見つかりませんでした。「設定 → 情報/言語」で FFmpeg のパスを設定するか、FFmpeg をインストールして PATH に追加してから再試行してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="38" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="39" />
         <source>人声分离需要 FFmpeg，但未找到可用的 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置后重试</source>
         <translation>ボーカル分離には FFmpeg が必要ですが、利用可能な FFmpeg が見つかりませんでした。組み込み実行時の FFmpeg はワークベンチが一元管理しています。ワークベンチ設定の FFmpeg 設定を確認してから再試行してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="98" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="131" />
+        <source>分离模型数据表已损坏，已重置（将自动重新下载）</source>
+        <translation>分離モデルのデータテーブルが壊れているためリセットしました（自動で再ダウンロードされます）</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="144" />
+        <source>分离模型文件不完整（下载中断残留），已自动删除，将在下次分离时重新下载</source>
+        <translation>分離モデルファイルが不完全です（ダウンロード中断の残骸）。自動削除したため、次回の分離時に再ダウンロードされます</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="177" />
         <source>分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（代理跟随工作台的网络设置）后重试</source>
         <translation>分離モデルは初回使用時に GitHub からダウンロードされますが、現在ダウンロードに失敗しています：ネットワークを確認して再試行してください（プロキシはワークベンチのネットワーク設定に従います）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="102" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="181" />
         <source>分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（可在「设置 → 网络与代理」配置代理）后重试</source>
         <translation>分離モデルは初回使用時に GitHub からダウンロードされますが、現在ダウンロードに失敗しています：ネットワークを確認するか（「設定 → ネットワークとプロキシ」でプロキシを設定できます）、再試行してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="211" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="290" />
         <source>分离环境未安装：请先在弹窗中安装对齐环境（含分离能力）</source>
         <translation>分離環境が未インストールです：先にダイアログでアラインメント環境（分離機能を含む）をインストールしてください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="323" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="406" />
         <source>子进程输出：{output}</source>
         <translation>子プロセス出力：{output}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="359" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="442" />
         <source>工作台分离环境未配置，使用 AI 运行环境内置分离</source>
         <translation>ワークベンチの分離環境が未設定のため、AI ランタイム内蔵の分離を使用します</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="303" />
+        <location filename="src/strange_uta_game/backend/application/ai_timing/separation.py" line="386" />
         <source>已取消人声分离</source>
         <translation>ボーカル分離をキャンセルしました</translation>
     </message>

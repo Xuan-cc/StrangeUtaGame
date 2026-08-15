@@ -9,6 +9,7 @@ UVR-MDX-NET-Inst_HQ_3（人声/伴奏双输出），自动下载到统一 ``ai_m
 
 from __future__ import annotations
 
+import json
 import subprocess
 from collections import deque
 from pathlib import Path
@@ -68,6 +69,84 @@ def resolve_ffmpeg_exe() -> str:
         return shutil.which("ffmpeg") or ""
     except Exception:
         return ""
+
+
+# audio-separator get_model_hash 的取样窗口：文件末 10,240,000 字节
+_UVR_HASH_TAIL_BYTES = 10000 * 1024
+# 子进程 load_model_data_using_hash 查询的两张模型数据表（model_file_dir 下）
+_MODEL_DATA_JSONS = ("mdx_model_data.json", "vr_model_data.json")
+
+
+def _uvr_partial_md5(path: Path) -> str:
+    """audio-separator 同款部分哈希：末 10MB（不足则全文件）的 MD5。
+
+    体检口径必须与子进程查表完全一致，否则会出现「宿主认为完好、
+    子进程仍报 Unsupported Model File」或反向误删好模型。
+    """
+    import hashlib
+
+    size = path.stat().st_size
+    digest = hashlib.md5()
+    with path.open("rb") as fh:
+        if size > _UVR_HASH_TAIL_BYTES:
+            fh.seek(size - _UVR_HASH_TAIL_BYTES)
+        for chunk in iter(lambda: fh.read(4 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def ensure_separation_model(model_root) -> str:
+    """分离模型体检与自愈；返回处理说明（空串 = 无需处理）。
+
+    audio-separator 的下载没有原子性：残缺文件直接落在最终名上，且
+    「文件存在即跳过下载」永不自愈——实测打包版 UVR 模型截断 1/3 后
+    每次分离都在子进程查表处抛 Unsupported Model File（退出码 1）。
+    体检对齐子进程判定口径：模型的部分 MD5 必须能在模型数据表中查到。
+
+    - 数据表 json 损坏 → 删除（子进程会重新下载，自愈）；
+    - 模型哈希查不到 → 删除模型（下次分离时重新下载）；
+    - 模型缺失 / 无数据表 → 不处理（交给子进程按需获取）。
+
+    被 ``separate()``（每次分离前）与弹窗「安装 / 修复」（环境维护时）
+    两处调用。
+    """
+    root = Path(model_root) if model_root else None
+    if root is None or not root.is_dir():
+        return ""
+    notes = []
+    hashes = set()
+    for name in _MODEL_DATA_JSONS:
+        table = root / name
+        if not table.is_file():
+            continue
+        try:
+            data = json.loads(table.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                hashes.update(data.keys())
+        except (OSError, ValueError):
+            try:
+                table.unlink()
+            except OSError:
+                pass
+            notes.append(_tr("分离模型数据表已损坏，已重置（将自动重新下载）"))
+    model = root / SEPARATION_MODEL
+    if model.is_file() and hashes:
+        try:
+            digest = _uvr_partial_md5(model)
+        except OSError:
+            digest = ""
+        if digest and digest not in hashes:
+            try:
+                model.unlink()
+            except OSError:
+                pass
+            notes.append(
+                _tr(
+                    "分离模型文件不完整（下载中断残留），已自动删除，"
+                    "将在下次分离时重新下载"
+                )
+            )
+    return "；".join(notes)
 
 
 def _failure_hint(tail_text: str, *, embedded: bool = False) -> str:
@@ -219,6 +298,10 @@ class StandaloneVocalSeparator:
             raise RuntimeError(
                 ffmpeg_missing_message(embedded=self._embedded)
             )
+        # 模型体检自愈：残缺下载在子进程查表处必败且永不自愈
+        note = ensure_separation_model(self._model_root)
+        if note:
+            progress("separation", 8, note)
         cmd = [
             python,
             "-c",
@@ -378,4 +461,5 @@ __all__ = [
     "VOCAL_STEM",
     "ffmpeg_missing_message",
     "resolve_ffmpeg_exe",
+    "ensure_separation_model",
 ]

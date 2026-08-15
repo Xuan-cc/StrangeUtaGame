@@ -1111,6 +1111,24 @@ class AiTimingDialog(QDialog):
 
         def _task(progress_cb, cancel_check):
             try:
+                # 分离模型体检：残缺下载（audio-separator 非原子落盘的
+                # 中断残留）会让之后每次分离都必败，环境维护时一并自愈
+                from strange_uta_game.backend.application.ai_timing.separation import (
+                    ensure_separation_model,
+                )
+
+                try:
+                    model_note = ensure_separation_model(
+                        resolve_model_root(self._settings)
+                    )
+                except Exception:
+                    model_note = ""
+                if model_note:
+                    try:
+                        self._runtime.log_line(f"分离模型体检：{model_note}")
+                    except Exception:
+                        pass
+                    progress_cb("runtime", 1, model_note)
                 if mode == "shared":
                     # 方案 B：向宿主托管解释器增量安装（不建 venv、不重装
                     # torch，torchaudio 按其 torch 版本自动配对）
