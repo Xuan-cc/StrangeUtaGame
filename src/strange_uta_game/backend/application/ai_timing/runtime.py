@@ -62,6 +62,11 @@ TORCH_CUDA_VERSION = "2.11.0"
 # 加依赖与缓存余量）
 CUDA_RUNTIME_DISK_GB = 8
 
+# 打包版发行包路线（install_from_release）的 CUDA 峰值需求：底座 zip
+# 0.15GB + torch cu128 wheel 3.1GB + 解压与安装双份 ≈ 9.5GB；完成后约
+# 6GB（staging 缓存安装成功后自动清理）
+RUNTIME_RELEASE_CUDA_PEAK_GB = 9.5
+
 # ── 托管 Runtime Release 契约（分支 B：standalone 复用工作台底座）──
 # 与 krok_helper/audio_processing/separation/integration.py 同源；工作台
 # 发新 runtime release 时需同步 bump 这里（两仓耦合点，见 EMBEDDING.md）。
@@ -231,6 +236,24 @@ def _safe_extract_path(base: Path, rel: str) -> Optional[Path]:
     except ValueError:
         return None
     return candidate
+
+
+def _replace_dir_with_retry(src: Path, dst: Path) -> None:
+    """替换目录，带重试：Windows 上杀软/索引器可能短暂锁定刚解压的文件。"""
+    import shutil as _shutil
+    import time as _time
+
+    last: Optional[Exception] = None
+    for _ in range(5):
+        try:
+            if dst.exists():
+                _shutil.rmtree(dst)
+            src.replace(dst)
+            return
+        except OSError as exc:
+            last = exc
+            _time.sleep(0.5)
+    raise AiRuntimeError(f"替换运行环境目录失败：{last}")
 
 
 def _download_verified(
@@ -609,10 +632,11 @@ class AiRuntimeManager:
             "python.exe" if sys.platform == "win32" else "bin" / "python"
         )
 
-        # 快路径：已有可用环境（修复重装）直接增量
+        # 快路径：已有可用环境（修复重装）直接增量。判定用「torch 可导入」
+        # 而非完整 probe——半装状态（torch 就位、AI 依赖缺失）也能免重下
+        # 3GB wheel，直接补装依赖
         if python_exe.is_file():
-            existing = self.probe(str(python_exe))
-            if existing.available:
+            if detect_torch_build(str(python_exe)) is not None:
                 progress(60, "检测到已安装的运行环境，跳过下载")
 
                 def _scaled(p: int, m: str) -> None:
@@ -634,6 +658,30 @@ class AiRuntimeManager:
             progress(
                 2, f"检测到 NVIDIA GPU（{gpu}），下载 CUDA 版托管运行环境"
             )
+            # cu128 路线峰值预检：底座 + torch wheel 下载缓存 + 解压安装
+            # 双份（完成后约 6GB，staging 自动清理）
+            import shutil as _shutil
+
+            try:
+                free_gb = (
+                    _shutil.disk_usage(
+                        target_dir.anchor or target_dir.parent
+                    ).free
+                    / 1024
+                    / 1024
+                    / 1024
+                )
+                if free_gb < RUNTIME_RELEASE_CUDA_PEAK_GB:
+                    raise AiRuntimeError(
+                        f"CUDA 版运行环境安装期间（含底座与 torch wheel "
+                        f"下载缓存）峰值约 {RUNTIME_RELEASE_CUDA_PEAK_GB}GB，"
+                        f"当前剩余 {free_gb:.1f}GB（完成后实际占用约 6GB，"
+                        "缓存会自动清理）。请清理磁盘后重试"
+                    )
+            except AiRuntimeError:
+                raise
+            except Exception:
+                pass  # 空间查询失败不阻断，交给 pip 自身的磁盘错误
         else:
             progress(2, "未检测到可用 NVIDIA GPU/驱动，下载 CPU 版托管运行环境")
 
@@ -725,19 +773,20 @@ class AiRuntimeManager:
                 raise AiRuntimeError(f"运行环境底座缺少文件：{rel}")
             if entry.get("size") and target.stat().st_size != int(entry["size"]):
                 raise AiRuntimeError(f"运行环境底座文件大小不符：{rel}")
-        # 底座 zip 的文件相对 runtime 根（无 runtime/ 前缀，同 KS 契约）
-        payload_python = payload / python_exe.relative_to(runtime_dir)
+        # KS 契约（separation/runtime.py 的 _safe_member）：底座 zip 条目
+        # 与 files[].path 均带 runtime/ 前缀——python 落在 payload/runtime/
+        # 下，搬运也只取该子目录。此前按「无前缀」口径校验，打包版安装
+        # 在解压后必报「缺少 python.exe」
+        payload_runtime = payload / "runtime"
+        payload_python = payload_runtime / python_exe.relative_to(runtime_dir)
         if not payload_python.is_file():
             raise AiRuntimeError(
                 "运行环境底座缺少 python.exe（清单与实际不符）"
             )
 
-        # 替换正式 runtime 目录（60-75 末）
-        if runtime_dir.exists():
-            import shutil as _shutil
-
-            _shutil.rmtree(runtime_dir)
-        payload.replace(runtime_dir)
+        # 替换正式 runtime 目录（60-75 末）：只搬 runtime/ 子目录，
+        # 避免 target/runtime/runtime 双重前缀
+        _replace_dir_with_retry(payload_runtime, runtime_dir)
 
         # torch wheel 安装（75-85）：底座自带 pip，依赖走常规索引
         if wheel_dest is not None:
@@ -780,6 +829,11 @@ class AiRuntimeManager:
             progress=_scaled,
             cancel=cancel,
         )
+        # 成功后清理 staging（底座分卷 + torch wheel 共约 3.2GB）；
+        # 失败路径保留，供重试时断点复用
+        import shutil as _shutil
+
+        _shutil.rmtree(staging, ignore_errors=True)
         progress(100, "运行环境就绪")
         return status
 

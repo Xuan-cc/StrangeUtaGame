@@ -1634,5 +1634,6 @@
   "注音操作进行中": "Ruby operation in progress",
   "请等待当前注音操作完成后再关闭窗口": "Please wait for the current ruby operation to finish before closing the window",
   "正在更新节奏点": "Updating checkpoints",
-  "请等待当前注音操作完成后再试": "Please wait for the current ruby operation to finish"
+  "请等待当前注音操作完成后再试": "Please wait for the current ruby operation to finish",
+  "打包版将下载官方运行环境发行包并安装（含 PyTorch，下载缓存安装成功后自动清理）。": "The packaged app will download and install the official runtime release (PyTorch included; download cache is cleaned up after success)."
 }

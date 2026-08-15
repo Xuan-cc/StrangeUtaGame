@@ -863,11 +863,14 @@ class TestInstallFromRelease:
         )
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            # 底座 zip 的条目相对 runtime 根（无 runtime/ 前缀，同 KS 契约）
-            zf.write(payload / "runtime" / "python.exe", "python.exe")
+            # KS 契约（separation/runtime.py _safe_member）：底座 zip 条目
+            # 与 files[].path 均带 runtime/ 前缀（真实 release 实测）
+            zf.write(
+                payload / "runtime" / "python.exe", "runtime/python.exe"
+            )
             zf.write(
                 payload / "manifests" / "installed.json",
-                "manifests/installed.json",
+                "runtime/manifests/installed.json",
             )
         data = buf.getvalue()
         part_file = tmp_path / "runtime.zip.001"
@@ -893,12 +896,12 @@ class TestInstallFromRelease:
             },
             "files": [
                 {
-                    "path": "python.exe",
+                    "path": "runtime/python.exe",
                     "size": len("#fake-python"),
                     "sha256": "",
                 },
                 {
-                    "path": "manifests/installed.json",
+                    "path": "runtime/manifests/installed.json",
                     "size": 2,
                     "sha256": "",
                 },
@@ -960,6 +963,11 @@ class TestInstallFromRelease:
         )
         assert status.available
         assert (target / "runtime" / "python.exe").is_file()
+        # 回归：KS 契约条目带 runtime/ 前缀，搬运只取 payload/runtime，
+        # 不得出现 target/runtime/runtime 双重前缀
+        assert not (target / "runtime" / "runtime").exists()
+        # 成功后 staging（底座分卷 + torch wheel 缓存）必须清理
+        assert not (target / "staging").exists()
         calls = seen["calls"]
         # torch wheel 安装（本地 wheel 路径进 pip 参数）
         assert any(
@@ -998,6 +1006,87 @@ class TestInstallFromRelease:
         )
         assert status.available
         assert fetched == []  # 已有环境：未拉清单未下载
+
+    def test_broken_torch_rebuilds_from_release(self, tmp_path, monkeypatch):
+        """半装环境（python 在、torch 坏）不走快路径，完整重建。
+
+        回归场景：torch wheel 安装中断后重试——重下底座与 wheel
+        重建 runtime，而不是误判「已安装」只补依赖。
+        """
+        import shutil
+
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        target = tmp_path / "rt"
+        (target / "runtime").mkdir(parents=True)
+        (target / "runtime" / "python.exe").write_text(
+            "#fake", encoding="utf-8"
+        )
+        manifest, url_map = self._fixture(tmp_path)
+        torch_ok = {"ok": False}
+
+        def _fake_build(exe):
+            return ("2.7.1", "cpu") if torch_ok["ok"] else None
+
+        monkeypatch.setattr(rt, "detect_torch_build", _fake_build)
+        monkeypatch.setattr(
+            rt,
+            "_download_verified",
+            lambda url, dest, **kw: shutil.copyfile(url_map[url], dest),
+        )
+        monkeypatch.setattr(
+            rt, "release_variant_for_host", lambda: rt.RUNTIME_VARIANT_CPU
+        )
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        fetched = []
+
+        def fake_runner(python, args, on_line, cancel):
+            if any("torch-2.7.1+cpu.whl" in str(x) for x in args):
+                torch_ok["ok"] = True
+            on_line("Successfully installed\n")
+            return 0
+
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        status = manager.install_from_release(
+            target,
+            manifest_fetch=lambda v, proxy="": fetched.append(v) or manifest,
+            progress=lambda p, m: None,
+        )
+        assert status.available
+        assert fetched == [rt.RUNTIME_VARIANT_CPU]
+        assert (target / "runtime" / "python.exe").is_file()
+
+    def test_cuda_release_preflight_disk(self, tmp_path, monkeypatch):
+        """cu128 发行包路线的峰值磁盘预检：剩余不足直接报错不下载。"""
+        import shutil as _shutil
+
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(
+            rt, "release_variant_for_host", lambda: rt.RUNTIME_VARIANT_CUDA
+        )
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "RTX Fake")
+
+        class _DU:
+            free = int(5.0 * 1024**3)
+
+        monkeypatch.setattr(_shutil, "disk_usage", lambda p: _DU())
+        manager = AiRuntimeManager(pip_runner=lambda *a: 0)
+        fetched = []
+        with pytest.raises(AiRuntimeError) as ei:
+            manager.install_from_release(
+                tmp_path / "rt",
+                manifest_fetch=lambda v, proxy="": fetched.append(v) or {},
+            )
+        assert "峰值" in str(ei.value)
+        assert fetched == []  # 预检在拉清单之前
 
     def test_frozen_install_delegates_to_release(self, tmp_path, monkeypatch):
         import sys as _sys

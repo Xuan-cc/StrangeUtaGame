@@ -85,6 +85,10 @@ CREDIT_TEXT = "对齐思路参考开源项目 FA-Kara 与 yohane（本项目不�
 # 共享增量合计约 0.4GB；CPU venv 按去掉 CUDA torch 加 CPU torch 推算）
 DISK_EST_VENV_CUDA_GB = 5.0
 DISK_EST_VENV_CPU_GB = 2.0
+# 打包版（frozen）走发行包路线：完成后 CUDA 约 6GB / CPU 约 2GB；
+# 过程峰值（底座 + torch wheel 缓存）由安装内预检把关
+DISK_EST_RELEASE_CUDA_GB = 6.0
+DISK_EST_RELEASE_CPU_GB = 2.0
 DISK_EST_SHARED_GB = 0.5
 DISK_EST_MODEL_GB = 1.2
 
@@ -1055,22 +1059,30 @@ class AiTimingDialog(QDialog):
             )
 
         if mode == "venv":
-            # 占用提醒（实测口径：CUDA venv 约 5GB / CPU venv 约 2GB；
-            # 安装期间含下载缓存的峰值更高，由安装内预检把关）。
+            # 占用提醒（源码运行实测口径：CUDA venv 约 5GB / CPU venv 约
+            # 2GB；打包版走发行包路线，完成后约 6GB）。安装期间含下载
+            # 缓存的峰值更高，由安装内预检把关。
             # GPU 判定用快照里探测好的 gpu_name——UI 线程上再起
             # nvidia-smi 子进程会卡界面并闪黑框（打包版实测）
             runtime_status = (
                 self._snapshot.runtime if self._snapshot is not None else None
             )
+            has_gpu = runtime_status is not None and runtime_status.gpu_name
+            frozen = bool(getattr(sys, "frozen", False))
             estimate = (
-                DISK_EST_VENV_CUDA_GB
-                if runtime_status is not None and runtime_status.gpu_name
-                else DISK_EST_VENV_CPU_GB
+                (DISK_EST_RELEASE_CUDA_GB if frozen else DISK_EST_VENV_CUDA_GB)
+                if has_gpu
+                else (DISK_EST_RELEASE_CPU_GB if frozen else DISK_EST_VENV_CPU_GB)
             )
-            if not self._confirm_disk_usage(
-                estimate,
-                self.tr("安装 AI 运行环境（含 PyTorch 与依赖）。"),
-            ):
+            detail = (
+                self.tr(
+                    "打包版将下载官方运行环境发行包并安装（含 PyTorch，"
+                    "下载缓存安装成功后自动清理）。"
+                )
+                if frozen
+                else self.tr("安装 AI 运行环境（含 PyTorch 与依赖）。")
+            )
+            if not self._confirm_disk_usage(estimate, detail):
                 return
         elif mode == "shared":
             # 增量路径体积小：不拦确认，开始消息里注明预估
