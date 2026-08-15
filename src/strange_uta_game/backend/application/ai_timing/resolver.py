@@ -75,7 +75,8 @@ class PronunciationResolver:
     def collect_existing_annotations(self, project: Project) -> PronunciationPlan:
         """只读提取既有标注，生成 PronunciationPlan（缺口保持 reading=None）。"""
         plan = PronunciationPlan(
-            annotation_digest=compute_annotation_digest(project)
+            annotation_digest=compute_annotation_digest(project),
+            chinese_mode=self._effective_chinese_mode(project),
         )
         for line_idx, sentence in enumerate(project.sentences):
             for char_idx, ch in enumerate(sentence.characters):

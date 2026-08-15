@@ -42,6 +42,10 @@ RUNTIME_REQUIREMENTS: List[str] = [
     # audio-separator 0.44.x 使用旧版 librosa API（get_duration(filename=)），
     # 0.11 起已移除该参数——必须钉住
     "librosa==0.10.2.post1",
+    # 对齐转写（FA-Kara 口径）：CMU 音素词典（英文音节读音）与
+    # pyphen（词典外回退切分）；缺失时 worker 静默回退表面拼写
+    "nltk",
+    "pyphen",
 ]
 
 # Windows 上 PyPI 的 torch 默认是 CPU-only wheel，GPU 推理必须显式走
@@ -799,6 +803,8 @@ class AiRuntimeManager:
             "huggingface_hub",
             "audio-separator[cpu]",
             "librosa==0.10.2.post1",
+            "nltk",
+            "pyphen",
         ]
         progress(
             2,

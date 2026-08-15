@@ -576,6 +576,18 @@ class TestUnalignableChars:
 class TestLatinWordGroups:
     """拉丁词组：手工按音节/字母拆分的英文单位成组（假名/拼音不受影响）。"""
 
+    @pytest.fixture(autouse=True)
+    def _hermetic_transcription(self, monkeypatch):
+        """封闭转写：CMU/pyphen 缺席时英文回退表面拼写，断言才稳定。"""
+        from strange_uta_game.backend.application.ai_timing import (
+            transcription,
+        )
+
+        monkeypatch.setattr(transcription, "_CMU_CACHE", {})
+        monkeypatch.setattr(transcription, "_PYPhen_CACHE", False)
+        monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
+        yield
+
     def test_adjacent_latin_units_grouped(self):
         s = _sentence(
             [
@@ -685,3 +697,76 @@ class TestSentenceEndPlaceholder:
         breath = project.sentences[0].characters[3]
         # 释放点 = 行内末 token（け）的终点，不再停留在陈旧原值 0
         assert breath.sentence_end_ts == 730
+
+
+class TestTranscriptionIntegration:
+    """转写接线：中文模式拼音表音、拉丁多音节词多 token、checkpoint 合并。"""
+
+    @pytest.fixture(autouse=True)
+    def _pin_cmu(self, monkeypatch):
+        from strange_uta_game.backend.application.ai_timing import (
+            transcription,
+        )
+
+        monkeypatch.setattr(
+            transcription,
+            "_CMU_CACHE",
+            {"beautiful": [["B", "Y", "UW1", "T", "AH0", "F", "UH0", "L"]]},
+        )
+        monkeypatch.setattr(transcription, "_PYPhen_CACHE", False)
+        monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
+        yield
+
+    def test_chinese_mode_kanji_gets_phonetic_reading(self):
+        from strange_uta_game.backend.application.ai_timing.resolver import (
+            PronunciationResolver,
+        )
+
+        project = Project()
+        project.sentences = [
+            _sentence([("汉", 1, ["zhōng"], False), ("字", 1, ["ài"], False)])
+        ]
+        resolver = PronunciationResolver(
+            analyzer=_FixedReadingAnalyzer(), chinese_mode=True
+        )
+        plan = resolver.resolve_project(project, fill_missing=True)
+        assert plan.chinese_mode is True
+        request = build_alignment_request(plan)
+        # zhong→jong（zh→j），ai→ai（零声母）
+        assert [t.text for t in request.tokens] == ["jong", "ai"]
+
+    def test_japanese_mode_kanji_kana_reading_untouched(self):
+        from strange_uta_game.backend.application.ai_timing.resolver import (
+            PronunciationResolver,
+        )
+
+        project = Project()
+        project.sentences = [_sentence([("漢", 1, ["かん"], False)])]
+        resolver = PronunciationResolver(
+            analyzer=_FixedReadingAnalyzer(), chinese_mode=False
+        )
+        plan = resolver.resolve_project(project, fill_missing=True)
+        request = build_alignment_request(plan)
+        assert [t.text for t in request.tokens] == ["kan"]  # 假名罗马字路径
+
+    def test_multisyllable_latin_word_emits_tokens_and_merges(self):
+        project = Project()
+        project.sentences = [_sentence([("b", 1, ["beautiful"], False)])]
+        project_resolved, plan = _resolved_project([project.sentences[0]])
+        request = build_alignment_request(plan)
+        # 三音节 → 三个 token，共享同一 location
+        assert [t.text for t in request.tokens] == ["byu", "ta", "fur"]
+        assert len({t.location for t in request.tokens}) == 1
+        # checkpoint 合并：首 token 起点 / 末 token 终点
+        spans = [
+            EmissionSpan(0, 100, 200),
+            EmissionSpan(1, 200, 300),
+            EmissionSpan(2, 300, 500),
+        ]
+        result = AlignmentResult(
+            annotation_digest=request.annotation_digest,
+            model_id="fake",
+            spans=spans,
+        )
+        mapping = checkpoint_timestamps(result, request)
+        assert mapping[(0, 0, 0)] == (100, 500)

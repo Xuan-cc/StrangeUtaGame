@@ -199,6 +199,10 @@ class PronunciationPlan:
     generation_errors: List[str] = field(default_factory=list)
     """生成阶段的中文错误记录（分析器不可用、字符无法注音等），供执行前阻断展示。"""
 
+    chinese_mode: bool = False
+    """工程级中文模式（resolver 路由结论）。对齐 token 化据此把汉字的
+    拉丁读音按拼音→表音转写（FA-Kara 口径）；不进 annotation_digest。"""
+
     @property
     def pending_units(self) -> List[PronunciationUnit]:
         """缺口单元（含生成后仍无法补足的）。"""

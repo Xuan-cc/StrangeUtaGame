@@ -210,20 +210,56 @@ def _build_tokens_and_word_groups(
                 word_groups.append(list(current_run))
             current_run.clear()
 
-        def _append_token(u) -> int:
-            rom = rom_by_id.get(id(u), u.reading or "")
-            text = _strip_diacritics(rom) if not _contains_kana(rom) else rom
-            idx = len(tokens)
-            tokens.append(
-                AlignmentToken(
-                    index=idx,
-                    text=text,
-                    raw_reading=u.reading or "",
-                    location=u.location,
-                    line_idx=line_idx,
-                )
+        def _unit_token_texts(u, rom: str) -> List[str]:
+            """单元 → 对齐 token 文本列表（0-多个：多音节英文词拆音节）。
+
+            中文模式下的汉字拉丁读音按拼音→表音转写；拉丁词按
+            CMU/pyphen 切音节给读音（FA-Kara 口径，transcription 模块
+            内部对缺失依赖静默回退表面拼写）。
+            """
+            from strange_uta_game.backend.application.ai_timing.pronunciation import (
+                ScriptKind,
             )
-            return idx
+            from strange_uta_game.backend.application.ai_timing.transcription import (
+                english_word_syllables,
+                pinyin_to_phonetic,
+            )
+
+            if (
+                plan.chinese_mode
+                and u.script == ScriptKind.KANJI
+                and rom
+                and not _contains_kana(rom)
+            ):
+                converted = pinyin_to_phonetic(rom)
+                return [converted] if converted else [_strip_diacritics(rom)]
+            if u.script == ScriptKind.LATIN and rom and not _contains_kana(rom):
+                syllables = english_word_syllables(
+                    _strip_diacritics(rom)
+                )
+                if syllables:
+                    return syllables
+            text = _strip_diacritics(rom) if not _contains_kana(rom) else rom
+            return [text]
+
+        def _append_unit_tokens(u) -> List[int]:
+            """为单元生成 1..N 个 token（多音节英文词=多 token 同 location），
+            返回这些 token 的索引列表。"""
+            rom = rom_by_id.get(id(u), u.reading or "")
+            indexes = []
+            for text in _unit_token_texts(u, rom):
+                idx = len(tokens)
+                tokens.append(
+                    AlignmentToken(
+                        index=idx,
+                        text=text,
+                        raw_reading=u.reading or "",
+                        location=u.location,
+                        line_idx=line_idx,
+                    )
+                )
+                indexes.append(idx)
+            return indexes
 
         for pos, u in enumerate(ordered_units):
             is_latin_token = (
@@ -233,14 +269,14 @@ def _build_tokens_and_word_groups(
                 _flush_run()
                 prev_latin_pos = -2
                 if id(u) in tokenizable_ids:
-                    _append_token(u)
+                    _append_unit_tokens(u)
                 continue
-            idx = _append_token(u)
+            new_indexes = _append_unit_tokens(u)
             if pos == prev_latin_pos + 1 and current_run:
-                current_run.append(idx)
+                current_run.extend(new_indexes)
             else:
                 _flush_run()
-                current_run.append(idx)
+                current_run.extend(new_indexes)
             prev_latin_pos = pos
         _flush_run()
     return tokens, word_groups
@@ -317,12 +353,23 @@ def validate_result(result: AlignmentResult, request: AlignmentRequest) -> None:
 def checkpoint_timestamps(
     result: AlignmentResult, request: AlignmentRequest
 ) -> Dict[UnitLocation, Tuple[int, int]]:
-    """token 区间 → checkpoint (start_ms, end_ms) 映射（写回的唯一定位来源）。"""
+    """token 区间 → checkpoint (start_ms, end_ms) 映射（写回的唯一定位来源）。
+
+    同一 location 可能对应多个 token（多音节英文词按音节拆分）：
+    合并为（首个 token 起点, 末个 token 终点）。
+    """
     spans = result.spans_by_token()
     mapping: Dict[UnitLocation, Tuple[int, int]] = {}
     for token in request.tokens:
         span = spans[token.index]
-        mapping[token.location] = (span.start_ms, span.end_ms)
+        existing = mapping.get(token.location)
+        if existing is None:
+            mapping[token.location] = (span.start_ms, span.end_ms)
+        else:
+            mapping[token.location] = (
+                min(existing[0], span.start_ms),
+                max(existing[1], span.end_ms),
+            )
     return mapping
 
 
