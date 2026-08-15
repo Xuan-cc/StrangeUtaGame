@@ -92,6 +92,50 @@ class TestProjectSwitchRegression:
             "symbol",
         ]
 
+    def test_nicokara_tags_survive_save_and_recent_list_cycle(self, tmp_path):
+        """1.6.0 用户报告场景：新建项目 → 编辑标签 → 保存成功后写最近列表
+        （ebcbfc7 新增）→ 周期自动保存不应把 .sug 里的标签清空。
+
+        旧代码中标签对话框用新建实例写盘、最近列表经共享实例整字典写盘，
+        保存成功的一瞬间磁盘标签被回滚成空值；周期保存随即把空标签写进
+        .sug。共享实例后两处写入落在同一份内存上，链条断裂。
+        """
+        cfg = tmp_path / "config.json"
+        # 项目切换 / 新建项目 / 最近列表写入方：设置页共享实例
+        shared = AppSettings(config_path=str(cfg))
+
+        # 1) 新建项目：标签重置为默认空值（timing_interface._on_new_project）
+        shared.set(
+            "nicokara_tags",
+            dict(AppSettings.DEFAULT_SETTINGS.get("nicokara_tags", {})),
+        )
+        shared.save()
+
+        # 2) 导出页标签对话框：新建实例写入新标签（export_interface._on_nicokara_tags）
+        dialog = AppSettings(config_path=str(cfg))
+        new_tags = {
+            "title": "テスト曲",
+            "artist": "テスト歌手",
+            "album": "",
+            "tagging_by": "",
+            "silence_ms": 0,
+            "custom": [],
+        }
+        dialog.set("nicokara_tags", new_tags)
+        dialog.save()
+
+        # 3) 手动保存：先捕获标签（_get_nicokara_tags_for_save），
+        #    保存成功后 _on_store_saved 经共享实例写最近列表（整字典）
+        captured_on_save = AppSettings(config_path=str(cfg)).get("nicokara_tags")
+        shared.set("recent_projects", ["demo.sug"])
+        shared.save()
+
+        # 4) 周期自动保存（默认开启）再次捕获
+        captured_on_periodic = AppSettings(config_path=str(cfg)).get("nicokara_tags")
+
+        assert captured_on_save == new_tags
+        assert captured_on_periodic == new_tags  # 旧代码此处读到空标签 → .sug 被清空
+
     def test_provider_write_notifies_host(self):
         """embedded：写入经 provider.save 通知宿主保存。"""
         p = _MemProvider()
