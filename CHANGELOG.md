@@ -8,7 +8,7 @@
   - 自动查找并复用工作台人声、同目录人声文件及 AI 缓存；没有可用人声时可自动执行人声分离
   - 提供日文歌曲推荐模型和多语言通用模型，可选择自动、CPU、CUDA 或 Apple 芯片 MPS 设备
   - 默认日文推荐模型采用 `CC-BY-NC-SA-4.0` 许可，仅限非商业用途，具体许可信息可在 AI 打轴窗口中查看
-  - 对齐与读音转写思路参考开源项目 FA-Kara（MIT，https://github.com/moriwx/FA-Kara）与 yohane（https://github.com/Japan7/yohane），本项目未内嵌其代码
+  - 对齐与读音转写思路参考开源项目 FA-Kara（MIT，[https://github.com/moriwx/FA-Kara]）与 yohane（[https://github.com/Japan7/yohane]），本项目未内嵌其代码
   - AI 打轴窗口内可完成运行环境安装或修复、模型下载与校验，并可设置下载镜像、模型目录、AI 缓存及运行环境位置
   - 执行过程中显示各阶段进度、速度和预计剩余时间，支持随时取消；相同素材会复用已有缓存
   - 成功后可通过一次撤销恢复原时间戳；AI 结果仅供辅助参考，含和声、重叠人声或伴唱的段落请务必人工校准
