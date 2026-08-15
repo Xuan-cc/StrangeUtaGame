@@ -32,8 +32,17 @@ _REDIRECT_FILENAME = ".config_redirect"
 
 
 def program_dir() -> Path:
-    """可执行文件（开发期为入口脚本）所在目录。"""
-    return Path(sys.argv[0]).resolve().parent
+    """可执行文件（开发期为源码树根目录）所在目录。
+
+    冻结（PyInstaller）环境下取 ``sys.executable``；源码运行时以本文件
+    位置推导源码树根（``src/`` 的上一级），不再依赖 ``sys.argv[0]``——
+    后者在 ``python -m pytest`` 等场景指向 site-packages 里的 runner 路径，
+    会使配置目录的可写性探针写错位置（个别机器上对受保护目录的探针
+    创建请求会长期阻塞，表现为测试无限卡死）。
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
 
 
 def _is_dir_writable(d: Path) -> bool:

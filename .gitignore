@@ -233,3 +233,6 @@ scripts/_sources.txt
 .superpowers/
 # Superpowers brainstorming/planning 草稿（spec/plan 产物，不入库）
 docs/superpowers/
+
+# pytest 临时目录（tests/conftest.py 重定向 basetemp 用）
+.test_tmp/
