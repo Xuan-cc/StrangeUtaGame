@@ -340,19 +340,56 @@ class StandaloneVocalSeparator:
         )
         result_path: Optional[Path] = None
         assert proc.stdout is not None
+        import queue as _queue
         import re as _re
+        import threading as _threading
 
         # 子进程的失败输出（traceback 混入 stdout）此前被逐行读取后丢弃，
         # 报错只剩返回码，外部用户反馈完全不可诊断——保留有界尾部，
         # 失败时并入异常消息
         tail: deque = deque(maxlen=24)
 
+        # 读取放后台线程、主循环按 0.25s 轮询队列：取消检查不能再挂在
+        # 「收到一行」上——推理期到达的行全是 tqdm 进度行（旧行里它们
+        # continue 在 cancel 检查之前），真静默期（模型下载/加载）则根本
+        # 无行可读。实测 CUDA 上推理期点取消要等整段推理结束才生效，
+        # CPU 机器上是分钟级（用户感知即「卡死」）
+        line_queue: "_queue.Queue" = _queue.Queue()
+
+        def _pump() -> None:
+            try:
+                for raw in proc.stdout:
+                    line_queue.put(raw)
+            finally:
+                line_queue.put(None)  # EOF 哨兵
+
+        reader = _threading.Thread(target=_pump, daemon=True)
+        reader.start()
+
+        def _raise_cancelled() -> None:
+            proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
+            raise RuntimeError(_tr("已取消人声分离"))
+
         _ansi_re = _re.compile("\x1b\\[[0-9;]*[A-Za-z]|[\x00-\x08\x0b-\x1f]")
         # tqdm 进度行（audio_separator 分块处理）形如：
         #   " 50%|█████| 1/2 [00:02<00:02,  2.21s/it]"（\r 分隔、可能同行多段）
         # —— 解析出 k/N 与 tqdm 自带的剩余时间，喂给进度回调（速度+ETA）
         _tqdm_re = _re.compile(r"(\d+)/(\d+) \[[^\]<]*<(\d+):(\d{2})")
-        for raw_line in proc.stdout:
+        while True:
+            try:
+                raw_line = line_queue.get(timeout=0.25)
+            except _queue.Empty:
+                if cancel():
+                    _raise_cancelled()
+                continue
+            if raw_line is None:
+                break
+            if cancel():
+                _raise_cancelled()
             m = None
             for m2 in _tqdm_re.finditer(raw_line):
                 m = m2  # 取最后一段（\r 覆盖写时同行会有多个状态）
@@ -377,13 +414,6 @@ class StandaloneVocalSeparator:
             if len(line) > 160:
                 line = line[:159] + "…"
             tail.append(line)
-            if cancel():
-                proc.kill()
-                try:
-                    proc.wait(timeout=5)
-                except Exception:
-                    pass
-                raise RuntimeError(_tr("已取消人声分离"))
             if line.startswith("stage:load"):
                 progress("separation", 10, line.split(":", 2)[2])
             elif line.startswith("stage:separate"):

@@ -4,6 +4,8 @@
 import io
 import json
 import os
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -26,6 +28,41 @@ class _FakeProc:
 
     def wait(self, timeout=None):
         return self._returncode
+
+
+class _ManualStdout:
+    """可编程管道替身：测试按需 push 行、close 后 EOF，模拟子进程
+    静默期（模型下载/加载/推理中无换行输出）。"""
+
+    def __init__(self):
+        self._cv = threading.Condition()
+        self._items = []
+        self._eof = False
+
+    def push(self, line: str) -> None:
+        with self._cv:
+            self._items.append(line)
+            self._cv.notify_all()
+
+    def close(self) -> None:
+        with self._cv:
+            self._eof = True
+            self._cv.notify_all()
+
+    def readline(self):
+        with self._cv:
+            while not self._items and not self._eof:
+                self._cv.wait(timeout=0.2)
+            if self._items:
+                return self._items.pop(0)
+            return ""
+
+    def __iter__(self):
+        while True:
+            line = self.readline()
+            if not line:
+                return
+            yield line
 
 
 def _separator(
@@ -193,6 +230,82 @@ class TestStandaloneSeparator:
         message = str(excinfo.value)
         assert "工作台" in message
         assert "设置 → 关于/语言" not in message
+
+    def test_cancel_during_silence_is_immediate(self, tmp_path, monkeypatch):
+        """真静默期（模型下载/加载，无任何换行输出）取消也必须在轮询
+        周期级延迟内生效——旧行为是阻塞在 readline 上直到子进程输出。"""
+        monkeypatch.setattr(StandaloneVocalSeparator, "available", lambda self: True)
+        python = tmp_path / "python.exe"
+        python.write_bytes(b"")
+        ffmpeg = tmp_path / "tools" / "ffmpeg.exe"
+        ffmpeg.parent.mkdir(parents=True, exist_ok=True)
+        ffmpeg.write_bytes(b"")
+        monkeypatch.setattr(sep_mod, "resolve_ffmpeg_exe", lambda: str(ffmpeg))
+        stdout = _ManualStdout()  # 永不输出，直到测试结束
+        proc = _FakeProc([], returncode=1)
+        proc.stdout = stdout
+        monkeypatch.setattr(sep_mod.subprocess, "Popen", lambda *a, **k: proc)
+        sep = StandaloneVocalSeparator(str(python), tmp_path / "models")
+        t0 = time.monotonic()
+
+        with pytest.raises(RuntimeError, match="已取消"):
+            sep.separate(
+                tmp_path / "song.flac",
+                lambda *a: None,
+                lambda: time.monotonic() - t0 > 0.5,
+            )
+        assert time.monotonic() - t0 < 3  # 轮询周期级，而非等到输出
+        assert proc.killed
+        stdout.close()  # 释放读取线程
+
+    def test_cancel_no_longer_bypassed_by_tqdm_lines(
+        self, tmp_path, monkeypatch
+    ):
+        """tqdm 进度行不得绕过取消检查——旧实现里它们 continue 在
+        cancel 之前，推理期（输出全是 tqdm 行）取消要等整段推理结束。"""
+        monkeypatch.setattr(StandaloneVocalSeparator, "available", lambda self: True)
+        python = tmp_path / "python.exe"
+        python.write_bytes(b"")
+        ffmpeg = tmp_path / "tools" / "ffmpeg.exe"
+        ffmpeg.parent.mkdir(parents=True, exist_ok=True)
+        ffmpeg.write_bytes(b"")
+        monkeypatch.setattr(sep_mod, "resolve_ffmpeg_exe", lambda: str(ffmpeg))
+        stdout = _ManualStdout()
+        proc = _FakeProc([], returncode=1)
+        proc.stdout = stdout
+        monkeypatch.setattr(sep_mod.subprocess, "Popen", lambda *a, **k: proc)
+        sep = StandaloneVocalSeparator(str(python), tmp_path / "models")
+        state = {"clicked": False}
+
+        def progress(stage, pct, msg):
+            if "块" in msg:
+                state["clicked"] = True  # 首块进度到达后用户点取消
+
+        outcome = {}
+
+        def _run():
+            try:
+                sep.separate(
+                    tmp_path / "song.flac", progress, lambda: state["clicked"]
+                )
+            except RuntimeError as exc:
+                outcome["exc"] = exc
+
+        worker = threading.Thread(target=_run)
+        worker.start()
+        stdout.push("  0%|    | 1/8 [00:01<00:07, 1.0s/it]\n")
+        for _ in range(60):
+            if state["clicked"]:
+                break
+            time.sleep(0.05)
+        assert state["clicked"], "首块进度未到达"
+        # 翻转取消后送入下一条 tqdm 行：必须在处理该行时即取消
+        stdout.push(" 12%|█▎  | 2/8 [00:02<00:06, 1.0s/it]\n")
+        worker.join(timeout=3)
+        assert not worker.is_alive()
+        assert "已取消" in str(outcome.get("exc"))
+        assert proc.killed
+        stdout.close()
 
     def test_corrupt_model_deleted_before_spawn(self, tmp_path, monkeypatch):
         """分离启动前的模型体检：残缺模型自动删除并提示重下
