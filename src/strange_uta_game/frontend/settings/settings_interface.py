@@ -463,8 +463,14 @@ class SettingsInterface(ScrollArea):
                 if self._settings_provider is not None:
                     self._settings = AppSettings(provider=self._settings_provider)
                     self._settings._settings = self._settings._load_packaged_defaults()
+                    # 整字典已替换为默认值；清 dirty 让 save() 走全量
+                    # provider.save 而非增量 save_partial，重置才能完整。
+                    self._settings._dirty_paths.clear()
                     self._settings.save()
                 else:
+                    # 丢弃共享实例前先把未保存修改写盘（交接语义），
+                    # 再删文件、清缓存重建——新实例从内嵌默认值读起。
+                    AppSettings.reset_shared_instances()
                     if self._settings._config_path.exists():
                         self._settings._config_path.unlink()
                     self._settings = AppSettings()

@@ -125,9 +125,10 @@ class MainWindow(MSFluentWindow):
         # 跟踪当前界面（用于 switchTo 自动应用修改，必须在 _init_navigation 之前）
         self._current_interface = None
 
-        # 窗口大小/最大化记忆：使用独立的 AppSettings 实例，与设置页的编辑
-        # 生命周期解耦；保存前会 reload，避免覆盖设置页刚写入的其它字段。
-        # embedded 模式由宿主管理几何，跳过这一整套。
+        # 窗口大小/最大化记忆：AppSettings 现为进程级共享实例（见
+        # app_settings），此处仅保留启动时恢复几何用的读取引用；写盘走
+        # _save_window_geometry 每次重新解析。embedded 模式由宿主管理
+        # 几何，跳过这一整套。
         if not self._embedded:
             from strange_uta_game.frontend.settings.app_settings import AppSettings
             self._win_settings = AppSettings()
@@ -339,19 +340,24 @@ class MainWindow(MSFluentWindow):
     def _save_window_geometry(self):
         """把当前窗口大小与最大化状态实时写入 config.json。
 
-        先 ``reload`` 取得磁盘上最新的完整配置（避免覆盖设置页刚保存的其它
-        字段），再仅更新窗口两项后落盘。最大化/全屏时不覆盖 ``window_size``，
-        以便退出最大化后仍能恢复用户习惯的普通窗口尺寸。embedded 模式下
-        几何由宿主管理，本方法直接返回。
+        AppSettings 为进程级共享实例，内存即最新状态，直接 set+save 即可
+        （旧版需先 reload 合并磁盘，否则会覆盖设置页刚保存的其它字段——
+        双实例快照问题已随共享实例消失）。最大化/全屏时不覆盖
+        ``window_size``，以便退出最大化后仍能恢复用户习惯的普通窗口尺寸。
+        embedded 模式下几何由宿主管理，本方法直接返回。
         """
         if self._embedded:
             return
-        win_settings = getattr(self, "_win_settings", None)
-        if win_settings is None:
+        try:
+            from strange_uta_game.frontend.settings.app_settings import AppSettings
+
+            # 每次保存时重新解析共享实例：「重置设置」会清缓存重建，
+            # 持有旧实例引用会在新旧实例间重新制造整字典写盘的回滚窗口。
+            win_settings = AppSettings()
+        except Exception:
             return
         try:
             maximized = self.isMaximized() or self.isFullScreen()
-            win_settings.reload()
             win_settings.set("ui.window_maximized", maximized)
             if not maximized:
                 win_settings.set("ui.window_size", [self.width(), self.height()])

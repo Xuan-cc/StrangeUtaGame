@@ -9,6 +9,13 @@ PR #6B 增补：
   ``AppSettings`` 的持久化重定向到自己的存储。
 - ``AppSettings.__init__`` 增加可选 ``provider`` 参数；不传则保持完整
   standalone 行为（文件读写 + dictionary 升级 + 独立 JSON 文件迁移）。
+
+共享实例（记忆设置丢失修复）：
+- ``AppSettings()`` 对同一存储目标（同一 config 文件 / 同一 provider）返回
+  **同一个实例**（见类 docstring）。此前各处 ``AppSettings()`` 各持一份内存
+  快照而 ``save()`` 整字典写盘，长寿命实例会把短寿命实例刚写入磁盘的键
+  回滚——表现为「切换项目后 AI 打轴环境配置、自动删除注音类型等记忆设置
+  丢失」。
 """
 
 from __future__ import annotations
@@ -18,6 +25,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, Optional, Protocol, runtime_checkable
 import json
 import sys
+import threading
 
 from strange_uta_game import app_dirs
 
@@ -69,9 +77,33 @@ class SettingsProvider(Protocol):
 
 
 class AppSettings:
-    """应用设置管理"""
+    """应用设置管理
+
+    进程级共享实例：``AppSettings()`` / ``AppSettings(provider=...)`` /
+    ``AppSettings(config_path=...)`` 对同一存储目标（同一 config 文件或同一
+    provider）返回**同一个实例**。设置修改因此总是直接记忆到 config.json
+    （embedded 下经 ``provider.save`` / ``save_partial`` 通知宿主保存），
+    不存在会回滚磁盘的"旧内存快照"。
+
+    背景：散落各处的 ``AppSettings()`` 曾各自持有独立内存快照，而 ``save()``
+    是整字典写盘——设置页的长寿命实例会在任何一次 save（典型：切换项目时
+    经 ``_apply_project_extras`` 重置 nicokara_tags 触发）把短寿命实例
+    （AI 打轴弹窗、全文编辑删除注音对话框等）刚写入磁盘的键回滚。
+
+    实例被丢弃前（:meth:`reset_shared_instances`）会先把带未保存修改的
+    实例写盘，保证交接不丢内存态。注意：本类不支持 ``copy``/``deepcopy``
+    实例本身（与共享机制冲突）；需要副本时拷贝 ``get_all()`` 字典。
+    """
 
     _default_provider: ClassVar[Optional[SettingsProvider]] = None
+
+    # 共享实例缓存：key -> (provider 强引用 | None, instance)。
+    # 保留 provider 强引用防止其被 GC 后 id 被新对象复用撞 key。
+    _shared_instances: ClassVar[Dict[tuple, tuple]] = {}
+    # 独立文件 + 主 config 的文件级锁：maybe_auto_update_network_dictionary
+    # 在 daemon 线程写 config.json，与 UI 线程并发 open(w) 在 Windows 上会
+    # PermissionError；RLock 保证 init→migrate→save 的重入路径不自我死锁。
+    _io_lock: ClassVar["threading.RLock"] = threading.RLock()
 
     DEFAULT_SETTINGS = {
         "audio": {
@@ -408,6 +440,49 @@ class AppSettings:
         """
         cls._default_provider = provider
 
+    def __new__(
+        cls,
+        config_path: Optional[str] = None,
+        *,
+        provider: Optional[SettingsProvider] = None,
+    ) -> "AppSettings":
+        # 同一存储目标只建一个实例。key 的解析与 __init__ 的 effective
+        # provider 规则保持一致：显式 provider > 显式 config_path > 类默认。
+        if provider is not None:
+            key = ("provider", id(provider))
+        elif config_path is not None:
+            key = ("file", str(Path(config_path)))
+        elif cls._default_provider is not None:
+            key = ("provider", id(cls._default_provider))
+        else:
+            key = ("file", str(cls.get_config_dir() / "config.json"))
+        cached = cls._shared_instances.get(key)
+        if cached is not None:
+            return cached[1]
+        instance = super().__new__(cls)
+        cls._shared_instances[key] = (
+            provider if provider is not None else cls._default_provider,
+            instance,
+        )
+        return instance
+
+    @classmethod
+    def reset_shared_instances(cls) -> None:
+        """清空进程级共享实例缓存（丢弃前先把未保存修改写盘）。
+
+        「重置设置为默认值」等需要从头初始化的路径使用：先把带
+        ``set()`` 过但未 ``save()`` 的实例 flush 到 config.json /
+        provider，再清缓存——之后 ``AppSettings()`` 重建的实例从最新
+        磁盘 / provider 状态读起，交接不丢内存态。
+        """
+        for _pinned_provider, instance in list(cls._shared_instances.values()):
+            try:
+                if getattr(instance, "_dirty_paths", None):
+                    instance.save()
+            except Exception:
+                pass
+        cls._shared_instances.clear()
+
     @staticmethod
     def get_config_dir() -> Path:
         """获取配置文件目录（已确保存在且可写）。
@@ -445,11 +520,15 @@ class AppSettings:
             config_path: 显式 config.json 路径（standalone 调试用）。
                 仅在 ``provider`` 为 None 时生效。
         provider: 设置后端 Protocol 实现。给定时**完全跳过**所有文件
-                路径初始化 —— 不解析 ``get_config_dir()``、不读写
-                ``config.json``、不做 dictionary 升级、不做独立文件
-                迁移。``self._settings`` 直接从 ``provider.load()`` 获取，
-                后续 ``save()`` 写回 provider。
+            路径初始化 —— 不解析 ``get_config_dir()``、不读写
+            ``config.json``、不做 dictionary 升级、不做独立文件
+            迁移。``self._settings`` 直接从 ``provider.load()`` 获取，
+            后续 ``save()`` 写回 provider。
         """
+        if getattr(self, "_initialized", False):
+            # __new__ 命中共享缓存时 __init__ 仍会被再次调用——直接返回，
+            # 避免重复初始化掀掉现役实例的内存态。
+            return
         self._dirty_paths: set[str] = set()
         if provider is not None:
             effective_provider = provider
@@ -505,6 +584,7 @@ class AppSettings:
             except (AttributeError, TypeError, ValueError):
                 provider_dictionary_version = 0
             self._force_upgrade_dictionary_if_needed(provider_dictionary_version)
+        self._initialized = True
 
     def _force_upgrade_dictionary_if_needed(
         self, user_version_override: Optional[int] = None
@@ -678,10 +758,11 @@ class AppSettings:
 
         if self._config_path.exists():
             try:
-                with open(self._config_path, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                    # 以默认值为基础，用户配置覆盖
-                    self._deep_merge(defaults, loaded)
+                with type(self)._io_lock:
+                    with open(self._config_path, "r", encoding="utf-8") as f:
+                        loaded = json.load(f)
+                # 以默认值为基础，用户配置覆盖
+                self._deep_merge(defaults, loaded)
             except Exception as e:
                 print(f"加载设置失败: {e}")
         else:
@@ -745,8 +826,12 @@ class AppSettings:
                 print(f"保存设置失败 (provider): {e}")
             return
         try:
-            with open(self._config_path, "w", encoding="utf-8") as f:
-                json.dump(self._settings, f, indent=2, ensure_ascii=False)
+            # 文件级锁：网络词典自动更新等 daemon 线程与 UI 线程并发写
+            # config.json 时避免 open(w) 竞争（Windows 下会 PermissionError）。
+            with type(self)._io_lock:
+                with open(self._config_path, "w", encoding="utf-8") as f:
+                    json.dump(self._settings, f, indent=2, ensure_ascii=False)
+            self._dirty_paths.clear()
         except Exception as e:
             print(f"保存设置失败: {e}")
 
@@ -787,8 +872,9 @@ class AppSettings:
                 target[key] = {}
             target = target[key]
         target[keys[-1]] = value
-        if self._provider is not None:
-            self._dirty_paths.add(path)
+        # dirty 标记供两条路径消费：provider 模式的 save_partial 增量写、
+        # reset_shared_instances 丢弃实例前的 flush。
+        self._dirty_paths.add(path)
 
     def get_all(self) -> Dict[str, Any]:
         return self._settings.copy()
