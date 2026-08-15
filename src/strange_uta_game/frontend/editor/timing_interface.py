@@ -638,6 +638,116 @@ class EditorInterface(QWidget):
                 change_type, e, exc_info=True)
             self._store.error_notify.emit("数据刷新异常", str(e))
 
+    @staticmethod
+    def _mode_shortcut_defaults(mode_key: str) -> dict:
+        """按模式取默认键位，来源为快捷键设置页 _SHORTCUT_ACTIONS 表。
+
+        表中 default_timing / default_edit 两列是双模式默认键位的唯一真相源；
+        打轴专属动作（delete_timestamp / tag_now 等）在编辑模式默认为空。
+        """
+        from strange_uta_game.frontend.settings.sub_interfaces.shortcut import (
+            ShortcutSubInterface,
+        )
+
+        col = 4 if mode_key == "timing_mode" else 5
+        return {
+            row[0]: row[col]
+            for row in ShortcutSubInterface._SHORTCUT_ACTIONS
+            if len(row) > col
+        }
+
+    @staticmethod
+    def _normalize_trigger(raw: str) -> str:
+        """将旧格式快捷键值（无 :short/:long 后缀）标准化为新格式。"""
+        if not raw:
+            return raw
+        parts = []
+        needs_update = False
+        for k in raw.split(","):
+            k = k.strip()
+            if k:
+                if ":" not in k:
+                    parts.append(f"{k}:short")
+                    needs_update = True
+                else:
+                    parts.append(k)
+        return ",".join(parts) if needs_update else raw
+
+    @classmethod
+    def _collect_shortcut_map(
+        cls,
+        settings,
+        mode_key: str,
+        action_names: list,
+        fallback_defaults: dict,
+    ) -> tuple[dict, dict, dict, list]:
+        """构建单个模式的快捷键映射。
+
+        返回 ``(key_map_short, key_map_long, action->key_str, 迁移写入列表)``；
+        迁移写入列表为 ``[(设置路径, 标准化值)]``，由调用方写回 settings。
+
+        取值优先级：``shortcuts.{mode}.{action}`` > 旧扁平 ``shortcuts.{action}``
+        > 设置页 _SHORTCUT_ACTIONS 的模式默认值 > fallback_defaults。
+
+        键冲突规则：**显式绑定（来自设置）不被回退默认值覆盖**。历史上内嵌
+        config.json 的 edit_mode 段漏写 delete_timestamp 键时，该动作回退到
+        单 schema 时代的打轴默认 "Backspace:short"，在遍历中后写覆盖了显式
+        绑定 remove_checkpoint 的 BACKSPACE，导致编辑模式退格键变成「删除
+        时间戳」而非「减节奏点」（1.6.1 用户反馈）。同优先级的冲突保留
+        后写生效并打印警告，便于排查。
+        """
+        mode_defaults = cls._mode_shortcut_defaults(mode_key)
+        key_map_short: dict[str, str] = {}
+        key_map_long: dict[str, str] = {}
+        action_to_keys: dict[str, str] = {}
+        # key -> (action, 是否显式绑定)；用于冲突时的优先级判定
+        bound_short: dict[str, tuple] = {}
+        bound_long: dict[str, tuple] = {}
+        migrated: list = []
+
+        def _bind(bound: dict, key_map: dict, key: str, action: str, explicit: bool):
+            existing = bound.get(key)
+            if existing is not None and existing[0] != action:
+                if existing[1] and not explicit:
+                    return  # 显式绑定优先，回退默认不得覆盖
+                if existing[1] == explicit:
+                    print(
+                        f"[Shortcuts] {mode_key} 键 {key} 同时绑定 "
+                        f"{existing[0]} 与 {action}，后者生效"
+                    )
+            bound[key] = (action, explicit)
+            key_map[key] = action
+
+        for action in action_names:
+            mode_raw = settings.get(f"shortcuts.{mode_key}.{action}")
+            flat_raw = settings.get(f"shortcuts.{action}")
+            if mode_raw is not None:
+                raw, explicit = mode_raw, True
+            elif flat_raw is not None:
+                # 兼容旧 schema（无 mode_key 的扁平 shortcuts.xxx）
+                raw, explicit = flat_raw, True
+            else:
+                raw = mode_defaults.get(action, fallback_defaults[action])
+                explicit = False
+            # 旧格式自动更正：无后缀的键名补全为 :short
+            normalized = cls._normalize_trigger(raw)
+            if normalized != raw:
+                migrated.append((f"shortcuts.{mode_key}.{action}", normalized))
+                raw = normalized
+            action_to_keys[action] = raw
+            for k in (raw or "").split(","):
+                k = k.strip()
+                if k:
+                    parts = k.split(":")
+                    key_name = parts[0].strip()
+                    trigger = parts[1].strip().lower() if len(parts) > 1 else "short"
+                    if key_name:
+                        if trigger == "long":
+                            _bind(bound_long, key_map_long, key_name.upper(), action, explicit)
+                        else:
+                            _bind(bound_short, key_map_short, key_name.upper(), action, explicit)
+        return key_map_short, key_map_long, action_to_keys, migrated
+
     def _apply_settings(self):
         """从 AppSettings 读取设定并应用到编辑器。"""
         try:
@@ -770,7 +880,8 @@ class EditorInterface(QWidget):
             "analyze_pinyin",
             "auto_generate_interlude_guide",
         ]
-        # 默认值兜底（当设置未写入新 schema 时使用）
+        # 末级兜底（设置页 _SHORTCUT_ACTIONS 表未收录的动作才会用到；
+        # 该表按模式给出默认键位，见 _collect_shortcut_map）
         defaults = {
             "tag_now": "D:short,F:short",
             "tag_now_extra": "SPACE:short",
@@ -845,58 +956,18 @@ class EditorInterface(QWidget):
             "auto_generate_interlude_guide": "",
         }
 
-        def _normalize_trigger(raw: str) -> str:
-            """将旧格式快捷键值（无 :short/:long 后缀）标准化为新格式。"""
-            if not raw:
-                return raw
-            parts = []
-            needs_update = False
-            for k in raw.split(","):
-                k = k.strip()
-                if k:
-                    if ":" not in k:
-                        parts.append(f"{k}:short")
-                        needs_update = True
-                    else:
-                        parts.append(k)
-            return ",".join(parts) if needs_update else raw
-
         # 标记是否有旧格式需要持久化
         self._settings_migrated = False
 
-        def _collect_map(mode_key: str) -> tuple[dict, dict, dict]:
-            """返回 (key_map_short, key_map_long, action->key_str) 三套数据。"""
-            key_map_short: dict[str, str] = {}
-            key_map_long: dict[str, str] = {}
-            action_to_keys: dict[str, str] = {}
-            for action in action_names:
-                raw = settings.get(
-                    f"shortcuts.{mode_key}.{action}",
-                    # 兼容旧 schema（无 mode_key 的扁平 shortcuts.xxx）
-                    settings.get(f"shortcuts.{action}", defaults[action]),
-                )
-                # 旧格式自动更正：无后缀的键名补全为 :short
-                normalized = _normalize_trigger(raw)
-                if normalized != raw:
-                    settings.set(f"shortcuts.{mode_key}.{action}", normalized)
-                    self._settings_migrated = True
-                    raw = normalized
-                action_to_keys[action] = raw
-                for k in (raw or "").split(","):
-                    k = k.strip()
-                    if k:
-                        parts = k.split(":")
-                        key_name = parts[0].strip()
-                        trigger = parts[1].strip().lower() if len(parts) > 1 else "short"
-                        if key_name:
-                            if trigger == "long":
-                                key_map_long[key_name.upper()] = action
-                            else:
-                                key_map_short[key_name.upper()] = action
-            return key_map_short, key_map_long, action_to_keys
-
-        timing_short, timing_long, timing_actions = _collect_map("timing_mode")
-        edit_short, edit_long, edit_actions = _collect_map("edit_mode")
+        timing_short, timing_long, timing_actions, migrated_timing = (
+            self._collect_shortcut_map(settings, "timing_mode", action_names, defaults)
+        )
+        edit_short, edit_long, edit_actions, migrated_edit = (
+            self._collect_shortcut_map(settings, "edit_mode", action_names, defaults)
+        )
+        for path, value in migrated_timing + migrated_edit:
+            settings.set(path, value)
+            self._settings_migrated = True
         # 旧格式迁移后自动保存
         if self._settings_migrated:
             settings.save()
