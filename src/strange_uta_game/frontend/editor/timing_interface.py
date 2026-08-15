@@ -2186,52 +2186,9 @@ class EditorInterface(QWidget):
                 host.find_session_vocal if host is not None else None
             ),
         )
-        # 分离编排：standalone 用共享 Runtime 子进程分离；embedded
-        # 宿主优先（会话人声/工作台设置），宿主未配置第 2 步分离环境时
-        # 回落 AI Runtime 内置分离（安装器本身携带 audio-separator，
-        # 只为 AI 打轴的用户不必强配工作台分离环境）
-        follows_host = False
-        # 解释器路径惰性读取：安装/修复完成后路径才写回设置，同一弹窗
-        # 会话内的分离 prober/执行器必须能立即反映（否则分离环境行
-        # 一直显示未安装，重复点「安装 / 修复」也不恢复）
-        runtime_python_getter = lambda: settings.runtime_python  # noqa: E731
-        if host is not None:
-            from strange_uta_game.backend.application.ai_timing.separation import (
-                StandaloneVocalSeparator,
-                host_first_separation,
-            )
-
-            standalone_sep = StandaloneVocalSeparator(
-                runtime_python_getter, model_root
-            )
-            executor, identity_fn, prober, follows_host = (
-                host_first_separation(host, standalone_sep)
-            )
-        else:
-            from strange_uta_game.backend.application.ai_timing.separation import (
-                StandaloneVocalSeparator,
-            )
-
-            separator = StandaloneVocalSeparator(
-                runtime_python_getter, model_root
-            )
-            executor = separator.separate
-            identity_fn = separator.identity
-            prober = separator.available
-        service = AiTimingService(
-            settings=settings,
-            cache=cache,
-            registry=registry,
-            runtime=runtime,
-            vocal_service=vocal_service,
-            resolver=PronunciationResolver(),
-            separation_executor=executor,
-            separation_identity=identity_fn,
-            separation_prober=prober,
-            separation_follows_host=follows_host,
-        )
         # 代理：embedded 用宿主（工作台网络设置）；standalone 用 SUG 自己
-        # 「设置 → 网络与代理」的代理模式（updater.proxy.resolve_proxy）
+        # 「设置 → 网络与代理」的代理模式（updater.proxy.resolve_proxy）。
+        # 分离子进程下载 UVR 模型走 GitHub，代理必须一并传入
         proxy = ""
         if host is not None:
             proxy_getter = getattr(host, "http_proxy", None)
@@ -2251,6 +2208,53 @@ class EditorInterface(QWidget):
                     proxy = info.url
             except Exception:
                 proxy = ""
+        # 分离编排：standalone 用共享 Runtime 子进程分离；embedded
+        # 宿主优先（会话人声/工作台设置），宿主未配置第 2 步分离环境时
+        # 回落 AI Runtime 内置分离（安装器本身携带 audio-separator，
+        # 只为 AI 打轴的用户不必强配工作台分离环境）
+        follows_host = False
+        # 解释器路径惰性读取：安装/修复完成后路径才写回设置，同一弹窗
+        # 会话内的分离 prober/执行器必须能立即反映（否则分离环境行
+        # 一直显示未安装，重复点「安装 / 修复」也不恢复）
+        runtime_python_getter = lambda: settings.runtime_python  # noqa: E731
+        if host is not None:
+            from strange_uta_game.backend.application.ai_timing.separation import (
+                StandaloneVocalSeparator,
+                host_first_separation,
+            )
+
+            # embedded：宿主优先；宿主未配置第 2 步分离环境时回落
+            # 内置分离。embedded=True 让失败提示引导到工作台设置
+            # （SUG 自身的 ffmpeg/网络入口在嵌入模式下隐藏）
+            standalone_sep = StandaloneVocalSeparator(
+                runtime_python_getter, model_root, proxy=proxy, embedded=True
+            )
+            executor, identity_fn, prober, follows_host = (
+                host_first_separation(host, standalone_sep)
+            )
+        else:
+            from strange_uta_game.backend.application.ai_timing.separation import (
+                StandaloneVocalSeparator,
+            )
+
+            separator = StandaloneVocalSeparator(
+                runtime_python_getter, model_root, proxy=proxy
+            )
+            executor = separator.separate
+            identity_fn = separator.identity
+            prober = separator.available
+        service = AiTimingService(
+            settings=settings,
+            cache=cache,
+            registry=registry,
+            runtime=runtime,
+            vocal_service=vocal_service,
+            resolver=PronunciationResolver(),
+            separation_executor=executor,
+            separation_identity=identity_fn,
+            separation_prober=prober,
+            separation_follows_host=follows_host,
+        )
         # 方案 B：embedded 复用宿主托管 Runtime——宿主给出可用的
         # python.exe 时，解释器跟随宿主（不另建 venv，安装改为增量）。
         # 例外：用户显式选择过的其他解释器（含原生安装兜底产物）不覆盖；

@@ -2,6 +2,7 @@
 """standalone 分离执行器：假子进程端到端测试（stdout 协议、取消、兜底轨名）。"""
 
 import io
+import os
 from pathlib import Path
 
 import pytest
@@ -14,27 +15,42 @@ from strange_uta_game.backend.application.ai_timing.separation import (
 
 
 class _FakeProc:
-    def __init__(self, lines):
+    def __init__(self, lines, returncode=0):
         self.stdout = io.StringIO("".join(l + "\n" for l in lines))
         self.killed = False
+        self._returncode = returncode
 
     def kill(self):
         self.killed = True
 
     def wait(self, timeout=None):
-        return 0
+        return self._returncode
 
 
-def _separator(tmp_path, monkeypatch, lines):
+def _separator(
+    tmp_path, monkeypatch, lines, *, proxy="", returncode=0, embedded=False
+):
     monkeypatch.setattr(StandaloneVocalSeparator, "available", lambda self: True)
     python = tmp_path / "python.exe"
     python.write_bytes(b"")
     vocal = tmp_path / "song_人声.wav"
     vocal.write_bytes(b"v")
-    proc = _FakeProc(lines)
-    monkeypatch.setattr(sep_mod.subprocess, "Popen", lambda *a, **k: proc)
-    sep = StandaloneVocalSeparator(str(python), tmp_path / "models")
-    return sep, proc, vocal
+    ffmpeg = tmp_path / "tools" / "ffmpeg.exe"
+    ffmpeg.parent.mkdir(parents=True, exist_ok=True)
+    ffmpeg.write_bytes(b"")
+    monkeypatch.setattr(sep_mod, "resolve_ffmpeg_exe", lambda: str(ffmpeg))
+    proc = _FakeProc(lines, returncode=returncode)
+    captured = {}
+
+    def _popen(*args, **kwargs):
+        captured.update(kwargs=kwargs)
+        return proc
+
+    monkeypatch.setattr(sep_mod.subprocess, "Popen", _popen)
+    sep = StandaloneVocalSeparator(
+        str(python), tmp_path / "models", proxy=proxy, embedded=embedded
+    )
+    return sep, proc, vocal, captured
 
 
 class TestStandaloneSeparator:
@@ -45,7 +61,7 @@ class TestStandaloneSeparator:
             "stage:separate:分离处理中",
             "done:" + str(vocal),
         ]
-        sep, proc, _ = _separator(tmp_path, monkeypatch, lines)
+        sep, proc, _, _ = _separator(tmp_path, monkeypatch, lines)
         events = []
         out = sep.separate(
             tmp_path / "song.flac", lambda *a: events.append(a), lambda: False
@@ -56,7 +72,7 @@ class TestStandaloneSeparator:
 
     def test_cancel_kills_and_waits_process(self, tmp_path, monkeypatch):
         lines = ["stage:load:加载分离模型", "stage:separate:分离处理中"]
-        sep, proc, _ = _separator(tmp_path, monkeypatch, lines)
+        sep, proc, _, _ = _separator(tmp_path, monkeypatch, lines)
         calls = {"n": 0}
 
         def cancel():
@@ -68,9 +84,114 @@ class TestStandaloneSeparator:
         assert proc.killed
 
     def test_no_done_line_raises(self, tmp_path, monkeypatch):
-        sep, _, _ = _separator(tmp_path, monkeypatch, ["stage:load:加载分离模型"])
+        sep, _, _, _ = _separator(
+            tmp_path, monkeypatch, ["stage:load:加载分离模型"]
+        )
         with pytest.raises(RuntimeError, match="人声分离失败"):
             sep.separate(tmp_path / "song.flac", lambda *a: None, lambda: False)
+
+    def test_missing_ffmpeg_fails_fast_without_spawn(self, tmp_path, monkeypatch):
+        """audio-separator 构造即探测 ffmpeg：缺失时启动前给出可操作
+        中文错误（GitHub issue：只报「返回码 1」无法定位）。"""
+        monkeypatch.setattr(StandaloneVocalSeparator, "available", lambda self: True)
+        python = tmp_path / "python.exe"
+        python.write_bytes(b"")
+        monkeypatch.setattr(sep_mod, "resolve_ffmpeg_exe", lambda: "")
+        spawned = []
+        monkeypatch.setattr(
+            sep_mod.subprocess,
+            "Popen",
+            lambda *a, **k: spawned.append(a) or _FakeProc([]),
+        )
+        sep = StandaloneVocalSeparator(str(python), tmp_path / "models")
+        with pytest.raises(RuntimeError, match="FFmpeg"):
+            sep.separate(tmp_path / "song.flac", lambda *a: None, lambda: False)
+        assert spawned == []  # 未启动子进程即失败
+
+    def test_child_env_injects_ffmpeg_dir_and_proxy(self, tmp_path, monkeypatch):
+        """配置的 ffmpeg 路径与代理必须注入子进程环境：前者供
+        audio-separator 探测，后者供模型首次下载（GitHub）使用。"""
+        lines = ["done:" + str(tmp_path / "song_人声.wav")]
+        sep, _, _, captured = _separator(
+            tmp_path, monkeypatch, lines, proxy="http://127.0.0.1:7890"
+        )
+        sep.separate(tmp_path / "song.flac", lambda *a: None, lambda: False)
+        env = captured["kwargs"]["env"]
+        assert env["PATH"].startswith(str(tmp_path / "tools") + os.pathsep)
+        assert env["HTTP_PROXY"] == "http://127.0.0.1:7890"
+        assert env["HTTPS_PROXY"] == "http://127.0.0.1:7890"
+
+    def test_failure_message_carries_child_tail_and_hint(self, tmp_path, monkeypatch):
+        """失败时异常消息带上子进程输出尾部与常见原因提示，外部
+        用户反馈不再只剩返回码。"""
+        lines = [
+            "stage:load:加载分离模型",
+            "FFmpeg is not installed. Please install FFmpeg to use this package.",
+            "Traceback (most recent call last):",
+            "    raise",
+            "FileNotFoundError: [WinError 2] 系统找不到指定的文件。",
+        ]
+        sep, _, _, _ = _separator(tmp_path, monkeypatch, lines, returncode=1)
+        with pytest.raises(RuntimeError) as excinfo:
+            sep.separate(tmp_path / "song.flac", lambda *a: None, lambda: False)
+        message = str(excinfo.value)
+        assert "返回码 1" in message
+        assert "WinError 2" in message
+        assert "FFmpeg" in message
+
+    def test_failure_hint_for_model_download_error(self, tmp_path, monkeypatch):
+        lines = [
+            "Downloading file from https://github.com/TRvlvr/model_repo/...",
+            "requests.exceptions.ConnectionError: Max retries exceeded",
+        ]
+        sep, _, _, _ = _separator(tmp_path, monkeypatch, lines, returncode=1)
+        with pytest.raises(RuntimeError, match="代理"):
+            sep.separate(tmp_path / "song.flac", lambda *a: None, lambda: False)
+
+    def test_missing_ffmpeg_message_differs_by_mode(self, tmp_path, monkeypatch):
+        """embedded 模式 SUG 自身的 ffmpeg 设置入口隐藏（EMBEDDING §5），
+        失败提示必须引导到工作台；standalone 引导到 SUG 设置。"""
+        monkeypatch.setattr(StandaloneVocalSeparator, "available", lambda self: True)
+        python = tmp_path / "python.exe"
+        python.write_bytes(b"")
+        monkeypatch.setattr(sep_mod, "resolve_ffmpeg_exe", lambda: "")
+        monkeypatch.setattr(
+            sep_mod.subprocess, "Popen", lambda *a, **k: _FakeProc([])
+        )
+
+        def _make(embedded):
+            return StandaloneVocalSeparator(
+                str(python), tmp_path / "models", embedded=embedded
+            )
+
+        with pytest.raises(RuntimeError) as standalone_err:
+            _make(embedded=False).separate(
+                tmp_path / "song.flac", lambda *a: None, lambda: False
+            )
+        assert "设置 → 关于/语言" in str(standalone_err.value)
+
+        with pytest.raises(RuntimeError) as embedded_err:
+            _make(embedded=True).separate(
+                tmp_path / "song.flac", lambda *a: None, lambda: False
+            )
+        assert "工作台" in str(embedded_err.value)
+        assert "设置 → 关于/语言" not in str(embedded_err.value)
+
+    def test_embedded_failure_hint_points_to_workbench(self, tmp_path, monkeypatch):
+        lines = [
+            "stage:load:加载分离模型",
+            "FFmpeg is not installed. Please install FFmpeg to use this package.",
+            "Traceback (most recent call last):",
+            "FileNotFoundError: [WinError 2] 系统找不到指定的文件。",
+        ]
+        sep, _, _, _ = _separator(
+            tmp_path, monkeypatch, lines, returncode=1, embedded=True
+        )
+        with pytest.raises(RuntimeError) as excinfo:
+            sep.separate(tmp_path / "song.flac", lambda *a: None, lambda: False)
+        message = str(excinfo.value)
+        assert "工作台" in message
+        assert "设置 → 关于/语言" not in message
 
     def test_vocal_track_fallback_in_script(self):
         """UVR 轨名兜底：脚本包含排除伴奏轨的回退逻辑。"""
