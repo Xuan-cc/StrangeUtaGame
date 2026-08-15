@@ -775,3 +775,29 @@ class TestTranscriptionIntegration:
         )
         mapping = checkpoint_timestamps(result, request)
         assert mapping[(0, 0, 0)] == (100, 500)
+
+
+class TestNumberUnitsAlign:
+    """数字单位参与对齐：数字→英文读法→e2k 罗马字（此前为空文本）。"""
+
+    @pytest.fixture(autouse=True)
+    def _pin_e2k(self, monkeypatch):
+        from strange_uta_game.backend.application.ai_timing import (
+            transcription,
+        )
+
+        monkeypatch.setattr(
+            transcription,
+            "_E2K_LOOKUP_CACHE",
+            lambda w: {"three": "スリー"}.get(w),
+        )
+        monkeypatch.setattr(transcription, "_PYPhen_CACHE", False)
+        monkeypatch.setattr(transcription, "_ENGLISH_CACHE", {})
+        yield
+
+    def test_number_token_gets_english_reading(self):
+        s = _sentence([("3", 1, None, False), ("た", 1, None, False)])
+        _, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        # 3→three→スリー→ス|リー→su+rii（真实词典口径）
+        assert [t.text for t in request.tokens] == ["surii", "ta"]

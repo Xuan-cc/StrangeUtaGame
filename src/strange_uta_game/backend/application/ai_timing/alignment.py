@@ -221,10 +221,22 @@ def _build_tokens_and_word_groups(
                 ScriptKind,
             )
             from strange_uta_game.backend.application.ai_timing.transcription import (
+                english_number_reading,
                 english_word_syllables,
                 pinyin_to_phonetic,
             )
 
+            # 数字 → 英文读法 → e2k 罗马字：此前数字 token 文本原样透传，
+            # worker 归一化后为空串，数字实际从未对齐过（仅相邻插值）
+            if (
+                u.script == ScriptKind.NUMBER
+                and rom
+                and not _contains_kana(rom)
+                and rom.strip().replace(".", "").isdigit()
+            ):
+                reading = english_number_reading(rom.strip())
+                if reading:
+                    return [reading]
             if (
                 plan.chinese_mode
                 and u.script == ScriptKind.KANJI

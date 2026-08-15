@@ -83,3 +83,27 @@ class TestEnglishE2K:
         assert transcription.english_word_syllables("take") == [
             "te", "i", "ku",
         ]
+
+
+class TestNumberToEnglish:
+    def test_integers_and_decimals(self):
+        assert transcription.number_to_english("3") == "three"
+        assert transcription.number_to_english("42") == "forty two"
+        assert transcription.number_to_english("100") == "one hundred"
+        assert (
+            transcription.number_to_english("1234")
+            == "one thousand two hundred and thirty four"
+        )
+        assert transcription.number_to_english("1.5") == "one point five zero"
+        assert transcription.number_to_english("0") == "zero"
+        assert transcription.number_to_english("abc") == ""
+
+    def test_number_reading_via_e2k(self, monkeypatch):
+        monkeypatch.setattr(
+            transcription,
+            "_E2K_LOOKUP_CACHE",
+            lambda w: {"three": "スリー"}.get(w),
+        )
+        # three→スリー→ス|リー→su+rii（整段读唱拼成一个 token 文本）
+        assert transcription.english_number_reading("3") == "surii"
+        assert transcription.english_number_reading("abc") == ""

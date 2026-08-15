@@ -189,7 +189,95 @@ def english_word_syllables(word: str) -> List[str]:
     return list(result)
 
 
+# ── 数字 → 英文读音（FA-Kara number_to_english 移植）──
+
+_NUM_ONES = [
+    "zero", "one", "two", "three", "four", "five", "six", "seven",
+    "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen",
+    "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+]
+_NUM_TENS = [
+    "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy",
+    "eighty", "ninety",
+]
+
+
+def number_to_english(number_str: str) -> str:
+    """阿拉伯数字 → 英文读法（整数与小数；解析失败返回空串）。"""
+    try:
+        if "." in number_str:
+            num = float(number_str)
+        else:
+            num = int(number_str)
+    except ValueError:
+        return ""
+
+    if isinstance(num, float):
+        integer_part = int(num)
+        decimal_part = round(num - integer_part, 3)
+        words = (
+            number_to_english(str(integer_part)) if integer_part > 0 else ""
+        )
+        decimal_str = f"{decimal_part:.3f}"[2:]
+        decimal_words = " point"
+        for digit in decimal_str:
+            if digit == "0" and not decimal_words.endswith(" zero"):
+                decimal_words += " zero"
+            elif digit != "0":
+                decimal_words += " " + _NUM_ONES[int(digit)]
+        return (words + decimal_words).strip()
+
+    if num < 0:
+        return "minus " + number_to_english(str(abs(num)))
+    if num < 20:
+        return _NUM_ONES[num]
+    if num < 100:
+        return _NUM_TENS[num // 10] + (
+            (" " + _NUM_ONES[num % 10]) if num % 10 != 0 else ""
+        )
+    if num < 1000:
+        return _NUM_ONES[num // 100] + " hundred" + (
+            (" and " + number_to_english(str(num % 100)))
+            if num % 100 != 0
+            else ""
+        )
+    for scale_value, scale_name in (
+        (10**12, "trillion"),
+        (10**9, "billion"),
+        (10**6, "million"),
+        (10**3, "thousand"),
+    ):
+        if num >= scale_value:
+            return number_to_english(str(num // scale_value)) + " " + (
+                scale_name
+            ) + (
+                (" " + number_to_english(str(num % scale_value)))
+                if num % scale_value != 0
+                else ""
+            )
+    return ""
+
+
+def english_number_reading(number_str: str) -> str:
+    """数字 → 英文读法 → e2k 罗马字（单一 token 文本；失败返回空串）。
+
+    数字单位通常是一个时间点（整段读唱），与 FA-Kara 的 surf=False
+    同口径：全部音节读音拼成一个字符串。
+    """
+    words = number_to_english(number_str).split()
+    if not words:
+        return ""
+    parts: List[str] = []
+    for word in words:
+        syllables = english_word_syllables(word)
+        if syllables:
+            parts.append("".join(syllables))
+    return "".join(parts).strip()
+
+
 __all__ = [
     "pinyin_to_phonetic",
     "english_word_syllables",
+    "number_to_english",
+    "english_number_reading",
 ]
