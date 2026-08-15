@@ -571,3 +571,117 @@ class TestUnalignableChars:
         cmd.undo()
         ch0, ch1 = project.sentences[0].characters
         assert ch0.timestamps == [] and ch0.ruby is not None
+
+
+class TestLatinWordGroups:
+    """拉丁词组：手工按音节/字母拆分的英文单位成组（假名/拼音不受影响）。"""
+
+    def test_adjacent_latin_units_grouped(self):
+        s = _sentence(
+            [
+                ("T", 1, ["Ta"], False),
+                ("a", 1, ["ke"], False),
+                (" ", 1, None, False),
+                ("x", 1, ["take"], False),
+            ]
+        )
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        # "Ta"+"ke" 相邻成组；空格断词；整词 take 单 token 不成组
+        assert request.word_groups == [[0, 1]]
+        assert [t.text for t in request.tokens] == ["ta", "ke", "take"]
+
+    def test_kana_and_mixed_break_groups(self):
+        s = _sentence(
+            [
+                ("T", 1, ["Ta"], False),
+                ("あ", 1, None, False),
+                ("k", 1, ["ke"], False),
+            ]
+        )
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        assert request.word_groups == []
+
+    def test_word_groups_roundtrip_through_protocol(self):
+        from strange_uta_game.backend.application.ai_timing.worker.protocol import (
+            deserialize_request,
+            serialize_request,
+        )
+
+        s = _sentence([("T", 1, ["Ta"], False), ("a", 1, ["ke"], False)])
+        project, plan = _resolved_project([s])
+        request = build_alignment_request(plan)
+        assert request.word_groups == [[0, 1]]
+        restored = deserialize_request(serialize_request(request))
+        assert restored.word_groups == [[0, 1]]
+        # 旧协议负载（无 word_groups 字段）= 空词组
+        payload = serialize_request(request)
+        payload.pop("word_groups")
+        assert deserialize_request(payload).word_groups == []
+
+
+class TestSentenceEndPlaceholder:
+    """句尾呼吸占位（0cp 无法标注字符）：尾音释放点取行内末 token 终点。"""
+
+    def test_zero_checkpoint_breath_char_gets_line_tail(self):
+        from strange_uta_game.backend.application.ai_timing.commands import (
+            ApplyAiTimingCommand,
+        )
+        from strange_uta_game.backend.domain import (
+            Character,
+            Project,
+            Ruby,
+            RubyPart,
+            Sentence,
+        )
+        from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
+            DummyAnalyzer,
+        )
+        from strange_uta_game.backend.application.ai_timing.resolver import (
+            PronunciationResolver,
+        )
+
+        project = Project()
+        s = Sentence(
+            singer_id="s1",
+            characters=[
+                Character(
+                    char="煌",
+                    check_count=2,
+                    ruby=Ruby(
+                        parts=[RubyPart(text="き"), RubyPart(text="ら")]
+                    ),
+                    singer_id="s1",
+                ),
+                Character(char="め", check_count=1, ruby=None, singer_id="s1"),
+                Character(char="け", check_count=1, ruby=None, singer_id="s1"),
+                Character(
+                    char="!",
+                    check_count=0,
+                    ruby=None,
+                    is_sentence_end=True,
+                    singer_id="s1",
+                    sentence_end_ts=0,
+                ),
+            ],
+        )
+        project.sentences = [s]
+        resolver = PronunciationResolver(analyzer=DummyAnalyzer(), chinese_mode=False)
+        plan = resolver.resolve_project(project, fill_missing=True)
+        request = build_alignment_request(plan)
+        spans = [
+            EmissionSpan(0, 100, 190),
+            EmissionSpan(1, 200, 290),
+            EmissionSpan(2, 300, 390),
+            EmissionSpan(3, 400, 730),  # け 的尾音自然结束
+        ]
+        result = AlignmentResult(
+            annotation_digest=request.annotation_digest,
+            model_id="fake",
+            spans=spans,
+        )
+        ApplyAiTimingCommand(project, plan, request, result).execute()
+        breath = project.sentences[0].characters[3]
+        # 释放点 = 行内末 token（け）的终点，不再停留在陈旧原值 0
+        assert breath.sentence_end_ts == 730

@@ -568,3 +568,33 @@ class TestExternalInterpreterBootstrap:
             "-m",
             "strange_uta_game.backend.application.ai_timing.worker",
         ]
+
+
+class TestWordGroupResplit:
+    """拉丁词组词内边界按子 token 数比例切分（手工拆分英文音节修正）。"""
+
+    def test_proportional_split(self):
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            apply_word_group_resplit,
+        )
+
+        # 权重 2/1/3，词区间 [10, 22)：边界 10, 14, 16, 22
+        grouped = [(10, 12), (12, 13), (13, 22)]  # Viterbi 原始词内边界（不可靠）
+        groups = [[5, 6], [7], [8, 9, 10]]
+        out = apply_word_group_resplit(grouped, groups, [[0, 1, 2]])
+        assert out == [(10, 14), (14, 16), (16, 22)]
+
+    def test_single_and_invalid_groups_ignored(self):
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            apply_word_group_resplit,
+        )
+
+        grouped = [(0, 10), (10, 20)]
+        # 单元素组、越界索引：原样保留
+        out = apply_word_group_resplit(grouped, [[1], [2]], [[0], [0, 5]])
+        assert out == grouped
+        # 词区间非法（末组终点 2 早于首组起点 5）：原样保留
+        out2 = apply_word_group_resplit(
+            [(5, 8), (3, 2)], [[1], [2]], [[0, 1]]
+        )
+        assert out2 == [(5, 8), (3, 2)]

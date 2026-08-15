@@ -70,6 +70,8 @@ def serialize_request(request: AlignmentRequest) -> Dict[str, Any]:
             }
             for t in request.tokens
         ],
+        # 拉丁词组（手工拆分的英文词）：旧 worker 无此字段 = 无词组
+        "word_groups": [list(g) for g in request.word_groups],
     }
 
 
@@ -98,6 +100,11 @@ def deserialize_request(payload: Dict[str, Any]) -> AlignmentRequest:
             media=media,
             options=dict(payload.get("options") or {}),
             tokens=tokens,
+            word_groups=[
+                [int(i) for i in group]
+                for group in (payload.get("word_groups") or [])
+                if isinstance(group, (list, tuple))
+            ],
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise WorkerProtocolError(f"对齐请求数据无效：{exc}") from exc

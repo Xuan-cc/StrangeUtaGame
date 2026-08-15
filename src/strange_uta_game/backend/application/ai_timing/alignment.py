@@ -89,6 +89,14 @@ class AlignmentRequest:
     tokens: List[AlignmentToken] = field(default_factory=list)
     options: Dict[str, object] = field(default_factory=dict)
     """执行选项（音频倍速、尾音修正等；阶段 C/D 定义具体键）。"""
+    word_groups: List[List[int]] = field(default_factory=list)
+    """拉丁词组：同一英文词被手工拆成的多个时间单位的 token 索引。
+
+    词级端点（整词字母序列的 CTC 区间）可靠，词内音节边界不可靠——
+    provider 按各成员子 token 数比例切分词区间（英文手工音节拆分的
+    对齐质量修正，FA-Kara/yohane 均无此处理）。假名/汉字/拼音单位
+    永不进入词组（逐字时序不受影响）。
+    """
 
 
 # ──────────────────────────────────────────────
@@ -138,11 +146,22 @@ def _contains_kana(text: str) -> bool:
 
 
 def build_alignment_tokens(plan: PronunciationPlan) -> List[AlignmentToken]:
-    """把 plan 中带 token 的单元转换为 Latn 域 token 序列。
+    """把 plan 中带 token 的单元转换为 Latn 域 token 序列（公共入口）。"""
+    return _build_tokens_and_word_groups(plan)[0]
 
-    假名读音按行序列走 SUG 罗马字转换（保证促音/拗音跨 part 组合正确），
+
+def _build_tokens_and_word_groups(
+    plan: PronunciationPlan,
+) -> Tuple[List[AlignmentToken], List[List[int]]]:
+    """token 序列 + 拉丁词组。
+
+    假名读音按行序列整体罗马字化（保证促音/拗音跨 part 组合正确），
     其余读音去声调转小写后原样使用。plan 存在缺口时抛出校验错误——
     「所有正文都能生成合法 token」是执行前置条件（§8.1）。
+
+    拉丁词组：同一行内**位置相邻**且都是 LATIN token 单位（中间无空白/
+    停顿/其他脚本单元）视为同一英文词——手工按音节/字母拆分的时间单
+    位由此成组，供 provider 词内比例切分。
     """
     pending = plan.pending_units
     if pending:
@@ -152,7 +171,12 @@ def build_alignment_tokens(plan: PronunciationPlan) -> List[AlignmentToken]:
             f"缺少读音，无法生成对齐 token"
         )
 
+    from strange_uta_game.backend.application.ai_timing.pronunciation import (
+        ScriptKind,
+    )
+
     tokens: List[AlignmentToken] = []
+    word_groups: List[List[int]] = []
     line_numbers = sorted({u.line_idx for u in plan.units})
     for line_idx in line_numbers:
         line_units = [
@@ -170,19 +194,56 @@ def build_alignment_tokens(plan: PronunciationPlan) -> List[AlignmentToken]:
         else:
             romanized = readings
         rom_by_id = {id(u): romanized[i] for i, u in enumerate(line_units)}
-        for u in tokenizable:
+
+        # 完整非句尾单元序列（含无读音的结构单元）：分组判据需要看见
+        # 空白/停顿等分隔符——它们 reading 为 None，会被 line_units 的
+        # u.reading 过滤掉，只按 line_units 迭代会把不同词误并成组
+        ordered_units = [
+            u for u in plan.units_for_line(line_idx) if not u.is_sentence_end
+        ]
+        tokenizable_ids = {id(u) for u in tokenizable}
+        current_run: List[int] = []
+        prev_latin_pos = -2
+
+        def _flush_run() -> None:
+            if len(current_run) >= 2:
+                word_groups.append(list(current_run))
+            current_run.clear()
+
+        def _append_token(u) -> int:
             rom = rom_by_id.get(id(u), u.reading or "")
             text = _strip_diacritics(rom) if not _contains_kana(rom) else rom
+            idx = len(tokens)
             tokens.append(
                 AlignmentToken(
-                    index=len(tokens),
+                    index=idx,
                     text=text,
                     raw_reading=u.reading or "",
                     location=u.location,
                     line_idx=line_idx,
                 )
             )
-    return tokens
+            return idx
+
+        for pos, u in enumerate(ordered_units):
+            is_latin_token = (
+                u.script == ScriptKind.LATIN and id(u) in tokenizable_ids
+            )
+            if not is_latin_token:
+                _flush_run()
+                prev_latin_pos = -2
+                if id(u) in tokenizable_ids:
+                    _append_token(u)
+                continue
+            idx = _append_token(u)
+            if pos == prev_latin_pos + 1 and current_run:
+                current_run.append(idx)
+            else:
+                _flush_run()
+                current_run.append(idx)
+            prev_latin_pos = pos
+        _flush_run()
+    return tokens, word_groups
 
 
 def build_alignment_request(
@@ -190,12 +251,14 @@ def build_alignment_request(
     media: Optional[MediaIdentity] = None,
     options: Optional[Dict[str, object]] = None,
 ) -> AlignmentRequest:
-    """从 PronunciationPlan 构建版本化对齐请求。"""
+    """从 PronunciationPlan 构建版本化对齐请求（含拉丁词组）。"""
+    tokens, word_groups = _build_tokens_and_word_groups(plan)
     return AlignmentRequest(
         media=media,
         annotation_digest=plan.annotation_digest,
-        tokens=build_alignment_tokens(plan),
+        tokens=tokens,
         options=dict(options or {}),
+        word_groups=word_groups,
     )
 
 

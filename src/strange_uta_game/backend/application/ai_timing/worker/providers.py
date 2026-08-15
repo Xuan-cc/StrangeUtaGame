@@ -34,6 +34,44 @@ TAIL_SILENCE_POWER_RATIO = 0.1
 TAIL_SILENCE_MIN_FRAMES = 4
 
 
+def apply_word_group_resplit(
+    grouped: List[Tuple[int, int]],
+    groups: List[List[int]],
+    word_groups: List[List[int]],
+) -> List[Tuple[int, int]]:
+    """拉丁词组词内边界按子 token 数比例切分（原地，返回 grouped）。
+
+    手工按音节/字母拆分的英文单位：整词字母序列的 CTC 端点（词首/词尾）
+    可靠，词内边界不可靠（英文字母≠音素，Viterbi 常把切点落在元音中间
+    或拖到下一词）。词内改为按各成员子 token 数加权均分，边界单调稳定。
+    """
+    for indexes in word_groups:
+        if len(indexes) < 2:
+            continue
+        if any(not (0 <= i < len(grouped)) for i in indexes):
+            continue
+        span_start = grouped[indexes[0]][0]
+        span_end = grouped[indexes[-1]][1]
+        if span_end <= span_start:
+            continue
+        weights = [
+            len(groups[i]) if 0 <= i < len(groups) and groups[i] else 1
+            for i in indexes
+        ]
+        total = sum(weights)
+        boundaries = [span_start]
+        acc = 0
+        for w in weights[:-1]:
+            acc += w
+            boundaries.append(
+                span_start + int(round((span_end - span_start) * acc / total))
+            )
+        boundaries.append(span_end)
+        for pos, i in enumerate(indexes):
+            grouped[i] = (boundaries[pos], boundaries[pos + 1])
+    return grouped
+
+
 def _silence_boundary(
     energies: Any, mean_power: float, from_frame: int, to_frame: int
 ) -> int:
@@ -531,6 +569,7 @@ class Wav2Vec2LatnProvider(_TorchProviderBase):
         progress(85, "计算对齐区间")
         blank = self._model.config.pad_token_id
         grouped = self._ctc_align_groups(emission, groups, blank=blank)
+        apply_word_group_resplit(grouped, groups, request.word_groups)
         spans = self._frames_to_spans(
             request,
             grouped,
@@ -638,6 +677,7 @@ class MmsFaProvider(_TorchProviderBase):
                 continue
             spans = next(span_iter)
             grouped.append((spans[0].start, spans[-1].end))
+        apply_word_group_resplit(grouped, groups, request.word_groups)
         spans = self._frames_to_spans(
             request,
             grouped,

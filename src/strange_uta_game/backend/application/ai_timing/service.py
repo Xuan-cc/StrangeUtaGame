@@ -414,6 +414,8 @@ class AiTimingService:
             # 尾音静音判据版本（相对整轨平均功率比例）：进缓存键，
             # 判据升级/调参时 bump 使旧缓存自动失效重算（v2: 比例 0.2→0.1）
             "tail_silence": 2,
+            # 拉丁词组词内比例切分（手工拆分英文音节的对齐修正）：进缓存键
+            "latin_word_split": 1,
         }
         request = build_alignment_request(
             plan,
