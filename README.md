@@ -146,6 +146,14 @@
   </td>
 </tr>
 <tr>
+  <td align="center">🤖</td>
+  <td>
+    <b>AI 打轴（Beta） / AI-assisted timing (Beta)</b><br/>
+    <sub>在 <b>打轴界面 → AI 打轴</b> 中，根据人声音频、歌词与已有注音自动生成整首歌曲的时间戳；支持日文及歌词中的中文、英文内容，可自动复用或分离人声，并提供日文推荐模型与多语言通用模型。默认日文推荐模型仅限非商业用途。结果仅供辅助参考，完成后请人工校准，尤其是和声与重叠人声段落。<br/>
+    Generate full-song timestamps from vocals, lyrics and existing readings under <b>Timing → AI Timing</b>. Japanese, Chinese and English content are supported, with reusable/automatic vocal separation and both Japanese-focused and multilingual models. The default Japanese-focused model is non-commercial only. Always review the result manually, especially harmony and overlapping-vocal sections.</sub>
+  </td>
+</tr>
+<tr>
   <td align="center">📤</td>
   <td>
     <b>13 种歌词格式导出 / Thirteen export formats</b><br/>
@@ -279,6 +287,7 @@
 
 | 功能 / Feature | 入口或设置位置 / Location | 说明 / Notes |
 |---|---|---|
+| AI 打轴（Beta） / AI-assisted timing | **打轴界面 → AI 打轴** | 模型、设备、下载镜像、模型目录、AI 缓存和运行环境均在弹窗内设置；执行结果可撤销一次。 |
 | 播放区间锁定 / Playback range locks | **设置 → 快捷键 → 锁定播放起点 / 锁定播放终点** | 默认按键为 <kbd>[</kbd> / <kbd>]</kbd>；再次触发可取消锁定。 |
 | 播放头居中模式 / Centered playhead | **设置 → 打轴 → 波形时间标签 → 播放头居中模式** | 默认关闭；开启后播放头固定在时间轴中央。 |
 | Karaoke 实时预览 / Live preview | **设置 → 界面** | 进入该页面后自动显示；拖动标题可移动，拖动边缘可缩放。 |
@@ -765,6 +774,8 @@ Please run <code>ruff check .</code> and <code>pytest</code> before opening a PR
 ## 💐 致谢 / Credits
 
 - **[RhythmicaLyrics](http://suwa.pupu.jp/RhythmicaLyrics.html)** — 灵感来源与工作流原型 / Original inspiration & workflow
+- **[FA-Kara](https://github.com/moriwx/FA-Kara)** (moriwx) — AI 打轴对齐与注音转写思路参考（MIT）/ Forced-alignment & transcription reference for AI timing
+- **[yohane](https://github.com/Japan7/yohane)** (Japan7) — AI 打轴 Wav2Vec2 CTC 对齐思路参考 / Wav2Vec2 CTC alignment reference for AI timing
 - **[BASS Audio Library](https://www.un4seen.com/bass.html)** (un4seen) — 低延迟音频引擎与解码 / Low-latency audio engine & decoding
 - **[BASS-FX](https://www.un4seen.com/bass.html)** — 实时音频变速 / Real-time pitch-preserving stretch
 - **[pedalboard](https://github.com/spotify/pedalboard)** (Spotify) — 音频效果与高质量变速 / Audio effects & HQ stretch
