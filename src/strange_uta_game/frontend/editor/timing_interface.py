@@ -2251,6 +2251,12 @@ class EditorInterface(QWidget):
         cache = AiCache(cache_root)
         registry = ModelRegistry(model_root)
         runtime = AiRuntimeManager()
+        if host is not None:
+            # 方案 B 增量安装会升级/降级宿主清单登记在案的共用包——
+            # 装完必须让宿主重扫清单，否则其下次启动校验报损坏
+            note_changed = getattr(host, "note_runtime_changed", None)
+            if callable(note_changed):
+                runtime.set_runtime_changed_hook(note_changed)
         vocal_service = VocalPreparationService(
             cache,
             session_vocal_finder=(

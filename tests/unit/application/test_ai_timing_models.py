@@ -746,6 +746,48 @@ class TestSharedRuntimeInstall:
         assert any("增量" in m or "复用" in m for _, m in events)
         assert events[-1][1] == "运行环境就绪"
 
+    def test_install_shared_notifies_runtime_changed_hook(
+        self, tmp_path, monkeypatch
+    ):
+        """方案 B 配套：增量装完后必须通知宿主重登记清单——pip 动过
+        共用包（librosa 降级等），不通知的话宿主下次启动报
+        「文件缺失或损坏」。钩子异常不影响安装结果。"""
+        exe = self._fake_managed_python(tmp_path)
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(
+            rt, "detect_torch_build", lambda exe: ("2.7.1", "cu128")
+        )
+        calls = []
+
+        def fake_runner(python, args, on_line, cancel):
+            return 0
+
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        manager.set_runtime_changed_hook(lambda: calls.append(1))
+        status = manager.install_shared(exe)
+        assert status.available
+        assert calls == [1]
+
+        # 钩子抛异常：安装结果不受影响，钩子失败被吞
+        def boom():
+            raise RuntimeError("host unavailable")
+
+        manager2 = AiRuntimeManager(pip_runner=fake_runner)
+        manager2.set_runtime_changed_hook(boom)
+        assert manager2.install_shared(exe).available
+
+        # 未注册钩子（standalone）：正常完成
+        manager3 = AiRuntimeManager(pip_runner=fake_runner)
+        assert manager3.install_shared(exe).available
+
     def test_install_shared_without_torch_raises(self, tmp_path, monkeypatch):
         exe = self._fake_managed_python(tmp_path)
         import strange_uta_game.backend.application.ai_timing.runtime as rt

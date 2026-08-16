@@ -78,6 +78,16 @@ class AiTimingHost(Protocol):
         """
         ...
 
+    def note_runtime_changed(self) -> bool:
+        """（可选，方案 B 配套）托管 Runtime 被受信增量修改的通知。
+
+        SUG 的增量安装会升级/降级宿主清单登记在案的共用包，装完后
+        调用本方法让宿主按磁盘现状重登记清单——否则宿主下次启动的
+        完整性校验会报「文件缺失或损坏」。返回 False / 未实现时 SUG
+        静默跳过；standalone 无宿主，天然不触发。
+        """
+        ...
+
     def open_separation_page(self) -> bool:
         """（可选）跳转到宿主的分离环境页（如工作台第 2 步）。
 

@@ -138,6 +138,7 @@ class SettingsProvider(Protocol):
 | `model_root() -> Path`（可选） | 统一 AI 模型根目录（对齐模型与分离模型同源管理，嵌入模式复用工作台目录）；缺省 = SUG 自身默认目录 |
 | `http_proxy() -> str`（可选） | 当前生效的下载代理 URL；空串/缺省 = 不显式代理（SUG 模型下载默认跟随宿主网络设置，standalone 则用 SUG 自身的「网络与代理」设置） |
 | `runtime_python() -> str \| None`（可选，方案 B） | 宿主托管 PyMSS Runtime 的 `python.exe`。路径存在时：SUG 的「安装/修复」向该解释器**增量**安装 AI 依赖（`install_shared`：不建 venv、不重装 torch，torchaudio 按其 torch 版本/变体自动配对），embedded 的对齐 worker 与分离共享同一份 torch（含 CUDA）；返回 None / 路径不存在 = 嵌入模式引导去宿主分离页安装，或经用户确认后独立安装兜底（用户自选/自装解释器优先于托管值）。能力发现用 `getattr`，不实现不影响其余协议 |
+| `note_runtime_changed() -> bool`（可选，方案 B 配套） | SUG 增量安装完成后的通知：pip 会升级/降级宿主清单登记在案的共用包（如 audio-separator 需要的 librosa 降级），宿主据此按磁盘现状重登记 installed manifest，否则其下次启动的完整性校验报「文件缺失或损坏」。返回 False / 未实现时 SUG 静默跳过；standalone 无宿主不触发 |
 | `open_separation_page() -> bool`（可选） | 跳转到宿主分离环境页（工作台第 2 步「分离人声」）；返回 False / 未实现时 SUG 回落为文字提示 |
 
 embedded 语义（对应主仓库 AI 打轴计划 §6.2）：跟随工作台当前「分离人声」

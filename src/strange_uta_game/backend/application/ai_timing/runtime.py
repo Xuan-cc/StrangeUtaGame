@@ -455,6 +455,10 @@ class AiRuntimeManager:
         # 最近一次安装会话的日志写入函数（open_install_log 产物）；
         # 供 UI 在任务失败时补写失败原因（详见 log_line）
         self._install_log: Optional[Callable[[str], None]] = None
+        # 宿主清单再登记钩子（embedded 注入）：增量安装会改动宿主清单
+        # 登记在案的共用包，装完必须通知宿主重扫，否则其下次启动校验
+        # 报「文件缺失或损坏」；standalone 未接线，静默跳过
+        self._runtime_changed_hook: Optional[Callable[[], bool]] = None
 
     def log_line(self, message: str) -> None:
         """向当前安装日志补写一行（无活动日志时静默跳过）。"""
@@ -464,6 +468,12 @@ class AiRuntimeManager:
                 cb(message)
             except Exception:
                 pass
+
+    def set_runtime_changed_hook(
+        self, hook: Optional[Callable[[], bool]]
+    ) -> None:
+        """注册宿主清单再登记钩子（timing_interface 从宿主注入）。"""
+        self._runtime_changed_hook = hook
 
     # ── 探测 ──
 
@@ -1010,9 +1020,18 @@ class AiRuntimeManager:
         if mirror:
             args += ["-i", mirror]
         args += list(requirements)
-        return self._pip_install_requirements(
+        status = self._pip_install_requirements(
             str(exe), args, progress=progress, cancel=cancel
         )
+        hook = self._runtime_changed_hook
+        if hook is not None:
+            # 通知宿主按磁盘现状重登记清单（pip 动过共用包）；
+            # 失败不影响安装结果本身
+            try:
+                hook()
+            except Exception:
+                pass
+        return status
 
     def _pip_install_requirements(
         self,
