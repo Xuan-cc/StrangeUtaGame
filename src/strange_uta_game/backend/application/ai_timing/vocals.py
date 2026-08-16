@@ -168,6 +168,11 @@ class AiCache:
     def root(self) -> Path:
         return self._root
 
+    def retarget(self, root: Path) -> None:
+        """动态更换缓存根（同一实例被 service/人声服务共享，原地换根
+        全体跟随；任务运行中由调用方拦截）。"""
+        self._root = Path(root)
+
     def vocals_dir(self) -> Path:
         return self._root / "vocals"
 

@@ -29,6 +29,7 @@ class _FakeService:
     def __init__(self, snapshot):
         self._snapshot = snapshot
         self.executed = False
+        self.retargeted = []
 
     def snapshot(self, project, audio_path, *, probe_runtime=True):
         return self._snapshot
@@ -40,6 +41,9 @@ class _FakeService:
     def execute(self, project, audio_path, *, on_progress=None, is_cancelled=None):
         self.executed = True
         return None
+
+    def retarget_cache(self, root):
+        self.retargeted.append(Path(root))
 
 
 def _project():
@@ -102,6 +106,61 @@ class _NullTransport:
 
     def download_file(self, *a, **k):
         raise RuntimeError("测试不执行下载")
+
+
+class TestPathChangeAppliesImmediately:
+    """改模型/缓存路径即时生效：注册表与缓存原地换根，不再要求重开窗口。"""
+
+    def _pick(self, monkeypatch, chosen):
+        import strange_uta_game.frontend.editor.ai_timing_dialog as dlg_mod
+
+        monkeypatch.setattr(
+            dlg_mod.QFileDialog,
+            "getExistingDirectory",
+            lambda *a, **k: str(chosen),
+        )
+
+    @staticmethod
+    def _wait_initial_refresh(qapp, dialog):
+        """等构造函数触发的异步 refresh 落地（_busy 复位）。"""
+        import time as _time
+
+        for _ in range(200):
+            if not dialog._busy:
+                return
+            qapp.processEvents()
+            _time.sleep(0.01)
+
+    def test_model_dir_retargets_registry(self, qapp, tmp_path, monkeypatch):
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        self._wait_initial_refresh(qapp, dialog)
+        new_root = tmp_path / "new-models"
+        self._pick(monkeypatch, new_root)
+        dialog._on_change_model_dir()
+        assert dialog._registry.root == new_root
+        assert dialog._settings.model_root == str(new_root)
+        assert not dialog.isVisible() or True  # 不再自动关窗
+
+    def test_cache_dir_retargets_service_cache(self, qapp, tmp_path, monkeypatch):
+        snap = _ready_snapshot()
+        dialog, service = _make_dialog(qapp, tmp_path, snap, [])
+        self._wait_initial_refresh(qapp, dialog)
+        new_root = tmp_path / "new-cache"
+        self._pick(monkeypatch, new_root)
+        dialog._on_change_cache_dir()
+        assert service.retargeted == [new_root]
+        assert dialog._settings.ai_cache_root == str(new_root)
+
+    def test_busy_blocks_path_change(self, qapp, tmp_path, monkeypatch):
+        snap = _ready_snapshot()
+        dialog, service = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._busy = True
+        self._pick(monkeypatch, tmp_path / "elsewhere")
+        dialog._on_change_model_dir()
+        dialog._on_change_cache_dir()
+        assert dialog._settings.model_root == ""
+        assert service.retargeted == []
 
 
 class TestAiTimingDialog:

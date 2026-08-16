@@ -214,6 +214,11 @@ class AiTimingService:
 
         return AlignmentWorkerClient(python_exe=python_exe or None)
 
+    def retarget_cache(self, root: Path) -> None:
+        """动态更换 AI 缓存根（弹窗改缓存路径即时生效；共享实例原地
+        换根，service 与人声服务一并跟随）。"""
+        self._cache.retarget(Path(root))
+
     # ── 状态快照 ──
 
     def snapshot(

@@ -1200,35 +1200,49 @@ class AiTimingDialog(QDialog):
             return Path(self._settings.ai_cache_root)
         return Path.home()
 
-    def _notify_saved_reopen(self) -> None:
-        """模型/缓存根变更提示：设置已落盘，重新打开窗口后生效。
-
-        模型注册表与 AI 缓存实例在弹窗打开时构建并固定根目录，
-        原地更换设置不会迁移它们——因此提示用户重开窗口（重建栈）。
-        提示挂在主窗口上：本弹窗即将关闭，挂在自身会随窗口销毁
-        瞬间消失（或脱离父级悬浮在错误的位置）。
-        """
-        InfoBar.info(
-            title=self.tr("已保存"),
-            content=self.tr("位置已更新，重新打开本窗口后生效。"),
+    def _notify_path_applied(self) -> None:
+        """路径变更即时生效提示（注册表/缓存已原地换根）。"""
+        InfoBar.success(
+            title=self.tr("位置已更新"),
+            content=self.tr("新位置已生效。"),
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
-            duration=4000,
-            parent=self.parent() if isinstance(self.parent(), QWidget) else self,
+            duration=2500,
+            parent=self,
+        )
+
+    def _notify_busy_path_change(self) -> None:
+        """任务运行中禁止改路径：换根会造成下载/缓存跨目录中间态。"""
+        InfoBar.warning(
+            title=self.tr("任务进行中"),
+            content=self.tr("请等待当前任务完成后再更改存储位置。"),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self,
         )
 
     def _on_change_model_dir(self) -> None:
+        if self._busy:
+            self._notify_busy_path_change()
+            return
         chosen = QFileDialog.getExistingDirectory(
             self, self.tr("选择模型根目录"), str(resolve_model_root(self._settings))
         )
         if chosen:
             self._settings.model_root = chosen
             self._persist_settings()
-            self._notify_saved_reopen()
-            self.close()
+            # 注册表原地换根：下载/校验立即用新目录，无需重开窗口
+            self._registry.retarget(Path(chosen))
+            self._notify_path_applied()
+            self.refresh()
 
     def _on_change_cache_dir(self) -> None:
+        if self._busy:
+            self._notify_busy_path_change()
+            return
         # 起点 = 行内当前显示的生效缓存根（而非设置项：独立模式默认
         # 缓存根不在设置里，此前会错误地从用户主目录开始）
         chosen = QFileDialog.getExistingDirectory(
@@ -1239,8 +1253,10 @@ class AiTimingDialog(QDialog):
         if chosen:
             self._settings.ai_cache_root = chosen
             self._persist_settings()
-            self._notify_saved_reopen()
-            self.close()
+            # 共享缓存实例原地换根（service/人声服务一并跟随）
+            self._service.retarget_cache(Path(chosen))
+            self._notify_path_applied()
+            self.refresh()
 
     def _on_change_runtime(self) -> None:
         # 未显式选择过解释器时，从当前解释器所在目录开始

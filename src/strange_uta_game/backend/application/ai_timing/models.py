@@ -142,6 +142,10 @@ class ModelRegistry:
     def root(self) -> Path:
         return self._root
 
+    def retarget(self, root: Path) -> None:
+        """动态更换模型根（弹窗内改路径即时生效；任务运行中由调用方拦截）。"""
+        self._root = Path(root)
+
     def model_dir(self, model_id: str) -> Path:
         return self._root / slugify_model_id(model_id)
 

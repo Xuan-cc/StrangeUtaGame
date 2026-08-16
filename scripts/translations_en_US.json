@@ -1520,7 +1520,6 @@
   "下载镜像:": "Download mirror:",
   "人声素材": "Vocal source",
   "任务进行中": "Task in progress",
-  "位置已更新，重新打开本窗口后生效。": "Location updated. Reopen this window to apply.",
   "分离环境": "Separation environment",
   "即将完成…": "Finishing up…",
   "原始音频": "Source audio",
@@ -1714,5 +1713,8 @@
   "字符与行编辑": "Character & Line Editing",
   "自动注音": "Auto Ruby",
   "文件与导出": "File & Export",
-  "固定功能（不可修改）": "Fixed Functions (Read-only)"
+  "固定功能（不可修改）": "Fixed Functions (Read-only)",
+  "新位置已生效。": "The new location is now active.",
+  "请等待当前任务完成后再更改存储位置。": "Wait for the current task to finish before changing storage locations.",
+  "位置已更新": "Location updated"
 }

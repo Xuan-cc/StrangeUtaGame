@@ -553,6 +553,15 @@ class TestSettings:
         save_ai_timing_settings(setter, settings)
         assert load_ai_timing_settings(getter) == settings
 
+    def test_registry_retarget_moves_model_dir(self, tmp_path):
+        """注册表原地换根：model_dir 跟随新根（弹窗改路径即时生效）。"""
+        registry = ModelRegistry(tmp_path / "a")
+        old_dir = registry.model_dir("NextFire/demo")
+        registry.retarget(tmp_path / "b")
+        assert registry.root == tmp_path / "b"
+        assert registry.model_dir("NextFire/demo") == tmp_path / "b" / "NextFire__demo"
+        assert old_dir != registry.model_dir("NextFire/demo")
+
     def test_embedded_model_root_respects_user_choice(self):
         """嵌入模式模型根：宿主统一目录为默认，但不覆盖用户显式选择
         （此前无条件覆盖导致嵌入模式改路径永远不生效）。"""
