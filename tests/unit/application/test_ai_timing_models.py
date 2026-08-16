@@ -553,6 +553,39 @@ class TestSettings:
         save_ai_timing_settings(setter, settings)
         assert load_ai_timing_settings(getter) == settings
 
+    def test_embedded_model_root_respects_user_choice(self):
+        """嵌入模式模型根：宿主统一目录为默认，但不覆盖用户显式选择
+        （此前无条件覆盖导致嵌入模式改路径永远不生效）。"""
+        from strange_uta_game.backend.application.ai_timing.settings import (
+            resolve_effective_model_root as resolve,
+        )
+
+        host = "C:/Users/u/AppData/Roaming/Karaoke Studio/ai_models"
+        # 未设置：宿主默认
+        assert resolve(AiTimingSettings(), host) == Path(host)
+        # 显式改过：用户优先
+        chosen = AiTimingSettings(model_root="D:/my_models")
+        assert resolve(chosen, host) == Path("D:/my_models")
+        # 宿主未提供：SUG 自身口径
+        empty = AiTimingSettings()
+        assert resolve(empty, "") == resolve_model_root(empty)
+
+    def test_embedded_cache_root_respects_user_choice(self):
+        from strange_uta_game.backend.application.ai_timing.settings import (
+            resolve_effective_cache_root as resolve,
+        )
+
+        host = "C:/Users/u/AppData/Roaming/Karaoke Studio/ai_timing"
+        assert resolve(AiTimingSettings(), host) == Path(host)
+        chosen = AiTimingSettings(ai_cache_root="E:/ai_cache")
+        assert resolve(chosen, host) == Path("E:/ai_cache")
+        # 双空：默认 .cache 口径
+        from strange_uta_game.backend.application.ai_timing.vocals import (
+            default_ai_cache_root,
+        )
+
+        assert resolve(AiTimingSettings(), "") == default_ai_cache_root()
+
     def test_defaults_when_empty(self):
         loaded = load_ai_timing_settings(lambda path, default: default)
         assert loaded == AiTimingSettings()

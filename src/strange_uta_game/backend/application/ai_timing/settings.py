@@ -138,6 +138,41 @@ def save_ai_timing_settings(
         setter(f"{SETTINGS_SECTION}.{key}", value)
 
 
+def resolve_effective_model_root(
+    settings: AiTimingSettings, host_model_root: str
+) -> Path:
+    """embedded 模型根解析：宿主统一目录为默认，**不覆盖用户显式选择**。
+
+    弹窗里改过模型路径（settings.model_root ≠ 宿主值）时以用户为准，
+    与运行环境注入同口径——此前无条件覆盖导致嵌入模式改路径永远
+    不生效（standalone 正常）。
+    """
+    if host_model_root:
+        host_path = Path(host_model_root)
+        chosen = (settings.model_root or "").strip()
+        if chosen and Path(chosen) != host_path:
+            return Path(chosen)
+        return host_path
+    return resolve_model_root(settings)
+
+
+def resolve_effective_cache_root(
+    settings: AiTimingSettings, host_cache_dir: str
+) -> Path:
+    """embedded AI 缓存根解析：用户显式设置的缓存目录优先于宿主默认。"""
+    chosen = (settings.ai_cache_root or "").strip()
+    if chosen:
+        return Path(chosen)
+    if host_cache_dir:
+        return Path(host_cache_dir)
+    # 惰性导入：default_ai_cache_root 在 vocals 模块（避免环）
+    from strange_uta_game.backend.application.ai_timing.vocals import (
+        default_ai_cache_root,
+    )
+
+    return default_ai_cache_root()
+
+
 __all__ = [
     "SETTINGS_SECTION",
     "AiTimingSettings",
@@ -148,4 +183,6 @@ __all__ = [
     "relativize_runtime_python",
     "load_ai_timing_settings",
     "save_ai_timing_settings",
+    "resolve_effective_model_root",
+    "resolve_effective_cache_root",
 ]

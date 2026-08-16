@@ -2228,26 +2228,36 @@ class EditorInterface(QWidget):
         # 宿主能力查找：沿 parent 链找 MainWindow 上注入的 aiTimingHost
         host = self._resolve_ai_timing_host()
 
-        # 模型根：embedded 用宿主统一目录（与分离模型同源管理）；
-        # standalone 用 SUG 自己的设置/默认目录
+        # 模型根/AI 缓存：embedded 默认用宿主统一目录（与分离模型同源
+        # 管理），但**不覆盖用户显式选择**（弹窗里改过路径就以用户为准，
+        # 与运行环境注入同口径——此前无条件覆盖导致嵌入模式改路径
+        # 永远不生效）；standalone 用 SUG 自己的设置/默认目录
+        host_model_root_value = ""
+        host_cache_value = ""
         if host is not None:
             host_model_root = getattr(host, "model_root", None)
-            model_root_path = (
-                Path(host_model_root()) if callable(host_model_root) else None
-            )
-            if model_root_path is None:
-                model_root = resolve_model_root(settings)
-            else:
-                model_root = model_root_path
-                settings.model_root = str(model_root)
-        else:
-            model_root = resolve_model_root(settings)
+            if callable(host_model_root):
+                try:
+                    host_model_root_value = str(host_model_root() or "")
+                except Exception:
+                    host_model_root_value = ""
+            try:
+                host_cache_value = str(host.ai_cache_dir() or "")
+            except Exception:
+                host_cache_value = ""
+        from strange_uta_game.backend.application.ai_timing.settings import (
+            resolve_effective_cache_root,
+            resolve_effective_model_root,
+        )
+
+        model_root = resolve_effective_model_root(
+            settings, host_model_root_value
+        )
         if host is not None:
-            cache_root = Path(host.ai_cache_dir())
-        elif settings.ai_cache_root:
-            cache_root = Path(settings.ai_cache_root)
-        else:
-            cache_root = default_ai_cache_root()
+            # 内存态回填生效根（弹窗路径选择器的起始目录）；
+            # 用户显式改过时 chosen≠host，判别不受影响
+            settings.model_root = str(model_root)
+        cache_root = resolve_effective_cache_root(settings, host_cache_value)
         cache = AiCache(cache_root)
         registry = ModelRegistry(model_root)
         runtime = AiRuntimeManager()
