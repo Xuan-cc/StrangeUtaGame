@@ -133,6 +133,24 @@ class ShortcutSubInterface(SubSettingInterface):
         ("edit_mode", "编辑模式（音乐暂停时）"),
     ]
 
+    # 设置页分组边界：(组标题源串, 该组第一个 action key)。
+    # 顺序必须与 _SHORTCUT_ACTIONS 中各功能分段的排列一致——_init_ui 遇到
+    # 边界 key 就另起一个 SettingCardGroup（对齐关系由 _validate_group_boundaries
+    # 在 _init_ui 开头校验）。纯 UI 展示层划分，不影响 _shortcut_cards 映射
+    # 与 shortcuts.<mode>.<action> 存取路径。
+    _SHORTCUT_GROUPS: list[tuple[str, str]] = [
+        ("播放控制", "play_pause"),
+        ("导航与跳转", "nav_prev_line"),
+        ("打轴与时间戳微调", "tag_now"),
+        ("节奏点与句尾", "add_checkpoint"),
+        ("字符与行编辑", "edit_ruby"),
+        ("自动注音", "analyze_rubies"),
+        ("演唱者", "singer_manager"),
+        ("时间戳工具", "complete_timestamp"),
+        ("文件与导出", "new_project"),
+        ("固定功能（不可修改）", "undo"),
+    ]
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._shortcut_cards: dict[str, dict[str, ShortcutSettingCard]] = {
@@ -307,6 +325,26 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("删除选中内容或当前字符")
         # _SHORTCUT_MODES 标签
         tr("打轴模式（音乐播放时）"); tr("编辑模式（音乐暂停时）")
+        # _SHORTCUT_GROUPS 分组标题
+        tr("播放控制"); tr("导航与跳转"); tr("打轴与时间戳微调")
+        tr("节奏点与句尾"); tr("字符与行编辑"); tr("自动注音")
+        tr("演唱者"); tr("时间戳工具"); tr("文件与导出")
+        tr("固定功能（不可修改）")
+
+    @classmethod
+    def _validate_group_boundaries(cls) -> None:
+        """校验 _SHORTCUT_GROUPS 与 _SHORTCUT_ACTIONS 对齐——两份清单漂移时
+        启动即报错，而不是静默把卡片归入错误的组。"""
+        action_keys = {row[0] for row in cls._SHORTCUT_ACTIONS}
+        assert cls._SHORTCUT_GROUPS, "_SHORTCUT_GROUPS 不能为空"
+        assert cls._SHORTCUT_GROUPS[0][1] == cls._SHORTCUT_ACTIONS[0][0], (
+            "_SHORTCUT_GROUPS 首组边界必须对齐 _SHORTCUT_ACTIONS 第一项"
+        )
+        for _title, first_key in cls._SHORTCUT_GROUPS:
+            assert first_key in action_keys, (
+                f"_SHORTCUT_GROUPS 边界 key {first_key!r} 不在 _SHORTCUT_ACTIONS 中，"
+                "该组永远不会被创建"
+            )
 
     def _init_ui(self):
         # 哑调用，仅为让 extractor 把所有 action title/content 字符串
@@ -315,16 +353,23 @@ class ShortcutSubInterface(SubSettingInterface):
         colors = self._tag_colors()
         tr = self.tr
 
-        group = SettingCardGroup(tr("快捷键"), self.scrollWidget)
-        self._group = group
-        self._tr_register(group, title_source="快捷键")
+        self._validate_group_boundaries()
+        # action key → 组标题源串；遇到边界 key 就另起一个 SettingCardGroup。
+        # 首个 action 必是边界（上方断言保证），无需再设无组回退分支。
+        boundaries = {first_key: title for title, first_key in self._SHORTCUT_GROUPS}
 
         def _wrap(t, s):
             # 类级常量里的 title 是源字符串；显示前过一遍 tr() 走翻译表
             return self._make_tag_html(s, tr(t), colors)
 
+        group = None
         for row in self._SHORTCUT_ACTIONS:
             key, icon, title, content, dt, de, scope, tc, ec, ro = row
+            if key in boundaries:
+                group_title = boundaries[key]
+                group = SettingCardGroup(tr(group_title), self.scrollWidget)
+                self._tr_register(group, title_source=group_title)
+                self.expandLayout.addWidget(group)
             if scope == "both":
                 card = ShortcutSettingCard(icon, "", tr(content), dt, parent=group)
                 card.setTitle(_wrap(title, "both"))
@@ -367,8 +412,6 @@ class ShortcutSubInterface(SubSettingInterface):
                 group.addSettingCard(card_e)
                 if not ro:
                     card_e.value_changed.connect(lambda v, c=card_e: self._on_shortcut_changed(c, v))
-
-        self.expandLayout.addWidget(group)
 
     # connect_signals 不需要额外操作，信号已在 _init_ui 中连接
     def connect_signals(self):
