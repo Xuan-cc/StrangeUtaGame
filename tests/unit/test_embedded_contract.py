@@ -136,7 +136,8 @@ class TestSettingsProviderContract:
             }
         }
 
-        def fake_update(doc):
+        def fake_update(doc, *, timeout=8.0, proxies=None):
+            # proxies：maybe_auto_update_network_dictionary 现在透传应用代理
             source = next(s for s in doc["sources"] if s["id"] == "custom")
             source["entries"] = [{"word": "漢字", "reading": "かんじ"}]
             source["last_fetched"] = 123

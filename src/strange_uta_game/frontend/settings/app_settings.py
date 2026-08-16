@@ -1150,6 +1150,7 @@ class AppSettings:
         from strange_uta_game.backend.infrastructure.network_dictionary import (
             auto_update_enabled_sources,
             is_auto_update_due,
+            resolve_app_proxies,
         )
 
         au_enabled = bool(self.get("network_dictionary.auto_update.enabled", False))
@@ -1165,7 +1166,9 @@ class AppSettings:
         # 网络词典总开关未启用时，自动更新无意义（用户也看不到结果）—— 仍允许拉取以保持
         # entries 最新；但若希望节流可以这里返回。当前选择"拉取"，因为下次启用立即生效。
         doc = self.load_network_dictionary()
-        ok_msgs, fail_msgs = auto_update_enabled_sources(doc)
+        # 拉取走「设置 → 网络与代理」的代理配置，与更新器/模型下载同一套
+        proxies = resolve_app_proxies(self)
+        ok_msgs, fail_msgs = auto_update_enabled_sources(doc, proxies=proxies)
         self.save_network_dictionary(doc)
 
         import time as _time

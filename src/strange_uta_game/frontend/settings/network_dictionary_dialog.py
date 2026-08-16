@@ -50,6 +50,7 @@ from qfluentwidgets import (
 from strange_uta_game.backend.infrastructure.network_dictionary import (
     fetch_source_entries,
     import_file_to_entries,
+    resolve_app_proxies,
 )
 from strange_uta_game.frontend.fluent_widgets import message_question
 from strange_uta_game.frontend.window_sizing import fit_min_size
@@ -77,12 +78,14 @@ class _FetchWorker(QObject):
         results: List[Dict[str, Any]] = []
         ok_msgs: List[str] = []
         fail_msgs: List[str] = []
+        # 手动刷新与自动同步同口径：走「设置 → 网络与代理」的应用代理
+        proxies = resolve_app_proxies()
         for src in self._targets:
             sid = src.get("id")
             name = src.get("name", sid or "?")
             url = (src.get("url") or "").strip()
             try:
-                entries = fetch_source_entries(url)
+                entries = fetch_source_entries(url, proxies=proxies)
                 results.append({"id": sid, "entries": entries, "ts": int(time.time())})
                 ok_msgs.append(f"{name}: {len(entries)} 条")
             except Exception as e:

@@ -82,6 +82,33 @@ _LOCAL_SOURCE_ID = "local"
 # ──────────────────────────────────────────────
 
 
+def resolve_app_proxies(app: Optional[Any] = None) -> Optional[Dict[str, str]]:
+    """按「设置 → 网络与代理」解析当前生效代理 → urllib/requests 可用 dict。
+
+    与更新器、AI 模型下载、LLM 注音走同一套 ``updater.proxy.resolve_proxy``
+    （off / system / manual / auto），保证网络词典的 HTTP 拉取也受应用代理
+    管控，而不是各自为政。
+
+    Returns:
+        * ``{"http": url, "https": url}`` — 需要走代理；
+        * ``{}`` — 设置可读且解析结果为「不使用代理」（mode=off），
+          调用方应显式禁用代理而非回落系统环境变量；
+        * ``None`` — 设置不可读（如宿主未提供），调用方保持默认行为
+          （urllib 会读系统环境变量 ``HTTP_PROXY`` 等）。
+    """
+    try:
+        from strange_uta_game.updater.proxy import resolve_proxy
+        from strange_uta_game.updater.settings import UpdaterSettings
+
+        settings = UpdaterSettings.load(app)
+        _info, proxies = resolve_proxy(
+            settings.proxy_mode, settings.proxy_manual_url
+        )
+        return proxies if proxies is not None else {}
+    except Exception:
+        return None
+
+
 def _build_ssl_context(insecure: bool = False) -> ssl.SSLContext:
     """构造 HTTPS 验证上下文：优先使用 ``certifi`` 根证书包；失败时回退系统默认。
 
@@ -102,6 +129,7 @@ def fetch_source_entries(
     url: str,
     timeout: float = 8.0,
     allow_insecure_fallback: bool = True,
+    proxies: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """HTTP 拉取一个 RL 兼容的网络源 → annotated entries。
 
@@ -117,6 +145,9 @@ def fetch_source_entries(
         url: 服务端 PHP 端点 URL。
         timeout: 连接 + 读超时（秒）。
         allow_insecure_fallback: 默认 True；遇到证书验证错误时尝试无验证重试。
+        proxies: 应用代理（:func:`resolve_app_proxies` 产物）。
+            ``None`` 保持 urllib 默认（读系统环境变量）；``{}`` 显式禁用
+            代理（mode=off）；非空 dict 则经 ``ProxyHandler`` 走代理。
 
     Returns:
         annotated 条目列表（同 :func:`parse_rl_dictionary` 输出格式）。
@@ -134,7 +165,14 @@ def fetch_source_entries(
 
     def _do_request(insecure: bool) -> bytes:
         ctx = _build_ssl_context(insecure=insecure) if url.lower().startswith("https") else None
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+        handlers: List[urllib.request.BaseHandler] = []
+        if proxies is not None:
+            # {} 显式禁用代理；非空则走 ProxyHandler（覆盖环境变量）
+            handlers.append(urllib.request.ProxyHandler(dict(proxies)))
+        if ctx is not None:
+            handlers.append(urllib.request.HTTPSHandler(context=ctx))
+        opener = urllib.request.build_opener(*handlers)
+        with opener.open(req, timeout=timeout) as resp:
             return resp.read()
 
     try:
@@ -359,12 +397,15 @@ def auto_update_enabled_sources(
     doc: Dict[str, Any],
     *,
     timeout: float = 8.0,
+    proxies: Optional[Dict[str, str]] = None,
 ) -> "Tuple[List[str], List[str]]":
     """遍历 ``doc`` 中所有启用且 URL 非空的源并 HTTP 拉取，原地写回 entries / last_fetched。
 
     Args:
         doc: 统一形态的网络词典文档（含 ``sources``）。
         timeout: 单源拉取超时。
+        proxies: 应用代理（:func:`resolve_app_proxies` 产物），透传给
+            :func:`fetch_source_entries`。
 
     Returns:
         ``(ok_msgs, fail_msgs)``：成功 / 失败的人类可读消息列表，供日志或 UI 显示。
@@ -378,7 +419,7 @@ def auto_update_enabled_sources(
         if not url:
             continue
         try:
-            entries = fetch_source_entries(url, timeout=timeout)
+            entries = fetch_source_entries(url, timeout=timeout, proxies=proxies)
             src["entries"] = entries
             src["last_fetched"] = int(time.time())
             ok_msgs.append(f"{src.get('name', src.get('id', '?'))}: {len(entries)} 条")
@@ -392,6 +433,7 @@ __all__ = [
     "DEFAULT_NETWORK_DICTIONARY",
     "DEFAULT_NETWORK_DICTIONARY_META",
     "fetch_source_entries",
+    "resolve_app_proxies",
     "import_file_to_entries",
     "flatten_effective_dictionary",
     "ensure_builtin_sources",

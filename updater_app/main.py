@@ -1353,6 +1353,146 @@ def run_incremental(
     return 0
 
 
+# ───────────────────────── 代理回退解析 ─────────────────────────
+# 未显式传 ``--proxy`` 时（用户手动启动 / 旧版主程序未透传），读取主程序
+# config.json 的 ``updater.proxy`` 设置并按主程序 ``updater/proxy.py`` 的
+# 同一套语义（off / system / manual / auto）解析。独立更新器不能 import
+# strange_uta_game，这里内嵌一份紧凑的等价实现。
+
+_PROXY_SCAN_PORTS: Tuple[int, ...] = (
+    7890, 7891, 7897, 17897, 10809, 10808, 1080, 1081,
+    2080, 8118, 8888, 8889, 20171, 20172, 33210, 7070, 6152, 1087,
+)
+
+
+def _config_dir_candidates(app_dir: Path) -> List[Path]:
+    """主程序 config.json 的查找目录（与 app_dirs.config_dir 同一解析顺序）。"""
+    candidates: List[Path] = []
+    env_dir = os.environ.get("SUG_CONFIG_DIR")
+    if env_dir:
+        candidates.append(Path(env_dir))
+    if sys.platform == "darwin":
+        candidates.append(
+            Path.home() / "Library" / "Application Support" / "StrangeUtaGame"
+        )
+    else:
+        marker = app_dir / ".config_redirect"
+        try:
+            if marker.is_file():
+                custom = Path(marker.read_text(encoding="utf-8").strip())
+                if custom.is_dir():
+                    candidates.append(custom)
+        except OSError:
+            pass
+        candidates.append(app_dir)
+    return candidates
+
+
+def _read_app_proxy_config(app_dir: Path) -> Tuple[str, str]:
+    """读取主程序代理设置 → ``(mode, manual_url)``；config.json 缺失/损坏返回 ``("", "")``。"""
+    for d in _config_dir_candidates(app_dir):
+        p = d / "config.json"
+        try:
+            if not p.is_file():
+                continue
+            data = json.loads(p.read_text(encoding="utf-8"))
+            proxy = ((data.get("updater") or {}).get("proxy")) or {}
+            return str(proxy.get("mode", "")), str(proxy.get("manual_url", ""))
+        except (OSError, ValueError):
+            continue
+    return "", ""
+
+
+def _read_system_proxy() -> str:
+    """Windows 系统代理（注册表）；非 Windows 或未启用返回空串。"""
+    if sys.platform != "win32":
+        return ""
+    try:
+        import winreg  # type: ignore[import-not-found]
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+        ) as key:
+            enable, _ = winreg.QueryValueEx(key, "ProxyEnable")
+            if not int(enable):
+                return ""
+            server, _ = winreg.QueryValueEx(key, "ProxyServer")
+    except Exception:
+        return ""
+    s = str(server or "").strip()
+    if not s:
+        return ""
+    if "=" in s:
+        # ``http=...;https=...`` 分协议格式：优先 https，其次 http
+        kv: Dict[str, str] = {}
+        for part in s.split(";"):
+            if "=" in part:
+                k, v = part.split("=", 1)
+                kv[k.strip().lower()] = v.strip()
+        s = kv.get("https") or kv.get("http") or ""
+        if not s:
+            return ""
+    if "://" not in s:
+        s = "http://" + s
+    return s
+
+
+def _scan_local_proxy(timeout: float = 0.15) -> str:
+    """扫描常用本地代理端口，返回首个可达端口的代理 URL。"""
+    import socket
+
+    for port in _PROXY_SCAN_PORTS:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                s.connect(("127.0.0.1", port))
+            return f"http://127.0.0.1:{port}"
+        except (OSError, socket.timeout):
+            continue
+    return ""
+
+
+def _parse_manual_proxy(value: str) -> str:
+    """手动代理串的最小校验：无 host:port 视为无效，返回空串。"""
+    s = (value or "").strip()
+    if not s:
+        return ""
+    if "://" not in s:
+        s = "http://" + s
+    host_part = s.rsplit("@", 1)[1] if "@" in s else s.split("://", 1)[1]
+    if ":" not in host_part:
+        return ""
+    return s
+
+
+def resolve_fallback_proxy(
+    app_dir: Path, log: Optional[logging.Logger] = None
+) -> str:
+    """按主程序「设置 → 网络与代理」解析代理；空串表示保持默认（直连/系统环境变量）。"""
+    mode, manual = _read_app_proxy_config(app_dir)
+    url = ""
+    if mode == "manual":
+        url = _parse_manual_proxy(manual)
+    elif mode == "system":
+        url = _read_system_proxy()
+    elif mode == "auto":
+        url = _read_system_proxy() or _scan_local_proxy()
+    # off / 未配置 / 解析失败 → 空串：与主程序口径一致，requests 仍会读
+    # 系统环境变量 HTTP(S)_PROXY，不强行禁用
+    if log is not None:
+        if url:
+            log.info(
+                "未传 --proxy，按主程序设置解析代理（mode=%s）: %s", mode, url
+            )
+        else:
+            log.info(
+                "未传 --proxy，主程序代理设置（mode=%s）未解析出可用代理，"
+                "使用直连/系统环境变量", mode or "未配置",
+            )
+    return url
+
+
 # ───────────────────────── 主流程 ─────────────────────────
 
 
@@ -1389,6 +1529,12 @@ def run(
     log.info("内部目录名: %s", args.internal_name)
     log.info("下载候选: %d 个源", len(args.urls))
     log.info("=" * 60)
+
+    # 未显式传 --proxy（手动启动 / 旧版主程序未透传）时，按主程序
+    # config.json 的代理设置回退解析——更新器的所有下载（manifest /
+    # sha256 / 全量 zip / 增量 part）同样受应用代理管理
+    if not args.proxy_url:
+        args.proxy_url = resolve_fallback_proxy(args.app_dir, log)
 
     # 0. 清理上次自更新遗留的 .old 文件
     _cleanup_old_files(args.app_dir, log)
