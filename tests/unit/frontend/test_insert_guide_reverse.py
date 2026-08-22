@@ -15,7 +15,7 @@ def _sentence_with_target(target_ts):
     return Sentence(singer_id="singer_1", characters=[target]), target
 
 
-def test_reverse_insert_marks_last_guide_with_target_start_ts():
+def test_reverse_insert_marks_last_guide_with_computed_end_ts():
     sentence, target = _sentence_with_target(44_010)
 
     result = insert_guide_before(
@@ -26,8 +26,9 @@ def test_reverse_insert_marks_last_guide_with_target_start_ts():
     guides = sentence.characters[:3]
     assert [c.char for c in guides] == ["●", "●", "●"]
     assert [c.timestamps for c in guides] == [[43_010], [42_010], [41_010]]
+    # 尾标记 = 末个导唱 41.01 再减一个间隔 = 40.01
     assert guides[-1].is_sentence_end is True
-    assert guides[-1].sentence_end_ts == 44_010
+    assert guides[-1].sentence_end_ts == 40_010
     assert not any(c.is_sentence_end for c in guides[:-1])
     assert target.is_sentence_end is False
 
@@ -54,7 +55,7 @@ def test_reverse_single_guide_serializes_with_trailing_end_token():
 
     assert result["ok"] is True
     line, _ = sentence_to_timed_line(sentence.characters)
-    assert "[00:44.01]○[>00:45.01]" in line
+    assert "[00:44.01]○[>00:43.01]" in line
 
 
 def test_reverse_without_target_timestamp_skips_end_marker():

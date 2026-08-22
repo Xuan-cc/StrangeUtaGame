@@ -187,11 +187,13 @@ def _build_chars(candidate: AutoGuideCandidate, params: AutoGuideParams) -> list
                 new_ch.add_timestamp(max(0, ts))
             result.append(new_ch)
     # 反向导唱的尾部 [>…] 标记：外部渲染软件要求在最后一个导唱字符上
-    # 附上目标字符的起始时间戳（无需按间隔推算），非反向不插入。
+    # 附上句尾释放时间戳——继续等差数列再往下推一步（末个导唱时间戳再减
+    # 一个间隔 = target_ms - (count+1)*duration），非反向不插入。
     if params.reverse and result:
+        end_ts = max(0, candidate.target_ms - duration_ms * (params.count + 1))
         last_ch = result[-1]
         last_ch.is_sentence_end = True
-        last_ch.set_sentence_end_ts(candidate.target_ms)
+        last_ch.set_sentence_end_ts(end_ts)
     return result
 
 

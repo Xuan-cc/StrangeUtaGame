@@ -97,7 +97,7 @@ def test_apply_replace_marks_chars_and_clears_todo():
     assert target.needs_guide is False
 
 
-def test_reverse_appends_end_marker_with_target_start_ts():
+def test_reverse_appends_end_marker_one_step_below_last_guide():
     target = _ch("歌", 44_010, todo=True)
     project = _project([target])
     candidate = scan_auto_guide_candidates(project, 3000)[0]
@@ -113,7 +113,8 @@ def test_reverse_appends_end_marker_with_target_start_ts():
     chars = project.sentences[0].characters
     assert [c.timestamps for c in chars[:3]] == [[43_010], [42_010], [41_010]]
     assert chars[2].is_sentence_end is True
-    assert chars[2].sentence_end_ts == 44_010
+    # 尾标记继续等差数列再往下一步：末个导唱 41.01 - 1s = 40.01
+    assert chars[2].sentence_end_ts == 40_010
     assert not any(c.is_sentence_end for c in chars[:2])
     assert target.is_sentence_end is False
 
@@ -146,14 +147,14 @@ def test_reverse_guide_serialization_round_trip():
         )],
     )
     line, _ = sentence_to_timed_line(project.sentences[0].characters)
-    assert "{●●●||[00:43.01],[00:42.01],[00:41.01][>00:44.01]}" in line
+    assert "{●●●||[00:43.01],[00:42.01],[00:41.01][>00:40.01]}" in line
 
     parsed = parse_timed_line(line)[0]
     guides = [c for c in parsed if c.is_guide]
     assert guides[-1].is_sentence_end is True
-    assert guides[-1].sentence_end_ts == 44_010
+    assert guides[-1].sentence_end_ts == 40_010
 
-    # 单个：独立字符直接跟 [ts]○[>目标起始]
+    # 单个：独立字符直接跟 [ts]○[>ts-间隔]
     target = _ch("歌", 45_010, todo=True)
     project = _project([target])
     candidate = scan_auto_guide_candidates(project, 3000)[0]
@@ -162,12 +163,12 @@ def test_reverse_guide_serialization_round_trip():
         [(candidate, AutoGuideParams(symbol="○", duration_ms=1000, reverse=True))],
     )
     line, _ = sentence_to_timed_line(project.sentences[0].characters)
-    assert "[00:44.01]○[>00:45.01]" in line
+    assert "[00:44.01]○[>00:43.01]" in line
 
     parsed = parse_timed_line(line)[0]
     guides = [c for c in parsed if c.is_guide]
     assert guides[-1].is_sentence_end is True
-    assert guides[-1].sentence_end_ts == 45_010
+    assert guides[-1].sentence_end_ts == 43_010
 
 
 def test_fixed_interval_unknown_left_is_executable_but_fill_is_not():
