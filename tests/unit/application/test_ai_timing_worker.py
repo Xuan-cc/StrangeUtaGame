@@ -524,6 +524,23 @@ class TestTailSilenceCriterion:
         )
         assert spans[0].end_ms == 30 * 20  # 吸附到下一 token 起点
 
+    def test_separation_residual_still_clamps(self):
+        """真实电平回归：有声占少数、间奏是分离残留（0.04~0.1×有声）
+        且缓慢衰减时也要裁得住。
+
+        旧基线用全轨均值：均值被大量静音/残留帧拉低，0.1×均值阈值
+        低于残留电平——静音永远找不到，尾音几乎总是一路延续到下一
+        字起点（句尾/停顿符前的字尤甚）。上四分位基线下残留可判。
+        """
+        # 帧 0-11 有声(1.0)；12-19 分离残留缓慢衰减
+        # (0.30,0.24,0.18,0.14,0.11,0.09,0.07,0.05)；20-39 残底(0.04)
+        residual = [0.30, 0.24, 0.18, 0.14, 0.11, 0.09, 0.07, 0.05]
+        energies = [1.0] * 12 + residual + [0.04] * 20
+        # 上四分位 ≈ 1.0 → 阈值 0.1：残留自第 17 帧（0.09）起连续低于
+        # 阈值，≥4 帧后边界落在第 17 帧（=340ms）
+        spans = self._spans([(0, 10), (30, 32)], energies)
+        assert spans[0].end_ms == 17 * 20
+
     def test_silence_boundary_min_frames(self):
         """持续静音需连续 ≥TAIL_SILENCE_MIN_FRAMES 帧，瞬时低谷不截断。"""
         from strange_uta_game.backend.application.ai_timing.worker.providers import (

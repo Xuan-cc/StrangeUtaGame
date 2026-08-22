@@ -450,7 +450,17 @@ class _TorchProviderBase(ForcedAlignmentProvider):
                 if waveform is not None
                 else None
             )
-            mean_power = float(energies.mean()) if energies is not None else 0.0
+            if energies is not None:
+                import numpy as np
+
+                # 静音判据基线取能量上四分位（≈典型有声帧电平），而非
+                # 全轨均值：人声轨大部分帧是句间静音/分离残留，全轨均值
+                # 被拉到极低，0.1×均值的阈值形同虚设——残留 0.04~0.1×
+                # 有声电平的帧永远高于阈值，静音永远“找不到”，句尾/
+                # 停顿符前的字几乎总是一路延续到下一字起点
+                mean_power = float(np.percentile(energies, 75))
+            else:
+                mean_power = 0.0
             audio_end_ms = int(round(num_frames * ratio))
             for i, cur in enumerate(spans):
                 cand = (
