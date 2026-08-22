@@ -103,7 +103,15 @@ def _parse_krl_layer(layer: str) -> Tuple[List[str], List[int]]:
     return parts, timestamps
 
 
-def _krl_block_to_character(block: str, singer_id: str) -> Character:
+def _krl_block_to_characters(block: str, singer_id: str) -> List[Character]:
+    """Parse one KRL block while preserving its linked-group boundary.
+
+    KRL concatenates every member's primary-ruby parts inside one block, so the
+    original per-character boundary is not recoverable.  Keep that payload on
+    the first character and link all display characters together.  The
+    exporter concatenates linked members in the same way, which makes the
+    primary subtitle/ruby layer lossless without inventing a split.
+    """
     display, separator, annotation = block.partition("|")
     if not separator or not display:
         raise ValueError(f"无效的 KRL 注音块: {{{block}}}")
@@ -120,7 +128,7 @@ def _krl_block_to_character(block: str, singer_id: str) -> Character:
     ruby = Ruby(parts=ruby_parts) if ruby_parts else None
     check_count = max(len(timestamps), len(ruby_parts), 1)
     character = Character(
-        char=display,
+        char=display[0],
         ruby=ruby,
         check_count=check_count,
         timestamps=timestamps[:check_count],
@@ -129,7 +137,18 @@ def _krl_block_to_character(block: str, singer_id: str) -> Character:
     if ruby is not None and len(ruby.parts) != check_count:
         character.set_check_count(check_count, ruby_split_mode="mora")
     character.push_to_ruby()
-    return character
+    characters = [character]
+    for display_char in display[1:]:
+        # A non-empty primary ruby layer is the only lossless signal that this
+        # multi-character block represents a linked word.  Romaji-only blocks
+        # can also be generated for kana mora combinations (e.g. きゃ); that
+        # discarded secondary layer must not invent project links.
+        if ruby is not None:
+            characters[-1].linked_to_next = True
+        characters.append(
+            Character(char=display_char, check_count=0, singer_id=singer_id)
+        )
+    return characters
 
 
 def sentence_from_kasugamuki(line: str, singer_id: str) -> Sentence:
@@ -142,12 +161,15 @@ def sentence_from_kasugamuki(line: str, singer_id: str) -> Sentence:
             end = line.find("}", pos + 1)
             if end < 0:
                 raise ValueError("未闭合的 KRL 注音块")
-            character = _krl_block_to_character(line[pos + 1 : end], singer_id)
-            if pending_timestamp is not None and not character.timestamps:
-                character.check_count = max(character.check_count, 1)
-                character.add_timestamp(pending_timestamp)
+            block_characters = _krl_block_to_characters(
+                line[pos + 1 : end], singer_id
+            )
+            first_character = block_characters[0]
+            if pending_timestamp is not None and not first_character.timestamps:
+                first_character.check_count = max(first_character.check_count, 1)
+                first_character.add_timestamp(pending_timestamp)
             pending_timestamp = None
-            characters.append(character)
+            characters.extend(block_characters)
             pos = end + 1
             continue
 
@@ -184,10 +206,11 @@ def sentence_from_kasugamuki(line: str, singer_id: str) -> Sentence:
 def sentences_from_kasugamuki(content: str, singer_id: str) -> List[Sentence]:
     """Parse KRL text, ignoring an optional foreign-exporter config block."""
     body = strip_krl_config(content)
+    if not body:
+        return []
     return [
-        sentence_from_kasugamuki(line.strip(), singer_id)
+        sentence_from_kasugamuki(line, singer_id)
         for line in body.splitlines()
-        if line.strip()
     ]
 
 
@@ -359,7 +382,9 @@ def _linked_group_kana(group: List[Character]) -> str:
     for ch in group:
         if ch.ruby:
             tagged.append(
-                _build_tagged_parts([part.text for part in ch.ruby.parts], _get_ts_list(ch))
+                _build_tagged_parts(
+                    [part.text for part in ch.ruby.parts], _get_ts_list(ch)
+                )
             )
     annotation = "".join(tagged)
     if not annotation:

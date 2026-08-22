@@ -6,6 +6,7 @@ from strange_uta_game.backend.application.project_import_service import (
 from strange_uta_game.backend.infrastructure.parsers.kasugamuki_format import (
     is_kasugamuki_content,
     sentences_from_kasugamuki,
+    sentences_to_kasugamuki,
     strip_krl_config,
 )
 from strange_uta_game.frontend.editor.timing.lyric_loader import (
@@ -90,3 +91,75 @@ def test_project_import_service_accepts_krl_extension(monkeypatch):
     assert metadata == {"format": "krl"}
     assert sentences[0].text == "秒"
     assert sentences[0].characters[0].timestamps == [11700, 11810]
+
+
+def test_linked_group_primary_subtitle_and_ruby_round_trip():
+    source = (
+        "前{明日|[00:01:00]あ[00:01:20]し[00:01:40]た>"
+        "[00:01:00]a[00:01:20]shi[00:01:40]ta}後[00:02:00]"
+    )
+
+    sentences = sentences_from_kasugamuki(source, SINGER_ID)
+    sentence = sentences[0]
+
+    assert sentence.text == "前明日後"
+    assert [character.char for character in sentence.characters] == [
+        "前", "明", "日", "後",
+    ]
+    assert [character.linked_to_next for character in sentence.characters] == [
+        False, True, False, False,
+    ]
+    assert sentence.characters[1].ruby.text == "あした"
+    assert sentence.characters[2].ruby is None
+    exported = sentences_to_kasugamuki(sentences)
+    assert exported == (
+        "前{明日|[00:01:00]あ[00:01:20]し[00:01:40]た}後[00:02:00]"
+    )
+
+    reparsed = sentences_from_kasugamuki(exported, SINGER_ID)[0]
+    assert [character.char for character in reparsed.characters] == [
+        "前", "明", "日", "後",
+    ]
+    assert [character.linked_to_next for character in reparsed.characters] == [
+        False, True, False, False,
+    ]
+    assert reparsed.characters[1].ruby.text == "あした"
+
+
+def test_primary_round_trip_preserves_empty_and_space_only_subtitle_lines():
+    source = (
+        "{空|[00:01:00]そら}\n"
+        "\n"
+        " \n"
+        "{白|[00:02:00]しろ}[00:02:50]"
+    )
+
+    sentences = sentences_from_kasugamuki(source, SINGER_ID)
+
+    assert [sentence.text for sentence in sentences] == ["空", "", " ", "白"]
+    assert sentences_to_kasugamuki(sentences) == source
+
+
+def test_discarded_romaji_only_group_does_not_invent_linked_word():
+    sentences = sentences_from_kasugamuki(
+        "{きゃ|>[00:01:00]kya}", SINGER_ID
+    )
+
+    assert [character.char for character in sentences[0].characters] == ["き", "ゃ"]
+    assert not any(
+        character.linked_to_next for character in sentences[0].characters
+    )
+
+
+def test_linked_group_line_key_up_is_restored_on_group_tail():
+    source = "{明日|[00:01:00]あ[00:01:20]し[00:01:40]た}[00:02:00]"
+
+    sentences = sentences_from_kasugamuki(source, SINGER_ID)
+    characters = sentences[0].characters
+
+    assert [character.char for character in characters] == ["明", "日"]
+    assert characters[0].linked_to_next
+    assert not characters[0].is_sentence_end
+    assert characters[1].is_sentence_end
+    assert characters[1].sentence_end_ts == 2000
+    assert sentences_to_kasugamuki(sentences) == source
