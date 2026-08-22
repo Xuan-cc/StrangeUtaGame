@@ -26,6 +26,8 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QSizePolicy,
+    QStyle,
+    QStyleOptionViewItem,
 )
 from PyQt6.QtCore import QEvent, Qt, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QPixmap, QPainter
@@ -621,6 +623,42 @@ class TransferTargetDialog(QDialog):
         return self.combo.currentData()
 
 
+class _CheckableRowListWidget(ListWidget):
+    """复选列表：点击复选框以外的行区域时也切换勾选状态。"""
+
+    def _check_indicator_rect(self, item: QListWidgetItem) -> QRect:
+        option = QStyleOptionViewItem()
+        self.initViewItemOption(option)
+        option.rect = self.visualItemRect(item)
+        option.features |= QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
+        option.checkState = item.checkState()
+        return self.style().subElementRect(
+            QStyle.SubElement.SE_ItemViewItemCheckIndicator,
+            option,
+            self,
+        )
+
+    def mouseReleaseEvent(self, event):  # noqa: N802 - Qt override
+        if event and event.button() == Qt.MouseButton.LeftButton:
+            position = event.position().toPoint()
+            item = self.itemAt(position)
+            if (
+                item is not None
+                and item.flags() & Qt.ItemFlag.ItemIsEnabled
+                and item.flags() & Qt.ItemFlag.ItemIsUserCheckable
+                and not self._check_indicator_rect(item).contains(position)
+            ):
+                next_state = (
+                    Qt.CheckState.Unchecked
+                    if item.checkState() == Qt.CheckState.Checked
+                    else Qt.CheckState.Checked
+                )
+                item.setCheckState(next_state)
+                event.accept()
+                return
+        super().mouseReleaseEvent(event)
+
+
 class SingerPresetLoadDialog(QDialog):
     """从软件预设加载演唱者的多选对话框（用 CheckState 驱动选中，避免 MultiSelection UI 刷新 BUG）"""
 
@@ -665,7 +703,7 @@ class SingerPresetLoadDialog(QDialog):
         layout.addLayout(filter_layout)
 
         # 演唱者列表（NoSelection，选中状态完全由 CheckState 驱动）
-        self.list_widget = ListWidget()
+        self.list_widget = _CheckableRowListWidget()
         self.list_widget.setIconSize(QSize(32, 18))
         self.list_widget.setSelectionMode(
             QAbstractItemView.SelectionMode.NoSelection
