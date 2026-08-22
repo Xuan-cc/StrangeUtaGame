@@ -157,8 +157,8 @@
   <td align="center">📤</td>
   <td>
     <b>13 种歌词格式导出 / Thirteen export formats</b><br/>
-    <sub><b>LRC</b>（增强型 / 逐行 / 逐字）· <b>KRA</b> · <b>TXT</b> · <b>SRT</b> · <b>txt2ass</b> · <b>ASS</b> · <b>Nicokara</b> · <b>Nicokara（带注音）</b> · <b>RL 编辑模式</b> · <b>春日向注音</b> · <b>Kirakara</b> —— Aegisub、NicokaraMaker、RhythmicaLyrics 工作流无缝衔接。<br/>
-    LRC (enhanced / per-line / per-word), KRA, TXT, SRT, txt2ass, ASS, Nicokara, Nicokara-with-furigana, RL edit-mode, Kasugamuki and Kirakara. Plays nice with Aegisub, NicokaraMaker and RhythmicaLyrics.</sub>
+    <sub><b>LRC</b>（增强型 / 逐行 / 逐字）· <b>KRA</b> · <b>TXT</b> · <b>SRT</b> · <b>txt2ass</b> · <b>ASS</b> · <b>Nicokara</b> · <b>Nicokara（带注音）</b> · <b>RL 编辑模式</b> · <b>春日向注音</b> · <b>Kirakara</b> —— Aegisub、NicokaraMaker、RhythmicaLyrics 工作流无缝衔接；KRL 文件也可直接导入。<br/>
+    LRC (enhanced / per-line / per-word), KRA, TXT, SRT, txt2ass, ASS, Nicokara, Nicokara-with-furigana, RL edit-mode, Kasugamuki and Kirakara. KRL files can also be imported directly.</sub>
   </td>
 </tr>
 <tr>
@@ -294,8 +294,8 @@
 | 软件界面字体 / Interface font | **设置 → 界面 → 界面设定 → 界面字体** | 留空时按界面语言自动选择，修改后立即应用。 |
 | Karaoke 预览横向滚动 / Horizontal preview scrolling | **Karaoke 预览区域** | 内容超宽时自动显示横向滚动条；也可按住 <kbd>Alt</kbd> 滚动鼠标滚轮。 |
 | 最近打开的项目 / Recent projects | **打轴界面 → 文件管理 → 最近打开的文件** | 最多显示 10 条记录，可在同一菜单中清空。 |
-| F2 注音快捷编辑 / Quick ruby editor | **设置 → 快捷键 → 注音编辑** | 默认 <kbd>F2</kbd>；可编辑注音并设置与下一字符连词。 |
-| Kirakara 导出 / Kirakara export | **导出 → 导出格式 → Kirakara** | 选择后可设置“导出罗马音”和演唱者；默认格式可在 **设置 → 导出 → 默认导出格式** 中修改。 |
+| F2 注音快捷编辑 / Quick ruby editor | **设置 → 快捷键 → 字符与行编辑 → 注音编辑窗口** | 默认 <kbd>F2</kbd>；可选择迷你浮窗或经典大窗口。 |
+| Kirakara 导入与导出 / Kirakara import & export | 导入：**首页 → 导入歌词文件**或**打轴界面 → 文件管理 → 加载歌词**；导出：**导出 → 导出格式 → Kirakara** | 支持带 `config` 配置块的 KRL；默认导出格式可在 **设置 → 导出 → 默认导出格式** 中修改。 |
 
 <!-- ───────────────────────────── 安装 ───────────────────────────── -->
 
