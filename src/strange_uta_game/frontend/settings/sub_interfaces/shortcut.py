@@ -7,10 +7,10 @@ _on_shortcut_changed 与原始 SettingsInterface 逻辑完全一致：
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, QCoreApplication
+from PyQt6.QtCore import Qt, QCoreApplication, QTimer
 from qfluentwidgets import FluentIcon as FIF, InfoBar, InfoBarPosition, SettingCardGroup
 
-from ..cards import ShortcutSettingCard
+from ..cards import ComboSettingCard, ShortcutSettingCard
 from .base import SubSettingInterface
 
 
@@ -157,6 +157,9 @@ class ShortcutSubInterface(SubSettingInterface):
             mode_key: {} for mode_key, _ in self._SHORTCUT_MODES
         }
         self._loading = False
+        # 注音编辑窗口下拉的延迟应用标记：避免在 RoundMenu 关闭栈内
+        # 同步触发设置保存，并合并连续快速切换。
+        self._f2_editor_apply_pending = False
         self._init_ui()
 
         # 主题变化时刷新快捷键标签前缀颜色（深/浅模式颜色不同）
@@ -413,9 +416,41 @@ class ShortcutSubInterface(SubSettingInterface):
                 if not ro:
                     card_e.value_changed.connect(lambda v, c=card_e: self._on_shortcut_changed(c, v))
 
+            if key == "edit_ruby":
+                self.card_f2_ruby_editor = self._tr_register(
+                    ComboSettingCard(
+                        FIF.EDIT,
+                        tr("注音编辑窗口"),
+                        tr("选择使用迷你浮窗或完整编辑窗口"),
+                        items=[tr("迷你浮窗"), tr("经典大窗口")],
+                        parent=group,
+                    ),
+                    title_source="注音编辑窗口",
+                    content_source="选择使用迷你浮窗或完整编辑窗口",
+                )
+                self.card_f2_ruby_editor.set_item_sources(
+                    ["迷你浮窗", "经典大窗口"]
+                )
+                self.card_f2_ruby_editor.index_changed.connect(
+                    self._schedule_f2_editor_apply
+                )
+                group.addSettingCard(self.card_f2_ruby_editor)
+
     # connect_signals 不需要额外操作，信号已在 _init_ui 中连接
     def connect_signals(self):
         pass
+
+    def _schedule_f2_editor_apply(self, *_args) -> None:
+        """Defer settings notification until the combo popup has closed."""
+        if self._loading or self._f2_editor_apply_pending:
+            return
+        self._f2_editor_apply_pending = True
+        QTimer.singleShot(0, self._apply_f2_editor_change)
+
+    def _apply_f2_editor_change(self) -> None:
+        self._f2_editor_apply_pending = False
+        if not self._loading:
+            self._notify_changed()
 
     def _rebuild_for_language_change(self) -> None:
         """快捷键页：基类登记的 group title 由 super 处理；这里再把每张卡的
@@ -521,10 +556,21 @@ class ShortcutSubInterface(SubSettingInterface):
                         continue
                     value = s.get(f"shortcuts.{mode_key}.{action_key}", default_key)
                     card.setValue(value)
+            f2_editor_idx = {
+                "compact": 0,
+                "classic": 1,
+            }.get(s.get("ui.f2_ruby_editor_mode", "compact"), 0)
+            self.card_f2_ruby_editor.setCurrentIndex(f2_editor_idx)
         finally:
             self._loading = False
 
     def collect_settings(self, s):
+        s.set(
+            "ui.f2_ruby_editor_mode",
+            {0: "compact", 1: "classic"}.get(
+                self.card_f2_ruby_editor.currentIndex(), "compact"
+            ),
+        )
         for mode_key, _ in self._SHORTCUT_MODES:
             for row in self._SHORTCUT_ACTIONS:
                 action_key = row[0]

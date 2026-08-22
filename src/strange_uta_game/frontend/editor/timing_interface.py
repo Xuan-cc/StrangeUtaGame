@@ -140,6 +140,7 @@ class EditorInterface(QWidget):
         self._last_position_update_time = 0.0  # 60fps UI 节流
         self._fast_forward_ms = 5000
         self._rewind_ms = 5000
+        self._f2_ruby_editor_mode = "compact"
         self._playback_range_start_ms: Optional[int] = None
         self._playback_range_end_ms: Optional[int] = None
         self._key_map = {}  # key_string -> action_name, populated by _apply_settings
@@ -780,6 +781,12 @@ class EditorInterface(QWidget):
         if setting_iface is None:
             return
         settings = setting_iface.get_settings()
+        f2_ruby_editor_mode = settings.get("ui.f2_ruby_editor_mode", "compact")
+        self._f2_ruby_editor_mode = (
+            f2_ruby_editor_mode
+            if f2_ruby_editor_mode in {"compact", "classic"}
+            else "compact"
+        )
         self._fast_forward_ms = settings.get("timing.fast_forward_ms", 5000)
         self._rewind_ms = settings.get("timing.rewind_ms", 5000)
         self._jump_before_ms = settings.get("timing.jump_before_ms", 3000)
@@ -5494,11 +5501,15 @@ class EditorInterface(QWidget):
         self._update_line_info()
 
     def _on_char_edit_requested(self, line_idx: int, char_idx: int):
-        """F2: show a compact ruby editor above the focused character."""
+        """F2: show the configured compact or classic ruby editor."""
         if not self._project or not 0 <= line_idx < len(self._project.sentences):
             return
         sentence = self._project.sentences[line_idx]
         if not 0 <= char_idx < len(sentence.chars):
+            return
+
+        if self._f2_ruby_editor_mode == "classic":
+            self._show_classic_char_editor(line_idx, char_idx, sentence)
             return
 
         before_character = deepcopy(sentence.characters[char_idx])
@@ -5558,6 +5569,54 @@ class EditorInterface(QWidget):
             QTimer.singleShot(
                 0, lambda li=line_idx: self._finish_inline_ruby_edit(li)
             )
+
+    def _show_classic_char_editor(
+        self, line_idx: int, char_idx: int, sentence: Sentence
+    ) -> None:
+        """Open the legacy full character editor and commit its mutations."""
+        before_sentences = deepcopy(self._project.sentences)
+
+        dialog = CharEditDialog(sentence, char_idx, self)
+        dialog.exec()
+        if not dialog.was_modified():
+            return
+
+        command_manager = (
+            self._timing_service.command_manager
+            if self._timing_service
+            else None
+        )
+        if command_manager is not None:
+            after_sentences = deepcopy(self._project.sentences)
+            word_start, word_end = sentence.get_word_char_range(char_idx)
+            if word_end - word_start > 1:
+                desc = (
+                    f"编辑连词（第 {line_idx + 1} 句 "
+                    f"第 {word_start + 1}-{word_end} 字）"
+                )
+            else:
+                desc = f"编辑字符（第 {line_idx + 1} 句 第 {char_idx + 1} 字）"
+            cmd = SentenceSnapshotCommand(
+                self._project,
+                before_sentences,
+                after_sentences,
+                desc,
+            )
+            cursor_pos = (self._current_line_idx, self.preview._current_char_idx)
+            cmd.undo_position = cursor_pos
+            cmd.redo_position = cursor_pos
+            command_manager.execute(cmd)
+
+        self._reapply_global_offset()
+        if self._timing_service:
+            self._timing_service.rebuild_global_checkpoints()
+        self.preview._update_display()
+        self._update_time_tags_display()
+        self._update_status()
+        if hasattr(self, "_store") and self._store:
+            self._store.notify("rubies")
+            self._store.notify("checkpoints")
+            self._store.notify("lyrics")
 
     def _finish_inline_ruby_edit(self, line_idx: int) -> None:
         """Refresh only ruby consumers after the popup has visually closed."""

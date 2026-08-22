@@ -185,6 +185,8 @@ class AppSettings:
         "ui": {
             "theme": "auto",
             "language": "auto",
+            # F2 注音编辑器：compact = 字符上方迷你浮窗，classic = 原有大窗口。
+            "f2_ruby_editor_mode": "compact",
             # 应用界面字体；空串表示根据界面语言和平台自动选择。
             "interface_font": "",
             # 窗口习惯：启动时读取以恢复上次的窗口大小与最大化状态；
