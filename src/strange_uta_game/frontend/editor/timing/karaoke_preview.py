@@ -228,6 +228,41 @@ def _wipe_ink_bounds(fm: QFontMetrics, text: str) -> tuple[int, int]:
     return _ink_bounds(fm, text)
 
 
+def _weighted_wipe_windows(
+    char_widths: list[int],
+    char_ink_widths: list[int],
+    indices: range,
+    start_ts: int,
+    end_ts: int,
+) -> list[tuple[int, int]]:
+    """按排版像素宽度把 ``[start_ts, end_ts]`` 加权切分为逐字符 wipe 窗口。
+
+    零墨水字符（空格 / 全角空格 / NBSP 等无渲染字符）权重为 0，得到零时长
+    窗口——不占用走字时长，整段时长由可见字符按宽度瓜分；否则空格会凭排版
+    宽度分走一段时间，绘制层却又因无墨水跳过它，表现为走字停顿、后续字符
+    被压缩。整段全为零墨水时（理论上的全空白段）回退为排版宽度加权，保证
+    各字符仍有有限时间窗口。
+    """
+    weights = [char_widths[ci] if char_ink_widths[ci] > 0 else 0 for ci in indices]
+    total = sum(weights)
+    if total <= 0:
+        weights = [char_widths[ci] for ci in indices]
+        total = sum(weights)
+    windows: list[tuple[int, int]] = []
+    cum = 0
+    for w in weights:
+        ratio = cum / total if total > 0 else 0.0
+        next_ratio = (cum + w) / total if total > 0 else 1.0
+        windows.append(
+            (
+                int(start_ts + (end_ts - start_ts) * ratio),
+                int(start_ts + (end_ts - start_ts) * next_ratio),
+            )
+        )
+        cum += w
+    return windows
+
+
 class _AltWheelScrollBar(QScrollBar):
     """A horizontal scrollbar that leaves an unmodified wheel to its parent."""
 
@@ -1907,7 +1942,8 @@ class KaraokePreview(QWidget):
           - 行内所有带 global_timestamps 的字符 + 行尾（is_sentence_end +
             global_sentence_end_ts）构成"锚点"
           - 相邻锚点之间的所有字符（含无时间戳的）按字符像素宽度加权线性插值
-            分配 wipe 区间——解决等字符数分配导致的宽度/节奏不匹配跳变
+            分配 wipe 区间——解决等字符数分配导致的宽度/节奏不匹配跳变；
+            空格等零墨水的无渲染字符权重为 0（零时长窗口），不占用走字时长
           - 首锚之前 / 末锚之后的字符贴首/末锚（wipe 恒 0 或 1）
           - linked_to_next 只影响视觉渲染层（连词不拆字画），不参与 wipe 计算
 
@@ -2095,17 +2131,17 @@ class KaraokePreview(QWidget):
                 start_ts_nl = _prev_line_last_ts
                 if end_ts_nl <= start_ts_nl:
                     continue
-                seg_total_w = sum(char_widths[ci] for ci in range(sent_start, no_cc_end))
-                cum_w = 0
-                for ci in range(sent_start, no_cc_end):
-                    w = char_widths[ci]
-                    ratio = cum_w / seg_total_w if seg_total_w > 0 else 0.0
-                    next_ratio = (cum_w + w) / seg_total_w if seg_total_w > 0 else 1.0
-                    char_wipe_times[ci] = (
-                        int(start_ts_nl + (end_ts_nl - start_ts_nl) * ratio),
-                        int(start_ts_nl + (end_ts_nl - start_ts_nl) * next_ratio),
-                    )
-                    cum_w += w
+                for ci, win in zip(
+                    range(sent_start, no_cc_end),
+                    _weighted_wipe_windows(
+                        char_widths,
+                        char_ink_widths,
+                        range(sent_start, no_cc_end),
+                        start_ts_nl,
+                        end_ts_nl,
+                    ),
+                ):
+                    char_wipe_times[ci] = win
                 continue
 
             for i, leader in enumerate(leaders):
@@ -2126,17 +2162,19 @@ class KaraokePreview(QWidget):
                 if end_ts is None or end_ts <= start_times[leader]:
                     continue
 
-                # 整体：leader + 它后面的无 ts 字符，按像素宽度加权从左到右分配时间
-                seg_total_w = sum(char_widths[ci] for ci in range(leader, seg_end + 1))
-                cum_w = 0
-                for ci in range(leader, seg_end + 1):
-                    w = char_widths[ci]
-                    ratio = cum_w / seg_total_w if seg_total_w > 0 else 0.0
-                    next_ratio = (cum_w + w) / seg_total_w if seg_total_w > 0 else 1.0
-                    char_start_ts = int(start_times[leader] + (end_ts - start_times[leader]) * ratio)
-                    char_end_ts = int(start_times[leader] + (end_ts - start_times[leader]) * next_ratio)
-                    char_wipe_times[ci] = (char_start_ts, char_end_ts)
-                    cum_w += w
+                # 整体：leader + 它后面的无 ts 字符，按像素宽度加权从左到右分配时间；
+                # 空格等零墨水字符不占走字时长（零时长窗口），时长由可见字符瓜分。
+                for ci, win in zip(
+                    range(leader, seg_end + 1),
+                    _weighted_wipe_windows(
+                        char_widths,
+                        char_ink_widths,
+                        range(leader, seg_end + 1),
+                        start_times[leader],
+                        end_ts,
+                    ),
+                ):
+                    char_wipe_times[ci] = win
 
                 # 合并段锚点组：leader 有 >=2 个时间戳、后随组员全为 cc=0 时，
                 # 把该段 ink 合并成一条轴，用 [gts..., end_ts] 走完（替代上面按
@@ -2209,34 +2247,35 @@ class KaraokePreview(QWidget):
                 if no_cc_end > sent_start:
                     _end_nl = start_times[first_leader]
                     if _end_nl > _start_anchor:  # type: ignore[operator]
-                        seg_w = sum(char_widths[ci] for ci in range(sent_start, no_cc_end))
-                        cum_w = 0
-                        for ci in range(sent_start, no_cc_end):
-                            w = char_widths[ci]
-                            ratio = cum_w / seg_w if seg_w > 0 else 0.0
-                            next_ratio = (cum_w + w) / seg_w if seg_w > 0 else 1.0
-                            char_wipe_times[ci] = (
-                                int(_start_anchor + (_end_nl - _start_anchor) * ratio),  # type: ignore[operator]
-                                int(_start_anchor + (_end_nl - _start_anchor) * next_ratio),  # type: ignore[operator]
-                            )
-                            cum_w += w
+                        for ci, win in zip(
+                            range(sent_start, no_cc_end),
+                            _weighted_wipe_windows(
+                                char_widths,
+                                char_ink_widths,
+                                range(sent_start, no_cc_end),
+                                _start_anchor,  # type: ignore[arg-type]
+                                _end_nl,
+                            ),
+                        ):
+                            char_wipe_times[ci] = win
                     old_algo_start = no_cc_end
 
                 # 剩余 pre-leader 字符（cc>0 未打轴）：
                 # 老算法——按像素宽度加权分配到 first_leader 的 wipe 窗口内
+                # （权重含 leader 自身，但只回写 pre-leader 字符的窗口）
                 if old_algo_start < first_leader and first_leader in char_wipe_times:
                     leader_start_ts, leader_end_ts = char_wipe_times[first_leader]
-                    pre_total_w = sum(char_widths[ci] for ci in range(old_algo_start, first_leader + 1))
-                    cum_w = 0
-                    for ci in range(old_algo_start, first_leader):
-                        w = char_widths[ci]
-                        ratio = cum_w / pre_total_w if pre_total_w > 0 else 0.0
-                        next_ratio = (cum_w + w) / pre_total_w if pre_total_w > 0 else 1.0
-                        char_wipe_times[ci] = (
-                            int(leader_start_ts + (leader_end_ts - leader_start_ts) * ratio),
-                            int(leader_start_ts + (leader_end_ts - leader_start_ts) * next_ratio),
-                        )
-                        cum_w += w
+                    for ci, win in zip(
+                        range(old_algo_start, first_leader),
+                        _weighted_wipe_windows(
+                            char_widths,
+                            char_ink_widths,
+                            range(old_algo_start, first_leader + 1),
+                            leader_start_ts,
+                            leader_end_ts,
+                        ),
+                    ):
+                        char_wipe_times[ci] = win
 
         # ---------- 每字符的 part 锚点序列（用于 check_count>=2 的多 checkpoint 字符） ----------
         # char_part_anchors[ci] = [ts_0, ts_1, ..., ts_N]，N = part 数

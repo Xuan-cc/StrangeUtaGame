@@ -20,6 +20,44 @@ def test_full_width_space_is_skipped_by_wipe():
     assert preview_module._wipe_ink_bounds(None, "\u3000") == (0, 0)
 
 
+def test_space_without_rhythm_consumes_no_wipe_time(qapp, monkeypatch):
+    """回归：无节奏点空格是无渲染字符，不得占用走字时长。
+
+    「あ い。」（あ=1000、い=2000、句尾释放 3000，空格 cc=0 无时间戳）：
+    旧算法把空格的排版宽度计入加权，空格分走一段时间而绘制层又因无墨水
+    跳过它——走字在空格处停顿、后续字符窗口被压缩（前一字加「。」停顿
+    标记时空格落入停顿区间才不受影响）。修复后空格得到零时长窗口，
+    あ 的 wipe 一直延伸到 い 的起始时间。
+    """
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    singer_id = "s"
+    end_char = Character(
+        char="。", check_count=0, is_sentence_end=True, singer_id=singer_id
+    )
+    end_char.set_sentence_end_ts(3000)
+    sentence = Sentence(
+        singer_id=singer_id,
+        characters=[
+            Character(char="あ", check_count=1, timestamps=[1000], singer_id=singer_id),
+            Character(char=" ", check_count=0, singer_id=singer_id),
+            Character(char="い", check_count=1, timestamps=[2000], singer_id=singer_id),
+            end_char,
+        ],
+    )
+    preview = preview_module.KaraokePreview()
+    preview.set_project(_project_from([sentence]))
+
+    wt = preview._sentence_cache[0]["char_wipe_times"]
+
+    # 空格：零时长窗口，瞬时跨过，不占走字时间
+    assert wt[1][0] == wt[1][1] == 2000
+    # あ：wipe 延伸到 い 的起始（旧算法会提前结束再停顿）
+    assert wt[0] == (1000, 2000)
+    # 末段不受影响：い 从 2000 起步、。收尾于句尾释放 3000
+    assert wt[2][0] == 2000
+    assert wt[3][1] == 3000
+
+
 def _char(text: str, ruby: str, *, linked: bool = False) -> Character:
     ch = Character(
         char=text,
