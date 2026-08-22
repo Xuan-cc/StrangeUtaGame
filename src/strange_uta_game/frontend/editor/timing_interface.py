@@ -7292,7 +7292,7 @@ class EditorInterface(QWidget):
         action_long = self._key_map_long.get(key_upper)
         # Fallback to default key map only if settings not loaded yet
         if not self._settings_loaded and action_short is None and action_long is None:
-            action_short = self._default_key_action(key, modifiers)
+            action_short = self._default_key_action(key, modifiers, playing=playing)
 
         # tag_now / tag_now_extra 使用 press/release 语义，立即执行，不走长按检测
         if action_short in ("tag_now", "tag_now_extra") or action_long in ("tag_now", "tag_now_extra"):
@@ -7558,33 +7558,34 @@ class EditorInterface(QWidget):
         return "+".join(parts) if parts else None
 
     def _default_key_action(
-        self, key, modifiers=Qt.KeyboardModifier.NoModifier
+        self,
+        key,
+        modifiers=Qt.KeyboardModifier.NoModifier,
+        *,
+        playing: bool = False,
     ) -> Optional[str]:
-        """Fallback key mapping when settings not loaded."""
+        """Return the current mode's default short-press action.
+
+        This path is used only before settings finish loading.  Build it from
+        the same per-mode defaults as the settings page so startup behavior
+        cannot drift from the shipped shortcut layout.
+        """
         key_name = self._qt_key_to_name(key, modifiers)
         if not key_name:
             return None
-        defaults = {
-            "SPACE": "tag_now",
-            "D": "play_pause",
-            "S": "stop",
-            "Z": "seek_back",
-            "X": "seek_forward",
-            "Q": "speed_down",
-            "W": "speed_up",
-            "F2": "edit_ruby",
-            "F3": "toggle_word_join",
-            "UP": "nav_prev_line",
-            "DOWN": "nav_next_line",
-            "LEFT": "nav_prev_char",
-            "RIGHT": "nav_next_char",
-            "ALT+UP": "timestamp_up",
-            "ALT+DOWN": "timestamp_down",
-            "ALT+LEFT": "cycle_checkpoint_prev",
-            "ALT+RIGHT": "cycle_checkpoint",
-            "SHIFT+ENTER": "merge_line_up",
-        }
-        return defaults.get(key_name.upper())
+        mode_key = "timing_mode" if playing else "edit_mode"
+        target = key_name.upper()
+        for action, raw in self._mode_shortcut_defaults(mode_key).items():
+            for binding in (raw or "").split(","):
+                binding = binding.strip()
+                if not binding:
+                    continue
+                parts = binding.rsplit(":", 1)
+                bound_key = parts[0].strip().upper()
+                trigger = parts[1].strip().lower() if len(parts) > 1 else "short"
+                if trigger == "short" and bound_key == target:
+                    return action
+        return None
 
     # ==================== TimingService 回调 ====================
 

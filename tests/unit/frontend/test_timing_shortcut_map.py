@@ -12,6 +12,8 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+from PyQt6.QtCore import Qt
+
 from strange_uta_game.frontend.editor.timing_interface import EditorInterface
 from strange_uta_game.frontend.settings.sub_interfaces.shortcut import (
     ShortcutSubInterface,
@@ -169,3 +171,38 @@ def test_shipped_config_matches_ui_table_defaults():
             assert actions.get(action) == default, (
                 f"{mode}.{action}: config={actions.get(action)!r} UI 表={default!r}"
             )
+
+
+class _FallbackHarness:
+    """Call the pre-settings fallback without constructing a QWidget."""
+
+    _qt_key_to_name = EditorInterface._qt_key_to_name
+    _mode_shortcut_defaults = staticmethod(EditorInterface._mode_shortcut_defaults)
+
+
+def test_preload_fallback_uses_current_mode_defaults():
+    """预加载兜底必须与当前双模式默认键位一致，不得保留旧版 D=播放。"""
+    fallback = _FallbackHarness()
+
+    assert EditorInterface._default_key_action(
+        fallback, Qt.Key.Key_A, playing=False
+    ) == "play_pause"
+    assert EditorInterface._default_key_action(
+        fallback, Qt.Key.Key_D, playing=False
+    ) is None
+    assert EditorInterface._default_key_action(
+        fallback, Qt.Key.Key_Space, playing=False
+    ) == "add_checkpoint"
+
+    assert EditorInterface._default_key_action(
+        fallback, Qt.Key.Key_A, playing=True
+    ) == "play_pause"
+    assert EditorInterface._default_key_action(
+        fallback, Qt.Key.Key_D, playing=True
+    ) == "tag_now"
+    assert EditorInterface._default_key_action(
+        fallback, Qt.Key.Key_F, playing=True
+    ) == "tag_now"
+    assert EditorInterface._default_key_action(
+        fallback, Qt.Key.Key_Space, playing=True
+    ) == "tag_now_extra"
