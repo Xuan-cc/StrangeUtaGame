@@ -37,6 +37,19 @@ class TestSokuon:
     def test_sokuon_isolated(self):
         assert romanize_ruby_parts(["っ"]) == ["xtsu"]
 
+    def test_sokuon_standalone_for_alignment(self):
+        """AI 打轴口径（sokuon_standalone）：促音独立成拍读后字辅音，
+        不再与后字共享时间轴。"""
+        assert romanize_ruby_parts(
+            ["ま", "っ", "て"], sokuon_standalone=True
+        ) == ["ma", "t", "te"]
+        assert romanize_ruby_parts(
+            ["こ", "っ", "ち"], sokuon_standalone=True
+        ) == ["ko", "c", "chi"]
+        assert romanize_ruby_parts(
+            ["ま", "っ", "ち", "ゃ"], sokuon_standalone=True
+        ) == ["ma", "c", "cha", ""]
+
 
 class TestLongVowel:
     def test_long_vowel_repeats_previous(self):
