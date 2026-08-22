@@ -28,6 +28,7 @@ from strange_uta_game.backend.domain import Project
 from strange_uta_game.frontend.project_store import ProjectStore
 from strange_uta_game.frontend.theme import theme
 from strange_uta_game.frontend.dialog_policy import install_non_modal_dialog_policy
+from strange_uta_game.frontend.crash_guard import install_crash_guard
 from strange_uta_game.frontend.fluent_widgets import message_choice, message_question
 from strange_uta_game.frontend.window_sizing import (
     center_on_screen,
@@ -65,6 +66,10 @@ class MainWindow(MSFluentWindow):
         app = QApplication.instance()
         if app is not None:
             install_non_modal_dialog_policy(app)
+            # 全局异常兜底同样装在主窗口入口（而非 main.py）：嵌入宿主
+            # （krok-helper 等）不经过 main.py，宿主进程里逃逸的未处理异常
+            # 也由此兜住；宿主自装的 excepthook 会被链式转交、不被剥夺。
+            install_crash_guard(app)
 
         # ⚠ 必须在 super().__init__() 之前赋值！MSFluentWindow 初始化
         # 过程中可能触发 resizeEvent / changeEvent，那些 handler 会调
