@@ -10,13 +10,15 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Dict, List, Optional, Tuple
 
 from strange_uta_game.backend.domain.entities import Sentence
-from strange_uta_game.backend.domain.models import Character, RubyPart
+from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     format_timestamp,
+    parse_timestamp,
 )
 from strange_uta_game.backend.infrastructure.parsers.romaji import (
     romanize_sentence_to_self_ruby,
@@ -26,6 +28,167 @@ from strange_uta_game.backend.infrastructure.parsers.romaji import (
 _YOUON = set("ゃゅょャュョ")
 _SOKUON = set("っッ")
 _LONG_VOWEL = set("ー")
+
+_KRL_TIMESTAMP_RE = re.compile(r"\[(\d{1,3}:\d{2}:\d{2,3})\]")
+_KRL_CONFIG_START_RE = re.compile(r"\A\ufeff?\s*config\s*\{", re.IGNORECASE)
+
+
+def strip_krl_config(content: str) -> str:
+    """Remove an optional leading ``config { ... }`` block from KRL text.
+
+    The config payload is JSON-like and may contain nested objects/arrays or
+    braces inside quoted strings, so a non-greedy regular expression is not
+    sufficient.  Malformed/unclosed blocks are left untouched rather than
+    silently discarding the entire file.
+    """
+    match = _KRL_CONFIG_START_RE.match(content)
+    if match is None:
+        return content
+
+    brace_start = content.find("{", match.start())
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(brace_start, len(content)):
+        char = content[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return content[index + 1 :].lstrip(" \t\r\n")
+    return content
+
+
+def is_kasugamuki_content(content: str) -> bool:
+    """Return whether text uses Kirakara/Kasugamuki timed-ruby syntax."""
+    body = strip_krl_config(content)
+    for block in re.findall(r"\{[^{}\r\n]*\}", body):
+        if "|" not in block:
+            continue
+        # Kirakara's second pronunciation layer is unambiguous.  Single-layer
+        # exports are identified by their unnumbered [MM:SS:cc] checkpoints;
+        # SUG's generic inline format uses [N|MM:SS:cc] instead.
+        if ">" in block or _KRL_TIMESTAMP_RE.search(block):
+            return True
+    return False
+
+
+def _parse_krl_layer(layer: str) -> Tuple[List[str], List[int]]:
+    """Parse one pronunciation layer into displayed parts and checkpoints."""
+    matches = list(_KRL_TIMESTAMP_RE.finditer(layer))
+    if not matches:
+        return ([layer] if layer else []), []
+
+    parts: List[str] = []
+    timestamps: List[int] = []
+    leading = layer[: matches[0].start()]
+    for idx, match in enumerate(matches):
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(layer)
+        text = layer[match.end() : end]
+        if idx == 0 and leading:
+            text = leading + text
+        timestamps.append(parse_timestamp(match.group(1)))
+        parts.append(text)
+    return parts, timestamps
+
+
+def _krl_block_to_character(block: str, singer_id: str) -> Character:
+    display, separator, annotation = block.partition("|")
+    if not separator or not display:
+        raise ValueError(f"无效的 KRL 注音块: {{{block}}}")
+    kana_layer, has_romaji, romaji_layer = annotation.partition(">")
+    kana_parts, kana_timestamps = _parse_krl_layer(kana_layer)
+    romaji_parts, romaji_timestamps = _parse_krl_layer(
+        romaji_layer if has_romaji else ""
+    )
+
+    # The kana layer is the source pronunciation.  For self-ruby blocks such
+    # as {しょ|>[00:19:77]sho}, only take timing from the romaji layer.
+    timestamps = kana_timestamps or romaji_timestamps
+    ruby_parts = [RubyPart(text=text) for text in kana_parts if text]
+    ruby = Ruby(parts=ruby_parts) if ruby_parts else None
+    check_count = max(len(timestamps), len(ruby_parts), 1)
+    character = Character(
+        char=display,
+        ruby=ruby,
+        check_count=check_count,
+        timestamps=timestamps[:check_count],
+        singer_id=singer_id,
+    )
+    if ruby is not None and len(ruby.parts) != check_count:
+        character.set_check_count(check_count, ruby_split_mode="mora")
+    character.push_to_ruby()
+    return character
+
+
+def sentence_from_kasugamuki(line: str, singer_id: str) -> Sentence:
+    """Parse one Kirakara/Kasugamuki lyric line."""
+    characters: List[Character] = []
+    pos = 0
+    pending_timestamp: Optional[int] = None
+    while pos < len(line):
+        if line[pos] == "{":
+            end = line.find("}", pos + 1)
+            if end < 0:
+                raise ValueError("未闭合的 KRL 注音块")
+            character = _krl_block_to_character(line[pos + 1 : end], singer_id)
+            if pending_timestamp is not None and not character.timestamps:
+                character.check_count = max(character.check_count, 1)
+                character.add_timestamp(pending_timestamp)
+            pending_timestamp = None
+            characters.append(character)
+            pos = end + 1
+            continue
+
+        timestamp_match = _KRL_TIMESTAMP_RE.match(line, pos)
+        if timestamp_match:
+            timestamp = parse_timestamp(timestamp_match.group(1))
+            next_pos = timestamp_match.end()
+            # A tag at line end or immediately before another block/tag is a
+            # release checkpoint for the preceding lyric unit.
+            if characters and (
+                next_pos == len(line) or line[next_pos] in "{["
+            ):
+                previous = characters[-1]
+                previous.is_sentence_end = True
+                previous.set_sentence_end_ts(timestamp)
+            else:
+                pending_timestamp = timestamp
+            pos = next_pos
+            continue
+
+        character = Character(
+            char=line[pos],
+            check_count=1 if pending_timestamp is not None else 0,
+            timestamps=[pending_timestamp] if pending_timestamp is not None else [],
+            singer_id=singer_id,
+        )
+        pending_timestamp = None
+        characters.append(character)
+        pos += 1
+
+    return Sentence(singer_id=singer_id, characters=characters)
+
+
+def sentences_from_kasugamuki(content: str, singer_id: str) -> List[Sentence]:
+    """Parse KRL text, ignoring an optional foreign-exporter config block."""
+    body = strip_krl_config(content)
+    return [
+        sentence_from_kasugamuki(line.strip(), singer_id)
+        for line in body.splitlines()
+        if line.strip()
+    ]
 
 
 def _split_kana_moras(text: str) -> List[str]:

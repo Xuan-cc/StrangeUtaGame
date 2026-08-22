@@ -29,6 +29,10 @@ from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     sentences_from_inline_text,
     split_into_moras,
 )
+from strange_uta_game.backend.infrastructure.parsers.kasugamuki_format import (
+    is_kasugamuki_content,
+    sentences_from_kasugamuki,
+)
 from strange_uta_game.backend.infrastructure.parsers.text_splitter import (
     CharType,
     get_char_type,
@@ -377,13 +381,17 @@ def detect_lyric_format(content: str) -> str:
     """检测歌词内容的格式。
 
     Returns:
-        格式名称: "sug", "utaten", "inline", "nicokara", "ass", "srt", "lrc", "text"
+        格式名称: "sug", "utaten", "krl", "inline", "nicokara", "ass", "srt", "lrc", "text"
     """
     # SUG/JSON 格式检测（最高优先级，避免误解析）
     if _is_json_content(content):
         return "sug"
     if UtatenRubyParser.is_utaten_format(content):
         return "utaten"
+    # KRL must precede generic inline detection: both formats use {text|ruby},
+    # but KRL checkpoints omit inline's leading N| count and may add >romaji.
+    if is_kasugamuki_content(content):
+        return "krl"
     # 带内联时间戳的注音文本格式（|| 分隔符）优先于内联格式检测
     if _ANNOTATED_PATTERN.search(content):
         return "annotated"
@@ -474,6 +482,12 @@ def parse_lyric_content(
             progress_cb=progress_cb,
         )
         return _apply_compensation(sentences), False, [], {"format": "utaten"}
+
+    if fmt == "krl":
+        if progress_cb:
+            progress_cb(_tr("正在解析 Kirakara 格式..."))
+        sentences = sentences_from_kasugamuki(content, default_singer_id)
+        return _apply_compensation(sentences), False, [], {"format": "krl"}
 
     # 带内联时间戳的注音文本格式（|| 分隔符）
     if fmt == "annotated":

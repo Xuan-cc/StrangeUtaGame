@@ -52,13 +52,16 @@ class ProjectImportService:
             ProjectImportError: 读取或解析失败时抛出，原始异常附加为 ``__cause__``。
         """
         # 延迟导入，避免 application 层启动时牵扯 infrastructure 重依赖
+        from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+            sentences_from_inline_text,
+        )
+        from strange_uta_game.backend.infrastructure.parsers.kasugamuki_format import (
+            sentences_from_kasugamuki,
+        )
         from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
             LRCParser,
             LyricParserFactory,
             parse_to_sentences,
-        )
-        from strange_uta_game.backend.infrastructure.parsers.inline_format import (
-            sentences_from_inline_text,
         )
 
         try:
@@ -67,6 +70,8 @@ class ProjectImportService:
             raise ProjectImportError(f"无法读取歌词文件: {e}") from e
 
         try:
+            if Path(path).suffix.lower() == ".krl":
+                return sentences_from_kasugamuki(content, default_singer_id)
             if _INLINE_PATTERN.search(content):
                 return sentences_from_inline_text(content, default_singer_id)
 
@@ -96,16 +101,19 @@ class ProjectImportService:
         Returns:
             (sentences, metadata) 元组
         """
-        from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
-            LRCParser,
-            LyricParserFactory,
-            parse_to_sentences,
+        from strange_uta_game.backend.infrastructure.parsers.ass_parser import (
+            ASSParser,
         )
         from strange_uta_game.backend.infrastructure.parsers.inline_format import (
             sentences_from_inline_text,
         )
-        from strange_uta_game.backend.infrastructure.parsers.ass_parser import (
-            ASSParser,
+        from strange_uta_game.backend.infrastructure.parsers.kasugamuki_format import (
+            sentences_from_kasugamuki,
+        )
+        from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
+            LRCParser,
+            LyricParserFactory,
+            parse_to_sentences,
         )
 
         try:
@@ -116,6 +124,10 @@ class ProjectImportService:
         meta: Dict[str, str] = {}
 
         try:
+            if Path(path).suffix.lower() == ".krl":
+                return sentences_from_kasugamuki(content, default_singer_id), {
+                    "format": "krl",
+                }
             if _INLINE_PATTERN.search(content):
                 sentences = sentences_from_inline_text(content, default_singer_id)
                 return sentences, meta

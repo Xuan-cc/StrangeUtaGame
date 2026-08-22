@@ -47,6 +47,10 @@ from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     sentences_from_inline_text,
 )
+from strange_uta_game.backend.infrastructure.parsers.kasugamuki_format import (
+    is_kasugamuki_content,
+    sentences_from_kasugamuki,
+)
 
 
 def _reset_nicokara_tags() -> None:
@@ -74,7 +78,7 @@ class HomeInterface(QWidget):
     project_created = pyqtSignal(Project, str)  # (project, audio_path)
     project_opened = pyqtSignal(Project, str)  # (project, file_path)
     project_save_requested = pyqtSignal()  # 请求保存当前项目
-    _LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra", ".ass", ".srt"}
+    _LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra", ".krl", ".ass", ".srt"}
     _PROJECT_EXTENSIONS = {".sug"}
     _AUDIO_EXTENSIONS = {
         ".mp3", ".wav", ".flac", ".ogg",
@@ -375,7 +379,7 @@ class HomeInterface(QWidget):
             self,
             self.tr("选择歌词文件"),
             init_dir,
-            self.tr("歌词文件 (*.lrc *.txt *.kra *.ass *.srt);;所有文件 (*.*)"),
+            self.tr("歌词文件 (*.lrc *.txt *.kra *.krl *.ass *.srt);;所有文件 (*.*)"),
         )
 
         if file_path:
@@ -685,11 +689,13 @@ class HomeInterface(QWidget):
     def _detect_format(self, content: str) -> str:
         """从文本内容自动检测歌词格式
 
-        返回格式标识: 'inline', 'nicokara', 'ass', 'srt', 'lrc', 'text'
+        返回格式标识: 'krl', 'inline', 'nicokara', 'ass', 'srt', 'lrc', 'text'
         """
         import re
 
-        # 优先级: inline > nicokara > ass > srt > lrc > text
+        # KRL 也使用 {text|ruby}，必须在通用 inline 之前检测。
+        if is_kasugamuki_content(content):
+            return "krl"
 
         # 内联格式: [N|MM:SS:cc] 或 {字|...}
         if self._is_inline_format(content):
@@ -725,6 +731,10 @@ class HomeInterface(QWidget):
         """
         fmt = self._detect_format(content)
         temp_singer = Singer(name="临时", is_default=True)
+
+        if fmt == "krl":
+            self._lyric_lines = sentences_from_kasugamuki(content, temp_singer.id)
+            return
 
         if fmt == "inline":
             self._lyric_lines = sentences_from_inline_text(content, temp_singer.id)
