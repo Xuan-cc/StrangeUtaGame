@@ -53,7 +53,10 @@ from strange_uta_game.backend.application import (
 from strange_uta_game.backend.application.auto_check_service import (
     delete_rubies_by_type_names,
 )
-from strange_uta_game.backend.application.export_service import ExportService
+from strange_uta_game.backend.application.export_service import (
+    ExportService,
+    sanitize_export_basename,
+)
 from strange_uta_game.backend.domain import Character, Project, Sentence
 from strange_uta_game.backend.infrastructure.audio import AudioLoadError
 from strange_uta_game.backend.infrastructure.exporters import get_exporter_by_name
@@ -7148,6 +7151,7 @@ class EditorInterface(QWidget):
             base_name = self._project.metadata.title
         else:
             base_name = "untitled"
+        base_name = sanitize_export_basename(base_name)
         suggested_dir = ""
         if store:
             suggested_dir = store.export_dir

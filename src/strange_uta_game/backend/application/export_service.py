@@ -3,6 +3,7 @@
 提供统一的项目导出功能。
 """
 
+import re
 from typing import Optional, Callable, List, Set, Dict
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,47 @@ from strange_uta_game.backend.infrastructure.exporters import (
     get_exporter_by_name,
     get_all_exporters,
 )
+
+
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
+_WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
+
+def sanitize_export_basename(name: str, fallback: str = "untitled") -> str:
+    """返回可安全用作跨平台导出文件名的名称（不含扩展名）。
+
+    Windows 不允许若干标点、控制字符、尾随空格/句点和设备保留名。
+    音频文件名与项目标题会被自动用作导出名，因此必须在拼接路径前清理。
+    名称还会按 UTF-16 code unit 限长，给扩展名和常见文件系统留出余量。
+    """
+    cleaned = _INVALID_FILENAME_CHARS.sub("_", str(name or "").strip())
+    cleaned = cleaned.rstrip(" .")
+    if not cleaned:
+        cleaned = fallback
+    # Windows 对设备名的判断只看第一个句点前的部分；CON.txt 也非法。
+    if cleaned.split(".", 1)[0].upper() in _WINDOWS_RESERVED_NAMES:
+        cleaned = f"_{cleaned}"
+
+    # NTFS 单个路径分量通常最多 255 个 UTF-16 code unit。限制为 200，
+    # 避免长标题再附加扩展名时触发 WinError 206 / OSError 22。
+    encoded = cleaned.encode("utf-16-le")[:400]
+    if len(encoded) % 2:
+        encoded = encoded[:-1]
+    while encoded:
+        try:
+            cleaned = encoded.decode("utf-16-le")
+            break
+        except UnicodeDecodeError:
+            encoded = encoded[:-2]
+    cleaned = cleaned.rstrip(" .")
+    return cleaned or fallback
 
 
 @dataclass

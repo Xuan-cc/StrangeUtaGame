@@ -39,7 +39,10 @@ from pathlib import Path
 import re
 
 from strange_uta_game.backend.domain import Project
-from strange_uta_game.backend.application.export_service import ExportService
+from strange_uta_game.backend.application.export_service import (
+    ExportService,
+    sanitize_export_basename,
+)
 from strange_uta_game.frontend.settings.settings_interface import (
     AppSettings,
     NicokaraTagsDialog,
@@ -882,11 +885,14 @@ class ExportInterface(QWidget):
                 ext = fmt["extension"]
                 break
 
-        base_name = (
+        requested_base_name = (
             self.line_filename.text().strip()
             or self._project.metadata.title
             or "untitled"
         )
+        base_name = sanitize_export_basename(requested_base_name)
+        if base_name != requested_base_name:
+            self.line_filename.setText(base_name)
         filename = base_name + ext
         filepath = str(Path(output_dir) / filename)
 

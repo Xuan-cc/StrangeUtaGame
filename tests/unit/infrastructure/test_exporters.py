@@ -26,6 +26,7 @@ from strange_uta_game.backend.infrastructure.exporters import (
     ExportError,
 )
 from strange_uta_game.backend.application import ExportService
+from strange_uta_game.backend.application.export_service import sanitize_export_basename
 
 
 class TestLRCExporter:
@@ -1194,6 +1195,27 @@ class TestExportService:
         lrc_format = next((f for f in formats if f["name"] == "LRC (增强型)"), None)
         assert lrc_format is not None
         assert lrc_format["extension"] == ".lrc"
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ('song: live? <take>|*', "song_ live_ _take_"),
+            ("title. ", "title"),
+            ("CON", "_CON"),
+            ("com1", "_com1"),
+            ("NUL.demo", "_NUL.demo"),
+            ("\x00\r\n", "_"),
+            ("日本語の曲名", "日本語の曲名"),
+        ],
+    )
+    def test_sanitize_export_basename(self, raw, expected):
+        assert sanitize_export_basename(raw) == expected
+
+    def test_sanitize_export_basename_limits_utf16_length(self):
+        sanitized = sanitize_export_basename("😀" * 150)
+
+        assert len(sanitized.encode("utf-16-le")) <= 400
+        assert sanitized == "😀" * 100
 
     def test_export(self):
         """测试导出功能"""
