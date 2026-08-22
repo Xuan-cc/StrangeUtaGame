@@ -108,6 +108,41 @@ class _NullTransport:
         raise RuntimeError("测试不执行下载")
 
 
+class TestModelComboDeferredApply:
+    """模型下拉变更延迟到事件循环应用：不与弹层销毁竞争（连续快速
+    点击闪退回归），且防抖合并连续切换。"""
+
+    def test_rapid_changes_apply_once(self, qapp, tmp_path):
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        TestPathChangeAppliesImmediately._wait_initial_refresh(qapp, dialog)
+        persisted = []
+        dialog._save_settings = lambda s: persisted.append(1)
+        # 连续两次切换：pending 期间第二次不重复排队
+        dialog.combo_model.setCurrentIndex(1)
+        assert dialog._model_apply_pending is True
+        dialog.combo_model.setCurrentIndex(0)
+        assert dialog._model_apply_pending is True
+        # 描述标签即时更新（便宜操作）
+        assert dialog.model_desc.text()
+        # 派发事件循环：延迟应用执行一次
+        for _ in range(20):
+            qapp.processEvents()
+        assert dialog._model_apply_pending is False
+        assert len(persisted) == 1
+
+    def test_busy_skips_apply(self, qapp, tmp_path):
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        dialog._busy = True
+        dialog.combo_model.setCurrentIndex(1)
+        for _ in range(10):
+            qapp.processEvents()
+        # busy 期间早退：不排队、不持久化、快照不变
+        assert dialog._model_apply_pending is False
+        assert dialog._snapshot is snap
+
+
 class TestPathChangeAppliesImmediately:
     """改模型/缓存路径即时生效：注册表与缓存原地换根，不再要求重开窗口。"""
 

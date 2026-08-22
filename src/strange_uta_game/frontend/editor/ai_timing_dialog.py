@@ -243,6 +243,8 @@ class AiTimingDialog(QDialog):
         self._thread: Optional[QThread] = None
         self._worker: Optional[_TaskWorker] = None
         self._busy = False
+        # 模型下拉变更的延迟应用标记（防抖：连续快速切换只应用最后一次）
+        self._model_apply_pending = False
         self._eta_samples: List[tuple] = []
         self._task_started = 0.0
         self._last_eta_text = ""
@@ -738,8 +740,21 @@ class AiTimingDialog(QDialog):
         )
 
     def _on_model_combo_changed(self, *_args) -> None:
-        """高级选项切换模型 → 立即持久化并刷新状态行（保持两处一致）。"""
+        """高级选项切换模型 → 持久化并刷新状态行（保持两处一致）。
+
+        重活延迟到下一轮事件循环：qfluentwidgets 的 currentIndexChanged
+        在弹层（RoundMenu）自身的激活/关闭调用栈内同步发出，此时直接
+        起线程/改控件会与弹层销毁竞争（用户实测连续快速点击闪退）。
+        防抖合并连续切换，只应用最后一次。
+        """
         self._update_model_desc(self.combo_model.currentIndex())
+        if self._busy or self._model_apply_pending:
+            return
+        self._model_apply_pending = True
+        QTimer.singleShot(0, self._apply_model_combo_change)
+
+    def _apply_model_combo_change(self) -> None:
+        self._model_apply_pending = False
         if self._busy:
             return
         self._persist_settings()
