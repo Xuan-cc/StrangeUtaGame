@@ -96,6 +96,9 @@ class AiTimingSnapshot:
     project_ok: bool = False
     has_content: bool = False
     pending_units: int = 0
+    pending_units_detail: List[str] = field(default_factory=list)
+    """缺少读音的节奏点位置（前几处，行/列/字符），供阻断提示直接
+    指出是哪个字——此前只显示数量，用户无从定位。"""
     generation_errors: List[str] = field(default_factory=list)
     vocal: Optional[VocalCandidate] = None
     runtime: Optional[RuntimeStatus] = None
@@ -119,7 +122,16 @@ class AiTimingSnapshot:
         if not self.audio_ok:
             reasons.append("未加载音频")
         if self.pending_units:
-            reasons.append(f"{self.pending_units} 个节奏点缺少读音，无法对齐")
+            detail = ""
+            if self.pending_units_detail:
+                shown = "、".join(self.pending_units_detail)
+                more = self.pending_units - len(self.pending_units_detail)
+                if more > 0:
+                    shown += f" 等 {self.pending_units} 处"
+                detail = f"（{shown}）"
+            reasons.append(
+                f"{self.pending_units} 个节奏点缺少读音，无法对齐{detail}"
+            )
         reasons.extend(self.generation_errors)
         if self.vocal is not None and self.vocal.state == "needs_choice":
             reasons.append("同目录存在多个人声文件，请先选择")
@@ -241,6 +253,10 @@ class AiTimingService:
         if project is not None and snap.has_content:
             plan = self._resolver.resolve_project(project, fill_missing=True)
             snap.pending_units = len(plan.pending_units)
+            snap.pending_units_detail = [
+                f"第 {u.line_idx + 1} 行第 {u.char_idx + 1} 字「{u.char_text}」"
+                for u in plan.pending_units[:5]
+            ]
             snap.generation_errors = list(plan.generation_errors)
 
         if snap.audio_ok:

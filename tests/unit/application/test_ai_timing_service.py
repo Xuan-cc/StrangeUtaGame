@@ -191,6 +191,12 @@ class TestSnapshot:
         snap = service.snapshot(project, str(audio), probe_runtime=False)
         assert snap.pending_units == 1
         assert any("缺少读音" in r for r in snap.blocking_reasons)
+        # 阻断提示直接指出缺注音的字（行/列/字符），不再是纯数量
+        reason = next(
+            r for r in snap.blocking_reasons if "缺少读音" in r
+        )
+        assert "第 1 行第 1 字「赤」" in reason
+        assert snap.pending_units_detail == ["第 1 行第 1 字「赤」"]
 
 
 class TestExecute:

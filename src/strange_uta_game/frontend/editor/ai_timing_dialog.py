@@ -795,11 +795,21 @@ class AiTimingDialog(QDialog):
 
         if snapshot.project_ok and snapshot.has_content:
             if snapshot.pending_units or snapshot.generation_errors:
-                detail = "、".join(snapshot.generation_errors[:2])
-                self.row_annotations.set_state(
-                    "error",
-                    f"{snapshot.pending_units} 个节奏点缺少读音 {detail}".strip(),
+                # 直接指出缺注音的字（行/列/字符）——此前只有数量，
+                # 用户无从知道该去补哪个字；行内过长自动省略+tooltip
+                detail = "、".join(snapshot.pending_units_detail[:3])
+                more = snapshot.pending_units - min(
+                    3, len(snapshot.pending_units_detail)
                 )
+                if more > 0:
+                    detail = f"{detail} 等 {snapshot.pending_units} 处".strip()
+                text = f"{snapshot.pending_units} 个节奏点缺少读音"
+                if detail:
+                    text += f"：{detail}"
+                gen = "、".join(snapshot.generation_errors[:2])
+                if gen:
+                    text += f" {gen}"
+                self.row_annotations.set_state("error", text.strip())
             else:
                 self.row_annotations.set_state(
                     "ok", self.tr("既有标注优先，缺口已补足")
