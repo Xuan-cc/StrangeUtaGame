@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from PyQt6.QtCore import Qt, QCoreApplication
+from PyQt6.QtCore import Qt, QCoreApplication, QTimer
 from strange_uta_game.frontend.font_utils import ui_font
 
 
@@ -199,7 +199,23 @@ def attach_proxy_group(settings_interface: "SettingsInterface") -> None:
 
     # ── 槽 ──
 
+    save_apply_pending = False
+
     def _save_and_refresh():
+        # 重活延迟到下一轮事件循环（防抖合并连续变更）：
+        # qfluentwidgets 的 currentIndexChanged 在弹层（RoundMenu）自身的
+        # 激活/关闭调用栈内同步发出，此时同步 load/save 设置文件、system
+        # 模式下还会扫本地代理端口（阻塞 IO），会与弹层销毁竞争、快速
+        # 点击卡 UI（同 ai_timing_dialog 模型下拉的修复）。
+        nonlocal save_apply_pending
+        if save_apply_pending:
+            return
+        save_apply_pending = True
+        QTimer.singleShot(0, _apply_save_and_refresh)
+
+    def _apply_save_and_refresh():
+        nonlocal save_apply_pending
+        save_apply_pending = False
         mode = _INDEX_TO_MODE.get(mode_card.combo.currentIndex(), "system")
         manual = manual_card.edit.text().strip()
         cur = UpdaterSettings.load(parent.get_settings())

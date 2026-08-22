@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
     QStyle,
     QStyleOptionViewItem,
 )
-from PyQt6.QtCore import QEvent, Qt, QRect, QSize, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, QRect, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPixmap, QPainter
 from qfluentwidgets import (
     ComboBox,
@@ -1037,6 +1037,8 @@ class SingerManagerInterface(QWidget):
         self._group_filter: str = ""
         # 持久选中状态：跨搜索/刷新保留，以 singer.id 为键
         self._selected_ids: Set[str] = set()
+        # 分组下拉触发的列表刷新延迟标记（防抖：连续快速切换只刷新一次）
+        self._list_refresh_pending = False
 
         self._init_ui()
 
@@ -1495,6 +1497,23 @@ class SingerManagerInterface(QWidget):
 
     def _on_group_filter_changed(self):
         self._group_filter = self.combo_group_filter.currentData() or ""
+        self._schedule_list_refresh()
+
+    def _schedule_list_refresh(self) -> None:
+        """分组切换触发的刷新延迟到下一轮事件循环（防抖合并连续切换）。
+
+        qfluentwidgets 的 currentIndexChanged 在弹层（RoundMenu）自身的
+        激活/关闭调用栈内同步发出，此时 _refresh_list 会 clear() 这个
+        下拉本身并整表重建演唱者列表，与弹层销毁竞争（快速连续切换
+        闪退，同 ai_timing_dialog 模型下拉的修复）。
+        """
+        if self._list_refresh_pending:
+            return
+        self._list_refresh_pending = True
+        QTimer.singleShot(0, self._apply_list_refresh)
+
+    def _apply_list_refresh(self) -> None:
+        self._list_refresh_pending = False
         self._refresh_list()
 
     def _on_copy_singer_names(self):

@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QEvent, Qt, QProcess, QUrl
+from PyQt6.QtCore import QEvent, Qt, QProcess, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices, QFont
 from strange_uta_game.frontend.font_utils import ui_font
 from PyQt6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QWidget
@@ -31,6 +31,8 @@ class AboutSubInterface(SubSettingInterface):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._settings_ref = None
+        # 语言下拉变更的延迟应用标记（防抖：连续快速切换只应用最后一次）
+        self._language_apply_pending = False
         self._init_ui()
 
     def _init_ui(self):
@@ -168,6 +170,23 @@ class AboutSubInterface(SubSettingInterface):
         pass  # 关于/语言页的 FFmpeg 路径与语言均在切换时即时保存，无需在此收集
 
     def _on_language_changed(self, idx: int):
+        """重活延迟到下一轮事件循环（防抖合并连续切换）。
+
+        qfluentwidgets 的 currentIndexChanged 在弹层（RoundMenu）自身的
+        激活/关闭调用栈内同步发出，此时落盘 + apply_language
+        （installTranslator 同步触发 LanguageChange → 各下拉 clear/重填，
+        包括语言卡自己）会与弹层销毁竞争（快速连续切换闪退，
+        同 ai_timing_dialog 模型下拉的修复）。
+        """
+        if self._language_apply_pending:
+            return
+        self._language_apply_pending = True
+        QTimer.singleShot(0, self._apply_language_change)
+
+    def _apply_language_change(self) -> None:
+        self._language_apply_pending = False
+        # 防抖后重读当前选中：连续切换只应用最后一次
+        idx = self._language_card.currentIndex()
         if self._settings_ref is None:
             return
         # embedded 下卡片本应隐藏，但万一别处程序化触发了 index_changed，

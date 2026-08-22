@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from PyQt6.QtCore import Qt, QThread
+from PyQt6.QtCore import Qt, QThread, QTimer
 from PyQt6.QtGui import QFont
 from strange_uta_game.frontend.font_utils import ui_font
 from PyQt6.QtWidgets import (
@@ -159,6 +159,8 @@ class DictionarySubInterface(SubSettingInterface):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._settings_ref = None
+        # 更新间隔变更的延迟应用标记（防抖：连续快速调整只应用最后一次）
+        self._interval_apply_pending = False
         self._init_ui()
 
     def _init_ui(self):
@@ -605,6 +607,20 @@ class DictionarySubInterface(SubSettingInterface):
         self._notify_changed()
 
     def _on_interval_changed(self):
+        """延迟到下一轮事件循环执行（防抖合并连续调整）。
+
+        qfluentwidgets 的 currentIndexChanged 在弹层（RoundMenu）自身的
+        激活/关闭调用栈内同步发出，此时 save() 同步落盘会与弹层销毁
+        竞争（同 ai_timing_dialog 模型下拉的修复）。editingFinished 走
+        同一延迟，0ms 对用户无感。
+        """
+        if self._interval_apply_pending:
+            return
+        self._interval_apply_pending = True
+        QTimer.singleShot(0, self._apply_interval_change)
+
+    def _apply_interval_change(self) -> None:
+        self._interval_apply_pending = False
         if self._settings_ref is None:
             return
         unit_idx = self._interval_combo.currentIndex()
