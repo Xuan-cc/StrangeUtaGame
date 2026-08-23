@@ -45,6 +45,7 @@ from qfluentwidgets import (
 )
 from qfluentwidgets import InfoBar, InfoBarPosition
 
+from strange_uta_game.backend.application.ai_timing.ailog import ai_log_path, ailog
 from strange_uta_game.backend.application.ai_timing.models import (
     ModelDownloadService,
     ModelRegistry,
@@ -339,10 +340,14 @@ class AiTimingDialog(QDialog):
             self.row_model,
         ):
             self._box_status.contentLayout.addWidget(row)
-        # 行内动作：对齐环境的「安装/修复」（含分离组件补装）、
-        # 模型的「下载」「校验」（检测到缺什么，同行直接给操作）
+        # 行内动作：对齐环境的「安装/修复」（含分离组件补装）、「日志」
+        # （一键定位 ai_timing.log，用户可整个发回排查）、模型的
+        # 「下载」「校验」（检测到缺什么，同行直接给操作）
         self.btn_install_runtime = self.row_runtime.add_action(
             self.tr("安装 / 修复"), self._on_install_runtime
+        )
+        self.btn_open_ai_log = self.row_runtime.add_action(
+            self.tr("日志"), self._on_open_ai_log
         )
         # 嵌入模式宿主 Runtime 未安装时的一键跳转（宿主提供能力才显示）
         self.btn_goto_sep = self.row_runtime.add_action(
@@ -558,6 +563,7 @@ class AiTimingDialog(QDialog):
             self.btn_goto_sep,
             self.btn_recheck,
             self.btn_reset,
+            # 日志按钮保持可用：任务进行中打开日志看实时进展也是正当需求
         ]
 
     def _cleanup_task(self) -> None:
@@ -965,6 +971,37 @@ class AiTimingDialog(QDialog):
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
+    def _on_open_ai_log(self) -> None:
+        """打开 AI 打轴统一日志（资源管理器中选中该文件）。
+
+        首次落一行事件保证文件存在；explorer /select 优先（直接定位
+        到文件），失败退化为打开所在目录。日志文件是用户反馈的主要
+        载体：探测/安装/变体判定/分离/推理/报错全在其中。
+        """
+        try:
+            path = ai_log_path()
+            ailog("ui", "用户打开 AI 打轴日志")
+            if sys.platform == "win32":
+                import subprocess as _sp
+
+                from strange_uta_game.backend.infrastructure.windows import (
+                    hidden_subprocess_kwargs,
+                )
+
+                _sp.run(
+                    ["explorer", "/select,", str(path)],
+                    check=False,
+                    timeout=10,
+                    **hidden_subprocess_kwargs(),
+                )
+                return
+        except Exception:
+            pass
+        try:
+            self._open_dir(ai_log_path().parent)
+        except Exception:
+            pass
+
     def _confirm_disk_usage(self, estimate_gb: float, detail: str = "") -> bool:
         """大体积下载/安装前的占用提醒：预计大小 + 磁盘实际剩余。"""
         import shutil as _shutil
@@ -1083,6 +1120,11 @@ class AiTimingDialog(QDialog):
 
     def _on_install_runtime(self) -> None:
         mode, target = self._install_plan()
+        ailog(
+            "ui",
+            f"用户点击「安装 / 修复」：mode={mode} target={target} "
+            f"frozen={bool(getattr(sys, 'frozen', False))}",
+        )
         if mode == "blocked":
             confirmed = message_question(
                 self,
@@ -1194,20 +1236,43 @@ class AiTimingDialog(QDialog):
         def _done(status) -> None:
             self._persist_settings()
             log_file = _install_log_file_for(mode, target)
-            InfoBar.success(
-                title=self.tr("对齐环境就绪"),
-                content=(
-                    status.summary
-                    + self.tr("（安装日志：{p}）").format(p=log_file)
-                    if log_file is not None
-                    else status.summary
-                ),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=4000,
-                parent=self,
-            )
+            ai_log = ai_log_path()
+            # 有 note（CPU 版 + 检测到显卡等）时用警告样式完整告知原因，
+            # 不再让用户对着「就绪」猜为什么不是 CUDA
+            note = getattr(status, "note", "")
+            if note:
+                InfoBar.warning(
+                    title=self.tr("运行环境已就绪（CPU 版）"),
+                    content=(
+                        note
+                        + self.tr("｜详细日志：{p} / {i}").format(
+                            p=ai_log, i=log_file
+                        )
+                        if log_file is not None
+                        else note
+                        + self.tr("｜详细日志：{p}").format(p=ai_log)
+                    ),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=12000,
+                    parent=self,
+                )
+            else:
+                InfoBar.success(
+                    title=self.tr("对齐环境就绪"),
+                    content=(
+                        status.summary
+                        + self.tr("（安装日志：{p}）").format(p=log_file)
+                        if log_file is not None
+                        else status.summary
+                    ),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=4000,
+                    parent=self,
+                )
             self.refresh()
 
         self._run_task(
@@ -1295,6 +1360,7 @@ class AiTimingDialog(QDialog):
         if chosen:
             self._settings.runtime_python = chosen
             self._persist_settings()
+            ailog("ui", f"用户更换对齐运行环境解释器：{chosen}")
             InfoBar.info(
                 title=self.tr("已保存"),
                 content=self.tr("运行环境已更新，将立即生效。"),
@@ -1356,6 +1422,7 @@ class AiTimingDialog(QDialog):
         if self._snapshot is None or not self._snapshot.ready:
             return
         if self._context_checker is not None and not self._context_checker():
+            ailog("ui", "执行被拦截：弹窗打开后工程/音频已切换")
             InfoBar.warning(
                 title=self.tr("工程已变化"),
                 content=self.tr(
@@ -1434,6 +1501,7 @@ class AiTimingDialog(QDialog):
             default_cancel=True,
         )
         if confirmed and self._worker is not None:
+            ailog("ui", "用户确认取消 AI 打轴任务")
             self._worker.request_cancel()
             self.status_label.setText(self.tr("正在取消…"))
 

@@ -40,6 +40,13 @@ os.environ.setdefault(
     "SUG_CONFIG_DIR",
     str(Path(__file__).resolve().parents[1] / ".test_tmp" / "config"),
 )
+# AI 打轴统一日志同样隔离：probe/安装等路径在测试里也会落日志，
+# 不隔离会写进仓库根的真实 logs/（SUG_AI_TIMING_LOG 最高优先，
+# 见 ailog.ai_log_path；文件按需自建）
+os.environ.setdefault(
+    "SUG_AI_TIMING_LOG",
+    str(Path(__file__).resolve().parents[1] / ".test_tmp" / "logs" / "ai_timing.log"),
+)
 
 
 @pytest.fixture(autouse=True)

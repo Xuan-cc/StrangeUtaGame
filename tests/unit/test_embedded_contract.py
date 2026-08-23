@@ -468,3 +468,45 @@ class TestEmbeddedThemeContract:
         )
         page.load_settings(standalone_settings)
         assert not page.card_theme.isHidden()
+
+
+class TestLogsDirContract:
+    """SUG_LOGS_DIR 契约：嵌入宿主把日志（ai_timing.log / crash.log）收进
+    自己的数据目录；不设时行为与 standalone 完全一致。"""
+
+    def test_env_var_takes_priority(self, tmp_path, monkeypatch):
+        from strange_uta_game import app_dirs
+
+        custom = tmp_path / "host-logs"
+        monkeypatch.setenv("SUG_LOGS_DIR", str(custom))
+        assert app_dirs.logs_dir() == custom
+        assert custom.is_dir()  # 已确保存在
+
+    def test_ailog_follows_env_var(self, tmp_path, monkeypatch):
+        from strange_uta_game.backend.application.ai_timing.ailog import (
+            ai_log_path,
+            ailog,
+        )
+
+        # conftest 为整个会话设了 SUG_AI_TIMING_LOG（worker 精确路径，
+        # 优先级更高）；这里验证的是「无精确路径时跟随目录变量」
+        monkeypatch.delenv("SUG_AI_TIMING_LOG", raising=False)
+        custom = tmp_path / "host-logs"
+        monkeypatch.setenv("SUG_LOGS_DIR", str(custom))
+        assert ai_log_path() == custom / "ai_timing.log"
+        ailog("contract", "写入宿主目录")
+        assert (custom / "ai_timing.log").is_file()
+
+    def test_worker_path_marker_lower_priority_than_ailog_env(
+        self, tmp_path, monkeypatch
+    ):
+        """SUG_AI_TIMING_LOG（worker 内部机制）优先于 SUG_LOGS_DIR：
+        宿主侧已解析好的绝对路径不被目录级变量改写。"""
+        from strange_uta_game.backend.application.ai_timing.ailog import (
+            ai_log_path,
+        )
+
+        exact = tmp_path / "exact" / "ai_timing.log"
+        monkeypatch.setenv("SUG_LOGS_DIR", str(tmp_path / "host-logs"))
+        monkeypatch.setenv("SUG_AI_TIMING_LOG", str(exact))
+        assert ai_log_path() == exact

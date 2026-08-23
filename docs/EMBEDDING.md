@@ -16,6 +16,7 @@
 | 窗口 | 顶层 `MSFluentWindow` | 降级为子 widget（`Qt.WindowType.Widget`），由宿主放进自己的 layout |
 | 配置 | 文件（`config.json` 等） | 宿主注入的 `SettingsProvider` |
 | 缓存 | `程序目录/.cache` | `SUG_CACHE_DIR` 环境变量指向的目录 |
+| 日志 | `程序目录/logs`（不可写时 `~/.strange_uta_game/logs`） | `SUG_LOGS_DIR` 环境变量指向的目录 |
 | 顶层行为 | 全部自管 | 跳过（见下），由宿主管 |
 
 **核心不变量：embedded 的一切惰性化 —— 当 `embedded=False` 且 provider 为 None 且 `SUG_CACHE_DIR` 未设时，SUG 行为必须跟没有嵌入支持时逐字节一致。** 这是 SUG 能独立分发的前提。
@@ -91,9 +92,12 @@ class SettingsProvider(Protocol):
 | 注入项 | 形式 | SUG 侧读取点 |
 |---|---|---|
 | 缓存目录 | `SUG_CACHE_DIR` **环境变量** | 三处 `_get_cache_dir()`（`frontend/project_store.py`、`backend/infrastructure/audio/tsm_cache.py`、`.../video_converter.py`）优先读它。`project_store` 的缓存路径已**惰性化**（`_cache_dir()`/`_untitled_temp_path()` 函数，非 import 期常量），避免 import 时机固化错路径。 |
+| 日志目录 | `SUG_LOGS_DIR` **环境变量** | `app_dirs.logs_dir()` 优先读它。`logs/` 下两类文件都跟随：`ai_timing.log`（AI 打轴模块统一日志，`backend/application/ai_timing/ailog.py`，弹窗「日志」按钮可一键定位）与 `crash.log`（`frontend/crash_guard.py` 全局异常兜底）。宿主不设时两者落在宿主 exe 旁的 `logs/`（不可写时回退 `~/.strange_uta_game/logs`）。 |
 | ffmpeg 路径 | 配置键 `tools.ffmpeg_path`（主 config namespace） | `video_converter.get_ffmpeg_path()` |
 
-**注意**：`SUG_CACHE_DIR` 必须在 import SUG 任何模块**之前**设置（虽已惰性化降低风险，但宿主仍应尽早设）。
+**注意**：`SUG_CACHE_DIR` 必须在 import SUG 任何模块**之前**设置（虽已惰性化降低风险，但宿主仍应尽早设）。`SUG_LOGS_DIR` 同理尽早设置——`logs_dir()` 惰性解析，但 AI 打轴的 worker 子进程由宿主侧 SUG 进程经 `SUG_AI_TIMING_LOG`（内部机制，宿主无需关心）传递最终路径，两进程写同一份文件。
+
+另有一份日志**不**跟随 `SUG_LOGS_DIR`：AI 打轴的安装流水 `install.log` 始终写在运行环境目录（`<ai_runtime>/install.log`，嵌入模式即宿主托管 runtime 所在处），因为它与运行环境共存亡、随环境重建。
 
 ## 5. embedded 模式下 SUG 内部的行为契约
 

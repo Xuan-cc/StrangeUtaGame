@@ -146,7 +146,12 @@ def ensure_separation_model(model_root) -> str:
                     "将在下次分离时重新下载"
                 )
             )
-    return "；".join(notes)
+    joined = "；".join(notes)
+    if joined:
+        from strange_uta_game.backend.application.ai_timing.ailog import ailog
+
+        ailog("separation", f"分离模型体检：{joined}")
+    return joined
 
 
 def _failure_hint(tail_text: str, *, embedded: bool = False) -> str:
@@ -299,6 +304,15 @@ class StandaloneVocalSeparator:
             raise RuntimeError(
                 ffmpeg_missing_message(embedded=self._embedded)
             )
+        import time as _time
+
+        from strange_uta_game.backend.application.ai_timing.ailog import ailog
+
+        started = _time.monotonic()
+        ailog(
+            "separation",
+            f"人声分离开始：source={source.name} python={python}",
+        )
         # 模型体检自愈：残缺下载在子进程查表处必败且永不自愈
         note = ensure_separation_model(self._model_root)
         if note:
@@ -477,12 +491,21 @@ class StandaloneVocalSeparator:
                 progress("separation", 100, "分离完成")
         returncode = proc.wait()
         if result_path is not None and result_path.is_file():
+            ailog(
+                "separation",
+                f"人声分离完成：{(_time.monotonic() - started):.1f}s → {result_path.name}",
+            )
             return result_path
         detail_lines = [t for t in tail if t][-3:]
         detail = "；".join(detail_lines)
         # 提示基于全部保留输出判断（如 FFmpeg 缺失行出现在 traceback 之前，
         # 会被 detail 的 [-3:] 截掉），展示只取末尾几行
         hint = _failure_hint(" ".join(tail), embedded=self._embedded)
+        ailog(
+            "separation",
+            f"人声分离失败（返回码 {returncode}，"
+            f"{(_time.monotonic() - started):.1f}s）：{detail or hint or '无输出'}",
+        )
         if detail:
             raise RuntimeError(
                 _tr("人声分离失败（返回码 {code}）。").format(code=returncode)

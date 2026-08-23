@@ -130,6 +130,13 @@ class AlignmentWorkerClient:
         env.setdefault("HF_HUB_OFFLINE", "1")
         env.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
         env.setdefault("TOKENIZERS_PARALLELISM", "false")
+        # 统一日志路径按宿主口径传给 worker：外部解释器对 logs_dir 的
+        # 解析（frozen 包根在 _MEIPASS）与宿主不同，不传会写错位置
+        from strange_uta_game.backend.application.ai_timing.ailog import (
+            ai_log_path,
+        )
+
+        env["SUG_AI_TIMING_LOG"] = str(ai_log_path())
         return env
 
     def _is_same_interpreter(self) -> bool:

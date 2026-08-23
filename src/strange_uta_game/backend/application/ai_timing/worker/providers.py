@@ -298,6 +298,21 @@ class _TorchProviderBase(ForcedAlignmentProvider):
         if device in ("cuda", "mps") and not (cuda if device == "cuda" else mps):
             progress(18, f"未检测到可用的 {device.upper()}，回退 CPU 推理")
             device = "cpu"
+        try:
+            from strange_uta_game.backend.application.ai_timing.ailog import (
+                ailog,
+            )
+
+            gpu_desc = (
+                torch.cuda.get_device_name(0) if cuda and device == "cuda" else ""
+            )
+            ailog(
+                "worker",
+                f"设备选择：pref={preference} cuda={cuda} mps={mps} → {device}"
+                + (f"（{gpu_desc}）" if gpu_desc else ""),
+            )
+        except Exception:
+            pass
         return torch.device(device)
 
     def _import_torch(self):

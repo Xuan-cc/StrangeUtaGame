@@ -447,6 +447,7 @@ class TestRuntimeInstall:
         import strange_uta_game.backend.application.ai_timing.runtime as rt
 
         monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
+        monkeypatch.setattr(rt, "_wmi_adapters", lambda: [])
         seen = {}
 
         def fake_runner(exe, args, on_line, cancel):
@@ -468,6 +469,17 @@ class TestRuntimeInstall:
 
 
 class TestGpuDetection:
+    @pytest.fixture(autouse=True)
+    def _reset_gpu_detection(self, monkeypatch):
+        """显卡检测有进程内缓存 + WMI 兜底：按用例复位并屏蔽真实 WMI，
+        保证测试与宿主机是否有 NVIDIA 显卡无关。"""
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(rt, "_gpu_name_cache", None)
+        monkeypatch.setattr(rt, "_wmi_cache", None)
+        monkeypatch.setattr(rt, "_wmi_adapters", lambda: [])
+        yield
+
     def test_detect_nvidia_gpu_parses_name(self, monkeypatch):
         import strange_uta_game.backend.application.ai_timing.runtime as rt
 
@@ -883,6 +895,17 @@ class TestPortableRuntimePath:
 class TestReleaseVariant:
     """分支 B：release 变体选择与契约 URL。"""
 
+    @pytest.fixture(autouse=True)
+    def _hermetic_detection(self, monkeypatch):
+        """驱动判定有 WMI 兜底与进程内缓存：屏蔽真实 WMI 并复位缓存，
+        用例只考察 nvidia-smi 输出的解析。"""
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(rt, "_gpu_name_cache", None)
+        monkeypatch.setattr(rt, "_wmi_cache", None)
+        monkeypatch.setattr(rt, "_wmi_adapters", lambda: [])
+        yield
+
     def test_driver_gate_parsing(self, monkeypatch):
         import strange_uta_game.backend.application.ai_timing.runtime as rt
 
@@ -939,6 +962,16 @@ class TestReleaseVariant:
 
 class TestInstallFromRelease:
     """分支 B：托管底座下载安装的离线全流程。"""
+
+    @pytest.fixture(autouse=True)
+    def _hermetic_detection(self, monkeypatch):
+        """变体判定/显卡探测全部离线：屏蔽真实 WMI 与缓存。"""
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(rt, "_gpu_name_cache", None)
+        monkeypatch.setattr(rt, "_wmi_cache", None)
+        monkeypatch.setattr(rt, "_wmi_adapters", lambda: [])
+        yield
 
     def _fixture(self, tmp_path):
         import hashlib
@@ -1115,6 +1148,11 @@ class TestInstallFromRelease:
         monkeypatch.setattr(
             rt, "detect_torch_build", lambda exe: ("2.7.1", "cpu")
         )
+        monkeypatch.setattr(
+            rt,
+            "explain_release_variant",
+            lambda: (rt.RUNTIME_VARIANT_CPU, "测试宿主：无 NVIDIA 显卡"),
+        )
         fetched = []
         manager = AiRuntimeManager(pip_runner=lambda *a: 0)
         status = manager.install_from_release(
@@ -1153,7 +1191,9 @@ class TestInstallFromRelease:
             lambda url, dest, **kw: shutil.copyfile(url_map[url], dest),
         )
         monkeypatch.setattr(
-            rt, "release_variant_for_host", lambda: rt.RUNTIME_VARIANT_CPU
+            rt,
+            "explain_release_variant",
+            lambda: (rt.RUNTIME_VARIANT_CPU, "测试宿主：无 NVIDIA 显卡"),
         )
         monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
         monkeypatch.setattr(
@@ -1188,7 +1228,9 @@ class TestInstallFromRelease:
         import strange_uta_game.backend.application.ai_timing.runtime as rt
 
         monkeypatch.setattr(
-            rt, "release_variant_for_host", lambda: rt.RUNTIME_VARIANT_CUDA
+            rt,
+            "explain_release_variant",
+            lambda: (rt.RUNTIME_VARIANT_CUDA, "测试宿主：驱动达标"),
         )
         monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "RTX Fake")
 

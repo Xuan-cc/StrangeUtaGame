@@ -83,6 +83,7 @@ RUNTIME_VARIANT_CUDA = "windows-cu128"
 # cu128 wheel 需要的最低 NVIDIA 驱动（与工作台同口径）
 CUDA_12_8_MIN_WINDOWS_DRIVER = (570, 65)
 
+from strange_uta_game.backend.application.ai_timing.ailog import ailog
 from strange_uta_game.backend.infrastructure.windows import (
     hidden_subprocess_kwargs,
 )
@@ -97,25 +98,141 @@ _PROBE_CODE = (
 )
 
 
-def detect_nvidia_gpu() -> str:
-    """探测 NVIDIA GPU 名称（nvidia-smi）；无独显/无驱动/失败返回空串。
-
-    在宿主进程执行即可——探测的解释器与本机是同一块显卡；CPU 版
-    torch 看不到 CUDA 设备，但 nvidia-smi 与 torch 版本无关。
-    """
+def _nvidia_smi(*args: str) -> str:
+    """运行 nvidia-smi 并返回 stdout（失败/超时返回空串）。"""
     try:
         completed = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            ["nvidia-smi", *args],
             capture_output=True,
             text=True,
             timeout=5,
             **hidden_subprocess_kwargs(),
         )
-        if completed.returncode == 0:
-            return (completed.stdout or "").strip().splitlines()[0].strip()
-    except (OSError, subprocess.TimeoutExpired, IndexError):
-        pass
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if completed.returncode != 0:
+        return ""
+    return (completed.stdout or "").strip()
+
+
+# 进程内缓存：显卡与驱动在应用运行期间不会变化（驱动更新需重启才生效），
+# probe/快路径/变体判定多处调用不能每次都起子进程。测试通过替换
+# _nvidia_smi / _wmi_adapters 注入。
+_gpu_name_cache: Optional[str] = None
+_wmi_cache: Optional[List[dict]] = None
+
+
+def _wmi_adapters() -> List[dict]:
+    """枚举显示适配器（集显+独显，WMI/Win32_VideoController）。
+
+    nvidia-smi 只看 NVIDIA：混合显卡笔记本上集显信息缺失，用户反馈
+    「明明有显卡」时无法给出全景。PowerShell CIM 查询列出全部适配器
+    （name / driver_version / status），失败返回空表。结果进程内缓存。
+    """
+    global _wmi_cache
+    if _wmi_cache is not None:
+        return _wmi_cache
+    adapters: List[dict] = []
+    try:
+        completed = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                "Get-CimInstance Win32_VideoController"
+                " | Select-Object Name,DriverVersion,Status"
+                " | ConvertTo-Json -Compress",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            encoding="utf-8",
+            errors="replace",
+            **hidden_subprocess_kwargs(),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        completed = None
+    if completed is not None and completed.returncode == 0:
+        import json as _json
+
+        try:
+            data = _json.loads((completed.stdout or "").strip() or "null")
+        except ValueError:
+            data = None
+        if isinstance(data, dict):
+            data = [data]
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    adapters.append(
+                        {
+                            "name": str(item.get("Name") or ""),
+                            "driver_version": str(
+                                item.get("DriverVersion") or ""
+                            ),
+                            "status": str(item.get("Status") or ""),
+                        }
+                    )
+    _wmi_cache = adapters
+    return adapters
+
+
+def _nv_driver_tuple_from_wmi(version: str) -> Optional[Tuple[int, int]]:
+    """从 WMI DriverVersion 解析 NVIDIA 驱动 (主, 次) 版本。
+
+    WMI 形如 ``32.0.15.6094`` → NVIDIA ``560.94``：取全部数字串的
+    末 5 位，前 3 位为主版本、后 2 位为次版本（2016 年至今稳定的
+    编码规则）。解析不出足够位数返回 None。
+    """
+    digits = "".join(ch for ch in str(version) if ch.isdigit())
+    if len(digits) < 5:
+        return None
+    tail = digits[-5:]
+    return int(tail[:3]), int(tail[3:])
+
+
+def _nvidia_driver_version() -> str:
+    """NVIDIA 驱动版本字符串（nvidia-smi 优先，WMI 兜底；失败空串）。"""
+    raw = _nvidia_smi("--query-gpu=driver_version", "--format=csv,noheader")
+    for line in raw.splitlines():
+        fields = line.strip().split(".")
+        if len(fields) >= 2 and fields[0].isdigit() and fields[1].isdigit():
+            return line.strip()
+    for adapter in _wmi_adapters():
+        if "nvidia" in adapter.get("name", "").lower():
+            parsed = _nv_driver_tuple_from_wmi(
+                adapter.get("driver_version", "")
+            )
+            if parsed is not None:
+                return f"{parsed[0]}.{parsed[1]:02d}"
     return ""
+
+
+def detect_nvidia_gpu() -> str:
+    """探测 NVIDIA 独显名称；无独显/无驱动/失败返回空串。
+
+    nvidia-smi 优先（与 torch 无关，宿主进程执行即可）；PATH 损坏 /
+    nvidia-smi 缺失时回退 WMI 枚举按名称匹配 NVIDIA。正向结果进程内
+    缓存——显卡不会在运行中变化，probe 每次快照都调这里。
+    """
+    global _gpu_name_cache
+    if _gpu_name_cache is not None:
+        return _gpu_name_cache
+    name = ""
+    raw = _nvidia_smi("--query-gpu=name", "--format=csv,noheader")
+    first = raw.splitlines()[0].strip() if raw else ""
+    if raw and first:
+        name = first
+    else:
+        for adapter in _wmi_adapters():
+            if "nvidia" in adapter.get("name", "").lower():
+                name = adapter["name"]
+                break
+    if name:
+        _gpu_name_cache = name
+    return name
 
 
 def detect_torch_build(python_exe: str) -> Optional[Tuple[str, str]]:
@@ -160,34 +277,88 @@ def detect_torch_build(python_exe: str) -> Optional[Tuple[str, str]]:
     return version, tag
 
 
+def _min_driver_text() -> str:
+    major, minor = CUDA_12_8_MIN_WINDOWS_DRIVER
+    return f"{major}.{minor:02d}"
+
+
 def nvidia_driver_supports_cu128() -> bool:
-    """NVIDIA 驱动是否满足 cu128 wheel 的最低要求（570.65）。"""
-    try:
-        completed = subprocess.run(
-            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            **hidden_subprocess_kwargs(),
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    if completed.returncode != 0:
-        return False
-    for line in (completed.stdout or "").splitlines():
+    """NVIDIA 驱动是否满足 cu128 wheel 的最低要求（570.65）。
+
+    nvidia-smi 的驱动版本直接比较；nvidia-smi 不可用时按 WMI 的
+    NVIDIA 编码规则解析 DriverVersion 后比较。
+    """
+    raw = _nvidia_smi("--query-gpu=driver_version", "--format=csv,noheader")
+    saw_version = False
+    for line in raw.splitlines():
         fields = line.strip().split(".")
         if len(fields) < 2 or not fields[0].isdigit() or not fields[1].isdigit():
             continue
+        saw_version = True
         if (int(fields[0]), int(fields[1])) >= CUDA_12_8_MIN_WINDOWS_DRIVER:
+            return True
+    if saw_version:
+        # nvidia-smi 可用且版本明确：真实版本不达标，不再走 WMI 兜底
+        return False
+    for adapter in _wmi_adapters():
+        if "nvidia" not in adapter.get("name", "").lower():
+            continue
+        parsed = _nv_driver_tuple_from_wmi(adapter.get("driver_version", ""))
+        if parsed is not None and parsed >= CUDA_12_8_MIN_WINDOWS_DRIVER:
             return True
     return False
 
 
+def explain_release_variant() -> Tuple[str, str]:
+    """变体判定 + 中文原因（安装提示/日志/UI 备注共用同一口径）。
+
+    返回 ``(variant, reason)``；reason 说明为什么选了这个变体，
+    尤其是「检测到 NVIDIA 显卡但驱动不达标」的完整上下文。
+    """
+    gpu = detect_nvidia_gpu()
+    if not gpu:
+        adapters = ", ".join(a["name"] for a in _wmi_adapters() if a["name"])
+        detail = f"（本机适配器：{adapters}）" if adapters else ""
+        return (
+            RUNTIME_VARIANT_CPU,
+            f"未检测到 NVIDIA 显卡{detail}",
+        )
+    driver = _nvidia_driver_version()
+    if not nvidia_driver_supports_cu128():
+        shown = driver or "未知版本"
+        return (
+            RUNTIME_VARIANT_CPU,
+            f"检测到 NVIDIA 显卡（{gpu}），但驱动 {shown} 低于"
+            f" {_min_driver_text()}（CUDA 12.8 最低要求），已安装 CPU 版；"
+            f"更新 NVIDIA 驱动到 {_min_driver_text()} 以上后，点「安装 / 修复」"
+            "即可升级 CUDA 版",
+        )
+    return (
+        RUNTIME_VARIANT_CUDA,
+        f"检测到 NVIDIA 显卡（{gpu}），驱动 {driver or '（版本未知，已达标准入）'}"
+        "满足 CUDA 版要求",
+    )
+
+
 def release_variant_for_host() -> str:
     """按本机硬件选择 runtime release 变体（cu128 需显卡且驱动达标）。"""
-    if detect_nvidia_gpu() and nvidia_driver_supports_cu128():
-        return RUNTIME_VARIANT_CUDA
-    return RUNTIME_VARIANT_CPU
+    return explain_release_variant()[0]
+
+
+def log_gpu_diagnostics() -> None:
+    """显卡/驱动探测结论写进统一日志（安装会话与用户反馈共用）。"""
+    variant, reason = explain_release_variant()
+    ailog("gpu", reason)
+    adapters = _wmi_adapters()
+    if adapters:
+        summary = "；".join(
+            f"{a['name']}(驱动 {a['driver_version'] or '?'},{a['status'] or '?'})"
+            for a in adapters
+        )
+        ailog("gpu", f"显示适配器枚举（WMI）：{summary}")
+    else:
+        ailog("gpu", "显示适配器枚举（WMI）：不可用（nvidia-smi 亦未命中时视为无 NVIDIA 显卡）")
+    ailog("gpu", f"变体判定：{variant}")
 
 
 def release_manifest_url(variant: str) -> str:
@@ -424,6 +595,12 @@ class RuntimeStatus:
     gpu_name: str = ""
     """NVIDIA GPU 名称（CUDA 可用时来自 torch，否则来自 nvidia-smi）。"""
     message: str = ""
+    note: str = ""
+    """可用状态下的附加提示（如「CPU 版 + 检测到显卡」的升级指引）。
+
+    与 ``message`` 分开：``message`` 语义是「不可用时的原因」，
+    ``note`` 是「可用但值得告知用户的事」，UI 据此用警告样式展示。
+    """
 
     @property
     def summary(self) -> str:
@@ -434,6 +611,32 @@ class RuntimeStatus:
             f"PyTorch {self.torch_version} · Transformers "
             f"{self.transformers_version} · {device}"
         )
+
+
+def _attach_gpu_note(status: RuntimeStatus) -> RuntimeStatus:
+    """环境可用但 CUDA 未生效且本机有 NVIDIA 显卡时，附上升级指引。"""
+    if status.available and not status.cuda_available and not status.note:
+        gpu = detect_nvidia_gpu()
+        if gpu:
+            variant, reason = explain_release_variant()
+            if variant == RUNTIME_VARIANT_CPU and "低于" in reason:
+                status.note = reason
+            else:
+                status.note = (
+                    f"当前为 CPU 版运行环境；检测到 NVIDIA 显卡（{gpu}），"
+                    "点「安装 / 修复」可升级 CUDA 版"
+                )
+    return status
+
+
+# probe 结果变化检测：弹窗每次 refresh 都会探测，相同结论不重复落日志
+_probe_log_state: dict = {}
+
+
+def _log_probe_outcome(exe: str, line: str) -> None:
+    if _probe_log_state.get(exe) != line:
+        _probe_log_state[exe] = line
+        ailog("probe", line)
 
 
 class AiRuntimeManager:
@@ -483,12 +686,17 @@ class AiRuntimeManager:
         if not python_exe and getattr(sys, "frozen", False):
             # 打包应用的 sys.executable 是应用 exe：拿它当解释器探测
             # 会把整个应用再启动一遍（实测幽灵 SUG 的来源）
+            _log_probe_outcome(
+                "<frozen-未安装>",
+                "打包版尚未安装运行环境（无解释器可探测）",
+            )
             return RuntimeStatus(
                 available=False,
                 python_path="",
                 message="尚未安装对齐运行环境，请点击「安装 / 修复」",
             )
         if not Path(exe).is_file() and exe != sys.executable:
+            _log_probe_outcome(exe, "解释器路径不存在")
             return RuntimeStatus(
                 available=False,
                 python_path=exe,
@@ -505,31 +713,39 @@ class AiRuntimeManager:
                 **hidden_subprocess_kwargs(),
             )
         except subprocess.TimeoutExpired:
+            _log_probe_outcome(exe, f"探测超时（>{timeout_s:.0f}s）")
             return RuntimeStatus(
                 available=False, python_path=exe, message="探测超时"
             )
         except OSError as exc:
+            _log_probe_outcome(exe, f"无法启动 Python：{exc}")
             return RuntimeStatus(
                 available=False, python_path=exe, message=f"无法启动 Python：{exc}"
             )
         if completed.returncode != 0:
             missing = self._parse_missing_module(completed.stderr or "")
+            message = (
+                f"缺少对齐依赖（{missing}），请下载对齐运行环境"
+                if missing
+                else "对齐运行环境校验失败"
+            )
+            _log_probe_outcome(
+                exe,
+                f"探测失败（返回码 {completed.returncode}）：{message}",
+            )
             return RuntimeStatus(
                 available=False,
                 python_path=exe,
-                message=(
-                    f"缺少对齐依赖（{missing}），请下载对齐运行环境"
-                    if missing
-                    else "对齐运行环境校验失败"
-                ),
+                message=message,
             )
         try:
             info = json.loads(completed.stdout.strip().splitlines()[-1])
         except (json.JSONDecodeError, IndexError, ValueError):
+            _log_probe_outcome(exe, "探测输出无法解析（非 JSON）")
             return RuntimeStatus(
                 available=False, python_path=exe, message="探测输出无法解析"
             )
-        return RuntimeStatus(
+        status = RuntimeStatus(
             available=True,
             python_path=exe,
             torch_version=str(info.get("torch", "")),
@@ -537,6 +753,13 @@ class AiRuntimeManager:
             cuda_available=bool(info.get("cuda", False)),
             gpu_name=str(info.get("gpu", "")) or detect_nvidia_gpu(),
         )
+        _log_probe_outcome(
+            exe,
+            f"环境可用：torch={status.torch_version} "
+            f"transformers={status.transformers_version} "
+            f"cuda={status.cuda_available} gpu={status.gpu_name or '无'}",
+        )
+        return _attach_gpu_note(status)
 
     @staticmethod
     def _parse_missing_module(stderr: str) -> str:
@@ -593,16 +816,24 @@ class AiRuntimeManager:
             )
 
         # GPU 策略最先确定（探测在本机执行，与解释器无关）：检测到
-        # NVIDIA 显卡时走 PyTorch 官方 CUDA 索引——PyPI 的 Windows
-        # torch 默认是 CPU-only wheel，不显式指定索引 GPU 永远不会被
-        # 用到；-U 让已装的 CPU 版原地升级到 +cu128 本地版本
+        # NVIDIA 显卡且驱动达标时走 PyTorch 官方 CUDA 索引——PyPI 的
+        # Windows torch 默认是 CPU-only wheel，不显式指定索引 GPU 永远
+        # 不会被用到；-U 让已装的 CPU 版原地升级到 +cu128 本地版本。
+        # 驱动门槛与打包版变体判定同口径（≥570.65）：旧驱动装了 cu128
+        # wheel 也看不到 CUDA 设备，白下 3GB 还让用户误以为装好了
         log = open_install_log(install_log_dir_for_target(target_dir))
         self._install_log = log
         progress = wrap_progress_with_log(progress, log)
+        ailog(
+            "install",
+            f"安装开始（venv 路径）：target={target_dir} frozen={bool(getattr(sys, 'frozen', False))}",
+        )
+        log_gpu_diagnostics()
         gpu_name = detect_nvidia_gpu()
-        use_cuda = bool(gpu_name)
+        use_cuda = bool(gpu_name) and nvidia_driver_supports_cu128()
         if use_cuda:
             progress(2, f"检测到 NVIDIA GPU（{gpu_name}），安装 CUDA 版运行环境")
+            ailog("install", f"use_cuda=True（{gpu_name}）")
             import shutil as _shutil
 
             try:
@@ -624,7 +855,16 @@ class AiRuntimeManager:
             except Exception:
                 pass  # 空间查询失败不阻断，交给 pip 自身的磁盘错误
         else:
-            progress(2, "未检测到 NVIDIA GPU，安装 CPU 版运行环境")
+            if gpu_name:
+                # 有 NVIDIA 显卡但驱动不达标：说明原因并给出升级路径，
+                # 不再让用户对着「安装成功却是 CPU」猜哪里出了问题
+                # （最终提示由 probe 的 _attach_gpu_note 统一附上）
+                _, reason = explain_release_variant()
+                progress(2, f"检测到 NVIDIA GPU（{gpu_name}），但驱动低于 {_min_driver_text()}，安装 CPU 版运行环境")
+                ailog("install", f"use_cuda=False：{reason}")
+            else:
+                progress(2, "未检测到 NVIDIA GPU，安装 CPU 版运行环境")
+                ailog("install", "use_cuda=False：未检测到 NVIDIA 显卡")
 
         progress(4, f"创建虚拟环境：{target_dir}")
         try:
@@ -697,6 +937,11 @@ class AiRuntimeManager:
             python_exe, args, progress=progress, cancel=cancel
         )
         log(f"安装完成：{status.python_path}")
+        ailog(
+            "install",
+            f"安装完成（venv 路径）：{status.summary}"
+            + (f"｜提示：{status.note}" if status.note else ""),
+        )
         return status
 
     def install_from_release(
@@ -714,7 +959,8 @@ class AiRuntimeManager:
         流程：选变体 → 拉清单 → 下载分卷底座 zip（sha256 校验）→ 解压
         校验出 ``runtime/python.exe``（内嵌 Python，整机无需系统 Python）
         → 下载 torch wheel 并用底座自带 pip 安装 → 复用 ``install_shared``
-        装 AI 增量依赖。已有可用 runtime 时跳过下载直接增量。
+        装 AI 增量依赖。已有可用 runtime 且变体匹配时跳过下载直接增量；
+        本机具备 CUDA 条件但现有环境是 CPU 版时放弃快路径、全量升级。
 
         Args:
             manifest_fetch: 可注入的清单获取函数（测试用，默认
@@ -733,29 +979,68 @@ class AiRuntimeManager:
         log = open_install_log(install_log_dir_for_target(target_dir))
         self._install_log = log
         progress = wrap_progress_with_log(progress, log)
+        ailog(
+            "install",
+            f"安装开始（release 路径）：target={target_dir} 已有解释器={python_exe.is_file()}",
+        )
+        log_gpu_diagnostics()
 
         # 快路径：已有可用环境（修复重装）直接增量。判定用「torch 可导入」
         # 而非完整 probe——半装状态（torch 就位、AI 依赖缺失）也能免重下
-        # 3GB wheel，直接补装依赖
+        # 3GB wheel，直接补装依赖。**例外（修复 CPU→CUDA 升级）**：本机
+        # 已具备 CUDA 条件（显卡 + 驱动达标）但现有 torch 是 CPU 变体时，
+        # 「安装 / 修复」的契约是升级——继续增量会把 CPU 版永远钉死在
+        # 机器上（旧 BUG：进度走完、提示就绪，torch 依旧 CPU）。反向
+        # （现有 cu128、本机不再达标）保留复用：CUDA wheel 在 CPU 上
+        # 照常运行，不值得让用户重下 2GB。
         if python_exe.is_file():
-            if detect_torch_build(str(python_exe)) is not None:
-                progress(60, "检测到已安装的运行环境，跳过下载")
+            build = detect_torch_build(str(python_exe))
+            if build is not None:
+                variant_now, variant_reason = explain_release_variant()
+                torch_ver, torch_tag = build
+                wants_cuda = variant_now == RUNTIME_VARIANT_CUDA
+                if wants_cuda and torch_tag != TORCH_CUDA_TAG:
+                    msg = (
+                        f"现有运行环境为 CPU 版（torch {torch_ver}），"
+                        f"本机已具备 CUDA 条件，重新下载 CUDA 版运行环境"
+                        f"（无需手动删除旧环境）"
+                    )
+                    progress(2, msg)
+                    ailog("install", f"快路径放弃（升级）：{msg}")
+                elif torch_tag == TORCH_CUDA_TAG and wants_cuda:
+                    ailog(
+                        "install",
+                        f"快路径增量：现有 torch {torch_ver}+{TORCH_CUDA_TAG} 已是目标变体",
+                    )
+                else:
+                    ailog(
+                        "install",
+                        f"快路径增量：本机不需要 CUDA（{variant_reason}），"
+                        f"复用现有 torch {torch_ver}+{torch_tag}",
+                    )
+                if not (wants_cuda and torch_tag != TORCH_CUDA_TAG):
+                    progress(60, "检测到已安装的运行环境，跳过下载")
 
-                def _scaled(p: int, m: str) -> None:
-                    progress(60 + int(p * 0.39), m)
+                    def _scaled(p: int, m: str) -> None:
+                        progress(60 + int(p * 0.39), m)
 
-                status = self.install_shared(
-                    str(python_exe),
-                    mirror=mirror,
-                    proxy=proxy,
-                    progress=_scaled,
-                    cancel=cancel,
-                    log=log,
-                )
-                progress(100, "运行环境就绪")
-                return status
+                    status = self.install_shared(
+                        str(python_exe),
+                        mirror=mirror,
+                        proxy=proxy,
+                        progress=_scaled,
+                        cancel=cancel,
+                        log=log,
+                    )
+                    progress(100, "运行环境就绪")
+                    ailog(
+                        "install",
+                        f"增量维护完成：{status.summary}"
+                        + (f"｜提示：{status.note}" if status.note else ""),
+                    )
+                    return status
 
-        variant = release_variant_for_host()
+        variant, variant_reason = explain_release_variant()
         gpu = detect_nvidia_gpu()
         if variant == RUNTIME_VARIANT_CUDA:
             progress(
@@ -786,7 +1071,11 @@ class AiRuntimeManager:
             except Exception:
                 pass  # 空间查询失败不阻断，交给 pip 自身的磁盘错误
         else:
-            progress(2, "未检测到可用 NVIDIA GPU/驱动，下载 CPU 版托管运行环境")
+            progress(2, f"{variant_reason}，下载 CPU 版托管运行环境")
+            if gpu:
+                # 有 NVIDIA 显卡但驱动不达标：原因进进度与日志；最终
+                # 提示由 probe 的 _attach_gpu_note 统一附上（同一口径）
+                ailog("install", f"CPU 变体原因：{variant_reason}")
 
         fetch = manifest_fetch or fetch_runtime_release_manifest
         manifest = fetch(variant, proxy=proxy)
@@ -940,6 +1229,11 @@ class AiRuntimeManager:
 
         _shutil.rmtree(staging, ignore_errors=True)
         progress(100, "运行环境就绪")
+        ailog(
+            "install",
+            f"安装完成（release 路线，{variant}）：{status.summary}"
+            + (f"｜提示：{status.note}" if status.note else ""),
+        )
         return status
 
     def install_shared(
@@ -1004,6 +1298,11 @@ class AiRuntimeManager:
             2,
             f"复用工作台运行环境（PyTorch {torch_version}+{torch_tag}），"
             "仅安装 AI 增量依赖（不重复下载 torch，预计新增约 0.5GB）",
+        )
+        ailog(
+            "install",
+            f"增量安装（install_shared）：解释器={python_exe} "
+            f"torch={torch_version}+{torch_tag}",
         )
         args: List[str] = [
             "-m",
@@ -1210,6 +1509,8 @@ __all__ = [
     "detect_nvidia_gpu",
     "detect_torch_build",
     "nvidia_driver_supports_cu128",
+    "explain_release_variant",
+    "log_gpu_diagnostics",
     "release_variant_for_host",
     "release_manifest_url",
     "fetch_runtime_release_manifest",

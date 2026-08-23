@@ -73,7 +73,10 @@ def _start_cancel_reader(cancel_state: _CancelState) -> threading.Thread:
 
 
 def main(argv=None) -> int:
+    from strange_uta_game.backend.application.ai_timing.ailog import ailog
+
     provider = None
+    started = None
     try:
         line = sys.stdin.readline()
         if not line:
@@ -88,6 +91,7 @@ def main(argv=None) -> int:
                 provider.validate_model(model_spec)
                 _emit({"type": "result", "payload": {"valid": True}})
             except Exception as exc:
+                ailog("worker", f"validate 失败：{exc}")
                 _emit({"type": "error", "message": str(exc)})
             return 0
         if message.get("type") != "align":
@@ -105,6 +109,9 @@ def main(argv=None) -> int:
             )
             return 1
 
+        import time as _time
+
+        started = _time.monotonic()
         payload = message.get("payload") or {}
         audio_path = str(payload.get("audio_path") or "")
         model_spec = dict(payload.get("model") or {})
@@ -113,6 +120,13 @@ def main(argv=None) -> int:
         if not audio_path:
             _emit({"type": "error", "message": "未提供音频文件路径"})
             return 1
+
+        ailog(
+            "worker",
+            f"对齐任务开始：provider={model_spec.get('provider')} "
+            f"model={model_spec.get('model_id')} device_pref={model_spec.get('device')} "
+            f"tokens={len(request.tokens)} audio={audio_path}",
+        )
 
         cancel_state = _CancelState()
         # 注意：取消监听线程延迟到 provider.load 之后启动。若在 torch 的
@@ -142,25 +156,41 @@ def main(argv=None) -> int:
             }
         )
         provider.load(model_spec, progress, cancel_state)
+        loaded_at = _time.monotonic()
+        ailog("worker", f"模型加载完成：耗时 {loaded_at - started:.1f}s")
         _start_cancel_reader(cancel_state)
         result = provider.align(request, audio_path, progress, cancel_state)
         provider.unload()
+        ailog(
+            "worker",
+            f"对齐完成：推理 {(_time.monotonic() - loaded_at):.1f}s / 总计 "
+            f"{(_time.monotonic() - started):.1f}s，spans={len(result.spans)}",
+        )
         _emit({"type": "result", "payload": serialize_result(result)})
         return 0
     except AlignmentCancelledError:
         if provider is not None:
             provider.unload()
+        ailog("worker", "对齐已取消")
         _emit({"type": "cancelled"})
         return 0
     except (AlignmentProviderError, AlignmentValidationError) as exc:
         if provider is not None:
             provider.unload()
+        ailog("worker", f"对齐失败：{exc}")
         _emit({"type": "error", "message": str(exc)})
         return 1
     except WorkerProtocolError as exc:
         _emit({"type": "error", "message": str(exc)})
         return 1
     except Exception as exc:  # 崩溃隔离：worker 内部异常不拖垮宿主
+        import traceback as _tb
+
+        ailog(
+            "worker",
+            f"对齐进程内部错误：{type(exc).__name__}: {exc}｜"
+            + _tb.format_exc().replace("\n", " ⏎ ")[-1500:],
+        )
         _emit({"type": "error", "message": f"对齐进程内部错误：{exc}"})
         return 1
 

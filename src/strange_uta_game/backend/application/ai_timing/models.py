@@ -442,8 +442,55 @@ class ModelDownloadService:
         cancel: Optional[CANCEL_CB] = None,
     ) -> Path:
         """下载并注册模型，返回本地目录；已就绪时直接返回现有目录。"""
+        from strange_uta_game.backend.application.ai_timing.ailog import ailog
+
         cancel = cancel or (lambda: False)
         progress = progress or (lambda p, m: None)
+
+        existing = self._registry.resolve_model_path(model_id)
+        if existing is not None:
+            progress(100, "模型已安装")
+            return existing
+
+        import time as _time
+
+        started = _time.monotonic()
+        ailog("model", f"模型下载开始：{model_id}@{revision}")
+        try:
+            target = self._download_impl(
+                model_id,
+                provider,
+                revision=revision,
+                license_text=license_text,
+                progress=progress,
+                cancel=cancel,
+                ailog=ailog,
+            )
+        except Exception as exc:
+            ailog(
+                "model",
+                f"模型下载失败（{type(exc).__name__}: {exc}，"
+                f"{(_time.monotonic() - started):.1f}s）：{model_id}",
+            )
+            raise
+        ailog(
+            "model",
+            f"模型下载完成：{(_time.monotonic() - started):.1f}s → {target}",
+        )
+        return target
+
+    def _download_impl(
+        self,
+        model_id: str,
+        provider: str,
+        *,
+        revision: str = "main",
+        license_text: str = "",
+        progress: Optional[PROGRESS_CB] = None,
+        cancel: Optional[CANCEL_CB] = None,
+        ailog=None,
+    ) -> Path:
+        ailog = ailog or (lambda msg: None)
 
         existing = self._registry.resolve_model_path(model_id)
         if existing is not None:

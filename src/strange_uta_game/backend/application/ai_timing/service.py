@@ -303,6 +303,56 @@ class AiTimingService:
         Raises:
             AiTimingError: 任一前置条件不满足或执行失败（中文消息）。
         """
+        import time as _time
+
+        from strange_uta_game.backend.application.ai_timing.ailog import ailog
+
+        started = _time.monotonic()
+        ailog(
+            "execute",
+            f"AI 打轴开始：audio={audio_path} provider={self._settings.provider} "
+            f"model={self.effective_model_id} device={self._settings.device} "
+            f"python={self._worker_python() or '当前解释器'}",
+        )
+        try:
+            command = self._execute_impl(
+                project,
+                audio_path,
+                on_progress=on_progress,
+                is_cancelled=is_cancelled,
+                vocal_choice=vocal_choice,
+                log=lambda msg: ailog("execute", msg),
+            )
+        except AiTimingError as exc:
+            ailog(
+                "execute",
+                f"AI 打轴失败（{(_time.monotonic() - started):.1f}s）：{exc}",
+            )
+            raise
+        except Exception as exc:
+            ailog(
+                "execute",
+                f"AI 打轴异常（{type(exc).__name__}: {exc}，"
+                f"{(_time.monotonic() - started):.1f}s）",
+            )
+            raise
+        ailog(
+            "execute",
+            f"AI 打轴成功：耗时 {(_time.monotonic() - started):.1f}s",
+        )
+        return command
+
+    def _execute_impl(
+        self,
+        project: Project,
+        audio_path: str,
+        *,
+        on_progress: Optional[ProgressFn] = None,
+        is_cancelled: Optional[CancelFn] = None,
+        vocal_choice: Optional[Path] = None,
+        log=None,
+    ) -> ApplyAiTimingCommand:
+        log = log or (lambda msg: None)
         progress = on_progress or (lambda s, p, m: None)
         cancel = is_cancelled or (lambda: False)
 
@@ -402,11 +452,13 @@ class AiTimingService:
                     "没有可复用的人声。请先在人声分离页完成分离，"
                     "或配置分离能力后重试"
                 )
+            log(f"无可复用人声，触发人声分离：{vocal_source.name}")
             progress("vocal", 12, "执行人声分离")
             vocal_path = self._separation_executor(
                 vocal_source, progress, cancel
             )
             _check_cancel()
+            log(f"人声分离完成：{vocal_path}")
             candidate = VocalCandidate(
                 state="separated",
                 path=self._vocal_service.register_separated_vocal(
@@ -461,6 +513,7 @@ class AiTimingService:
         progress("cache", 18, "检查对齐缓存")
         cached = self._cache.lookup_alignment(cache_meta)
         if cached is not None:
+            log("命中对齐缓存，跳过推理")
             result = self._result_from_cache(cached, request)
             progress("align", 100, "命中对齐缓存")
             return self._build_command(project, plan, request, result)
@@ -491,7 +544,9 @@ class AiTimingService:
             )
         except Exception as exc:  # worker 层已转换中文错误
             if "取消" in str(exc):
+                log(f"worker 已取消：{exc}")
                 raise AiTimingError(str(exc)) from exc
+            log(f"worker 执行失败：{exc}")
             raise AiTimingError(f"AI 打轴执行失败：{exc}") from exc
         finally:
             # 生命周期卫生：无论成败都回收 worker 进程/管道/临时文件，

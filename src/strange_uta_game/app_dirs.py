@@ -126,7 +126,16 @@ def cache_dir() -> Path:
 
 
 def logs_dir() -> Path:
-    """日志目录（已确保存在且可写）。"""
+    """日志目录（已确保存在且可写）。
+
+    ``SUG_LOGS_DIR`` 环境变量最高优先，与 ``SUG_CONFIG_DIR`` /
+    ``SUG_CACHE_DIR`` 同口径：嵌入宿主把日志收进自己的数据目录
+    （crash.log 与 ai_timing.log 都跟随本目录，不可写时回退
+    ``~/.strange_uta_game/logs``）。
+    """
+    env_dir = os.environ.get("SUG_LOGS_DIR")
+    if env_dir:
+        return _first_writable(Path(env_dir), _FALLBACK_ROOT / "logs")
     if sys.platform == "darwin":
         return _first_writable(
             Path.home() / "Library" / "Logs" / APP_NAME,
