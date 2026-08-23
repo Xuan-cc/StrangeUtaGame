@@ -14,6 +14,7 @@ import numpy as np
 import sounddevice as sd
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QFont, QKeyEvent, QPainter, QPaintEvent, QPen
+from strange_uta_game.frontend.background_throttle import background_throttle
 from strange_uta_game.frontend.font_utils import ui_font
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -158,6 +159,13 @@ class CalibrationDialog(QDialog):
         self.animation_timer = QTimer(self)
         self.animation_timer.setInterval(16)
         self.animation_timer.timeout.connect(self.canvas.update)
+        # 对话框隐藏/最小化时暂停画布重绘；可见但失焦不降频（用户可能分屏
+        # 使用）。节拍器音频在独立线程，不受影响
+        _throttle = background_throttle()
+        if _throttle is not None:
+            _throttle.visibility_maybe_changed.connect(
+                self._on_ui_visibility_maybe_changed
+            )
 
         # 主题变化时重绘画布（theme.changed 信号由 CalibrationCanvas.paintEvent 消费）
         theme.changed.connect(self.canvas.update)
@@ -176,6 +184,13 @@ class CalibrationDialog(QDialog):
         self._start_metronome()
         self.animation_timer.start()
         QTimer.singleShot(0, self.canvas.setFocus)
+
+    def _on_ui_visibility_maybe_changed(self) -> None:
+        """可见性变化：对话框可见且未最小化时运行画布动画（仅视觉），否则停。"""
+        if self.isVisible() and not self.isMinimized():
+            self.animation_timer.start()
+        else:
+            self.animation_timer.stop()
 
     def closeEvent(self, a0):
         self.animation_timer.stop()

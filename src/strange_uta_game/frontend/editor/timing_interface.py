@@ -71,6 +71,10 @@ from strange_uta_game.frontend.perf_log import (
     perf_enabled,
     start_ui_watchdog,
 )
+from strange_uta_game.frontend.background_throttle import (
+    background_throttle,
+    ui_visible,
+)
 from strange_uta_game.frontend.theme import theme, ThemeColors
 from strange_uta_game.frontend.fluent_widgets import (
     message_choice,
@@ -176,6 +180,17 @@ class EditorInterface(QWidget):
         self._position_poll_timer = QTimer(self)
         self._position_poll_timer.setInterval(16)  # ~60fps
         self._position_poll_timer.timeout.connect(self._poll_audio_position)
+        # 前台轮询间隔跟随 timing.ui_refresh_fps 设置；窗口最小化/隐藏后降到
+        # 200ms——仅维持播放结束/锁定终点检测与状态栏。窗口可见但失焦不降频
+        # （用户可能一边看预览一边在别的窗口干活）。音频播放不受影响（引擎
+        # 独立线程），打轴取时按键时直读引擎也不经过此定时器。
+        self._position_poll_fg_interval_ms = 16
+        self._position_poll_bg_interval_ms = 200
+        _throttle = background_throttle()
+        if _throttle is not None:
+            _throttle.visibility_maybe_changed.connect(
+                self._refresh_position_poll_interval
+            )
         self._last_polled_duration_ms: Optional[int] = None
         # Per-line status snapshots. A timing key only changes one line, so the
         # footer can update in O(chars in line) instead of scanning the project.
@@ -799,7 +814,9 @@ class EditorInterface(QWidget):
         refresh_fps = self._normalize_ui_refresh_fps(
             settings.get("timing.ui_refresh_fps", 60)
         )
-        self._position_poll_timer.setInterval(round(1000 / refresh_fps))
+        self._position_poll_fg_interval_ms = round(1000 / refresh_fps)
+        # 窗口隐藏期间应用新设置时保持降频间隔，回可见状态由信号恢复
+        self._refresh_position_poll_interval()
         # 波形时间标签拖拽编辑总开关（默认开启，关闭回退旧的纯显示/seek/pan 模式）
         if hasattr(self, "timeline"):
             self.timeline.set_tag_edit_enabled(
@@ -7711,6 +7728,31 @@ class EditorInterface(QWidget):
             self._poll_audio_position()
         else:
             self._update_mode_indicator()
+
+    def _refresh_position_poll_interval(self) -> None:
+        """按窗口可见性调整播放头轮询频率。
+
+        窗口可见（哪怕失焦——用户可能一边看歌词预览一边在别的窗口干活）→
+        用户设置的刷新率；窗口最小化/隐藏（没人看得见画面）→ 200ms 仅维持
+        播放结束/锁定终点检测与状态栏。setInterval 对运行中的定时器即时生效。
+
+        嵌入式模式下 self.window() 是宿主顶层窗口，宿主隐藏 SUG 区域时宿主
+        窗口仍可见，因此除自身窗口外还参考节流器的全局判定（含宿主经
+        on_host_visibility_changed / set_visibility_override 的显式通知）。
+        """
+        window = self.window()
+        hidden = (
+            window is None
+            or window.isMinimized()
+            or not window.isVisible()
+            or not ui_visible()
+        )
+        interval_ms = (
+            self._position_poll_bg_interval_ms
+            if hidden
+            else self._position_poll_fg_interval_ms
+        )
+        self._position_poll_timer.setInterval(interval_ms)
 
     @log_slow_method(
         "editor.poll_audio_position",

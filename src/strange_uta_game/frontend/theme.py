@@ -24,6 +24,8 @@ from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import QApplication, QWidget
 
+from strange_uta_game.frontend.background_throttle import background_throttle
+
 
 class ThemeMode(Enum):
     """主题模式"""
@@ -443,6 +445,26 @@ class Theme(QObject):
         self._poll_timer.setInterval(2000)  # 每 2 秒检查一次
         self._poll_timer.timeout.connect(self._poll_system_theme)
         self._poll_timer.start()
+        # 应用所有窗口都隐藏/最小化时没人看主题，停掉轮询省电；重新可见时
+        # 先补一次检测再恢复（窗口可见但失焦不降频——用户可能分屏使用）
+        throttle = background_throttle()
+        if throttle is not None:
+            throttle.visibility_maybe_changed.connect(
+                self._on_ui_visibility_maybe_changed
+            )
+
+    def _on_ui_visibility_maybe_changed(self) -> None:
+        """应用可见性变化：全部窗口隐藏时暂停系统主题轮询，恢复可见补测。"""
+        timer = self._poll_timer
+        if timer is None:
+            return
+        throttle = background_throttle()
+        if throttle is not None and throttle.is_visible:
+            if not timer.isActive():
+                self._poll_system_theme()
+            timer.start()
+        else:
+            timer.stop()
 
     def _poll_system_theme(self) -> None:
         """轮询检测系统主题变化"""

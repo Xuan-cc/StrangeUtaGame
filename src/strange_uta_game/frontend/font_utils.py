@@ -180,8 +180,14 @@ def _apply_application_ui_font(previous_families: list[str] | None = None) -> No
     QToolTip.setFont(tooltip_font)
 
     for widget, widget_font in managed_widgets:
-        widget_font.setFamilies(families)
-        widget.setFont(widget_font)
+        # 中途的全局 QSS 刷新会触发 repolish，部分内部子控件（如组合框内嵌
+        # 输入框）可能被 Qt 销毁重建，快照里的 wrapper 随之悬空；跳过即可，
+        # 重建后的控件会从 QApplication 字体继承新字体链。
+        try:
+            widget_font.setFamilies(families)
+            widget.setFont(widget_font)
+        except RuntimeError:
+            continue
 
     _managed_ui_primary_families.add(families[0].casefold())
 

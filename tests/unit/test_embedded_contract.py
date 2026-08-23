@@ -355,6 +355,31 @@ class TestEmbeddedUIContract:
 
         assert callable(MainWindow.on_host_visibility_changed)
 
+    def test_host_visibility_forwarded_to_throttle(self, qapp):
+        """on_host_visibility_changed 必须转发给前后台节流器。
+
+        嵌入式下宿主隐藏 SUG 区域时宿主顶层窗口仍可见，编辑器自动判定
+        看不到这层——只有这条显式通知能让非音频服务降频（EMBEDDING.md §2）。
+        """
+        from strange_uta_game.frontend import background_throttle as bt
+        from strange_uta_game.frontend.main_window import MainWindow
+
+        throttle = bt.background_throttle()
+        assert throttle is not None
+        # editorInterface 未就绪（SimpleNamespace）也应先完成转发再早返回
+        try:
+            MainWindow.on_host_visibility_changed(SimpleNamespace(), False)
+            assert throttle.is_visible is False
+
+            MainWindow.on_host_visibility_changed(SimpleNamespace(), False)
+            assert throttle.is_visible is False  # 幂等
+
+            MainWindow.on_host_visibility_changed(SimpleNamespace(), True)
+            # True 恢复自动判定；无可见窗口时为 False，但不再是强制隐藏
+            assert throttle._host_hidden is False
+        finally:
+            bt.set_visibility_override(None)
+
     def test_network_auto_update_scheduler_uses_default_provider(
         self, monkeypatch, reset_default_provider
     ):

@@ -55,7 +55,7 @@ class MainWindow(MSFluentWindow):
 | `has_unsaved_changes() -> bool` | 宿主 closeEvent 用，判断是否有脏数据 |
 | `flush_unsaved()` | 宿主销毁 widget 前调用，把脏数据兜底写到崩溃恢复临时文件 |
 | `export_to_next_payload() -> dict \| None` | 获取项目、角色、Nicokara 标签和媒体路径的隔离快照，供宿主送往下一模块 |
-| `on_host_visibility_changed(visible: bool)` | 宿主切入/切出整个 SUG 控件时调用；切出时只要音频仍在播放就立即暂停（不受“离开打轴界面时暂停”设置约束），并从音频实际状态同步快捷键模式 |
+| `on_host_visibility_changed(visible: bool)` | 宿主切入/切出整个 SUG 控件时调用；切出时只要音频仍在播放就立即暂停（不受“离开打轴界面时暂停”设置约束），并从音频实际状态同步快捷键模式；同时转发给前后台节流器——宿主隐藏 SUG 区域而宿主窗口仍可见时，只有这条显式通知能让非音频服务（UI 轮询/主题轮询等）降频 |
 
 embedded 实例还公开 `export_to_next_requested` 信号。SUG 的导出页仅在
 embedded 模式显示“进入下一步”按钮；点击后发出该信号，宿主收到后调用
@@ -69,6 +69,12 @@ embedded 模式显示“进入下一步”按钮；点击后发出该信号，�
 `on_host_visibility_changed(False)`，并在重新显示后调用
 `on_host_visibility_changed(True)`。SUG 的 embedded `hideEvent/showEvent` 也会执行相同
 同步作为兜底；接口是幂等的，显式通知与 Qt 事件重复到达不会重复暂停。
+
+上述通知同时驱动前后台性能节流（`frontend/background_throttle.py`）：不可见时
+非音频服务降频（编辑页播放头轮询降到 200ms、Win10 主题轮询暂停等），音频
+播放不受影响。不走 `MainWindow` 嵌入路径的宿主也可以直接调用模块级
+`strange_uta_game.frontend.background_throttle.set_visibility_override(visible)`：
+`False` 强制按隐藏处理，`True`/`None` 恢复自动判定（窗口最小化等自动检测仍生效）。
 
 ## 3. 设置后端：SettingsProvider
 

@@ -25,6 +25,7 @@ from typing import Optional
 
 from strange_uta_game.backend.application import CommandManager, TimingService
 from strange_uta_game.backend.domain import Project
+from strange_uta_game.frontend.background_throttle import set_visibility_override
 from strange_uta_game.frontend.project_store import ProjectStore
 from strange_uta_game.frontend.theme import theme
 from strange_uta_game.frontend.dialog_policy import install_non_modal_dialog_policy
@@ -1726,7 +1727,12 @@ class MainWindow(MSFluentWindow):
         音频已暂停但快捷键仍处于打轴模式。
 
         本方法可重复调用：只有实际仍在播放时才会触发暂停。
+
+        可见性同时转发给前后台节流器（background_throttle）：嵌入式下编辑器
+        按 ``self.window()`` 自动判定解析到的是宿主顶层窗口，宿主隐藏 SUG
+        区域而宿主窗口仍可见时，只有这条显式通知能让非音频服务降频。
         """
+        set_visibility_override(visible)
         editor = getattr(self, "editorInterface", None)
         timing_service = getattr(self, "_timing_service", None)
         if editor is None:
