@@ -340,6 +340,11 @@ class AiTimingService:
             "execute",
             f"AI 打轴成功：耗时 {(_time.monotonic() - started):.1f}s",
         )
+        # 成功后统一补发 100%：正常执行路径止步于 99、worker 进度被
+        # 封顶在 95，进度条依赖这条收尾信号走满（缓存命中路径已发过
+        # align 100，重复无害）
+        if on_progress is not None:
+            on_progress("apply", 100, "AI 打轴完成")
         return command
 
     def _execute_impl(
@@ -454,8 +459,14 @@ class AiTimingService:
                 )
             log(f"无可复用人声，触发人声分离：{vocal_source.name}")
             progress("vocal", 12, "执行人声分离")
+
+            def _sep_progress(_stage: str, percent: int, message: str) -> None:
+                # 分离内部 0-100 压进 12-14 区间：整体进度全程单调，
+                # 不再出现「分离冲到 100、对齐又从 15 重新开始」的回跳
+                progress("separation", 12 + int(percent * 0.02), message)
+
             vocal_path = self._separation_executor(
-                vocal_source, progress, cancel
+                vocal_source, _sep_progress, cancel
             )
             _check_cancel()
             log(f"人声分离完成：{vocal_path}")

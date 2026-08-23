@@ -209,7 +209,9 @@ class TestExecute:
             on_progress=lambda s, p, m: events.append((s, p, m)),
         )
         assert cmd is not None
-        assert events[-1][1] == 99
+        # 成功收尾必须补发 100：UI 进度条依赖最后一条信号走满
+        # （2026-08 用户反馈任务完成但进度条停在 99% 未走完）
+        assert events[-1][:2] == ("apply", 100)
         # 调用方（CommandManager）执行命令后时间戳被覆盖
         cmd.execute()
         project = _project()  # 命令持有的是自己的 project 实例
@@ -279,6 +281,33 @@ class TestExecute:
         cmd2 = service.execute(_project(), str(audio))
         assert cmd2 is not None
         assert "source" not in calls
+
+    def test_separation_progress_band_and_monotonic(self, tmp_path):
+        """分离内部 0-100 必须压进 12-14 区间，整体进度全程单调：
+        2026-08 用户反馈任务期间进度冲到 100 又回落（分离 100 →
+        对齐 15），观感如同进度条错乱。"""
+        fresh = tmp_path / "fresh_vocal.wav"
+        fresh.write_bytes(b"fresh")
+
+        def executor(source, progress, cancel):
+            for pct in (0, 30, 60, 100):
+                progress("separation", pct, f"分离中 {pct}%")
+            return fresh
+
+        service, audio = _make_service(tmp_path, separation_executor=executor)
+        (tmp_path / "song_人声.wav").unlink()  # 制造无可用人声状态
+        events = []
+        cmd = service.execute(
+            _project(),
+            str(audio),
+            on_progress=lambda s, p, m: events.append((s, p, m)),
+        )
+        assert cmd is not None
+        sep = [p for s, p, _ in events if s == "separation"]
+        assert all(12 <= p <= 14 for p in sep)  # 不冲顶、不越 prepare 15
+        assert sep[-1] == 14  # 分离完成给后续阶段留出空间
+        percents = [p for _, p, _ in events]
+        assert all(b >= a for a, b in zip(percents, percents[1:]))
 
     def test_worker_failure_becomes_chinese_error(self, tmp_path):
         worker = _FakeWorker(fail=True)

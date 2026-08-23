@@ -666,8 +666,9 @@ class AiTimingDialog(QDialog):
             return self.tr("正在估算剩余时间…")
         now = time.monotonic()
         if self._eta_samples and percent < self._eta_samples[-1][1] - 5:
-            # 阶段边界百分比回落（如内嵌分离自身的 0-100 汇入总进度后，
-            # 对齐阶段从 20 重新开始）：旧样本会让速率算出负值，重新累计
+            # 阶段边界百分比回落的兜底（service 层进度现已全程单调，
+            # 但嵌入宿主等外部进度源不受此约束）：旧样本会让速率
+            # 算出负值，重新累计
             self._eta_samples = []
         self._eta_samples.append((now, percent))
         self._eta_samples = self._eta_samples[-20:]
