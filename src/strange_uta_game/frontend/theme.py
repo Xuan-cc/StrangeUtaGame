@@ -452,6 +452,10 @@ class Theme(QObject):
             throttle.visibility_maybe_changed.connect(
                 self._on_ui_visibility_maybe_changed
             )
+            # 接入时立即校正一次：轮询可能在全部窗口隐藏的状态下启动
+            # （如嵌入宿主隐藏 SUG 后才初始化主题监听），不能等下一次
+            # 可见性事件才停
+            self._on_ui_visibility_maybe_changed()
 
     def _on_ui_visibility_maybe_changed(self) -> None:
         """应用可见性变化：全部窗口隐藏时暂停系统主题轮询，恢复可见补测。"""

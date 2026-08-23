@@ -168,7 +168,13 @@ def test_play_starts_from_locked_start_when_position_is_outside_range():
     assert preview.current_time_ms == 2_000
 
 
-def test_poll_pauses_exactly_at_locked_end_at_1_5x_speed():
+def test_poll_pauses_exactly_at_locked_end_at_1_5x_speed(monkeypatch):
+    # 隔离前后台节流的全局判定：本用例验证锁定终点的 seek+暂停精度，
+    # 与窗口可见性无关
+    from strange_uta_game.frontend.editor import timing_interface as ti_module
+
+    monkeypatch.setattr(ti_module, "ui_visible", lambda: True)
+
     class Engine:
         playing = True
 
@@ -202,6 +208,14 @@ def test_poll_pauses_exactly_at_locked_end_at_1_5x_speed():
     transport = _FakePositionWidget()
     timeline = _FakePositionWidget()
     preview = _FakePreview()
+
+    class _VisibleWindow:
+        def isVisible(self) -> bool:
+            return True
+
+        def isMinimized(self) -> bool:
+            return False
+
     editor = SimpleNamespace(
         _timing_service=service,
         _playback_range_end_ms=6_000,
@@ -210,6 +224,7 @@ def test_poll_pauses_exactly_at_locked_end_at_1_5x_speed():
         timeline=timeline,
         preview=preview,
         y=lambda: 0,
+        window=lambda: _VisibleWindow(),
         _position_poll_timer=SimpleNamespace(stop=lambda: None),
         _auto_scroll_cooldown_timer=SimpleNamespace(stop=lambda: None),
         _auto_scroll_suspended=False,
@@ -220,6 +235,7 @@ def test_poll_pauses_exactly_at_locked_end_at_1_5x_speed():
         _update_mode_indicator=lambda playing=None: None,
         _validate_all_timestamps=lambda: None,
     )
+    editor._position_poll_hidden = lambda: EditorInterface._position_poll_hidden(editor)
     editor._on_pause = lambda: EditorInterface._on_pause(editor)
 
     EditorInterface._poll_audio_position(editor)

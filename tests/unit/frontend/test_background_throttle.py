@@ -65,11 +65,18 @@ class _StubWindow:
 
 
 class _StubEditor:
+    _position_poll_hidden = EditorInterface._position_poll_hidden
+    _refresh_position_poll_interval = EditorInterface._refresh_position_poll_interval
+    _apply_playback_range = EditorInterface._apply_playback_range
+    _poll_audio_position = EditorInterface._poll_audio_position
+
     def __init__(self, window):
         self._window = window
         self._position_poll_timer = QTimer()
         self._position_poll_fg_interval_ms = 16
         self._position_poll_bg_interval_ms = 200
+        self._playback_range_start_ms = None
+        self._playback_range_end_ms = None
 
     def window(self):
         return self._window
@@ -168,6 +175,109 @@ def test_position_poll_hidden_by_host_notification(qapp, monkeypatch):
     assert editor._position_poll_timer.interval() == 200
 
 
+def test_locked_range_keeps_fast_poll_when_hidden(qapp, monkeypatch):
+    """锁定播放区间终点是音频行为：隐藏期间也必须保持高频检测。
+
+    否则音频会越过终点约一个后台轮询间隔（200ms）才 seek+暂停，
+    违背"音频服务不降频"。
+    """
+    from strange_uta_game.frontend.editor import timing_interface as ti_module
+
+    monkeypatch.setattr(ti_module, "ui_visible", lambda: True)
+    editor = _StubEditor(_StubWindow(visible=False))
+    editor._position_poll_timer.setInterval(200)  # 已处于降频态
+
+    editor._playback_range_end_ms = 5000
+    EditorInterface._refresh_position_poll_interval(editor)
+    assert editor._position_poll_timer.interval() == 16
+
+    editor._playback_range_end_ms = None
+    EditorInterface._refresh_position_poll_interval(editor)
+    assert editor._position_poll_timer.interval() == 200
+
+    editor._window = _StubWindow(visible=True)
+    editor._playback_range_end_ms = 5000
+    EditorInterface._refresh_position_poll_interval(editor)
+    assert editor._position_poll_timer.interval() == 16
+
+
+def test_apply_playback_range_refreshes_poll_interval(qapp, monkeypatch):
+    """区间变化（含 undo/redo，都走 _apply_playback_range）后立即重估频率。"""
+    from strange_uta_game.frontend.editor import timing_interface as ti_module
+
+    monkeypatch.setattr(ti_module, "ui_visible", lambda: True)
+
+    class _RangeRecorder:
+        def __init__(self):
+            self.ranges = []
+
+        def set_playback_range(self, start, end):
+            self.ranges.append((start, end))
+
+    editor = _StubEditor(_StubWindow(visible=False))
+    editor.transport = _RangeRecorder()
+    editor.timeline = _RangeRecorder()
+    EditorInterface._refresh_position_poll_interval(editor)
+    assert editor._position_poll_timer.interval() == 200
+
+    editor._apply_playback_range(1000, 5000)
+    assert editor._position_poll_timer.interval() == 16
+
+    editor._apply_playback_range(None, None)
+    assert editor._position_poll_timer.interval() == 200
+    assert editor.transport.ranges == [(1000, 5000), (None, None)]
+
+
+def test_poll_audio_position_skips_ui_updates_when_hidden(qapp, monkeypatch):
+    """隐藏 tick 只做检测（结束/锁定终点），不刷新 UI 控件。"""
+    from strange_uta_game.frontend.editor import timing_interface as ti_module
+
+    monkeypatch.setattr(ti_module, "ui_visible", lambda: True)
+
+    class _UIRecorder:
+        def __init__(self):
+            self.calls = []
+
+        def set_duration(self, value):
+            self.calls.append(("duration", value))
+
+        def set_position(self, value):
+            self.calls.append(("position", value))
+
+        def set_current_time_ms(self, value):
+            self.calls.append(("current", value))
+
+    recorder = _UIRecorder()
+    engine = type("_Engine", (), {"is_playing": lambda self: True})()
+    service = type(
+        "_Service",
+        (),
+        {
+            "_audio_engine": engine,
+            "get_position_ms": lambda self: 1000,
+            "get_duration_ms": lambda self: 5000,
+        },
+    )()
+
+    editor = _StubEditor(_StubWindow(visible=False))
+    editor.y = lambda: 0
+    editor._timing_service = service
+    editor.transport = recorder
+    editor.timeline = recorder
+    editor.preview = recorder
+    editor._last_polled_duration_ms = None
+
+    editor._poll_audio_position()
+    assert recorder.calls == []
+    assert editor._last_polled_duration_ms is None
+
+    editor._window = _StubWindow(visible=True)
+    editor._poll_audio_position()
+    assert ("duration", 5000) in recorder.calls
+    assert ("position", 1000) in recorder.calls
+    assert editor._last_polled_duration_ms == 5000
+
+
 def test_theme_poll_timer_follows_app_visibility(qapp, monkeypatch):
     from strange_uta_game.frontend import theme as theme_module
 
@@ -196,6 +306,40 @@ def test_theme_poll_timer_follows_app_visibility(qapp, monkeypatch):
         assert timer.isActive()
     finally:
         timer.stop()
+        manager._poll_timer = original_timer
+
+
+def test_theme_poll_reconciles_immediately_on_connect(qapp, monkeypatch):
+    """轮询在全部窗口隐藏时启动（如宿主隐藏 SUG 后才初始化主题监听），
+    接入节流器时应立即校正为停止态，不等下一次可见性事件。"""
+    from strange_uta_game.frontend import theme as theme_module
+
+    class _StubSignal:
+        def __init__(self):
+            self.connected = []
+
+        def connect(self, slot):
+            self.connected.append(slot)
+
+    class _StubThrottle:
+        def __init__(self, visible):
+            self.visibility_maybe_changed = _StubSignal()
+            self.is_visible = visible
+
+    manager = theme_module.theme
+    original_timer = manager._poll_timer
+    manager._poll_timer = None
+    stub = _StubThrottle(visible=False)
+    monkeypatch.setattr(theme_module, "background_throttle", lambda: stub)
+    try:
+        manager._start_polling()
+        timer = manager._poll_timer
+        assert timer is not None
+        assert len(stub.visibility_maybe_changed.connected) == 1
+        assert not timer.isActive(), "接入即校正：隐藏态下不应处于运行态"
+    finally:
+        if manager._poll_timer is not None:
+            manager._poll_timer.stop()
         manager._poll_timer = original_timer
 
 

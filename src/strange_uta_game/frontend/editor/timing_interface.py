@@ -5090,6 +5090,9 @@ class EditorInterface(QWidget):
         self._playback_range_end_ms = end_ms
         self.transport.set_playback_range(start_ms, end_ms)
         self.timeline.set_playback_range(start_ms, end_ms)
+        # 锁定终点决定后台轮询是否保持高频（音频终点检测），区间变化
+        # （含 undo/redo，都走本方法）后立即重估
+        self._refresh_position_poll_interval()
 
     def _reset_playback_range(self) -> None:
         self._apply_playback_range(None, None)
@@ -7729,27 +7732,34 @@ class EditorInterface(QWidget):
         else:
             self._update_mode_indicator()
 
-    def _refresh_position_poll_interval(self) -> None:
-        """按窗口可见性调整播放头轮询频率。
-
-        窗口可见（哪怕失焦——用户可能一边看歌词预览一边在别的窗口干活）→
-        用户设置的刷新率；窗口最小化/隐藏（没人看得见画面）→ 200ms 仅维持
-        播放结束/锁定终点检测与状态栏。setInterval 对运行中的定时器即时生效。
+    def _position_poll_hidden(self) -> bool:
+        """播放头轮询的"隐藏态"：窗口最小化/隐藏，或宿主隐藏了 SUG 区域。
 
         嵌入式模式下 self.window() 是宿主顶层窗口，宿主隐藏 SUG 区域时宿主
         窗口仍可见，因此除自身窗口外还参考节流器的全局判定（含宿主经
         on_host_visibility_changed / set_visibility_override 的显式通知）。
         """
         window = self.window()
-        hidden = (
+        return (
             window is None
             or window.isMinimized()
             or not window.isVisible()
             or not ui_visible()
         )
+
+    def _refresh_position_poll_interval(self) -> None:
+        """按窗口可见性与锁定区间调整播放头轮询频率。
+
+        窗口可见（哪怕失焦——用户可能一边看歌词预览一边在别的窗口干活）→
+        用户设置的刷新率；窗口最小化/隐藏且无锁定终点 → 200ms 仅维持播放
+        结束检测与状态栏。锁定终点是音频行为：越过终点后 seek+暂停的时机
+        由本定时器决定，隐藏期间也必须保持高频检测，否则音频会越过终点约
+        一个后台轮询间隔（200ms），违背"音频服务不降频"。setInterval 对
+        运行中的定时器即时生效。
+        """
         interval_ms = (
             self._position_poll_bg_interval_ms
-            if hidden
+            if self._position_poll_hidden() and self._playback_range_end_ms is None
             else self._position_poll_fg_interval_ms
         )
         self._position_poll_timer.setInterval(interval_ms)
@@ -7794,9 +7804,11 @@ class EditorInterface(QWidget):
             position_ms = self._playback_range_end_ms
             self._timing_service.seek(position_ms)
 
-        # 页面切换动画期间（self.y() != 0）跳过 UI 重绘，避免与动画争抢导致控件抖动。
-        # 位置读取和播放结束检测不受影响，不影响打轴精度。
-        if self.y() == 0:
+        # 页面切换动画期间（self.y() != 0）跳过 UI 重绘，避免与动画争抢导致
+        # 控件抖动；窗口隐藏时没人看得见，同样跳过（锁定终点生效时轮询保持
+        # 高频，但 tick 内只做检测不刷新控件）。位置读取和播放结束检测不受
+        # 影响，不影响打轴精度。
+        if self.y() == 0 and not self._position_poll_hidden():
             if duration_ms != self._last_polled_duration_ms:
                 self.transport.set_duration(duration_ms)
                 self.timeline.set_duration(duration_ms)
