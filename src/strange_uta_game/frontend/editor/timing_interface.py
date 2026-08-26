@@ -5257,11 +5257,25 @@ class EditorInterface(QWidget):
             # 切换到编辑模式时校验所有行时间戳
             self._validate_all_timestamps()
 
+    def _clamp_seek_to_playback_range(self, ms: int) -> int:
+        """锁定播放区间时把 seek 目标钳制到 [起点, 终点] 内。
+
+        点击波形窗/进度条上 A 之前的位置 → 落到区间起点（以 A 为起始点播放）；
+        点击 B 之后的位置 → 落到区间终点（播放中由位置轮询触发「已到达锁定
+        终点」暂停，停留在 B）。未锁定时不限制。
+        """
+        if self._playback_range_start_ms is not None:
+            ms = max(self._playback_range_start_ms, ms)
+        if self._playback_range_end_ms is not None:
+            ms = min(self._playback_range_end_ms, ms)
+        return ms
+
     @log_slow_method("editor.seek", 20, lambda self, args, kwargs: {"target_ms": args[0] if args else kwargs.get("ms")})
     def _on_seek(self, ms: int):
         log_perf_event("editor.seek.start", target_ms=ms, line=getattr(self, "_current_line_idx", -1))
         self._suspend_auto_scroll()
         if self._timing_service:
+            ms = self._clamp_seek_to_playback_range(ms)
             self._timing_service.seek(ms)
             self.transport.set_position(ms)
             self.timeline.set_position(ms)

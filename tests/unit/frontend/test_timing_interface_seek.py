@@ -84,6 +84,8 @@ def test_seek_immediately_updates_preview_time():
         transport=transport,
         timeline=timeline,
         preview=preview,
+        _playback_range_start_ms=None,
+        _playback_range_end_ms=None,
         auto_scroll_suspended=False,
     )
 
@@ -91,6 +93,7 @@ def test_seek_immediately_updates_preview_time():
         editor.auto_scroll_suspended = True
 
     editor._suspend_auto_scroll = suspend_auto_scroll
+    editor._clamp_seek_to_playback_range = lambda ms: EditorInterface._clamp_seek_to_playback_range(editor, ms)
 
     EditorInterface._on_seek(editor, target_ms)
 
@@ -99,6 +102,88 @@ def test_seek_immediately_updates_preview_time():
     assert transport.position_ms == target_ms
     assert timeline.position_ms == target_ms
     assert preview.current_time_ms == target_ms
+
+
+def _make_seek_editor(playback_range):
+    """构造可直接调用 EditorInterface._on_seek 的最小 editor。
+
+    波形窗与进度条的点击/拖动 seek 都汇入 _on_seek，这里直接在统一入口
+    层验证锁定区间的钳制行为。
+    """
+    timing_service = _FakeTimingService()
+    transport = _FakePositionWidget()
+    timeline = _FakePositionWidget()
+    preview = _FakePreview()
+    editor = SimpleNamespace(
+        _timing_service=timing_service,
+        transport=transport,
+        timeline=timeline,
+        preview=preview,
+        _playback_range_start_ms=playback_range[0],
+        _playback_range_end_ms=playback_range[1],
+        auto_scroll_suspended=False,
+    )
+    editor._suspend_auto_scroll = lambda: None
+    editor._clamp_seek_to_playback_range = lambda ms: EditorInterface._clamp_seek_to_playback_range(editor, ms)
+    return editor
+
+
+def test_seek_before_locked_start_clamps_to_start():
+    """点击 A 之前的位置：以区间起点 A 播放，不允许落到区间外。"""
+    editor = _make_seek_editor((2_000, 6_000))
+
+    EditorInterface._on_seek(editor, 1_000)
+
+    assert editor._timing_service.seeked_ms == 2_000
+    assert editor.transport.position_ms == 2_000
+    assert editor.timeline.position_ms == 2_000
+    assert editor.preview.current_time_ms == 2_000
+
+
+def test_seek_after_locked_end_clamps_to_end():
+    """点击 B 之后的位置：停留在区间终点 B。"""
+    editor = _make_seek_editor((2_000, 6_000))
+
+    EditorInterface._on_seek(editor, 9_000)
+
+    assert editor._timing_service.seeked_ms == 6_000
+    assert editor.transport.position_ms == 6_000
+    assert editor.timeline.position_ms == 6_000
+    assert editor.preview.current_time_ms == 6_000
+
+
+def test_seek_inside_locked_range_stays_unchanged():
+    """点击区间内的位置：正常跳转，不受钳制影响。"""
+    editor = _make_seek_editor((2_000, 6_000))
+
+    EditorInterface._on_seek(editor, 4_500)
+
+    assert editor._timing_service.seeked_ms == 4_500
+    assert editor.transport.position_ms == 4_500
+    assert editor.timeline.position_ms == 4_500
+    assert editor.preview.current_time_ms == 4_500
+
+
+def test_seek_clamps_with_only_start_locked():
+    """只锁起点 A：A 之前钳到 A，之后不限制。"""
+    editor = _make_seek_editor((2_000, None))
+
+    EditorInterface._on_seek(editor, 500)
+    assert editor._timing_service.seeked_ms == 2_000
+
+    EditorInterface._on_seek(editor, 9_000)
+    assert editor._timing_service.seeked_ms == 9_000
+
+
+def test_seek_clamps_with_only_end_locked():
+    """只锁终点 B：B 之后钳到 B，之前不限制。"""
+    editor = _make_seek_editor((None, 6_000))
+
+    EditorInterface._on_seek(editor, 9_000)
+    assert editor._timing_service.seeked_ms == 6_000
+
+    EditorInterface._on_seek(editor, 1_000)
+    assert editor._timing_service.seeked_ms == 1_000
 
 
 def test_timetag_added_delegates_dependent_invalidation_to_preview():
