@@ -100,7 +100,9 @@
     <h3>① Nicokara 标签设置…</h3>
     <p>设置文件头部的元数据标签：<code>@Title</code>（歌曲名）、<code>@Artist</code>（演唱者）、
     <code>@Album</code>（专辑）、<code>@TaggingBy</code>（打轴者）、<code>@SilencemSec</code>（前奏静音毫秒）、
-    以及任意 <code>@Custom</code> 自定义标签。保存后写入软件配置，导出时写进文件头。</p>
+    <code>@Offset</code>（全局偏移毫秒，可负）、<code>@HeadOffset</code>（头部偏移毫秒，可负）、
+    以及任意 <code>@Custom</code> 自定义标签。保存后写入软件配置，导出时写进文件头
+    （偏移栏位为 0 时不输出对应标签）。</p>
 
     <h3>② 插入【演唱者名】标签</h3>
     <p>勾选后，导出时<b>每当演唱者发生变化</b>，就在该处字符前自动插入一个

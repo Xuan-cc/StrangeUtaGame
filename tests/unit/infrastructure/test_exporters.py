@@ -799,18 +799,67 @@ class TestNicokaraWithRubyExporter:
             temp_path = f.name
 
         try:
-            exporter.export(project, temp_path)
+            exporter.export(project, temp_path, tag_data={})
 
             with open(temp_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # @Offset 仅在 project.offset_ms ≠ 0 时输出（避免 round-trip 污染）；
-            # 当前 Project 没有 offset_ms 字段，因此不应出现 @Offset 行。
+            # tag_data 为空时 @Offset/@HeadOffset 均不输出（避免 round-trip 污染）
             assert "@Offset" not in content
+            assert "@HeadOffset" not in content
             # 应包含 @Ruby 标签（朴素分段：kanji + reading + pos1 + pos2）
             assert "@Ruby1=赤,あか" in content
             # 歌词部分仍为逐字时间戳
             assert "[00:05:00]赤" in content
+        finally:
+            os.unlink(temp_path)
+
+    def test_export_offset_and_head_offset_tags(self):
+        """@Offset/@HeadOffset 标准栏位：非零时按 +ms/-ms 符号格式输出。"""
+        from strange_uta_game.backend.domain import Ruby, RubyPart
+        from strange_uta_game.backend.infrastructure.exporters import (
+            NicokaraWithRubyExporter,
+        )
+
+        project = Project()
+        singer = project.singers[0]
+        sentence = Sentence.from_text("あ", singer.id)
+        sentence.characters[0].set_ruby(Ruby(parts=[RubyPart(text="あ")]))
+        sentence.characters[0].add_timestamp(5000)
+        project.add_sentence(sentence)
+
+        exporter = NicokaraWithRubyExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(
+                project,
+                temp_path,
+                tag_data={"offset": 250, "head_offset": -120, "custom": []},
+            )
+
+            with open(temp_path, "r", encoding="utf-8-sig") as f:
+                lines = f.read().splitlines()
+
+            assert "@Offset=+250" in lines
+            assert "@HeadOffset=-120" in lines
+            # 顺序：标准栏位输出在 @Ruby 之前
+            offset_idx = next(i for i, l in enumerate(lines) if l.startswith("@Offset="))
+            ruby_idx = next(i for i, l in enumerate(lines) if l.startswith("@Ruby1="))
+            assert offset_idx < ruby_idx
+
+            # 零值 → 不输出对应标签
+            exporter.export(
+                project, temp_path, tag_data={"offset": 0, "head_offset": 0}
+            )
+            with open(temp_path, "r", encoding="utf-8-sig") as f:
+                content = f.read()
+            assert "@Offset" not in content
+            assert "@HeadOffset" not in content
         finally:
             os.unlink(temp_path)
 

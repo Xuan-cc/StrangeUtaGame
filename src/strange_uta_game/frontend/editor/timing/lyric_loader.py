@@ -321,7 +321,8 @@ def _sync_nicokara_metadata_to_settings(metadata: dict, *, setting_iface=None) -
         Album         → tags["album"]
         TaggingBy     → tags["tagging_by"]
         SilencemSec   → tags["silence_ms"] (int)
-        Offset        → tags["custom"]（保留原始 LRC 标签）
+        Offset        → tags["offset"] (int；解析失败回退 custom 保留原文)
+        HeadOffset    → tags["head_offset"] (int；解析失败回退 custom 保留原文)
         其余 *        → tags["custom"]，每项形如 "@Key=Value"
 
     覆盖式：旧的 nicokara_tags 全部被替换，不做合并——
@@ -342,21 +343,21 @@ def _sync_nicokara_metadata_to_settings(metadata: dict, *, setting_iface=None) -
         "Album": "album",
         "TaggingBy": "tagging_by",
     }
+    int_map = {
+        "SilencemSec": "silence_ms",
+        "Offset": "offset",
+        "HeadOffset": "head_offset",
+    }
     tags: dict = {}
     custom: list = []
     for key, value in metadata.items():
         if key in known_map:
             tags[known_map[key]] = value
-        elif key == "SilencemSec":
+        elif key in int_map:
             try:
-                tags["silence_ms"] = int(value)
+                tags[int_map[key]] = int(value)
             except (TypeError, ValueError):
                 custom.append(f"@{key}={value}")
-        elif key == "Offset":
-            # 导入 LRC 时不应丢失源文件的 @Offset。当前导入流程并没有
-            # 将该值写入 Project；保存到 custom 才能在标签对话框中看到并
-            # round-trip 回写。这里也保留原文的值和符号。
-            custom.append(f"@{key}={value}")
         elif key.startswith("_Emoji"):
             # NicokaraParser 用 _EmojiN 键存储完整 @Emoji 行，还原为 @Emoji=
             custom.append(f"@Emoji={value}")

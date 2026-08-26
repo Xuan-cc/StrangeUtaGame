@@ -241,6 +241,9 @@ class AppSettings:
             "album": "",
             "tagging_by": "",
             "silence_ms": 0,
+            # @Offset/@HeadOffset 标准栏位（毫秒，可为负；0 = 不输出该标签）
+            "offset": 0,
+            "head_offset": 0,
             "custom": [],
         },
         "auto_save": {

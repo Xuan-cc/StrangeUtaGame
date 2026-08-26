@@ -19,7 +19,7 @@ from qfluentwidgets import LineEdit, PrimaryPushButton, PushButton, ScrollArea, 
 class NicokaraTagsDialog(QDialog):
     """Nicokara 导出元数据标签设置对话框
 
-    设置 @Title/@Artist/@Album/@TaggingBy/@SilencemSec/@Custom 等标签。
+    设置 @Title/@Artist/@Album/@TaggingBy/@SilencemSec/@Offset/@HeadOffset/@Custom 等标签。
     """
 
     def __init__(self, tag_data: dict, parent=None):
@@ -83,6 +83,23 @@ class NicokaraTagsDialog(QDialog):
         silence_row.addWidget(self._spin_silence)
         form_layout.addLayout(silence_row)
 
+        def _offset_row(key: str, edit_attr: str) -> None:
+            row = QHBoxLayout()
+            lbl = QLabel(key)
+            lbl.setFont(ui_font(10))
+            lbl.setMinimumWidth(150)
+            spin = SpinBox()
+            spin.setRange(-99999, 99999)
+            spin.setSuffix(" ms")
+            spin.setFont(ui_font(10))
+            setattr(self, edit_attr, spin)
+            row.addWidget(lbl)
+            row.addWidget(spin)
+            form_layout.addLayout(row)
+
+        _offset_row(self.tr("@Offset（全局偏移）"), "_spin_offset")
+        _offset_row(self.tr("@HeadOffset（头部偏移）"), "_spin_head_offset")
+
         scroll_layout.addLayout(form_layout)
 
         # @Custom 动态列表
@@ -113,6 +130,8 @@ class NicokaraTagsDialog(QDialog):
         self._edit_album.setText(tag_data.get("album", ""))
         self._edit_tagging_by.setText(tag_data.get("tagging_by", ""))
         self._spin_silence.setValue(tag_data.get("silence_ms", 0))
+        self._spin_offset.setValue(tag_data.get("offset", 0))
+        self._spin_head_offset.setValue(tag_data.get("head_offset", 0))
         for custom_val in tag_data.get("custom", []):
             self._on_add_custom(custom_val)
 
@@ -143,5 +162,7 @@ class NicokaraTagsDialog(QDialog):
             "album": self._edit_album.text().strip(),
             "tagging_by": self._edit_tagging_by.text().strip(),
             "silence_ms": self._spin_silence.value(),
+            "offset": self._spin_offset.value(),
+            "head_offset": self._spin_head_offset.value(),
             "custom": [e.text().strip() for e in self._custom_list if e.text().strip()],
         }

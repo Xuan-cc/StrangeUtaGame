@@ -5,7 +5,7 @@
 - 每个字符前有独立时间戳
 - 行末附加结束时间戳
 - @Ruby 注音标签（含字内相对时间；多次出现时每次独立条目+位置范围）
-- @Offset 全局偏移
+- @Offset/@HeadOffset 标准偏移栏位（非零时输出，符号格式 +ms/-ms）
 - @Title/@Artist/@Album/@TaggingBy/@SilencemSec 元数据标签（可选）
 - 演唱者过滤：可按选定的演唱者筛选输出行/字符
 - 演唱者标签：在演唱者切换处自动插入【演唱者名】标签
@@ -21,17 +21,16 @@ from strange_uta_game.backend.domain import Project, Sentence, Singer
 _NICOKARA_TS_RE = re.compile(r'\[\d+:\d+:\d+\]')
 
 
-def _format_nicokara_ts(timestamp_ms: int, offset_ms: int = 0) -> str:
+def _format_nicokara_ts(timestamp_ms: int) -> str:
     """格式化 Nicokara 时间戳 [MM:SS:CC]
 
     Args:
         timestamp_ms: 毫秒时间戳
-        offset_ms: 偏移量（毫秒）
 
     Returns:
         格式化后的字符串，如 [00:12:34]
     """
-    timestamp_ms = max(0, timestamp_ms + offset_ms)
+    timestamp_ms = max(0, timestamp_ms)
     total_cs = timestamp_ms // 10
     minutes = total_cs // 6000
     seconds = (total_cs % 6000) // 100
@@ -372,7 +371,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
     """带注音的 Nicokara LRC 格式导出器
 
     在 Nicokara 逐字格式基础上追加：
-    - @Offset 全局偏移
+    - @Offset/@HeadOffset 标准偏移栏位（非零时输出）
     - @RubyN=漢字,読み[相対時間],出現位置1,出現位置2,...
     """
 
@@ -533,19 +532,22 @@ class NicokaraWithRubyExporter(NicokaraExporter):
         silence = tags.get("silence_ms", 0)
         if silence:
             output_lines.append(f"@SilencemSec={silence}")
+
+        # @Offset/@HeadOffset 标准栏位（仅当非零时输出，避免污染 round-trip）。
+        # 只写标签本身，不改时间戳——时间戳偏移由前端通过 Character.set_offset()
+        # 预先写入 global_timestamps，与此处标签互不叠加。
+        for tag_name, tag_key in (("Offset", "offset"), ("HeadOffset", "head_offset")):
+            try:
+                offset_val = int(tags.get(tag_key, 0) or 0)
+            except (TypeError, ValueError):
+                offset_val = 0
+            if offset_val != 0:
+                sign = "+" if offset_val >= 0 else "-"
+                output_lines.append(f"@{tag_name}={sign}{abs(offset_val)}")
+
         for custom in tags.get("custom", []):
             if custom:
                 output_lines.append(custom)
-
-        # @Offset（仅当存在非零偏移时输出，避免污染 round-trip）
-        offset_ms = 0
-        try:
-            offset_ms = int(getattr(project, "offset_ms", 0) or 0)
-        except (TypeError, ValueError):
-            offset_ms = 0
-        if offset_ms != 0:
-            sign = "+" if offset_ms >= 0 else "-"
-            output_lines.append(f"@Offset={sign}{abs(offset_ms)}")
 
         # @Ruby 注音标签（也按演唱者过滤）
         ruby_entries = self._collect_ruby_entries(project, singer_ids)
