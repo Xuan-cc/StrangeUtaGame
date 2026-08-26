@@ -607,9 +607,14 @@ class NicokaraWithRubyExporter(NicokaraExporter):
           - 相邻两个有 ruby 但未设为连词的字符（典型：解析后的两个
             单字 @Ruby tag）必须输出为两个独立 `@RubyN` entry。
           - 每段独立输出，N 严格递增，不复用、不去重、不按 kanji 合并。
-          - 作用域写死在该段自身的时间范围内：
-              pos1 = 段首字第一个 global timestamp（缺失则向上回溯）
-              pos2 = 段尾字 sentence_end_ts（若是演唱停顿）或下一字起始 ts
+          - 作用域按**文本顺序在本行内优先闭段**：
+              pos1 = 段首字第一个 global timestamp（缺失则向上回溯；
+                    跨行回退时钳制不超过本行内其后的第一个 ts）
+              pos2 = 段尾字 sentence_end_ts（若是演唱停顿）
+                    / 本句下一字起始 ts / 本句后续释放 ts（如行尾 [>..]）
+              跨行借用（下一行首 ts）仅为最后手段，且钳制 pos2 >= pos1：
+              重叠歌词（下一行先于本行结束开始）时下一行首 ts 远早于
+              本行真实结束，直接借用会压垮 ruby 作用域（ココ☆ナツ案例）。
 
         Args:
             project: 项目数据
@@ -701,11 +706,31 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                                 break
                         if found:
                             break
-                # pos2: 段尾字"作用结束"时刻
+                    if pos1_ts is not None:
+                        # 重叠歌词保护：跨行回退借到的「上一行末尾 ts」
+                        # 可能晚于本行自身的第一个 ts（上一行尚未唱完、
+                        # 本行已经开唱）。段首字的作用起点不得晚于本行内
+                        # 文本顺序上其后的第一个 ts，取两者较早者。
+                        for k in range(start_idx, n):
+                            cap_ts: Optional[int] = None
+                            if chars[k].global_timestamps:
+                                cap_ts = chars[k].global_timestamps[0]
+                            elif chars[k].global_sentence_end_ts is not None:
+                                cap_ts = chars[k].global_sentence_end_ts
+                            if cap_ts is not None:
+                                if cap_ts < pos1_ts:
+                                    pos1_ts = cap_ts
+                                break
+                # pos2: 段尾字"作用结束"时刻（文本顺序在本行内优先闭段）
                 #   - 若段尾字标有演唱停顿（is_sentence_end，命名遗留，
                 #     真实语义是"演唱时的呼吸/停顿"，非语义句末）
                 #     → 取该字 global_sentence_end_ts（停顿释放 ts）
-                #   - 否则 → 下一个有 ts 的 char 的起始 ts（下字开始 = 本字结束）
+                #   - 否则 → 本句下一个有起始 ts 的 char（下字开始 = 本字结束）
+                #   - 本句剩余 char 无起始 ts → 本句后续释放 ts（如行尾 [>..]，
+                #     即本行自身的结束）。重叠歌词（下一行先于本行结束开始）
+                #     时必须先在本行内闭段，不能借下一行首 ts——那会把作用域
+                #     压到远早于本行真实结束的时刻（ココ☆ナツ「発」案例）
+                #   - 本句后续完全无 ts → 跨 sentence 借下一行首 ts（最后手段）
                 #   - 找不到下一字（全文末尾且用户未标停顿）→ pos2 省略
                 last_ch = chars[end_idx - 1]
                 pos2_ts: Optional[int] = None
@@ -713,15 +738,20 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 if last_ch.is_sentence_end and last_ch.global_sentence_end_ts is not None:
                     pos2_ts = last_ch.global_sentence_end_ts
                 else:
-                    # 先在本句剩余 char 找下一个有 ts 的
+                    # 先在本句剩余 char 找下一个有起始 ts 的
                     for k in range(end_idx, n):
                         if chars[k].global_timestamps:
                             pos2_ts = chars[k].global_timestamps[0]
                             break
                     if pos2_ts is None:
-                        # 本句后续无 ts char → 找后续 sentence 第一个有 ts 的 char
-                        sent_idx_in_proj = sent_idx
-                        for ns in project.sentences[sent_idx_in_proj + 1:]:
+                        # 本句剩余 char 无起始 ts → 本句自身的释放 ts 闭段
+                        for k in range(end_idx, n):
+                            if chars[k].global_sentence_end_ts is not None:
+                                pos2_ts = chars[k].global_sentence_end_ts
+                                break
+                    if pos2_ts is None:
+                        # 本句后续完全无 ts → 跨 sentence 找后续行第一个有 ts 的 char
+                        for ns in project.sentences[sent_idx + 1:]:
                             found = False
                             for nc in ns.characters:
                                 if nc.global_timestamps:
@@ -733,6 +763,15 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                     if pos2_ts is None:
                         # 全文最后一字且未标句尾 → pos2 省略
                         pos2_omit = True
+
+                # 倒挂钳制：极端重叠下（本行既无后续起始 ts 也无释放 ts，
+                # 跨行借用的下一行首 ts 早于 pos1），作用域不可为负区间
+                if (
+                    pos2_ts is not None
+                    and pos1_ts is not None
+                    and pos2_ts < pos1_ts
+                ):
+                    pos2_ts = pos1_ts
 
                 pos1_str = _format_nicokara_ts(pos1_ts) if pos1_ts is not None else ""
                 if pos2_omit:

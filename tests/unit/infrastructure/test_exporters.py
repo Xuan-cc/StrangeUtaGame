@@ -1195,6 +1195,181 @@ class TestNicokaraWithRubyExporter:
         finally:
             os.unlink(temp_path)
 
+    def test_export_ruby_overlap_next_line_closes_scope_at_own_line_end(self):
+        """重叠歌词回归（ココ☆ナツ「発」案例）：下一行先于本行结束开始时，
+        行尾 ruby 段的 pos2 必须用**本行自身**的行尾释放 ts 闭段，
+        不得跨行借用下一行首 ts（否则作用域被压成极窄窗口，
+        ニコカラメーカー匹配不到假名注音）。
+
+        行1「爆発☆」：段尾字「発」后只剩无起始 ts 的「☆」（仅带行尾
+        释放 ts 01:01.81）；行2 于 00:59.60 重叠插入。预期：
+          @RubyN=発,は[00:02:09]つ,[00:59:59],[01:01:81]
+        """
+        from strange_uta_game.backend.domain import RubyPart
+        from strange_uta_game.backend.infrastructure.exporters import (
+            NicokaraWithRubyExporter,
+        )
+
+        project = Project()
+        singer = project.singers[0]
+
+        s1 = Sentence.from_text("爆発☆", singer.id)
+        c_baku = s1.characters[0]
+        c_baku.set_ruby(Ruby(parts=[RubyPart(text="ば")]))
+        c_baku.add_timestamp(58710)  # 00:58.71
+        c_hatsu = s1.characters[1]
+        c_hatsu.check_count = 2
+        c_hatsu.set_ruby(Ruby(parts=[RubyPart(text="は"), RubyPart(text="つ")]))
+        c_hatsu.add_timestamp(59590, checkpoint_idx=0)  # 00:59.59
+        c_hatsu.add_timestamp(61680, checkpoint_idx=1)  # 01:01.68
+        c_star = s1.characters[2]
+        c_star.is_sentence_end = True
+        c_star.set_sentence_end_ts(61810)  # 01:01.81 行尾释放
+        project.add_sentence(s1)
+
+        # 行2 在行1 结束（01:01.81）前即开始（00:59.60）—— 重叠
+        s2 = Sentence.from_text("サシスセ", singer.id)
+        for idx, (yomi, ts) in enumerate([
+            ("さ", 59600), ("し", 59940), ("す", 60026), ("せ", 60410),
+        ]):
+            ch = s2.characters[idx]
+            ch.set_ruby(Ruby(parts=[RubyPart(text=yomi)]))
+            ch.add_timestamp(ts)
+        s2.characters[3].is_sentence_end = True
+        s2.characters[3].set_sentence_end_ts(60480)
+        project.add_sentence(s2)
+
+        exporter = NicokaraWithRubyExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(project, temp_path)
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # 「発」段：pos2 = 本行行尾释放 ts 01:01.81（不是行2 首 ts 00:59.60）
+            assert re.search(
+                r"@Ruby\d+=発,は\[00:02:09\]つ,\[00:59:59\],\[01:01:81\]",
+                content,
+            ), f"重叠行尾 ruby 段未用本行释放 ts 闭段:\n{content}"
+            assert not re.search(
+                r"@Ruby\d+=発,[^,]*,\[00:59:59\],\[00:59:60\]",
+                content,
+            ), f"「発」段 pos2 仍跨行借用了行2 首 ts:\n{content}"
+            # 行2 自身条目不受影响
+            assert re.search(
+                r"@Ruby\d+=サ,さ,\[00:59:60\],\[00:59:94\]",
+                content,
+            ), f"行2 ruby 段被误改:\n{content}"
+        finally:
+            os.unlink(temp_path)
+
+    def test_export_ruby_overlap_deep_no_inverted_scope(self):
+        """重叠歌词深度重叠 + 本行完全无释放 ts：跨行回退取到的下一行
+        首 ts 早于 pos1 时，钳制 pos2 >= pos1，不得导出倒挂作用域。
+
+        行1 仅「発」（ruby ts 59590，无后续字符无释放）；行2 于 59500
+        （更早）开始。跨行回退借到 59500 < pos1 → 钳回 [00:59:59]。
+        """
+        from strange_uta_game.backend.domain import RubyPart
+        from strange_uta_game.backend.infrastructure.exporters import (
+            NicokaraWithRubyExporter,
+        )
+
+        project = Project()
+        singer = project.singers[0]
+
+        s1 = Sentence.from_text("発", singer.id)
+        s1.characters[0].set_ruby(Ruby(parts=[RubyPart(text="は")]))
+        s1.characters[0].add_timestamp(59590)  # 00:59.59
+        project.add_sentence(s1)
+
+        s2 = Sentence.from_text("サ", singer.id)
+        s2.characters[0].add_timestamp(59500)  # 00:59.50 深度重叠
+        project.add_sentence(s2)
+
+        exporter = NicokaraWithRubyExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(project, temp_path)
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # pos2 钳回 pos1，不输出 [00:59:50] 的倒挂区间
+            assert re.search(
+                r"@Ruby\d+=発,は,\[00:59:59\],\[00:59:59\]",
+                content,
+            ), f"深度重叠下未钳制倒挂作用域:\n{content}"
+        finally:
+            os.unlink(temp_path)
+
+    def test_export_ruby_overlap_head_char_pos1_capped_by_own_line(self):
+        """重叠歌词 pos1 镜像保护：段首字无起始 ts、跨行向上回退借到的
+        「上一行末尾 ts」晚于本行自身首个 ts 时（上一行尚未唱完本行已开唱），
+        pos1 钳到本行内文本顺序上其后的第一个 ts，不得晚于本行开始。
+
+        上一行释放于 01:01.81 才结束；本行「☆発」首字「☆」无 ts、
+        「発」于 00:59.60 开始。旧逻辑 pos1=01:01:81 > pos2，倒挂；
+        新逻辑 pos1 钳到 00:59.60。
+        """
+        from strange_uta_game.backend.domain import RubyPart
+        from strange_uta_game.backend.infrastructure.exporters import (
+            NicokaraWithRubyExporter,
+        )
+
+        project = Project()
+        singer = project.singers[0]
+
+        s0 = Sentence.from_text("爆", singer.id)
+        s0.characters[0].add_timestamp(58000)
+        s0.characters[0].is_sentence_end = True
+        s0.characters[0].set_sentence_end_ts(61810)  # 01:01.81 才释放
+        project.add_sentence(s0)
+
+        s1 = Sentence.from_text("☆発", singer.id)
+        c_star = s1.characters[0]
+        c_star.set_ruby(Ruby(parts=[RubyPart(text="し")]))  # 无起始 ts 的段首字
+        c_hatsu = s1.characters[1]
+        c_hatsu.set_ruby(Ruby(parts=[RubyPart(text="は")]))
+        c_hatsu.add_timestamp(59600)  # 00:59.60
+        project.add_sentence(s1)
+
+        exporter = NicokaraWithRubyExporter()
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".lrc", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+
+        try:
+            exporter.export(project, temp_path)
+
+            with open(temp_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # pos1 钳到本行首个 ts 00:59.60，不再倒挂取上一行的 01:01:81
+            assert re.search(
+                r"@Ruby\d+=☆,し,\[00:59:60\],\[00:59:60\]",
+                content,
+            ), f"段首字 pos1 未按本行 ts 钳制:\n{content}"
+            assert not re.search(
+                r"@Ruby\d+=☆,し,\[01:01:81\]",
+                content,
+            ), f"段首字 pos1 仍跨行借用了上一行末尾 ts:\n{content}"
+        finally:
+            os.unlink(temp_path)
+
 
 class TestExporterUtils:
     """测试导出器工具函数"""
