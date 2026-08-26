@@ -8750,8 +8750,17 @@ class EditorInterface(QWidget):
         annotate_katakana_with_english = app_settings.get(
             "ruby_dictionary.annotate_katakana_with_english", False
         )
-        # LLM 整首一次发送：传入全部行文本以保留上下文（按行命中缓存）。
-        lines = [s.text for s in self._project.sentences]
+        # LLM 只发本批需要注音的行（去重保序）：所选/按行不再每次发整首，
+        # 避免小范围操作承担整首请求的超长生成时间（600s 总时限超时后
+        # 回退本地引擎）；跨行所选的多行合并进同一次批量请求。
+        # 「全部」入口走 RubyAnalyzeWorker，仍整首一次发送。
+        _seen_line_texts = set()
+        lines = []
+        for _li, _ri in specs:
+            _text = self._project.sentences[_li].text
+            if _text not in _seen_line_texts:
+                _seen_line_texts.add(_text)
+                lines.append(_text)
         analyzer = app_settings.build_ruby_analyzer(
             lines, annotate_katakana_with_english=annotate_katakana_with_english
         )
@@ -8872,7 +8881,7 @@ class EditorInterface(QWidget):
             _cleanup()
 
         def _on_llm_waiting() -> None:
-            subset_tooltip.setContent(self.tr("正在等待 LLM 返回…（整首歌词一次性发送，请稍候）"))
+            subset_tooltip.setContent(self.tr("正在等待 LLM 返回…（本批内容一次性发送，请稍候）"))
 
         def _on_llm_progress(msg: str) -> None:
             subset_tooltip.setContent(msg)

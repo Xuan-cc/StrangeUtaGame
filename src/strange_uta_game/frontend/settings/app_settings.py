@@ -1218,7 +1218,8 @@ class AppSettings:
         """构建注音分析器：LLM 激活时返回 LLMRubyAnalyzer，否则走本地回退链。
 
         Args:
-            lines: 整首歌词的行文本列表（LLM 整首一次发送所需）。LLM 未激活时忽略。
+            lines: 本批需要注音的行文本列表（LLM 一次批量发送所选行；
+                「全部」入口传整首行列表）。LLM 未激活时忽略。
             annotate_katakana_with_english: 开启时让 LLM 为英语外来语片假名返回英文读音
                 （无法对应英文的片假名放弃标注）。LLM 未激活时忽略。
         """
