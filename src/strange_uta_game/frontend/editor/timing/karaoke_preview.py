@@ -191,7 +191,7 @@ def _piecewise_wipe_ratio(
 
 
 def _guide_colors(colors: "list[QColor]", alpha: float) -> "list[QColor]":
-    """走字预览指引：将颜色列表整体套用透明度（分色逐色保留，仅改 alpha）。"""
+    """走字预览指引：将颜色列表整体套用不透明度（分色逐色保留，仅改 alpha）。"""
     out = []
     for _c in colors:
         _cc = QColor(_c)
@@ -414,9 +414,9 @@ class KaraokePreview(QWidget):
         self._global_version: int = 0  # 全局版本号，用于字体变化等全局刷新
         self._is_playing: bool = False
         self._preview_guide_enabled: bool = False  # 走字预览指引（仅播放打轴时光标所在行生效）
-        self._guide_prev_alpha: float = 1.0       # 上一个打的字透明度
-        self._guide_curr_alpha: float = 0.5       # 正在打的字透明度
-        self._guide_next_alpha: float = 0.2       # 下一个要打的字透明度
+        self._guide_prev_alpha: float = 1.0       # 上一个打的字不透明度
+        self._guide_curr_alpha: float = 0.5       # 正在打的字不透明度
+        self._guide_next_alpha: float = 0.2       # 下一个要打的字不透明度
         self._guide_prev_enabled: bool = True
         self._guide_curr_enabled: bool = True
         self._guide_next_enabled: bool = True
@@ -579,7 +579,7 @@ class KaraokePreview(QWidget):
         curr_enabled: bool,
         next_enabled: bool,
     ):
-        """设置走字预览指引的逐群透明度和开关。"""
+        """设置走字预览指引的逐群不透明度和开关。"""
         self._guide_prev_alpha = float(prev_alpha)
         self._guide_curr_alpha = float(curr_alpha)
         self._guide_next_alpha = float(next_alpha)
@@ -2520,7 +2520,7 @@ class KaraokePreview(QWidget):
             self._suppress_click_recenter = False
 
     def _compute_guide_alpha(self, characters, cursor_idx: int) -> dict:
-        """走字预览指引：返回 ``char_pos -> 透明度(alphaF)`` 映射。
+        """走字预览指引：返回 ``char_pos -> 不透明度(alphaF)`` 映射。
 
         以打轴光标 ``cursor_idx``（``_current_char_idx``）为锚，而非时间戳分布——
         "用户正在打哪个字"的唯一真相来源是光标，回跳/seek/跳着打都能正确跟随。
@@ -2530,7 +2530,7 @@ class KaraokePreview(QWidget):
         与当前打的字之间不需要打的字"会被组合进同一个字群。
 
         再按光标所在字群相对位置上色（分色由 ``_draw_split_text`` 负责），
-        透明度由用户自定义的 ``set_preview_guide_config`` 提供。
+        不透明度由用户自定义的 ``set_preview_guide_config`` 提供。
         """
         groups: list[list[int]] = []
         char_to_group: dict[int, int] = {}
@@ -2707,7 +2707,7 @@ class KaraokePreview(QWidget):
                 base_color = theme.karaoke_text_future
 
             # 走字预览指引：仅在「设置开启 + 播放中 + 打轴光标所在行」时，对本行
-            # 以光标 _current_char_idx 为锚，计算"上一个/正在/下一个"字群的过渡透明度。
+            # 以光标 _current_char_idx 为锚，计算"上一个/正在/下一个"字群的过渡不透明度。
             # 锚定 _current_line_idx（打轴光标行）而非 effective_current（视觉高亮行），
             # 两者在播放/自动滚动挂起等状态下可能不一致。
             if (
@@ -2878,7 +2878,7 @@ class KaraokePreview(QWidget):
                         _rh_br = fm_ruby.tightBoundingRect(_merged)
                         _rh_ink_top = ruby_y + _rh_br.top()
                         _rh_ink_bottom = ruby_y + _rh_br.bottom() + 1
-                        # 底色：命中走字预览指引时用走字后分色 × 透明度，否则用 base_color。
+                        # 底色：命中走字预览指引时用走字后分色 × 不透明度，否则用 base_color。
                         # wipe 照常在底色之上叠加——能 wipe 的自然走字，无需任何拦截。
                         _g_alpha_ruby = guide_alpha.get(char_pos)
                         if _g_alpha_ruby is not None:
@@ -3013,7 +3013,7 @@ class KaraokePreview(QWidget):
                         _ruby_br = fm_ruby.tightBoundingRect(_ruby_disp)
                         _ruby_ink_top = ruby_y + _ruby_br.top()
                         _ruby_ink_bottom = ruby_y + _ruby_br.bottom() + 1
-                        # 底色：命中走字预览指引时用走字后分色 × 透明度，否则用 base_color。
+                        # 底色：命中走字预览指引时用走字后分色 × 不透明度，否则用 base_color。
                         # wipe 照常在底色之上叠加——能 wipe 的自然走字，无需任何拦截。
                         _g_alpha_ruby = guide_alpha.get(char_pos)
                         if _g_alpha_ruby is not None:
@@ -3112,7 +3112,7 @@ class KaraokePreview(QWidget):
                 char_text_w = main_fm.horizontalAdvance(ch)
                 char_draw_x = curr_x + (char_w - char_text_w) // 2
 
-                # 走字预览指引：命中时把"未走字部分的底色"换成走字后分色 × 透明度
+                # 走字预览指引：命中时把"未走字部分的底色"换成走字后分色 × 不透明度
                 # （上一个=0.8 / 正在=0.5 / 下一个=0.2）。底色之上 wipe 照常叠加——
                 # 能 wipe 的字走字后色会盖住底色自然走字，打完检查时一切正常，无需拦截。
                 _g_alpha = guide_alpha.get(char_pos)

@@ -141,14 +141,14 @@ class TimingSubInterface(SubSettingInterface):
         self._tr_register(g_guide, title_source="预览指引")
         self.card_preview_guide = self._tr_register(
             SwitchSettingCard(FIF.VIEW, tr("打轴预览指引"),
-                tr("打轴播放时在当前行以光标为锚用过渡色提示上一个/正在/下一个打的字；具体透明度与开关可在下方「预览指引方式」中自定义"), parent=g_guide),
+                tr("打轴播放时在当前行以光标为锚用过渡色提示上一个/正在/下一个打的字；具体不透明度与开关可在下方「预览指引方式」中自定义"), parent=g_guide),
             title_source="打轴预览指引",
-            content_source="打轴播放时在当前行以光标为锚用过渡色提示上一个/正在/下一个打的字；具体透明度与开关可在下方「预览指引方式」中自定义")
+            content_source="打轴播放时在当前行以光标为锚用过渡色提示上一个/正在/下一个打的字；具体不透明度与开关可在下方「预览指引方式」中自定义")
         self.card_preview_guide_style = self._tr_register(
             SettingCard(FIF.PALETTE, tr("预览指引方式"),
-                tr("设置预览指引中上一个/正在/下一个字群的透明度和开关"), g_guide),
+                tr("设置预览指引中上一个/正在/下一个字群的不透明度和开关"), g_guide),
             title_source="预览指引方式",
-            content_source="设置预览指引中上一个/正在/下一个字群的透明度和开关")
+            content_source="设置预览指引中上一个/正在/下一个字群的不透明度和开关")
         self.btn_guide_style = PushButton(tr("设置指引"), self.card_preview_guide_style)
         self._tr_register_text(self.btn_guide_style, "setText", "设置指引")
         self.btn_guide_style.clicked.connect(self._open_preview_guide_dialog)

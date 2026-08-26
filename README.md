@@ -229,7 +229,7 @@
   <td align="center">🎯</td>
   <td>
     <b>打轴预览指引 / Customizable timing guide</b><br/>
-    <sub>预览走字可叠加「上一个 / 正在打 / 下一个」字的引导着色，每档透明度与开关均可自定义；另有导唱符待办标记，对无时间戳处提前标注「此处需导唱符」。<br/>
+    <sub>预览走字可叠加「上一个 / 正在打 / 下一个」字的引导着色，每档不透明度与开关均可自定义；另有导唱符待办标记，对无时间戳处提前标注「此处需导唱符」。<br/>
     The karaoke preview can overlay prev / current / next guide coloring with per-level alpha and toggles; plus a "needs guide symbol" to-do marker for untimed spots.</sub>
   </td>
 </tr>

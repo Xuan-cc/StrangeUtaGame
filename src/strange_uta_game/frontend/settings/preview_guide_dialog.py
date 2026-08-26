@@ -1,4 +1,4 @@
-"""打轴预览指引设置弹窗 — 自定义上一个/正在/下一个打的字群的透明度和开关。"""
+"""打轴预览指引设置弹窗 — 自定义上一个/正在/下一个打的字群的不透明度和开关。"""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ _ROWS = [
 
 
 class PreviewGuideDialog(QDialog):
-    """打轴预览指引的透明度与开关配置弹窗。"""
+    """打轴预览指引的不透明度与开关配置弹窗。"""
 
     def __init__(self, current: Optional[dict[str, float | bool]] = None, parent=None):
         super().__init__(parent)
@@ -51,9 +51,9 @@ class PreviewGuideDialog(QDialog):
         root.addWidget(
             QLabel(
                 self.tr(
-                    "设置播放打轴时当前行光标前后字群的透明度与是否显示：\n"
-                    "上一个打的字（高透明度提示已完成）/ 正在打的字（当前进度）/\n"
-                    "下一个要打的字（低透明度预告）。"
+                    "设置播放打轴时当前行光标前后字群的不透明度与是否显示：\n"
+                    "上一个打的字（高不透明度提示已完成）/ 正在打的字（当前进度）/\n"
+                    "下一个要打的字（低不透明度预告）。"
                 )
             )
         )
@@ -63,7 +63,7 @@ class PreviewGuideDialog(QDialog):
         grid.setVerticalSpacing(10)
 
         header_key = QLabel(self.tr("键值名"))
-        header_alpha = QLabel(self.tr("透明度"))
+        header_alpha = QLabel(self.tr("不透明度"))
         header_enable = QLabel(self.tr("启用/关闭"))
         grid.addWidget(header_key, 0, 0)
         grid.addWidget(header_alpha, 0, 1)
