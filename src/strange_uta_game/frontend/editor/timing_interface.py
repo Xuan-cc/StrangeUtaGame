@@ -8721,20 +8721,29 @@ class EditorInterface(QWidget):
         # 用户主动触发的按行/按选定字符分析：不做中文检测——按下"注音分析"按钮
         # 即表示需要注音，避免纯汉字日文行被误判为中文跳过。
         if not llm_active:
-            from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
-                winrt_japanese_status,
-            )
-            from strange_uta_game.frontend.winrt_japanese_guide import (
-                ensure_winrt_japanese,
-            )
+            import sys
 
-            if show_winrt_dialog:
-                if not ensure_winrt_japanese(self):
-                    return
-            else:
-                available, _ = winrt_japanese_status()
-                if not available:
-                    return
+            from strange_uta_game.__version__ import VARIANT
+
+            # 与 ensure_winrt_japanese 的放行判据保持一致：非 Windows 平台或
+            # 非 main 变体（noWinIME/mac 打包版）以 Sudachi 为主引擎、不带
+            # winrt 包，无需也不应检查 WinRT——否则队列里除首行外的任务会因
+            # winrt_japanese_status() 恒为不可用而被静默丢弃。
+            if not VARIANT and sys.platform == "win32":
+                from strange_uta_game.backend.infrastructure.parsers.ruby_analyzer import (
+                    winrt_japanese_status,
+                )
+                from strange_uta_game.frontend.winrt_japanese_guide import (
+                    ensure_winrt_japanese,
+                )
+
+                if show_winrt_dialog:
+                    if not ensure_winrt_japanese(self):
+                        return
+                else:
+                    available, _ = winrt_japanese_status()
+                    if not available:
+                        return
 
         auto_check_flags = app_settings.get_all().get("auto_check", {})
         user_dict = app_settings.load_effective_dictionary()
@@ -8804,7 +8813,6 @@ class EditorInterface(QWidget):
                 subset_tooltip.setState(True)
 
         def _on_finished(analyzed_project) -> None:
-            _cleanup()
             _close_tooltip()
             if getattr(analyzer, "llm_failed", False):
                 InfoBar.warning(
@@ -8846,9 +8854,11 @@ class EditorInterface(QWidget):
                 duration=2500,
                 parent=self,
             )
+            # 本轮结果落盘后再消费队列：下一轮的 before/copy 深拷贝才能包含
+            # 本轮分析结果，否则快照整体替换会把它回滚掉（跨行所选交替丢行）。
+            _cleanup()
 
         def _on_error(err: str) -> None:
-            _cleanup()
             _close_tooltip()
             InfoBar.warning(
                 title=self.tr("{label}失败").format(label=label),
@@ -8859,6 +8869,7 @@ class EditorInterface(QWidget):
                 duration=3000,
                 parent=self,
             )
+            _cleanup()
 
         def _on_llm_waiting() -> None:
             subset_tooltip.setContent(self.tr("正在等待 LLM 返回…（整首歌词一次性发送，请稍候）"))
@@ -8916,7 +8927,7 @@ class EditorInterface(QWidget):
 
         label = "注音分析所选字符" if update_checkpoints else "注音分析所选字符（仅注音）"
 
-        # 跨行选中：逐行提交，由 _analyze_rubies_specs_async 队列顺序执行
+        # 跨行选中：收集每行的字符范围，整批提交（worker 内部逐行顺序分析）
         if self.preview.is_multi_line_selection():
             sel = self.preview.get_normalized_selection()
             if sel is None:
@@ -8936,19 +8947,14 @@ class EditorInterface(QWidget):
                 ri = set(range(s, e + 1))
                 specs.append((line_idx, ri))
             if specs:
-                # 第一行立即执行，后续行加入队列
-                first_li, first_ri = specs[0]
-                self._analyze_rubies_subset(
-                    first_li, first_ri, label,
-                    update_checkpoints=update_checkpoints,
+                # 整批一次提交：一次深拷贝、一次快照应用、一条撤销命令；
+                # worker 内部逐行顺序调用句子级管线（跨行顺序处理语义不变），
+                # 并通过 progress 信号显示「注音分析 i/total」进度。拆成
+                # 前端逐行排队是 ad30734 时代旧管线的规避手段，句子级管线
+                # （analyze_and_apply_sentence_pipeline）重构后已无必要。
+                self._analyze_rubies_specs_async(
+                    specs, label, update_checkpoints=update_checkpoints
                 )
-                if len(specs) > 1:
-                    if not hasattr(self, "_ruby_analysis_queue"):
-                        self._ruby_analysis_queue = []
-                    for li, ri in specs[1:]:
-                        self._ruby_analysis_queue.append(
-                            ([(li, ri)], label, False, update_checkpoints)
-                        )
             return
 
         line_idx = self._current_line_idx
