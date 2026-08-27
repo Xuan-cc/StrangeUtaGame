@@ -1377,7 +1377,7 @@ class MainWindow(MSFluentWindow):
             InfoBar.warning(
                 title=self.tr("不支持的文件类型"),
                 content=self.tr(
-                    "仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL）及音频/视频文件"
+                    "仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL/SRT/ASS）及音频/视频文件"
                 ),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,

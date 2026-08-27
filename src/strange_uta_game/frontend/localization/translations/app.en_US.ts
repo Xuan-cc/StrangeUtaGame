@@ -5010,8 +5010,8 @@ Leave empty to disable, and automatically use the saved project / last loaded fi
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="283" />
-        <source>歌词文件 (*.lrc *.txt *.kra *.krl);;所有文件 (*.*)</source>
-        <translation type="unfinished" />
+        <source>歌词文件 (*.lrc *.txt *.kra *.krl *.srt *.ass);;所有文件 (*.*)</source>
+        <translation>Lyrics files (*.lrc *.txt *.kra *.krl *.srt *.ass);;All Files (*.*)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="752" />
@@ -5945,8 +5945,8 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="1379" />
-        <source>仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL）及音频/视频文件</source>
-        <translation>Only .sug projects, lyrics (LRC/TXT/KRA/KRL) and audio/video files are supported</translation>
+        <source>仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL/SRT/ASS）及音频/视频文件</source>
+        <translation>Only .sug projects, lyrics (LRC/TXT/KRA/KRL/SRT/ASS) and audio/video files are supported</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="1676" />

@@ -1761,5 +1761,7 @@
   "网格线宽": "Grid Line Width",
   "双层波形（RMS）": "Dual-layer waveform (RMS)",
   "因内存预算，实际使用 {p}% 重叠": "Due to memory budget, actual overlap is {p}%",
-  "音频过长：超出声谱内存预算，请降低窗口重叠率或缩短音频": "Audio too long: exceeds spectrogram memory budget. Lower window overlap or shorten audio."
+  "音频过长：超出声谱内存预算，请降低窗口重叠率或缩短音频": "Audio too long: exceeds spectrogram memory budget. Lower window overlap or shorten audio.",
+  "歌词文件 (*.lrc *.txt *.kra *.krl *.srt *.ass);;所有文件 (*.*)": "Lyrics files (*.lrc *.txt *.kra *.krl *.srt *.ass);;All Files (*.*)",
+  "仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL/SRT/ASS）及音频/视频文件": "Only .sug projects, lyrics (LRC/TXT/KRA/KRL/SRT/ASS) and audio/video files are supported"
 }

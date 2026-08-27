@@ -24,6 +24,8 @@ def test_classify_supported_file_covers_all_drop_kinds(tmp_path):
     assert classify_supported_file("song.sug") == "project"
     assert classify_supported_file("lyrics.LRC") == "lyric"
     assert classify_supported_file("歌詞.krl") == "lyric"
+    assert classify_supported_file("sub.srt") == "lyric"
+    assert classify_supported_file("sub.ASS") == "lyric"
     assert classify_supported_file("song.mp3") == "audio"
     assert classify_supported_file("song.DSF") == "audio"
     assert classify_supported_file("video.mp4") == "video"
@@ -37,7 +39,8 @@ def test_classify_supported_file_matches_can_accept_drop(tmp_path):
     loader = FileLoader(editor)
     for name, expected in [
         ("a.sug", True), ("a.lrc", True), ("a.txt", True), ("a.kra", True),
-        ("a.krl", True), ("a.mp3", True), ("a.mp4", True),
+        ("a.krl", True), ("a.srt", True), ("a.ass", True),
+        ("a.mp3", True), ("a.mp4", True),
         ("a.zip", False), ("a.docx", False),
     ]:
         assert loader.can_accept_drop(name) is expected, name
@@ -155,6 +158,29 @@ def test_open_initial_files_lyric_uses_load_lyrics(tmp_path, monkeypatch):
     assert ("open_initial_project", str(lrc), True) not in stub.calls
     assert stub._store.working_dirs == [str(lrc)]
     assert stub._opened_initial_files is True
+
+
+def test_open_initial_files_srt_and_ass_load_like_other_lyrics(tmp_path, monkeypatch):
+    # 自启（拖到程序图标/双击关联文件）对 SRT/ASS 与其他歌词格式同一分流：
+    # classify → "lyric" → load_lyrics（新建项目并加载）。
+    srt = tmp_path / "sub.srt"
+    srt.write_text("1\n00:00:01,000 --> 00:00:02,000\ntest\n", encoding="utf-8")
+    ass = tmp_path / "sub.ass"
+    ass.write_text(
+        "[Script Info]\n[Events]\nFormat: Layer, Start, End, Style, Name, "
+        "MarginL, MarginR, MarginV, Effect, Text\n"
+        "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,hi\n",
+        encoding="utf-8",
+    )
+
+    for path in (srt, ass):
+        loader = _FileLoaderStub()
+        stub = _WindowStub(loader)
+        bars = _run_open_initial_files(stub, [str(path)], monkeypatch)
+
+        assert loader.calls == [("load_lyrics", str(path), True)], path
+        assert stub._opened_initial_files is True
+        assert bars == []
 
 
 def test_open_initial_files_audio_creates_fresh_project(tmp_path, monkeypatch):

@@ -35,7 +35,7 @@ AUDIO_EXTENSIONS = {
     ".m4a", ".m4b", ".aac", ".wma", ".opus", ".ape", ".ac3", ".wv",
     ".dsf", ".dff",
 }
-LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra", ".krl"}
+LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra", ".krl", ".srt", ".ass"}
 
 
 def classify_supported_file(file_path: str) -> str | None:
@@ -280,7 +280,7 @@ class FileLoader:
         init_dir = self._store.working_dir if self._store else ""
         path, _ = QFileDialog.getOpenFileName(
             self._editor, self._editor.tr("选择歌词文件"), init_dir,
-            self._editor.tr("歌词文件 (*.lrc *.txt *.kra *.krl);;所有文件 (*.*)"),
+            self._editor.tr("歌词文件 (*.lrc *.txt *.kra *.krl *.srt *.ass);;所有文件 (*.*)"),
         )
         if path:
             self.load_lyrics(path, check_unsaved=False)

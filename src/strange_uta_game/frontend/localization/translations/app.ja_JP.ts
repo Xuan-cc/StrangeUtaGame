@@ -5010,8 +5010,8 @@
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="283" />
-        <source>歌词文件 (*.lrc *.txt *.kra *.krl);;所有文件 (*.*)</source>
-        <translation type="unfinished" />
+        <source>歌词文件 (*.lrc *.txt *.kra *.krl *.srt *.ass);;所有文件 (*.*)</source>
+        <translation>歌詞ファイル (*.lrc *.txt *.kra *.krl *.srt *.ass);;すべてのファイル (*.*)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="752" />
@@ -5945,8 +5945,8 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="1379" />
-        <source>仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL）及音频/视频文件</source>
-        <translation>対応形式は .sug プロジェクト、歌詞（LRC/TXT/KRA/KRL）、音声/動画ファイルのみです</translation>
+        <source>仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL/SRT/ASS）及音频/视频文件</source>
+        <translation>対応形式は .sug プロジェクト、歌詞（LRC/TXT/KRA/KRL/SRT/ASS）、音声/動画ファイルのみです</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="1676" />
