@@ -985,15 +985,13 @@ class AiTimingDialog(QDialog):
             if sys.platform == "win32":
                 import subprocess as _sp
 
-                from strange_uta_game.backend.infrastructure.windows import (
-                    hidden_subprocess_kwargs,
-                )
-
+                # 不能带 hidden_subprocess_kwargs()：explorer 是 GUI 程序
+                # 本就不会闪黑框，而其 STARTUPINFO 的 SW_HIDE 会让
+                # Explorer 窗口以隐藏方式创建，点了像没反应。
                 _sp.run(
                     ["explorer", "/select,", str(path)],
                     check=False,
                     timeout=10,
-                    **hidden_subprocess_kwargs(),
                 )
                 return
         except Exception:
