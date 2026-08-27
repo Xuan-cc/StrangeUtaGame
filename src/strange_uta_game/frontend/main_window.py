@@ -927,18 +927,13 @@ class MainWindow(MSFluentWindow):
         return ProjectStore.has_crash_recovery()
 
     def _startup_checks(self) -> None:
-        """启动期检查入口：清缓存 → 检查更新 → 更新解决后再做闪退恢复。
+        """启动期检查入口：检查更新 → 更新解决后闪退恢复 → 链尾清缓存。
 
         闪退恢复弹窗和更新检测弹窗都是模态的，必须串行。更新优先：
         用户确认更新则直接 force quit（不弹恢复，保留 temp 供更新后重启使用）；
-        用户跳过/取消/无更新时，再做闪退恢复。
+        用户跳过/取消/无更新时，再做闪退恢复。缓存清理延后到启动链最末
+        （见 :meth:`_maybe_clear_audio_cache`）。
         """
-        # 拖入/关联文件启动时跳过缓存清理：清缓存的前提是「尚未加载任何
-        # 音频」，而初始媒体此时可能正在加载（视频提取的临时 mp3 落在
-        # 缓存 extracted/ 下、引擎 TSM 缓存正在写入），500ms 时点的清理会
-        # 删掉在途文件。清理顺延到下一次正常启动。
-        if not self._opened_initial_files:
-            self._clear_all_audio_cache()
         self._check_for_app_update()
 
     @staticmethod
@@ -1073,6 +1068,30 @@ class MainWindow(MSFluentWindow):
         if not self._opened_initial_files:
             self.check_crash_recovery()
         QTimer.singleShot(500, self._schedule_network_dict_auto_update)
+        # 缓存清理放启动链最末：所有可能加载内容的环节（拖入加载、恢复
+        # 加载、更新弹窗）都已结束，仅当本会话无音频在用时执行。
+        self._maybe_clear_audio_cache()
+
+    def _maybe_clear_audio_cache(self) -> None:
+        """启动链末尾清缓存；音频在用（已载/在载/视频提取在途）则本次跳过。
+
+        清理会删掉 cache/extracted/ 与缓存根下的全部 mp3/wav，只有「本会话
+        尚未加载任何音频」时才安全；跳过仅意味着顺延到下一次启动。恢复带
+        媒体的项目、拖入音频/视频启动等场景均由此守卫覆盖。
+        """
+        if self._audio_in_use():
+            return
+        self._clear_all_audio_cache()
+
+    def _audio_in_use(self) -> bool:
+        """本会话是否已有音频加载完成、正在加载或视频提取在途。"""
+        editor = self.editorInterface
+        loader = getattr(editor, "_file_loader", None)
+        return bool(
+            self._store.audio_path
+            or getattr(editor, "_audio_loading", False)
+            or (loader is not None and loader._loading_thread is not None)
+        )
 
     def _on_startup_update_check(self, result_obj: object) -> None:
         """处理启动期 UpdateChecker 的回调。"""

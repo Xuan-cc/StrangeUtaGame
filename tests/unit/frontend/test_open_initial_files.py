@@ -4,7 +4,8 @@
 1. classify_supported_file 的扩展名分类（与打轴页拖拽同一套集合）；
 2. MainWindow.open_initial_files 的分流：.sug 优先开项目；歌词/音频/视频
    新建项目并加载对应文件；歌词+音频合并进同一新项目；
-3. 启动即拖入文件时跳过闪退恢复（_on_update_check_done 的守卫）。
+3. 启动链尾段：拖入启动跳过闪退恢复；缓存清理迁移到链尾并以
+   「音频在用（已载/在载/视频提取在途）」为守卫。
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ def test_classify_supported_file_matches_can_accept_drop(tmp_path):
 class _Store:
     def __init__(self):
         self.working_dirs = []
+        self.audio_path = None
 
     def set_working_dir(self, file_path):
         self.working_dirs.append(file_path)
@@ -56,6 +58,7 @@ class _Store:
 class _FileLoaderStub:
     def __init__(self, ready=True):
         self._timing_service = object() if ready else None
+        self._loading_thread = None  # 视频提取线程（None = 不在途）
         self.calls = []
 
     def load_lyrics(self, path, check_unsaved=True):
@@ -75,6 +78,7 @@ class _FileLoaderStub:
 class _EditorStub:
     def __init__(self, file_loader):
         self._file_loader = file_loader
+        self._audio_loading = False
 
 
 class _WindowStub:
@@ -224,54 +228,84 @@ def test_open_initial_files_drops_request_when_loader_not_ready(tmp_path, monkey
     assert stub.calls == []
 
 
-# ── 启动即拖入文件时跳过闪退恢复 ─────────────────────────────────────────
+# ── 启动链：闪退恢复让位 与 链尾缓存清理守卫 ─────────────────────────────
 
-def test_update_check_done_skips_crash_recovery_after_initial_files(
-    qtbot, monkeypatch,
-):
-    from PyQt6.QtCore import QTimer
-    from PyQt6.QtWidgets import QApplication
+def _run_update_check_done(stub, monkeypatch):
+    """绑定真实 _maybe_clear_audio_cache/_audio_in_use 后执行 _on_update_check_done。"""
+    from types import MethodType
 
-    loader = _FileLoaderStub()
-    stub = _WindowStub(loader)
     stub.check_crash_recovery = lambda: stub.calls.append(("crash_recovery",))
     stub._schedule_network_dict_auto_update = lambda: None
-    timers = []
+    stub._clear_all_audio_cache = lambda: stub.calls.append(("clear_cache",))
+    stub._maybe_clear_audio_cache = MethodType(
+        main_window_mod.MainWindow._maybe_clear_audio_cache, stub
+    )
+    stub._audio_in_use = MethodType(
+        main_window_mod.MainWindow._audio_in_use, stub
+    )
     monkeypatch.setattr(
         main_window_mod.QApplication, "activeModalWidget",
         staticmethod(lambda: None),
     )
     monkeypatch.setattr(
         main_window_mod.QTimer, "singleShot",
-        staticmethod(lambda ms, fn: timers.append((ms, fn))),
+        staticmethod(lambda ms, fn: None),
     )
+    main_window_mod.MainWindow._on_update_check_done(stub)
 
+
+def test_update_check_done_normal_startup_recovers_then_clears(monkeypatch):
+    loader = _FileLoaderStub()
+    stub = _WindowStub(loader)
+    _run_update_check_done(stub, monkeypatch)
+
+    assert stub.calls == [("crash_recovery",), ("clear_cache",)]
+
+
+def test_update_check_done_skips_recovery_but_clears_for_lyric_only_drag(monkeypatch):
+    # 拖入启动跳过闪退恢复；纯歌词拖入会话没有音频，链尾仍清缓存
+    # （旧实现按标志一律跳过，此为收窄后的行为）。
+    loader = _FileLoaderStub()
+    stub = _WindowStub(loader)
     stub._opened_initial_files = True
-    main_window_mod.MainWindow._on_update_check_done(stub)
-    assert stub.calls == []  # 跳过恢复
-    assert len(timers) == 1  # 仅词典更新调度
+    _run_update_check_done(stub, monkeypatch)
 
-    stub._opened_initial_files = False
-    main_window_mod.MainWindow._on_update_check_done(stub)
+    assert stub.calls == [("clear_cache",)]
+
+
+def test_update_check_done_skips_clear_when_audio_loaded(monkeypatch):
+    loader = _FileLoaderStub()
+    stub = _WindowStub(loader)
+    stub._store.audio_path = r"C:\song.mp3"
+    _run_update_check_done(stub, monkeypatch)
+
     assert stub.calls == [("crash_recovery",)]
 
 
-def test_startup_checks_skips_cache_clear_after_initial_files():
-    # 清缓存以「尚未加载任何音频」为前提；拖入文件启动时初始媒体可能在途
-    # （视频提取/引擎缓存写入），必须跳过，顺延到下次正常启动。
+def test_update_check_done_skips_clear_when_audio_loading(monkeypatch):
     loader = _FileLoaderStub()
     stub = _WindowStub(loader)
-    stub._clear_all_audio_cache = lambda: stub.calls.append(("clear_cache",))
+    stub.editorInterface._audio_loading = True
+    _run_update_check_done(stub, monkeypatch)
+
+    assert stub.calls == [("crash_recovery",)]
+
+
+def test_update_check_done_skips_clear_when_video_extracting(monkeypatch):
+    loader = _FileLoaderStub()
+    stub = _WindowStub(loader)
+    loader._loading_thread = object()
+    _run_update_check_done(stub, monkeypatch)
+
+    assert stub.calls == [("crash_recovery",)]
+
+
+def test_startup_checks_only_starts_update_check():
+    # 缓存清理已迁移到启动链末尾，_startup_checks 不再触碰。
+    loader = _FileLoaderStub()
+    stub = _WindowStub(loader)
     stub._check_for_app_update = lambda: stub.calls.append(("update_check",))
 
-    stub._opened_initial_files = True
     main_window_mod.MainWindow._startup_checks(stub)
-    assert stub.calls == [("update_check",)]
 
-    stub._opened_initial_files = False
-    main_window_mod.MainWindow._startup_checks(stub)
-    assert stub.calls == [
-        ("update_check",),
-        ("clear_cache",),
-        ("update_check",),
-    ]
+    assert stub.calls == [("update_check",)]
