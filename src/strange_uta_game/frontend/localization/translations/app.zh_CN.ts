@@ -5936,6 +5936,16 @@ Checkpoint数：每字符一项（如 2,2,1），累加为本行节奏点总数 
         <translation>上次关联的媒体文件不存在：{name}</translation>
     </message>
     <message>
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1359" />
+        <source>不支持的文件类型</source>
+        <translation>不支持的文件类型</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1360" />
+        <source>仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL）及音频/视频文件</source>
+        <translation>仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL）及音频/视频文件</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="1532" />
         <source>保存</source>
         <translation>保存</translation>

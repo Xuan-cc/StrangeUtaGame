@@ -200,12 +200,20 @@ def main():
                 except Exception:
                     pass
 
-    # 从命令行参数中提取 .sug 文件路径（双击关联打开时传入）
-    initial_project = None
+    # 从命令行参数中提取受支持的文件路径（双击关联打开 / 拖到程序图标时传入）。
+    # 除 .sug 项目外也接受歌词（LRC/TXT/KRA/KRL）与音频/视频——启动后由
+    # open_initial_files 按「打开项目 / 新建项目并加载对应文件」分流。
+    from strange_uta_game.frontend.editor.timing.file_loader import (
+        classify_supported_file,
+    )
+
+    initial_files = []
     for arg in sys.argv[1:]:
-        if arg.lower().endswith(".sug") and Path(arg).is_file():
-            initial_project = str(Path(arg).resolve())
-            break
+        try:
+            if Path(arg).is_file() and classify_supported_file(arg):
+                initial_files.append(str(Path(arg).resolve()))
+        except (OSError, ValueError):
+            continue
 
     # 创建主窗口（通过回调驱动闪屏进度）
     def _on_splash_progress(value: int, text: str) -> None:
@@ -231,21 +239,23 @@ def main():
     # 用 100ms 延迟确保在 _preload 之后再补设一次。
     QTimer.singleShot(100, lambda: _force_taskbar_icon(window, _icon_path))
 
-    # 如果有命令行传入的项目文件，延迟加载（等事件循环启动后执行）
-    if initial_project:
-        QTimer.singleShot(200, lambda: window.open_initial_project(initial_project))
+    # 命令行传入的受支持文件在主窗口构造完成后立即打开——全部界面与音频
+    # 服务此时已同步就绪，异步加载 worker 随即启动，结果经事件循环送达，
+    # 不用定时器盲等事件循环。
+    if initial_files:
+        window.open_initial_files(initial_files)
 
-    # macOS：把 QFileOpenEvent（双击 .sug 关联打开）接到 open_initial_project。
-    # mac 上双击文件不走 sys.argv，而是 QFileOpenEvent。
-    def _open_project_file(path: str) -> None:
-        if path and path.lower().endswith(".sug"):
-            window.open_initial_project(path)
+    # macOS：双击关联文件不走 sys.argv，而是 QFileOpenEvent；同样放行所有
+    # 受支持格式。启动期窗口就绪前缓存的文件在此一并冲放。
+    def _open_dropped_file(path: str) -> None:
+        if path and classify_supported_file(path):
+            window.open_initial_files([path])
 
-    app.file_open_handler = _open_project_file
+    app.file_open_handler = _open_dropped_file
     if app._pending_file:  # 启动期 handler 未就绪时缓存的文件
         _pending = app._pending_file
         app._pending_file = None
-        QTimer.singleShot(200, lambda: _open_project_file(_pending))
+        _open_dropped_file(_pending)
 
     # 运行应用
     sys.exit(app.exec())

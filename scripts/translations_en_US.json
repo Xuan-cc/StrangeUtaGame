@@ -1720,5 +1720,7 @@
   "注音编辑窗口": "Ruby editor window",
   "选择使用迷你浮窗或完整编辑窗口": "Choose the mini popup or full editor window",
   "迷你浮窗": "Mini popup",
-  "经典大窗口": "Classic full window"
+  "经典大窗口": "Classic full window",
+  "不支持的文件类型": "Unsupported file type",
+  "仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL）及音频/视频文件": "Only .sug projects, lyrics (LRC/TXT/KRA/KRL) and audio/video files are supported"
 }

@@ -5935,6 +5935,16 @@ SentenceEnd column: 'Yes' marks sentence end (separate release time), empty canc
         <translation>Previously linked media file not found: {name}</translation>
     </message>
     <message>
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1359" />
+        <source>不支持的文件类型</source>
+        <translation>Unsupported file type</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/main_window.py" line="1360" />
+        <source>仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL）及音频/视频文件</source>
+        <translation>Only .sug projects, lyrics (LRC/TXT/KRA/KRL) and audio/video files are supported</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/main_window.py" line="1532" />
         <source>保存</source>
         <translation>Save</translation>

@@ -203,6 +203,10 @@ class MainWindow(MSFluentWindow):
         # 由 updater 流程主动设置；closeEvent 检测到此标志即 bypass dirty 弹窗，
         # 走"兜底保存 + 直接退出"路径。
         self._force_quitting = False
+        # 本次会话是否已通过 open_initial_files 打开拖入/关联文件。为真时
+        # 启动链跳过闪退恢复提示——用户拖入文件的意图明确，恢复弹窗反而会
+        # 覆盖刚加载的内容；恢复数据保留在磁盘，留待下次正常启动再询问。
+        self._opened_initial_files = False
 
         self._report_progress(100, self.tr("准备就绪"))
         self._progress_cb = None
@@ -929,7 +933,12 @@ class MainWindow(MSFluentWindow):
         用户确认更新则直接 force quit（不弹恢复，保留 temp 供更新后重启使用）；
         用户跳过/取消/无更新时，再做闪退恢复。
         """
-        self._clear_all_audio_cache()
+        # 拖入/关联文件启动时跳过缓存清理：清缓存的前提是「尚未加载任何
+        # 音频」，而初始媒体此时可能正在加载（视频提取的临时 mp3 落在
+        # 缓存 extracted/ 下、引擎 TSM 缓存正在写入），500ms 时点的清理会
+        # 删掉在途文件。清理顺延到下一次正常启动。
+        if not self._opened_initial_files:
+            self._clear_all_audio_cache()
         self._check_for_app_update()
 
     @staticmethod
@@ -1060,7 +1069,9 @@ class MainWindow(MSFluentWindow):
         if QApplication.activeModalWidget() is not None:
             QTimer.singleShot(500, self._on_update_check_done)
             return
-        self.check_crash_recovery()
+        # 启动即拖入/关联文件打开时跳过闪退恢复（见 _opened_initial_files 注释）。
+        if not self._opened_initial_files:
+            self.check_crash_recovery()
         QTimer.singleShot(500, self._schedule_network_dict_auto_update)
 
     def _on_startup_update_check(self, result_obj: object) -> None:
@@ -1285,13 +1296,126 @@ class MainWindow(MSFluentWindow):
                 "网络词典自动更新调度失败，已忽略", exc_info=True
             )
 
-    # ==================== 启动时打开项目 ====================
+    # ==================== 启动/关联文件打开 ====================
 
-    def open_initial_project(self, file_path: str) -> None:
-        """启动时通过命令行参数打开 .sug 项目文件（异步）。
+    def _require_ready_file_loader(self):
+        """取打轴页 FileLoader；未就绪时记日志并返回 None（不重试）。
+
+        主窗口构造完成后 file_loader 与 timing_service 恒已就绪
+        （``set_timing_service`` 在 ``__init__`` 内同步完成），本守卫仅作
+        契约兜底——调用方必须在构造完成后才发起加载，禁止定时器盲等。
+        """
+        file_loader = getattr(self.editorInterface, "_file_loader", None)
+        if file_loader is not None and file_loader._timing_service is not None:
+            return file_loader
+        import logging
+
+        logging.getLogger(__name__).error(
+            "[MainWindow] 加载请求到达时 file_loader/timing_service 未就绪，已丢弃"
+        )
+        return None
+
+    def open_initial_files(self, file_paths: list) -> None:
+        """打开拖入/关联的受支持文件（异步加载）。
+
+        独立运行时把文件拖到程序图标（或双击关联文件）经命令行参数传入；
+        运行期 macOS 关联文件经 QFileOpenEvent 到达这里。分流规则：
+        - ``.sug`` → 走 :meth:`open_initial_project` 直接打开项目；
+        - 歌词 / 音频 / 视频 → 新建项目并直接加载对应文件；同时拖入
+          歌词与音频时合并进同一个新项目。
+
+        分类与加载均复用打轴页 FileLoader（拖入窗口的同一套路径）。必须在
+        主窗口构造完成后调用：届时全部界面与 timing_service 已同步就绪，
+        加载 worker 立即启动，其结果经事件循环送达，无需任何延迟。
+        """
+        from pathlib import Path
+
+        from strange_uta_game.frontend.editor.timing.file_loader import (
+            classify_supported_file,
+        )
+
+        files = [path for path in file_paths if Path(path).is_file()]
+        if not files:
+            InfoBar.error(
+                title=self.tr("无法打开文件"),
+                content=self.tr("文件不存在: {path}").format(
+                    path=file_paths[0] if file_paths else ""
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            return
+
+        supported = [
+            (path, kind) for path, kind in
+            ((path, classify_supported_file(path)) for path in files)
+            if kind
+        ]
+        if not supported:
+            InfoBar.warning(
+                title=self.tr("不支持的文件类型"),
+                content=self.tr(
+                    "仅支持 .sug 项目、歌词（LRC/TXT/KRA/KRL）及音频/视频文件"
+                ),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            return
+
+        file_loader = self._require_ready_file_loader()
+        if file_loader is None:
+            return
+
+        # .sug 优先：直接作为项目打开，其余拖入文件忽略。
+        project_file = next(
+            (path for path, kind in supported if kind == "project"), None
+        )
+        if project_file is not None:
+            self._opened_initial_files = True
+            self.open_initial_project(project_file)
+            return
+
+        lyric_file = next(
+            (path for path, kind in supported if kind == "lyric"), None
+        )
+        media_file = next(
+            (path for path, kind in supported if kind in ("audio", "video")), None
+        )
+
+        self.switchTo(self.editorInterface)
+        self._opened_initial_files = True
+
+        if lyric_file is not None:
+            # load_lyrics 自带「新建项目 + 装入歌词」语义，内含未保存检测
+            # （启动阶段尚无项目，检测自动直通）。
+            self._store.set_working_dir(lyric_file)
+            file_loader.load_lyrics(lyric_file)
+        elif media_file is not None:
+            # 纯音频/视频：先做未保存检测（启动阶段直通），再新建空项目
+            # 加载（与工具栏「新建项目」一致）。
+            if not file_loader.check_unsaved_changes():
+                return
+            file_loader.create_fresh_project()
+
+        if media_file is not None:
+            self._store.set_working_dir(media_file)
+            file_loader.load_media(media_file)
+
+        self._refresh_frameless()
+
+    def open_initial_project(self, file_path: str, check_unsaved: bool = True) -> None:
+        """打开 .sug 项目文件（异步）。
 
         委托给 editorInterface._file_loader.load_project，与其他加载路径使用同一函数。
-        若 file_loader 尚未就绪（timing_service 未初始化），延迟 100ms 重试。
+        启动时由 open_initial_files 分流到达；运行期 macOS 双击关联文件亦经此
+        进入（当前项目有未保存更改且 check_unsaved=True 时会先询问）。
+        必须在主窗口构造完成后调用，无需任何延迟重试。
         """
         from pathlib import Path
 
@@ -1307,9 +1431,8 @@ class MainWindow(MSFluentWindow):
             )
             return
 
-        file_loader = getattr(self.editorInterface, "_file_loader", None)
-        if file_loader is None or file_loader._timing_service is None:
-            QTimer.singleShot(100, lambda: self.open_initial_project(file_path))
+        file_loader = self._require_ready_file_loader()
+        if file_loader is None:
             return
 
         def _on_success(project: Project, loaded_path: str) -> None:
@@ -1325,7 +1448,9 @@ class MainWindow(MSFluentWindow):
             )
             self._refresh_frameless()
 
-        file_loader.load_project(file_path, check_unsaved=False, on_success=_on_success)
+        file_loader.load_project(
+            file_path, check_unsaved=check_unsaved, on_success=_on_success
+        )
 
     # ==================== 窗口事件 ====================
 

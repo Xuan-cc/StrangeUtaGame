@@ -27,6 +27,34 @@ from .lyric_loader import parse_lyric_content
 if TYPE_CHECKING:
     from ..timing_interface import EditorInterface
 
+# 支持的文件类型（拖拽到窗口 / 拖到独立运行的程序图标共用）。
+PROJECT_EXTENSIONS = {".sug"}
+AUDIO_EXTENSIONS = {
+    ".mp3", ".wav", ".flac", ".ogg",
+    # 由 BASS 插件直接解码（无需 FFmpeg）
+    ".m4a", ".m4b", ".aac", ".wma", ".opus", ".ape", ".ac3", ".wv",
+    ".dsf", ".dff",
+}
+LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra", ".krl"}
+
+
+def classify_supported_file(file_path: str) -> str | None:
+    """按扩展名把文件归类为受支持的类型。
+
+    返回 ``"project"`` / ``"lyric"`` / ``"audio"`` / ``"video"``，
+    不受支持的扩展名返回 ``None``。
+    """
+    ext = Path(file_path).suffix.lower()
+    if ext in PROJECT_EXTENSIONS:
+        return "project"
+    if ext in LYRIC_EXTENSIONS:
+        return "lyric"
+    if ext in AUDIO_EXTENSIONS:
+        return "audio"
+    if ext in VIDEO_EXTENSIONS:
+        return "video"
+    return None
+
 
 class FileLoader:
     """文件加载管理器 — 处理项目/音频/歌词的加载"""
@@ -34,14 +62,9 @@ class FileLoader:
     _RECENT_PROJECTS_KEY = "recent_projects"
     _MAX_RECENT_PROJECTS = 10
 
-    _AUDIO_EXTENSIONS = {
-        ".mp3", ".wav", ".flac", ".ogg",
-        # 由 BASS 插件直接解码（无需 FFmpeg）
-        ".m4a", ".m4b", ".aac", ".wma", ".opus", ".ape", ".ac3", ".wv",
-        ".dsf", ".dff",
-    }
-    _LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra", ".krl"}
-    _PROJECT_EXTENSIONS = {".sug"}
+    _AUDIO_EXTENSIONS = AUDIO_EXTENSIONS
+    _LYRIC_EXTENSIONS = LYRIC_EXTENSIONS
+    _PROJECT_EXTENSIONS = PROJECT_EXTENSIONS
 
     def __init__(self, editor: EditorInterface):
         self._editor = editor
@@ -71,23 +94,41 @@ class FileLoader:
 
     def can_accept_drop(self, file_path: str) -> bool:
         """判断文件是否可接受拖拽"""
-        ext = Path(file_path).suffix.lower()
-        return ext in (self._AUDIO_EXTENSIONS | VIDEO_EXTENSIONS | self._LYRIC_EXTENSIONS | self._PROJECT_EXTENSIONS)
+        return classify_supported_file(file_path) is not None
 
     def handle_drop(self, file_path: str):
         """处理拖拽文件"""
-        ext = Path(file_path).suffix.lower()
-        if ext in self._AUDIO_EXTENSIONS:
+        kind = classify_supported_file(file_path)
+        if kind == "audio":
             self._editor.load_audio(file_path)
             self._save_last_dir(file_path)
-        elif ext in VIDEO_EXTENSIONS:
+        elif kind == "video":
             self._load_video_as_audio(file_path)
-        elif ext in self._LYRIC_EXTENSIONS:
+        elif kind == "lyric":
             self.load_lyrics(file_path)
             self._save_last_dir(file_path)
-        elif ext in self._PROJECT_EXTENSIONS:
+        elif kind == "project":
             self._save_last_dir(file_path)
             self.load_project(file_path)
+
+    def create_fresh_project(self) -> None:
+        """新建空项目替换当前项目（与工具栏「新建项目」一致）。
+
+        重置演唱者/音频/metadata/nicokara_tags，使随后装入的文件落在纯净
+        项目上。不做未保存检测，由调用方决定是否先检测。
+        """
+        from strange_uta_game.backend.application import ProjectService
+
+        project = ProjectService().create_project()
+        self._store.load_project(project)
+        self._reset_nicokara_tags_to_defaults()
+
+    def load_media(self, file_path: str) -> None:
+        """加载音频或视频文件（视频先经 FFmpeg 提取音轨，异步）。"""
+        if is_video_file(file_path):
+            self._load_video_as_audio(file_path)
+        else:
+            self._editor.load_audio(file_path)
 
     # ── 菜单/按钮触发 ──
 
@@ -853,10 +894,7 @@ class FileLoader:
         if check_unsaved and self._project and not self.check_unsaved_changes():
             return False
 
-        from strange_uta_game.backend.application import ProjectService
-        project = ProjectService().create_project()
-        self._store.load_project(project)
-        self._reset_nicokara_tags_to_defaults()
+        self.create_fresh_project()
         return True
 
     def load_lyrics(self, path: str, check_unsaved: bool = True):
