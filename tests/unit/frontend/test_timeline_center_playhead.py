@@ -28,8 +28,13 @@ def test_center_mode_keeps_playhead_at_half_width_during_playback(qapp):
 
 
 def test_center_mode_adds_blank_waveform_padding_before_audio(qapp):
+    from strange_uta_game.backend.infrastructure.audio import spectrum
+
     display = _display(qapp)
     display.set_audio_data(np.ones(1_000, dtype=np.float32), 100, 1)
+    # 预填充缓存层（回退不扫原始样本，需有层可用）
+    levels = spectrum.build_peak_levels_single_pass(display._waveform_samples)
+    display._waveform_peak_levels.update(levels)
     display.set_center_playhead_mode(True)
     display.set_position(100)
     display.set_playing(True)
@@ -37,8 +42,8 @@ def test_center_mode_adds_blank_waveform_padding_before_audio(qapp):
     peaks = display._compute_waveform_peaks(10)
 
     assert peaks is not None
-    assert peaks[:4] == [(0.0, 0.0)] * 4
-    assert peaks[4:] == [(1.0, 1.0)] * 6
+    assert peaks[:4] == [(0.0, 0.0, 0.0)] * 4
+    assert [(lo, hi) for lo, hi, _r in peaks[4:]] == [(1.0, 1.0)] * 6
 
 
 def test_center_mode_click_coordinates_still_seek_on_the_moving_timeline(qapp):

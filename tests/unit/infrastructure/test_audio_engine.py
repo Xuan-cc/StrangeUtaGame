@@ -3,7 +3,6 @@
 import pytest
 import numpy as np
 import soundfile as sf
-from pathlib import Path
 
 from strange_uta_game.backend.infrastructure.audio import (
     bass_available,
@@ -194,6 +193,27 @@ class TestBassEngine:
 
         # 释放后信息应该被清除
         assert engine.get_audio_info() is None
+        assert engine.get_mono_samples() is None
+
+    def test_get_mono_samples_stereo(self, tmp_path):
+        """P1-1：立体声在加载线程预混单声道，供波形/声谱/BPM 共用。"""
+        sr = 44100
+        t = np.linspace(0, 0.5, int(sr * 0.5))
+        left = (np.sin(2 * np.pi * 440 * t) * 0.3).astype(np.float32)
+        right = np.zeros_like(left)
+        stereo = np.column_stack([left, right]).astype(np.float32)
+        p = tmp_path / "stereo.wav"
+        sf.write(str(p), stereo, sr, subtype="FLOAT")  # 位精确，便于比对
+
+        engine = BassEngine()
+        engine.load(str(p))
+        try:
+            mono = engine.get_mono_samples()
+            assert mono is not None
+            assert mono.ndim == 1 and mono.dtype == np.float32
+            np.testing.assert_allclose(mono, stereo.mean(axis=1), atol=1e-6)
+        finally:
+            engine.release()
 
     def test_stop_resets_position(self, test_audio_file):
         """测试停止后位置重置"""

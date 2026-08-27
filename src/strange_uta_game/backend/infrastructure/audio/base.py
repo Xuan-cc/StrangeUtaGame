@@ -29,6 +29,22 @@ class AudioPlaybackError(AudioError):
     pass
 
 
+def compute_mono_samples(data: Optional[np.ndarray]) -> Optional[np.ndarray]:
+    """(n, ch) 原始 PCM → 1-D (n,) 分析用单声道数据。
+
+    只应在引擎加载线程调用——立体声降混 10 分钟音频实测 ≈200ms，
+    放 UI 线程会明显卡界面。波形/声谱/BPM 检测共用这一份数据，
+    避免各处重复降混。
+    """
+    if data is None:
+        return None
+    if data.ndim == 1:
+        return np.ascontiguousarray(data, dtype=np.float32)
+    if data.shape[1] <= 1:
+        return np.ascontiguousarray(data[:, 0], dtype=np.float32)
+    return np.ascontiguousarray(data.mean(axis=1, dtype=np.float32))
+
+
 class PlaybackState(Enum):
     """播放状态"""
 
@@ -195,6 +211,15 @@ class IAudioEngine(ABC):
         Returns:
             原始 PCM 数据，形状为 (n_samples, channels) 的 float32 数组，
             如果没有加载音频则返回 None
+        """
+        pass
+
+    @abstractmethod
+    def get_mono_samples(self) -> Optional[np.ndarray]:
+        """获取分析用单声道采样（加载线程预混，波形/声谱/BPM 共用）
+
+        Returns:
+            1-D float32 数组 (n_samples,)；未加载音频或预混失败返回 None
         """
         pass
 

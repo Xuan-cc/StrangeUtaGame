@@ -82,6 +82,9 @@ class FakeAudioEngine(IAudioEngine):
     def get_original_samples(self):
         return None
 
+    def get_mono_samples(self):
+        return None
+
     def release(self) -> None:
         pass
 

@@ -131,6 +131,18 @@ class AppSettings:
             "waveform_tag_char_enabled": True,
             "waveform_tag_ruby_enabled": True,
             "waveform_center_playhead_enabled": False,
+            # 波形区显示设置（齿轮对话框）：模式互斥 + 网格 + 频谱参数
+            "waveform_visible": True,
+            "waveform_display_mode": "waveform",  # waveform / spectrum
+            "waveform_grid_mode": "time",         # time / bpm
+            "waveform_grid_bpm": 120.0,
+            "waveform_grid_line_width": 2,        # 网格线宽 0~100px；0=不绘制
+            "spectrum_overlap": 0.75,             # 窗口重叠（帧距=fft·(1-overlap)）
+            "spectrum_fft_size": 2048,
+            "spectrum_freq_scale": "log",         # log / linear
+            "spectrum_dyn_range_db": 90,
+            "display_height": 220,                # 显示高度（波形/声谱公共）
+            "waveform_rms_enabled": True,         # 双层波形（峰值+RMS）
             "disable_click_jump": False,
             "disable_click_recenter": False,
             "preview_guide_enabled": False,

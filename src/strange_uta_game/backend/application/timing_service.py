@@ -182,6 +182,14 @@ class TimingService:
         """
         return self._audio_engine.get_original_samples()
 
+    def get_mono_samples(self):
+        """获取分析用单声道采样（引擎加载线程预混，波形/声谱/BPM 共用）。
+
+        Returns:
+            1-D float32 数组 (n_samples,)；未加载音频或预混失败返回 None
+        """
+        return self._audio_engine.get_mono_samples()
+
     def get_position_ms(self) -> int:
         display_getter = getattr(self._audio_engine, "get_display_position_ms", None)
         if callable(display_getter):

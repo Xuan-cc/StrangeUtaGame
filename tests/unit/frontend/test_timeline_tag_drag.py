@@ -125,6 +125,8 @@ def test_reshow_waveform_flushes_dirty():
         updateGeometry=lambda: None,
         _timetags_dirty_while_hidden=True,
         _update_time_tags_display=lambda: refreshed.append(1),
+        _get_setting_interface=lambda: None,  # 可见性持久化分支的安全 stub
+        _apply_preview_spectrum_yield=lambda: None,  # 预览让位分支的安全 stub
     )
     EditorInterface._on_waveform_visibility_changed(ed, True)
     assert refreshed == [1] and ed._timetags_dirty_while_hidden is False

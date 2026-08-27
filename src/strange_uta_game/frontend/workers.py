@@ -7,13 +7,151 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
+import numpy as np
 from PyQt6.QtCore import QObject, pyqtSignal
 
 if TYPE_CHECKING:
     from strange_uta_game.backend.infrastructure.audio import IAudioEngine
     from strange_uta_game.backend.domain import Project
+
+
+# ──────────────────────────────────────────────
+# 声谱图 / BPM 检测
+# ──────────────────────────────────────────────
+
+
+class PeakLevelWorker(QObject):
+    """后台构建波形峰值层（min/max/RMS 多 bin 层金字塔）。
+
+    纯计算包装 backend.infrastructure.audio.spectrum 的
+    build_peak_levels_single_pass；结果为 {bin_size: (mins, maxs, rmss)}。
+    """
+
+    progress = pyqtSignal(float)
+    finished = pyqtSignal(object)  # dict | None（取消）
+    error = pyqtSignal(str)
+
+    def __init__(self, samples: np.ndarray):
+        super().__init__()
+        self._samples = samples
+        self._cancelled = False
+
+    def request_cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        try:
+            from strange_uta_game.backend.infrastructure.audio import spectrum
+
+            result = spectrum.build_peak_levels_single_pass(
+                self._samples,
+                cancel_check=lambda: self._cancelled,
+                progress_cb=self.progress.emit,
+            )
+            self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class SpectrogramWorker(QObject):
+    """后台计算整段音频的声谱图（uint8 dB 矩阵 + 预算内金字塔，≈140ms/分钟音频）。
+
+    samples 必须是单声道 float32；调用方保证计算期间不就地修改该数组。
+    取消时同样发出 ``finished``（载荷 None）——调用方据此做纯信号驱动的
+    线程回收，UI 路径不得同步 ``wait()``。金字塔总内存超过
+    ``spectrum_core.PYRAMID_BUDGET_BYTES``（长音频）时 result 不带 levels，
+    由渲染侧按需惰性构建单个所需层。
+    """
+
+    progress = pyqtSignal(float)   # 0.0~1.0
+    finished = pyqtSignal(object)  # 结果 dict；取消时为 None
+    error = pyqtSignal(str)
+
+    def __init__(
+        self,
+        samples: np.ndarray,
+        sample_rate: int,
+        fft_size: int,
+        hop: Optional[int] = None,
+    ):
+        super().__init__()
+        self._samples = samples
+        self._sample_rate = sample_rate
+        self._fft_size = fft_size
+        # 窗口重叠（帧距）：hop 越小时间粒度越细，计算量与内存越大
+        self._hop = hop
+        self._cancelled = False
+
+    def request_cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        try:
+            from strange_uta_game.backend.infrastructure.audio import spectrum as spectrum_core
+
+            result = spectrum_core.compute_spectrogram(
+                self._samples,
+                self._sample_rate,
+                self._fft_size,
+                hop=self._hop,
+                progress_cb=self.progress.emit,
+                cancel_check=lambda: self._cancelled,
+            )
+            if result is None:
+                self.finished.emit(None)  # 已取消：仍发信号驱动线程回收
+                return
+            # 金字塔在 worker 线程构建，避免 UI 回调里几十~几百 ms 的停顿。
+            # 超预算（长音频）：构建受预算限制的中间粗层金字塔，渲染侧深缩放
+            # 用可见切片归约——UI 绘制路径永远不同步构建完整层。
+            if result["matrix"].nbytes * 2 <= spectrum_core.PYRAMID_BUDGET_BYTES:
+                result["levels"] = spectrum_core.build_pyramid(result["matrix"])
+            else:
+                result["levels"] = None
+                mid, coarse = spectrum_core.coarse_pyramid_for_budget(
+                    result["matrix"], spectrum_core.PYRAMID_BUDGET_BYTES
+                )
+                result["coarse_mid"] = mid
+                result["coarse_levels"] = coarse
+            self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class BpmDetectWorker(QObject):
+    """后台检测音频 BPM（librosa 管线的纯 numpy 复刻，见 spectrum_core.detect_bpm）。
+
+    finished 携带 {"bpm": float | None, "confidence": 0.0~1.0}；
+    bpm=None 表示未能识别。结果应回填给用户确认，不静默生效。
+    """
+
+    progress = pyqtSignal(float)
+    finished = pyqtSignal(object)
+    error = pyqtSignal(str)
+
+    def __init__(self, samples: np.ndarray, sample_rate: int):
+        super().__init__()
+        self._samples = samples
+        self._sample_rate = sample_rate
+        self._cancelled = False
+
+    def request_cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        try:
+            from strange_uta_game.backend.infrastructure.audio import spectrum as spectrum_core
+
+            result = spectrum_core.detect_bpm(
+                self._samples,
+                self._sample_rate,
+                progress_cb=self.progress.emit,
+                cancel_check=lambda: self._cancelled,
+            )
+            self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 # ──────────────────────────────────────────────

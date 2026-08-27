@@ -50,6 +50,9 @@ class ShortcutSubInterface(SubSettingInterface):
         ("lock_playback_start", FIF.PIN, "锁定播放起点", "在当前播放位置锁定区间起点；再次触发则取消，可撤销", "[:short", "[:short", "both", None, None, False),
         ("lock_playback_end", FIF.PIN, "锁定播放终点", "在当前播放位置锁定区间终点；再次触发则取消，可撤销", "]:short", "]:short", "both", None, None, False),
 
+        # ── 时间轴显示 ──
+        ("toggle_waveform_spectrum", FIF.VIEW, "切换波形图 / 声谱图", "在波形图和声谱图显示模式之间切换", "", "", "both", None, None, False),
+
         # ── 打轴与时间戳微调 ──
         ("tag_now", FIF.PLAY, "打轴键", "打轴操作的按键【仅打轴模式】", "D:short,F:short", "", "timing_only", None, None, False),
         ("tag_now_extra", FIF.PLAY, "打轴键 Extra", "打轴操作的备用按键【仅打轴模式】", "SPACE:short", "", "timing_only", None, None, False),
@@ -141,6 +144,7 @@ class ShortcutSubInterface(SubSettingInterface):
     _SHORTCUT_GROUPS: list[tuple[str, str]] = [
         ("播放控制", "play_pause"),
         ("导航与跳转", "nav_prev_line"),
+        ("时间轴显示", "toggle_waveform_spectrum"),
         ("打轴与时间戳微调", "tag_now"),
         ("节奏点与句尾", "add_checkpoint"),
         ("字符与行编辑", "edit_ruby"),
@@ -242,6 +246,7 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("打轴键"); tr("打轴键 Extra"); tr("打轴并删除下一节奏点")
         tr("打轴键（编辑模式）"); tr("打轴键 Extra（编辑模式）")
         tr("后退"); tr("前进"); tr("删除当前时间戳并回滚")
+        tr("切换波形图 / 声谱图")
         tr("增加节奏点"); tr("删除节奏点"); tr("切换句尾")
         tr("批量变更"); tr("修改所选字符"); tr("插入导唱符"); tr("自动插入导唱符")
         tr("切换导唱待办"); tr("修改选中行")
@@ -269,6 +274,7 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("增大播放音量"); tr("减小播放音量")
         tr("将播放音量恢复为设置中的默认音量；双击音量条也可恢复")
         tr("移动到上一歌词行"); tr("移动到下一歌词行")
+        tr("在波形图和声谱图显示模式之间切换")
         tr("在当前行内移动到上一个字符；若已在首字符则跳到上一行末字符")
         tr("在当前行内移动到下一个字符；若已在末字符则跳到下一行首字符")
         tr("在当前字符的多个节奏点之间反向循环切换（Alt+←）")
@@ -329,7 +335,7 @@ class ShortcutSubInterface(SubSettingInterface):
         # _SHORTCUT_MODES 标签
         tr("打轴模式（音乐播放时）"); tr("编辑模式（音乐暂停时）")
         # _SHORTCUT_GROUPS 分组标题
-        tr("播放控制"); tr("导航与跳转"); tr("打轴与时间戳微调")
+        tr("播放控制"); tr("导航与跳转"); tr("时间轴显示"); tr("打轴与时间戳微调")
         tr("节奏点与句尾"); tr("字符与行编辑"); tr("自动注音")
         tr("演唱者"); tr("时间戳工具"); tr("文件与导出")
         tr("固定功能（不可修改）")

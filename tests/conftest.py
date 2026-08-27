@@ -21,10 +21,25 @@ import pytest
 
 
 def pytest_configure(config):
-    basetemp = Path(__file__).resolve().parents[1] / ".test_tmp"
-    if not basetemp.exists():
-        basetemp.mkdir(parents=True)
-    config.option.basetemp = str(basetemp)
+    # 每次会话使用唯一临时目录：进程原生崩溃后旧目录可能被 Windows ACL
+    # 锁死，固定目录名只会在仓库里累积不可清理的目录。
+    import time as _time
+
+    _SESSION_ROOT.mkdir(parents=True, exist_ok=True)
+    config.option.basetemp = str(_SESSION_ROOT)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """会话结束时 best-effort 清理本会话临时目录（崩溃残留交人工清理）。"""
+    import shutil
+
+    shutil.rmtree(str(_SESSION_ROOT), ignore_errors=True)
+    try:
+        parent = _SESSION_ROOT.parent
+        if parent.exists() and not any(parent.iterdir()):
+            parent.rmdir()
+    except OSError:
+        pass
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -36,16 +51,26 @@ if sys.platform.startswith("win"):
 # 配置目录重定向到 basetemp 下的隔离位置：测试不再读写仓库根的真实
 # config.json（SUG_CONFIG_DIR 最高优先，见 app_dirs.config_dir）。
 # basetemp 会被 pytest 在会话开始时清空重建，AppSettings 首次访问时自建。
-os.environ.setdefault(
-    "SUG_CONFIG_DIR",
-    str(Path(__file__).resolve().parents[1] / ".test_tmp" / "config"),
+import time as _time
+
+_SESSION_ROOT = (
+    Path(__file__).resolve().parents[1]
+    / ".test_sessions"
+    / f"s{os.getpid()}-{int(_time.time())}"
 )
-# AI 打轴统一日志同样隔离：probe/安装等路径在测试里也会落日志，
-# 不隔离会写进仓库根的真实 logs/（SUG_AI_TIMING_LOG 最高优先，
-# 见 ailog.ai_log_path；文件按需自建）
+
+
+def _session_subdir(name: str) -> str:
+    """会话子目录（复用模块级 _SESSION_ROOT，全程唯一）。"""
+    return str(_SESSION_ROOT / name)
+
+
+# 配置目录重定向到会话隔离位置（SUG_CONFIG_DIR 最高优先，见 app_dirs）
+os.environ.setdefault("SUG_CONFIG_DIR", _session_subdir("config"))
+# AI 打轴统一日志同样隔离（SUG_AI_TIMING_LOG 最高优先，见 ailog.ai_log_path）
 os.environ.setdefault(
     "SUG_AI_TIMING_LOG",
-    str(Path(__file__).resolve().parents[1] / ".test_tmp" / "logs" / "ai_timing.log"),
+    str(Path(_session_subdir("logs")) / "ai_timing.log"),
 )
 
 

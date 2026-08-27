@@ -48,6 +48,7 @@ from .base import (
     AudioPlaybackError,
     IAudioEngine,
     PlaybackState,
+    compute_mono_samples,
 )
 from .ring_buffer import RingBuffer
 from .tsm_cache import TSMRenderCache, LoadProgressCallback, _quantize
@@ -96,6 +97,7 @@ class SoundDeviceEngine(IAudioEngine):
     def __init__(self) -> None:
         # ---- 音频元数据 ----
         self._original_data: Optional[np.ndarray] = None  # (n, channels) float32（原始文件，仅用于波形显示）
+        self._mono_data: Optional[np.ndarray] = None  # 1-D 分析用单声道（加载线程预混，波形/声谱/BPM 共用）
         self._original_sample_rate: int = 44100  # 原始文件采样率（用于时长/位置计算）
         self._sample_rate: int = 44100  # 播放采样率（MP3 采样率，用于 stream/ring）
         self._channels: int = 2
@@ -190,6 +192,12 @@ class SoundDeviceEngine(IAudioEngine):
                 self._sample_rate = self._original_sample_rate
                 cached_pcm = self._original_data
 
+            # mono 必须与显示 PCM（get_original_samples）处于同一采样空间：
+            # 缓存 PCM 可能被重采样（如 22050→32000）且含 MP3 编解码延迟/
+            # 补齐（~26ms）。从 _original_data 预混会让波形/声谱/BPM 与
+            # AudioInfo.sample_rate 解释的时间轴整体错位（P1-1）。
+            self._mono_data = compute_mono_samples(cached_pcm)
+
             # 时长基于 MP3 实际数据（确保位置计算一致）
             self._duration_ms = int(len(cached_pcm) / self._sample_rate * 1000)
 
@@ -254,6 +262,7 @@ class SoundDeviceEngine(IAudioEngine):
         self._cache.clear()
         with self._state_lock:
             self._original_data = None
+            self._mono_data = None
             self._active_pcm = None
             self._file_path = None
             self._duration_ms = 0
@@ -479,6 +488,10 @@ class SoundDeviceEngine(IAudioEngine):
             采样率与播放采样率一致。如果没有加载音频则返回 None
         """
         return self._cache.get(1.0)
+
+    def get_mono_samples(self) -> Optional[np.ndarray]:
+        """分析用单声道（加载线程预混），波形/声谱/BPM 检测共用。"""
+        return self._mono_data
 
     # ==================== 内部：流 / Producer / 回调 ====================
 

@@ -236,3 +236,7 @@ docs/superpowers/
 
 # pytest 临时目录（tests/conftest.py 重定向 basetemp 用）
 .test_tmp/
+
+# AI 会话产物（计划文件/探针输出，不入库）
+.zcode/
+.test_sessions/

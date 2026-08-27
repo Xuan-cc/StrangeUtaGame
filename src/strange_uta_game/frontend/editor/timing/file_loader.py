@@ -367,8 +367,12 @@ class FileLoader:
 
                 samples = self._timing_service.get_original_samples()
                 if samples is not None:
+                    # mono 来自引擎加载线程的预混（P1-1）：UI 线程不再降混立体声
                     self._editor.timeline.set_audio_data(
-                        samples, info.sample_rate, info.channels
+                        samples,
+                        info.sample_rate,
+                        info.channels,
+                        mono=self._timing_service.get_mono_samples(),
                     )
 
         # 应用设置中的默认音量和速度

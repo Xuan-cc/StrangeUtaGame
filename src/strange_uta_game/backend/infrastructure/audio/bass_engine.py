@@ -24,6 +24,7 @@ from .base import (
     AudioPlaybackError,
     IAudioEngine,
     PlaybackState,
+    compute_mono_samples,
 )
 
 # ═══════════════════════════════════════════════════════════════════
@@ -265,6 +266,8 @@ class BassEngine(IAudioEngine):
 
         # waveform data (read via soundfile, for get_original_samples)
         self._original_data: Optional[np.ndarray] = None
+        # 分析用单声道（加载线程预混，波形/声谱/BPM 共用；UI 线程不降混）
+        self._mono_data: Optional[np.ndarray] = None
         self._original_sample_rate: int = 44100
         self._channels: int = 2
 
@@ -363,6 +366,9 @@ class BassEngine(IAudioEngine):
             )
 
             self._load_waveform_data(file_path, playback_path)
+            # 加载线程预混单声道：立体声 10 分钟降混实测 ≈200ms，
+            # 放 UI 线程（set_audio_data 回调）会卡界面。
+            self._mono_data = compute_mono_samples(self._original_data)
 
             self._file_path = file_path
             self._playback_path = playback_path
@@ -607,6 +613,7 @@ class BassEngine(IAudioEngine):
                 _bass.BASS_Free()
                 self._initialized = False
             self._original_data = None
+            self._mono_data = None
             self._file_path = None
             self._playback_path = None
             self._duration_ms = 0
@@ -923,3 +930,7 @@ class BassEngine(IAudioEngine):
     def get_original_samples(self) -> Optional[np.ndarray]:
         """Return raw PCM (float32) for waveform display."""
         return self._original_data
+
+    def get_mono_samples(self) -> Optional[np.ndarray]:
+        """分析用单声道（加载线程预混），波形/声谱/BPM 检测共用。"""
+        return self._mono_data

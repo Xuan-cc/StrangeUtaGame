@@ -191,6 +191,10 @@ class EditorInterface(QWidget):
             _throttle.visibility_maybe_changed.connect(
                 self._refresh_position_poll_interval
             )
+            # 应用最小化/切后台时同样暂停在途声谱计算（回前台按需恢复）
+            _throttle.visibility_maybe_changed.connect(
+                self._on_ui_visibility_for_spectrum
+            )
         self._last_polled_duration_ms: Optional[int] = None
         # Per-line status snapshots. A timing key only changes one line, so the
         # footer can update in O(chars in line) instead of scanning the project.
@@ -429,12 +433,17 @@ class EditorInterface(QWidget):
         self.timeline = TimelineWidget(self)
         self.timeline.seek_requested.connect(self._on_seek)
         self.timeline.waveform_visibility_changed.connect(self._on_waveform_visibility_changed)
+        self.timeline.display_settings_changed.connect(
+            self._on_timeline_display_settings_changed
+        )
         self.timeline.tag_clicked.connect(self._on_timeline_tag_clicked)
         self.timeline.tags_drag_committed.connect(self._on_timeline_tags_drag_committed)
         layout.addWidget(self.timeline)
 
         # 4) 歌词预览（占主要空间）
         self.preview = KaraokePreview(self)
+        # 预览默认 minimumHeight（声谱模式让位后可恢复的原值）
+        self._preview_default_min_h = self.preview.minimumHeight()
         self.preview.line_clicked.connect(self._on_line_clicked)
         self.preview.checkpoint_clicked.connect(self._on_checkpoint_clicked)
         self.preview.char_selected.connect(self._on_char_selected)
@@ -832,6 +841,29 @@ class EditorInterface(QWidget):
             self.timeline.set_center_playhead_mode(
                 settings.get("timing.waveform_center_playhead_enabled", False)
             )
+            # 波形区显示设置（齿轮对话框项）：模式 / 网格 / 频谱参数
+            self.timeline._apply_display_settings({
+                "display_mode": settings.get("timing.waveform_display_mode", "waveform"),
+                "grid_mode": settings.get("timing.waveform_grid_mode", "time"),
+                "grid_bpm": float(settings.get("timing.waveform_grid_bpm", 120.0)),
+                "grid_line_width": int(
+                    settings.get("timing.waveform_grid_line_width", 2)
+                ),
+                "spectrum_fft_size": int(settings.get("timing.spectrum_fft_size", 2048)),
+                "spectrum_overlap": float(settings.get("timing.spectrum_overlap", 0.75)),
+                "spectrum_freq_scale": settings.get("timing.spectrum_freq_scale", "log"),
+                "spectrum_dyn_range_db": int(settings.get("timing.spectrum_dyn_range_db", 90)),
+                "display_height": int(settings.get("timing.display_height", 220)),
+                "waveform_rms_enabled": bool(
+                    settings.get("timing.waveform_rms_enabled", True)
+                ),
+            })
+            # 波形显示开关的持久化状态（齿轮外的既有开关）
+            self.timeline.set_waveform_visible(
+                bool(settings.get("timing.waveform_visible", True))
+            )
+            # 显示开关影响声谱模式下的预览让位
+            self._apply_preview_spectrum_yield()
         # #8/#11/#13：读取双模式快捷键映射（打轴模式=播放中、编辑模式=未播放）
         # 动作集合（所有动作在两种模式下都存在，读设置时各自取值，互不干扰）
         action_names = [
@@ -843,6 +875,7 @@ class EditorInterface(QWidget):
             "seek_forward",
             "lock_playback_start",
             "lock_playback_end",
+            "toggle_waveform_spectrum",
             "speed_down",
             "speed_up",
             "speed_reset",
@@ -918,6 +951,7 @@ class EditorInterface(QWidget):
             "seek_forward": "X:short",
             "lock_playback_start": "[:short",
             "lock_playback_end": "]:short",
+            "toggle_waveform_spectrum": "",
             "speed_down": "Q:short",
             "speed_up": "W:short",
             "speed_reset": "E:short",
@@ -4946,7 +4980,13 @@ class EditorInterface(QWidget):
 
             samples = self._timing_service.get_original_samples()
             if samples is not None:
-                self.timeline.set_audio_data(samples, info.sample_rate, info.channels)
+                # mono 来自引擎加载线程的预混（P1-1）：UI 线程不再降混立体声
+                self.timeline.set_audio_data(
+                    samples,
+                    info.sample_rate,
+                    info.channels,
+                    mono=self._timing_service.get_mono_samples(),
+                )
 
         self._audio_file_path = file_path
         self.timeline.set_audio_name(Path(file_path).name)
@@ -5298,6 +5338,100 @@ class EditorInterface(QWidget):
         if visible and getattr(self, "_timetags_dirty_while_hidden", False):
             self._timetags_dirty_while_hidden = False
             self._update_time_tags_display()
+        # 显示开关影响声谱模式下的预览让位
+        if hasattr(self, "preview"):
+            self._apply_preview_spectrum_yield()
+        # 开关状态持久化（齿轮高级设置之外的既有开关）；值未变时不写盘
+        setting_iface = self._get_setting_interface()
+        if setting_iface is not None:
+            s = setting_iface.get_settings()
+            if bool(s.get("timing.waveform_visible", True)) != bool(visible):
+                s.set("timing.waveform_visible", bool(visible))
+                s.save()
+
+    def _on_timeline_display_settings_changed(self, settings: dict):
+        """齿轮对话框的显示设置变化 → 持久化到 timing.* 键。"""
+        # 模式/期望高度变化 → 立即重新协商预览让位（布局协商不依赖设置接口，
+        # 无 settingInterface 的嵌入/测试环境同样生效）
+        self._apply_preview_spectrum_yield()
+        setting_iface = self._get_setting_interface()
+        if setting_iface is None:
+            return
+        s = setting_iface.get_settings()
+        s.set("timing.waveform_display_mode", settings.get("display_mode", "waveform"))
+        s.set("timing.waveform_grid_mode", settings.get("grid_mode", "time"))
+        s.set("timing.waveform_grid_bpm", float(settings.get("grid_bpm", 120.0)))
+        s.set(
+            "timing.waveform_grid_line_width",
+            int(settings.get("grid_line_width", 2)),
+        )
+        s.set(
+            "timing.spectrum_overlap",
+            float(settings.get("spectrum_overlap", 0.75)),
+        )
+        s.set("timing.spectrum_fft_size", int(settings.get("spectrum_fft_size", 2048)))
+        s.set("timing.spectrum_freq_scale", settings.get("spectrum_freq_scale", "log"))
+        s.set(
+            "timing.spectrum_dyn_range_db",
+            int(settings.get("spectrum_dyn_range_db", 90)),
+        )
+        s.set("timing.display_height", int(settings.get("display_height", 220)))
+        s.set(
+            "timing.waveform_rms_enabled",
+            bool(settings.get("waveform_rms_enabled", True)),
+        )
+        s.save()
+
+    def _toggle_waveform_spectrum(self) -> None:
+        """快捷键：在波形图 / 声谱图之间切换，并走既有持久化链。"""
+        if not hasattr(self, "timeline"):
+            return
+        settings = dict(self.timeline.display_settings())
+        settings["display_mode"] = (
+            "spectrum" if settings.get("display_mode") == "waveform" else "waveform"
+        )
+        self.timeline._apply_display_settings(settings)
+
+    # ── 声谱高度协商 / 应用可见性 ──
+
+    # 声谱模式下歌词预览让位后的最低可操作高度（KaraokePreview 默认
+    # minimumHeight=400，不让位则窗口内放不下声谱期望高度）。
+    _SPECTRUM_PREVIEW_YIELD_H = 160
+
+    def _apply_preview_spectrum_yield(self) -> None:
+        """声谱模式下让歌词预览可缩到低位（同步 minimumHeight），波形模式恢复。
+
+        只调 maximumHeight 无法突破 preview 既有的 minimumHeight=400——
+        必须同步下调 min，父布局才能把空间分给时间轴（Qt 原生协商）。
+        波形模式下若窗口空间不足（总 min > 窗口高）同样让位，防止顶层
+        窗口被 min 撑大（P1：曾实测请求 713px 得到 855px）。
+        """
+        if not hasattr(self, "timeline"):
+            return
+        # 波形/声谱可见时预览恒让位到低位——显示高度经 minimumHeight 领取
+        # 空间，预览的 400px 固有 min 会阻止空间分配并撑大窗口
+        if self.timeline.is_waveform_visible():
+            target = self._SPECTRUM_PREVIEW_YIELD_H
+            if self.preview.minimumHeight() != target:
+                self.preview.setMinimumHeight(target)
+        else:
+            if self.preview.minimumHeight() != self._preview_default_min_h:
+                self.preview.setMinimumHeight(self._preview_default_min_h)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # 显示后确保预览让位（显示高度经 min 领取空间需要预览配合）
+        if hasattr(self, "timeline") and hasattr(self, "preview"):
+            self._apply_preview_spectrum_yield()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+
+    def _on_ui_visibility_for_spectrum(self) -> None:
+        """应用/窗口可见性变化 → 暂停或恢复在途声谱计算。"""
+        if not hasattr(self, "timeline"):
+            return
+        self.timeline.set_app_visible(not self._position_poll_hidden())
 
     # ==================== 打轴 ====================
 
@@ -7070,6 +7204,8 @@ class EditorInterface(QWidget):
         elif action == "toggle_word_join":
             if self._project:
                 self._toggle_word_join()
+        elif action == "toggle_waveform_spectrum":
+            self._toggle_waveform_spectrum()
         elif action == "toggle_line_end":
             if self._project:
                 line_idx, char_idx = self._resolve_target_char()

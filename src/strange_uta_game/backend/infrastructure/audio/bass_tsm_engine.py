@@ -41,6 +41,7 @@ from .base import (
     AudioPlaybackError,
     IAudioEngine,
     PlaybackState,
+    compute_mono_samples,
 )
 
 # Reuse the ctypes bindings + constants already configured in bass_engine so we
@@ -106,6 +107,8 @@ class BassTsmEngine(IAudioEngine):
 
         # waveform data for visualisation (source PCM)
         self._original_data: Optional[np.ndarray] = None
+        # 分析用单声道（加载线程预混，波形/声谱/BPM 共用）
+        self._mono_data: Optional[np.ndarray] = None
         self._original_sample_rate: int = 44100
         self._channels: int = 2
 
@@ -191,6 +194,8 @@ class BassTsmEngine(IAudioEngine):
             # display and the TSM renderer.
             pcm, sr, ch = self._decode_full_pcm(playback_path)
             self._original_data = pcm
+            # 加载线程预混单声道（立体声 10 分钟 ≈200ms，不能放 UI 线程）
+            self._mono_data = compute_mono_samples(pcm)
             self._original_sample_rate = sr
             self._channels = ch
 
@@ -365,6 +370,7 @@ class BassTsmEngine(IAudioEngine):
                 _bass.BASS_Free()
                 self._initialized = False
             self._original_data = None
+            self._mono_data = None
             self._file_path = None
             self._source_1x_path = None
             self._current_source_path = None
@@ -856,3 +862,7 @@ class BassTsmEngine(IAudioEngine):
 
     def get_original_samples(self) -> Optional[np.ndarray]:
         return self._original_data
+
+    def get_mono_samples(self) -> Optional[np.ndarray]:
+        """分析用单声道（加载线程预混），波形/声谱/BPM 检测共用。"""
+        return self._mono_data

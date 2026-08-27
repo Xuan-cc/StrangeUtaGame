@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import bisect
 import math
-from typing import List, NamedTuple, Optional, Tuple
+from collections import OrderedDict
+from typing import Callable, List, NamedTuple, Optional, Tuple
 
 import numpy as np
-from PyQt6.QtCore import QPoint, QRect, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QSize, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
+    QImage,
     QMouseEvent,
     QWheelEvent,
     QPainter,
@@ -26,21 +28,26 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QHBoxLayout,
-    QLabel,
     QScrollBar,
     QVBoxLayout,
     QWidget,
 )
 
-from qfluentwidgets import CaptionLabel, Slider, SwitchButton
+from qfluentwidgets import CaptionLabel, FluentIcon, Slider, SwitchButton, TransparentToolButton
 
+from strange_uta_game.backend.infrastructure.audio import spectrum as spectrum_core
 from strange_uta_game.frontend.perf_log import log_slow_method
 from strange_uta_game.frontend.theme import theme
+from strange_uta_game.frontend.workers import SpectrogramWorker
 
 
 # (line_idx, char_idx, cp_idx, is_sentence_end) —— 可反查模型到具体 checkpoint 的句柄。
 # 选中态、命中测试、拖拽提交都以此为身份，跨 set_time_tags 重排存活。
 TagHandle = Tuple[int, int, int, bool]
+
+# 声谱模式左侧频率轴 gutter 宽度（px）：tag/热图/播放头从轴区右侧开始，
+# 频率刻度独占轴区，两者物理分离互不覆盖。
+_SPECTRUM_AXIS_W = 40
 
 
 class TimeTag(NamedTuple):
@@ -76,7 +83,12 @@ class WaveformDisplay(QWidget):
     _HANDLE_SEL_HALF_W = 7      # 选中把手放大后半宽（px）
     _HANDLE_HEIGHT = 9          # 把手块高度（px）
     _MIN_HANDLE_SPACING = 8     # 相邻把手最小间距，低于此值密度门控不绘制把手/不可命中
-    _HANDLE_HIT_Y_BAND = 12     # 命中仅在波形竖直中线 ±该像素范围内有效（把手居中，与顶部标签分离）
+    _HANDLE_HIT_Y_BAND = 12     # 命中仅在把手中心 ±该像素范围内有效
+
+    def _handle_center_y(self, h: int) -> float:
+        """tag 把手竖直中心：恒在显示区中央（波形与任意高度的声谱一致），
+        靠近 tag 竖线中部，方便点击。"""
+        return h / 2.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -114,9 +126,44 @@ class WaveformDisplay(QWidget):
         # 波形峰值缓存
         self._peaks_cache: Optional[List[tuple]] = None
         self._peaks_cache_key: Optional[tuple] = None  # (width, zoom, scroll, samples_id)
-        # 整段音频的多分辨率峰值缓存：bin_size -> (mins, maxs)。同一缩放
-        # 粒度只归约一次，播放滚动时仅从缓存中取当前窗口。
-        self._waveform_peak_levels: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+        # 整段音频的多分辨率峰值缓存：bin_size -> (mins, maxs, rmss)。同一缩放
+        # 粒度只归约一次，播放滚动时仅从缓存中取当前窗口。LRU + 内存预算：
+        # 长音频多缩放层不设限会累积数百 MB。
+        self._waveform_peak_levels: "OrderedDict[int, tuple]" = OrderedDict()
+        # 在途峰值预热任务的取消闭包；换歌/清除音频时先取消再启动新的，
+        # worker 正常完成/报错/取消后释放为 None（迟到信号只做身份过滤）。
+        self._preheat_cancel: Optional[Callable[[], None]] = None
+
+        # 显示模式与高级设置（齿轮对话框 / timing.* 设置键）
+        self._display_mode = "waveform"   # "waveform" | "spectrum"（互斥）
+        self._grid_mode = "time"         # "time" | "bpm"
+        self._grid_bpm = 120.0
+        self._grid_line_width = 2        # 网格线宽（0~100px，时间/BPM 共用；0=不绘制）
+        self._spectrum_fft_size = 2048
+        self._spectrum_overlap = 0.75   # 窗口重叠（SV 口径）；帧距=fft·(1-overlap)
+        self._spectrum_freq_scale = "log"  # "log" | "linear"
+        self._spectrum_dyn_range_db = 90
+        # 显示高度（公共属性：波形与声谱共用，120~400px）
+        self._display_height = 220
+        # 声谱活动门禁：False 时任何路径（换音频/改参数/切模式）都不得重启计算
+        self._spectrum_active = True
+        # 双层波形（外层 min/max 峰值 + 内层 RMS 核心带）绘制开关，默认开
+        self._waveform_rms_enabled = True
+        # 实际使用的重叠率（预算降级后可能与用户选择不同；None=未计算）
+        self._actual_overlap: Optional[float] = None
+
+        # 声谱缓存与后台计算状态。线程由 task_runner 注册表持有（不 parent
+        # 到本控件），_spectrum_worker 仅作身份比对——迟到信号按 sender 丢弃。
+        self._spectrum: Optional[dict] = None
+        self._spectrum_state = "idle"    # idle | computing | ready | error
+        self._spectrum_progress_pct = -1
+        self._spectrum_error = ""
+        self._spectrum_worker: Optional[SpectrogramWorker] = None
+        self._spectrum_view_cache: Optional[np.ndarray] = None
+        self._spectrum_view_cache_key: Optional[tuple] = None
+        self._spectrum_lut_cache: Optional[np.ndarray] = None
+        self._spectrum_lut_cache_key: Optional[tuple] = None
+
         # 网格、波形、范围和标签在普通播放期间不变。缓存为静态图层后，
         # 逐帧只需绘制该图层和播放头；缩放/滚动/数据变化时再失效重建。
         self._static_layer: Optional[QPixmap] = None
@@ -152,7 +199,8 @@ class WaveformDisplay(QWidget):
         self._suspension_timer.setInterval(6000)
         self._suspension_timer.timeout.connect(self._resume_auto_scroll)
 
-        self.setMinimumHeight(80)
+        # 显示高度为公共期望高度（波形/声谱一致，默认 220）
+        self._apply_display_height()
         self.setMouseTracking(True)
 
         # 监听主题变化，触发重绘
@@ -368,19 +416,34 @@ class WaveformDisplay(QWidget):
         self.set_time_tags(cached)
         return True
 
-    def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
+    def set_audio_data(
+        self,
+        samples: np.ndarray,
+        sample_rate: int,
+        channels: int,
+        mono: Optional[np.ndarray] = None,
+    ):
         self._samples = samples
         # 波形滚动会逐帧重算可见峰值；立体声只在加载时混合一次，避免播放时
-        # 每帧扫描整首音频。
-        self._waveform_samples = (
-            np.mean(samples, axis=1, dtype=np.float32) if channels > 1 else samples
-        )
+        # 每帧扫描整首音频。mono 是引擎加载线程预混的分析用单声道——直接
+        # 引用，不在 UI 线程重复降混（10 分钟立体声实测 ≈200ms 会卡界面）。
+        if mono is not None:
+            self._waveform_samples = mono
+        elif channels > 1:
+            self._waveform_samples = np.mean(samples, axis=1, dtype=np.float32)
+        else:
+            self._waveform_samples = samples
         self._sample_rate = sample_rate
         self._channels = channels
         # 清除波形缓存
         self._peaks_cache = None
         self._peaks_cache_key = None
         self._waveform_peak_levels.clear()
+        # 声谱缓存随音频作废；声谱模式下立即重启后台计算
+        self._reset_spectrum_cache()
+        self._ensure_spectrum()
+        # 后台预热峰值层（粗层优先）：首次滚轮/缩放不再在 UI 线程全曲扫描
+        self._preheat_peak_levels()
         self._invalidate_static_layer()
         self.update()
 
@@ -392,11 +455,13 @@ class WaveformDisplay(QWidget):
         self._peaks_cache = None
         self._peaks_cache_key = None
         self._waveform_peak_levels.clear()
+        self._cancel_peak_preheat()
+        self._reset_spectrum_cache()
         self._invalidate_static_layer()
         self.update()
 
     def set_zoom(self, zoom: float):
-        self._zoom_factor = max(1.0, min(100.0, zoom))
+        self._zoom_factor = max(1.0, min(self._MAX_ZOOM, zoom))
         # 缩放变化后重新 clamp，避免当前滚动位置超出新的有效范围
         self._scroll_position = self._clamp_scroll(self._scroll_position)
         self._invalidate_static_layer()
@@ -477,8 +542,16 @@ class WaveformDisplay(QWidget):
         return int((ts - visible_start_ms) / visible_duration_ms * w)
 
     def _x_to_time(self, x: float, width: Optional[int] = None) -> int:
-        """把波形横坐标换算为时间；居中播放时同样使用滚动中的虚拟视窗。"""
-        w = self.width() if width is None else width
+        """把波形横坐标换算为时间；居中播放时同样使用滚动中的虚拟视窗。
+
+        传 width 时 x 视为绘图区坐标（测试约定）；不传时 x 是 widget 坐标，
+        声谱模式下先扣除左侧频率轴 gutter。
+        """
+        if width is not None:
+            w = width
+        else:
+            w = self._plot_width()
+            x = x - self._spectrum_axis_width()
         if self._duration_ms <= 0 or w <= 0:
             return 0
         ratio = max(0.0, min(1.0, x / w))
@@ -504,11 +577,15 @@ class WaveformDisplay(QWidget):
         return tag_list[lo:hi]
 
     def _hit_test_handle(self, x: float, y: float):
-        """命中顶部把手块：返回 (handle, ts, x_px) 或 None。仅在编辑开启且 y 在顶部带内。"""
+        """命中把手块：返回 (handle, ts, x_px) 或 None。仅在编辑开启且 y 在把手带内。
+
+        x 为 widget 坐标，声谱模式下先扣除频率轴 gutter。
+        """
         if not self._tag_edit_enabled:
             return None
-        if abs(y - self.height() / 2) > self._HANDLE_HIT_Y_BAND:
+        if abs(y - self._handle_center_y(self.height())) > self._HANDLE_HIT_Y_BAND:
             return None
+        x = x - self._spectrum_axis_width()
         best = None
         best_dx = self._HANDLE_HALF_W + 1
         for hx, handle, ts in self._hit_boxes:
@@ -540,7 +617,11 @@ class WaveformDisplay(QWidget):
         },
     )
     def _compute_waveform_peaks(self, width: int) -> Optional[List[tuple]]:
-        """从整段峰值层中截取当前窗口；每种采样粒度只计算一次。"""
+        """从整段峰值层中截取当前窗口；每种采样粒度只计算一次。
+
+        SV 式口径：每像素 min/max 峰值（外层轮廓）+ RMS 均方根（内层核心），
+        分辨率由缩放决定——粗览 bin 宽、深放大 bin 细，无独立粒度设置。
+        """
         if self._samples is None or self._duration_ms <= 0 or width <= 0:
             return None
 
@@ -563,7 +644,18 @@ class WaveformDisplay(QWidget):
         # 量化到 2 的幂，缩放/resize 时可复用少量固定层级；选不大于目标
         # 粒度的层，确保缓存不会吃掉瞬态峰值。
         bin_size = 1 << max(0, int(math.floor(math.log2(samples_per_pixel))))
-        level_min, level_max = self._waveform_peak_level(bin_size)
+        cached = self._waveform_peak_levels.get(bin_size)
+        if cached is not None:
+            self._waveform_peak_levels.move_to_end(bin_size)
+            level_min, level_max, level_rms = cached
+        else:
+            # 精确层未就绪：尝试任何**已缓存**的层（即使更粗），映射到像素。
+            # 绝不在 paint 路径扫描原始样本（10min 音频实测 52ms 会卡 UI）。
+            # 预热通常在加载后 <200ms 内完成，首次闪空帧可接受。
+            fallback = self._find_cached_fallback_level(bin_size)
+            if fallback is None:
+                return None  # 完全没有层：显示占位（中心线+空波形）
+            bin_size, (level_min, level_max, level_rms) = fallback
 
         ms_per_pixel = visible_duration_ms / width
         left_times = visible_start_ms + np.arange(width, dtype=np.float64) * ms_per_pixel
@@ -589,9 +681,17 @@ class WaveformDisplay(QWidget):
         maxs = np.maximum.reduce(
             (level_max[left_idx], level_max[center_idx], level_max[right_idx])
         )
+        # RMS：三点取最大（能量核心不会低于实际响度）
+        rmss = np.maximum.reduce(
+            (level_rms[left_idx], level_rms[center_idx], level_rms[right_idx])
+        )
         mins = np.where(valid, mins, 0.0)
         maxs = np.where(valid, maxs, 0.0)
-        peaks = [(float(lo), float(hi)) for lo, hi in zip(mins, maxs)]
+        rmss = np.where(valid, rmss, 0.0)
+        peaks = [
+            (float(lo), float(hi), float(rm))
+            for lo, hi, rm in zip(mins, maxs, rmss)
+        ]
 
         # 更新缓存
         self._peaks_cache = peaks
@@ -599,30 +699,583 @@ class WaveformDisplay(QWidget):
 
         return peaks
 
-    def _waveform_peak_level(self, bin_size: int) -> tuple[np.ndarray, np.ndarray]:
-        """惰性生成整段音频的一个峰值层，后续播放帧直接复用。"""
-        cached = self._waveform_peak_levels.get(bin_size)
-        if cached is not None:
-            return cached
+    def _find_cached_fallback_level(self, target_bin: int):
+        """找任意已缓存的峰值层（优先最细的可用层）。
+
+        粗层的 min/max/RMS 仍然真实（只是时间分辨率较低），映射到像素后
+        波形形状正确、瞬态不丢。返回 (bin_size, (mins, maxs, rmss)) 或 None。
+        """
+        best_bin = None
+        for available_bin in self._waveform_peak_levels:
+            if available_bin <= target_bin:
+                if best_bin is None or available_bin > best_bin:
+                    best_bin = available_bin
+        if best_bin is not None:
+            self._waveform_peak_levels.move_to_end(best_bin)
+            return best_bin, self._waveform_peak_levels[best_bin]
+        # 所有可用层都比目标粗——用最粗的也行（好过没有）
+        if self._waveform_peak_levels:
+            coarsest = max(self._waveform_peak_levels.keys())
+            self._waveform_peak_levels.move_to_end(coarsest)
+            return coarsest, self._waveform_peak_levels[coarsest]
+        return None
+
+    # 峰值层缓存总预算（min/max/rms 三个 float32 数组 × 各层）
+    _PEAK_LEVEL_BUDGET_BYTES = 96 * 1024 * 1024
+
+    def _trim_peak_level_cache(self) -> None:
+        """LRU 淘汰：缓存总字节超预算时逐出最久未用的层。"""
+        total = sum(
+            a.nbytes for level in self._waveform_peak_levels.values() for a in level
+        )
+        while total > self._PEAK_LEVEL_BUDGET_BYTES and len(self._waveform_peak_levels) > 1:
+            _, evicted = self._waveform_peak_levels.popitem(last=False)
+            total -= sum(a.nbytes for a in evicted)
+
+    def _note_peak_level_used(self, bin_size: int) -> None:
+        if bin_size in self._waveform_peak_levels:
+            self._waveform_peak_levels.move_to_end(bin_size)
+
+    def _cancel_peak_preheat(self) -> None:
+        """取消在途峰值预热任务并释放句柄。
+
+        任何让旧预热结果失效的路径都必须调用：新音频进入（无论长短）、
+        清除音频——否则旧 worker 会继续扫描已被替换的音频，白耗 CPU
+        与内存带宽。owner.destroyed 时 task_runner 也会自动取消。
+        """
+        cancel, self._preheat_cancel = self._preheat_cancel, None
+        if cancel is not None:
+            cancel()
+
+    def _preheat_peak_levels(self) -> None:
+        """构建 min/max/RMS 峰值层；长音频后台、短音频同步（极快）。
+
+        新音频进入时先取消旧预热——包括短音频和无音频的提前返回路径。
+        """
+        self._cancel_peak_preheat()
         samples = self._waveform_samples
-        if samples is None or len(samples) == 0:
-            empty = np.zeros(1, dtype=np.float32)
-            return empty, empty
-        full_bins, remainder = divmod(len(samples), bin_size)
-        if full_bins:
-            main = samples[:full_bins * bin_size].reshape(full_bins, bin_size)
-            mins = np.min(main, axis=1).astype(np.float32, copy=False)
-            maxs = np.max(main, axis=1).astype(np.float32, copy=False)
+        if samples is None or len(samples) < 1:
+            return
+
+        # 短音频（<64K 样本 ≈ 1.5s @44.1k）：同步构建，耗时 <1ms
+        if len(samples) < 65536:
+            from strange_uta_game.backend.infrastructure.audio import spectrum
+
+            levels = spectrum.build_peak_levels_single_pass(samples)
+            if levels:
+                self._waveform_peak_levels.update(levels)
+                self._trim_peak_level_cache()
+            return
+
+        # 长音频：后台构建（单遍归约、可取消），UI 零等待
+        samples_id = id(samples)
+
+        from strange_uta_game.frontend.workers import PeakLevelWorker
+        from strange_uta_game.frontend.editor.timing import task_runner
+
+        worker = PeakLevelWorker(samples)
+
+        def _cancel_stale() -> None:
+            worker.request_cancel()
+
+        def _release_cancel() -> None:
+            # worker 正常完成/报错后释放句柄；仅当仍是当前任务（未被更新的
+            # 预热替换）才清，避免迟到信号抹掉新任务的取消闭包。
+            if self._preheat_cancel is _cancel_stale:
+                self._preheat_cancel = None
+
+        def _merge(levels) -> None:
+            _release_cancel()
+            # 身份门禁：取消是请求式的，worker 可能在收到通知前已算完——
+            # 迟到结果不得写入新音频的缓存（第二层保护）。
+            if id(self._waveform_samples) != samples_id or not levels:
+                return
+            for b, level in levels.items():
+                if b not in self._waveform_peak_levels:
+                    self._waveform_peak_levels[b] = level
+            self._trim_peak_level_cache()
+            self._invalidate_static_layer()
+            self.update()
+
+        self._preheat_cancel = _cancel_stale
+
+        task_runner.start_task(
+            self,
+            worker,
+            on_finished=_merge,
+            on_error=lambda _msg: _release_cancel(),
+        )
+
+    # ── 显示模式 / 高级设置（齿轮对话框消费） ──
+
+    _WAVEFORM_MIN_HEIGHT = 80
+    _SPECTRUM_FFT_CHOICES = (512, 1024, 2048, 4096, 8192)
+    # 窗口重叠选项（Sonic Visualiser 口径：overlap = 1 - hop/fft）
+    _SPECTRUM_OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375)
+    # 缩放上限（与 TimelineWidget._MAX_ZOOM 保持一致）
+    _MAX_ZOOM = 1000.0
+
+    @classmethod
+    def _spectrum_hop_for(cls, fft_size: int, overlap: float) -> int:
+        """窗口重叠 → STFT 帧距（hop）。重叠越大，时间粒度越细。"""
+        divisors = {0.5: 2, 0.75: 4, 0.875: 8, 0.9375: 16}
+        return max(1, fft_size // divisors.get(overlap, 4))
+
+    def set_display_mode(self, mode: str) -> None:
+        """波形图 / 声谱图互斥切换；声谱模式需要更高的显示区。
+
+        切回波形模式时取消在途声谱计算（省 CPU），但保留已完成的缓存，
+        便于快速切回。
+        """
+        if mode not in ("waveform", "spectrum") or mode == self._display_mode:
+            return
+        self._display_mode = mode
+        self._apply_display_height()
+        self._spectrum_view_cache = None
+        if mode == "spectrum":
+            self._ensure_spectrum()
         else:
-            mins = np.empty(0, dtype=np.float32)
-            maxs = np.empty(0, dtype=np.float32)
-        if remainder:
-            tail = samples[full_bins * bin_size:]
-            mins = np.append(mins, np.float32(np.min(tail)))
-            maxs = np.append(maxs, np.float32(np.max(tail)))
-        level = (mins, maxs)
-        self._waveform_peak_levels[bin_size] = level
-        return level
+            self._cancel_spectrum_worker()
+        self._invalidate_static_layer()
+        self.updateGeometry()
+        self.update()
+
+    def set_spectrum_active(self, active: bool) -> None:
+        """活动性门禁：False 时**任何路径**都不得重启声谱计算。
+
+        状态持久化为 `_spectrum_active`——隐藏/后台期间 set_audio_data、
+        改参数、切模式都会走 `_ensure_spectrum()`，统一在此拦截；恢复可见
+        时若仍处于声谱模式则按需启动。
+        """
+        active = bool(active)
+        if active == self._spectrum_active:
+            return
+        self._spectrum_active = active
+        if active:
+            self._ensure_spectrum()
+        else:
+            self._cancel_spectrum_worker()
+
+    def set_waveform_rms_enabled(self, enabled: bool) -> None:
+        """双层波形开关：关闭后只画外层 min/max 峰值轮廓（旧行为）。"""
+        enabled = bool(enabled)
+        if enabled == self._waveform_rms_enabled:
+            return
+        self._waveform_rms_enabled = enabled
+        self._invalidate_static_layer()
+        self.update()
+
+    def set_grid_mode(self, mode: str) -> None:
+        if mode not in ("time", "bpm") or mode == self._grid_mode:
+            return
+        self._grid_mode = mode
+        self._invalidate_static_layer()
+        self.update()
+
+    def set_grid_bpm(self, bpm: float) -> None:
+        bpm = float(bpm)
+        if not 10.0 <= bpm <= 600.0 or bpm == self._grid_bpm:
+            return
+        self._grid_bpm = bpm
+        self._invalidate_static_layer()
+        self.update()
+
+    def set_grid_line_width(self, width_px: int) -> None:
+        """网格线宽（0~100px，时间/BPM 共用）；半拍/拍线/小节线按层级递进。
+
+        0 = 不绘制任何网格（含时间标签与小节号）。
+        """
+        width_px = int(max(0, min(100, width_px)))
+        if width_px == self._grid_line_width:
+            return
+        self._grid_line_width = width_px
+        self._invalidate_static_layer()
+        self.update()
+
+    def _bpm_grid_widths(self) -> tuple:
+        """三类 BPM 网格线宽（半拍, 拍线, 小节线）：保持视觉层级递进。"""
+        base = self._grid_line_width
+        return (max(1, base - 1), base, base + 1)
+
+    def set_spectrum_params(
+        self,
+        fft_size: Optional[int] = None,
+        overlap: Optional[float] = None,
+        freq_scale: Optional[str] = None,
+        dyn_range_db: Optional[int] = None,
+        display_height: Optional[int] = None,
+    ) -> None:
+        """频谱参数；FFT 窗口/重叠变化触发后台重算，其余即时生效。"""
+        changed = False
+        recompute = False
+        if (
+            fft_size is not None
+            and fft_size in self._SPECTRUM_FFT_CHOICES
+            and fft_size != self._spectrum_fft_size
+        ):
+            self._spectrum_fft_size = fft_size
+            changed = recompute = True
+        if (
+            overlap is not None
+            and overlap in self._SPECTRUM_OVERLAP_CHOICES
+            and overlap != self._spectrum_overlap
+        ):
+            self._spectrum_overlap = overlap
+            changed = recompute = True
+        if freq_scale in ("log", "linear") and freq_scale != self._spectrum_freq_scale:
+            self._spectrum_freq_scale = freq_scale
+            changed = True
+        if dyn_range_db is not None:
+            dyn_range_db = int(max(40, min(120, dyn_range_db)))
+            if dyn_range_db != self._spectrum_dyn_range_db:
+                self._spectrum_dyn_range_db = dyn_range_db
+                changed = True
+        if display_height is not None:
+            display_height = int(max(120, min(400, display_height)))
+            if display_height != self._display_height:
+                self._display_height = display_height
+                self._apply_display_height()
+                changed = True
+        if recompute:
+            self._reset_spectrum_cache()
+            self._ensure_spectrum()
+        if changed:
+            self._invalidate_static_layer()
+            self.update()
+
+    def display_settings(self) -> dict:
+        """当前显示设置的快照（齿轮对话框初始化 / timing.* 持久化共用）。"""
+        return {
+            "display_mode": self._display_mode,
+            "grid_mode": self._grid_mode,
+            "grid_bpm": self._grid_bpm,
+            "grid_line_width": self._grid_line_width,
+            "spectrum_fft_size": self._spectrum_fft_size,
+            "spectrum_overlap": self._spectrum_overlap,
+            "spectrum_freq_scale": self._spectrum_freq_scale,
+            "spectrum_dyn_range_db": self._spectrum_dyn_range_db,
+            "display_height": self._display_height,
+            "waveform_rms_enabled": self._waveform_rms_enabled,
+            "actual_spectrum_overlap": self._actual_overlap,
+        }
+
+    def spectrum_audio_source(self) -> Optional[tuple]:
+        """BPM 检测的数据源：(单声道 samples, sample_rate)，无音频时 None。"""
+        if self._waveform_samples is None or self._sample_rate <= 0:
+            return None
+        return self._waveform_samples, self._sample_rate
+
+    def _apply_display_height(self) -> None:
+        """「显示高度」经 minimumHeight 领取空间（sizeHint 会被 Expanding 预览吃掉）。
+
+        预览（Expanding）在 VBox 中吸收所有剩余空间，Preferred 的 sizeHint
+        会被忽略——必须用 minimumHeight 才能领到期望高度。预览同步让位到
+        160（由 EditorInterface 管理），确保总 min 不超出常规窗口。
+        """
+        self.setMinimumHeight(self._display_height)
+        self.updateGeometry()
+
+    def sizeHint(self):
+        from PyQt6.QtCore import QSize
+
+        return QSize(super().sizeHint().width(), int(self._display_height))
+
+    # ── 声谱后台计算（QThread + moveToThread，遵循 workers.py 约定） ──
+
+    def _reset_spectrum_cache(self) -> None:
+        """音频/FFT 变化：作废在途任务与缓存（generation 机制丢弃过期结果）。"""
+        self._cancel_spectrum_worker()
+        self._spectrum = None
+        self._actual_overlap = None  # 上一音源的降级值不残留
+        self._spectrum_state = "idle"
+        self._spectrum_progress_pct = -1
+        self._spectrum_error = ""
+        self._spectrum_view_cache = None
+        self._spectrum_view_cache_key = None
+
+    def _ensure_spectrum(self) -> None:
+        if not self._spectrum_active:
+            return  # 隐藏/后台门禁：恢复可见前不启动任何计算
+        if self._display_mode != "spectrum":
+            return
+        if self._spectrum_worker is not None:
+            return  # 已有任务在途
+        if self._waveform_samples is None or self._sample_rate <= 0:
+            return
+        overlap = self._effective_spectrum_overlap()
+        if overlap is not None:
+            expected_hop = self._spectrum_hop_for(self._spectrum_fft_size, overlap)
+            if (
+                self._spectrum is not None
+                and self._spectrum.get("fft_size") == self._spectrum_fft_size
+                and self._spectrum.get("hop") == expected_hop
+            ):
+                return
+        # overlap 为 None（超预算）时由 _start_spectrum_worker 统一置 error
+        self._start_spectrum_worker()
+
+    def _effective_spectrum_overlap(self) -> Optional[float]:
+        """基础矩阵预算内可用的最大重叠；None 表示连 50% 都超（应拒绝）。
+
+        未设门禁时 1 小时音频 @93.75% 重叠的基础矩阵约 1.18GiB（OOM 风险）。
+        """
+        return spectrum_core.pick_overlap_within_budget(
+            len(self._waveform_samples),
+            self._sample_rate,
+            self._spectrum_fft_size,
+            self._spectrum_overlap,
+        )
+
+    def _start_spectrum_worker(self) -> None:
+        overlap = self._effective_spectrum_overlap()
+        if overlap is None:
+            self._spectrum_state = "error"
+            self._spectrum_error = self.tr("音频过长：超出声谱内存预算，请降低窗口重叠率或缩短音频")
+            self._invalidate_static_layer()
+            self.update()
+            return
+        self._cancel_spectrum_worker()
+        self._spectrum_state = "computing"
+        self._spectrum_progress_pct = 0
+        self._actual_overlap = overlap  # 记录实际使用值（可能被预算降级）
+
+        worker = SpectrogramWorker(
+            self._waveform_samples,
+            self._sample_rate,
+            self._spectrum_fft_size,
+            hop=self._spectrum_hop_for(self._spectrum_fft_size, overlap),
+        )
+        self._spectrum_worker = worker
+        # 线程由 task_runner 注册表持有并自回收（不 parent 到本控件——控件
+        # 销毁不得析构运行中的线程）；槽是本控件的方法引用，控件销毁时连接
+        # 自动断开，迟到信号不会触碰已销毁的 UI。
+        from strange_uta_game.frontend.editor.timing import task_runner
+
+        task_runner.start_task(
+            self,
+            worker,
+            on_progress=self._on_spectrum_progress,
+            on_finished=self._on_spectrum_finished,
+            on_error=self._on_spectrum_error,
+            is_current=lambda w: w is self._spectrum_worker,
+        )
+        self._invalidate_static_layer()
+        self.update()
+
+    def _cancel_spectrum_worker(self) -> None:
+        """请求取消并立即返回（UI 路径禁止同步 wait 冻结界面）。
+
+        worker 分块检查取消标志（每块 ≈70ms），返回后由 task_runner 的自
+        回收链（finished → thread.quit → thread.finished → deleteLater）
+        完成退出与销毁，全程不依赖本控件存活。
+        """
+        worker = self._spectrum_worker
+        self._spectrum_worker = None
+        if worker is not None:
+            worker.request_cancel()
+            if self._spectrum_state == "computing":
+                self._spectrum_state = "idle"
+
+    def is_task_current(self, worker) -> bool:
+        """task_runner 中继的身份判定：只有当前任务的信号进入 UI 槽。"""
+        return worker is self._spectrum_worker
+
+    def _on_spectrum_progress(self, value: float) -> None:
+        if self._spectrum_worker is None or self._spectrum_state != "computing":
+            return  # 过期任务的迟到进度（中继已过滤，双保险）
+        pct = int(value * 100)
+        if pct == self._spectrum_progress_pct:
+            return
+        self._spectrum_progress_pct = pct
+        self._invalidate_static_layer()
+        self.update()
+
+    def _on_spectrum_finished(self, result: dict) -> None:
+        if result is None:
+            return  # 已取消
+        self._spectrum = result
+        self._spectrum_state = "ready"
+        self._spectrum_view_cache = None
+        self._spectrum_view_cache_key = None
+        self._invalidate_static_layer()
+        self.update()
+
+    def _on_spectrum_error(self, message: str) -> None:
+        self._spectrum_state = "error"
+        self._spectrum_error = message
+        self._invalidate_static_layer()
+        self.update()
+
+    # ── 声谱视图渲染（金字塔选层 → reduceat → LUT → QImage） ──
+
+    def _compute_spectrum_view(self, w: int, h: int) -> Optional[np.ndarray]:
+        """当前可见窗的 (w, h) uint8 视图；行 0 = 最低频段。带缓存。"""
+        spec = self._spectrum
+        if spec is None or w <= 0 or h <= 0:
+            return None
+        visible_start_ms = self._visible_start_ms()
+        visible_duration_ms = self._visible_duration_ms()
+        if visible_duration_ms <= 0:
+            return None
+        key = (
+            w,
+            h,
+            round(visible_start_ms, 1),
+            round(visible_duration_ms, 1),
+            id(spec["matrix"]),
+            self._spectrum_freq_scale,
+        )
+        if self._spectrum_view_cache_key == key and self._spectrum_view_cache is not None:
+            return self._spectrum_view_cache
+
+        matrix = spec["matrix"]
+        frames_per_ms = spec["sample_rate"] / (spec["hop"] * 1000.0)
+        frame_start = max(0, int(math.floor(visible_start_ms * frames_per_ms)))
+        frame_end = min(
+            matrix.shape[0],
+            int(math.ceil((visible_start_ms + visible_duration_ms) * frames_per_ms)) + 1,
+        )
+        if frame_end <= frame_start:
+            return None
+        level, level_matrix = self._spectrum_level_matrix(spec, frame_start, frame_end, w)
+        group_start = frame_start >> level
+        group_end = min(
+            (frame_end + (1 << level) - 1) >> level, level_matrix.shape[0]
+        )
+        sub = level_matrix[group_start:group_end]
+        if sub.shape[0] < 1:
+            return None
+        cols = spectrum_core.reduce_columns(sub, w)
+        bin_edges = spectrum_core.frequency_bin_edges(
+            cols.shape[1], spec["sample_rate"], spec["fft_size"], h,
+            self._spectrum_freq_scale,
+        )
+        view = spectrum_core.reduce_rows(cols, bin_edges)
+
+        self._spectrum_view_cache = view
+        self._spectrum_view_cache_key = key
+        return view
+
+    def _spectrum_level_matrix(self, spec: dict, frame_start: int, frame_end: int,
+                               cols: int) -> tuple:
+        """返回 (shift, 矩阵)；UI 路径不同步构建任何完整层。
+
+        - 预算内（levels 存在）：直接用金字塔第 level 层。
+        - 超预算：level ≥ coarse_mid 时用 worker 后台备好的粗层金字塔
+          （levels[level - mid]）；更深的缩放（level < mid）退回原始矩阵的
+          可见切片归约——深缩放可见帧少，扫描量远小于全矩阵。
+        """
+        levels = spec.get("levels")
+        level = self._spectrum_pick_level(spec, frame_start, frame_end, cols)
+        if levels is not None:
+            return level, levels[level]
+        mid = spec.get("coarse_mid", 0)
+        coarse = spec.get("coarse_levels") or []
+        if mid > 0 and level >= mid and (level - mid) < len(coarse):
+            return level, coarse[level - mid]
+        return 0, spec["matrix"]
+
+    def _spectrum_pick_level(self, spec: dict, frame_start: int, frame_end: int,
+                             cols: int) -> int:
+        """选层；超预算（levels=None）时按后台粗层金字塔推虚拟层深。"""
+        levels = spec.get("levels")
+        if levels is not None:
+            return spectrum_core.pick_level(levels, frame_start, frame_end, cols)
+        mid = spec.get("coarse_mid", 0)
+        coarse = spec.get("coarse_levels") or []
+        # pick_level 只用 len(levels) 计算层深，不索引内容 → 占位列表即可
+        return spectrum_core.pick_level(
+            [None] * (mid + len(coarse)), frame_start, frame_end, cols
+        )
+
+    def _spectrum_lut(self) -> np.ndarray:
+        """uint8 dB → RGBA 颜色查找表；随动态范围与主题背景变化重建。
+
+        矩阵编码为 -128dB→0、0dB→255，动态范围 R(dB) 的可见下沿
+        (-R dB) 对应 u = (128 - R)·255/128（方向不能反，否则 R 越大
+        截得越狠）。LUT 内部把可见段拉伸到完整色带。
+        """
+        bg = theme.waveform_bg
+        bg_rgb = (bg.red(), bg.green(), bg.blue())
+        floor_u = int(round((128 - self._spectrum_dyn_range_db) * 255.0 / 128.0))
+        floor_u = max(0, min(255, floor_u))
+        key = (bg_rgb, floor_u)
+        if self._spectrum_lut_cache is None or self._spectrum_lut_cache_key != key:
+            self._spectrum_lut_cache = spectrum_core.build_colormap_lut(bg_rgb, floor_u)
+            self._spectrum_lut_cache_key = key
+        return self._spectrum_lut_cache
+
+    def _draw_spectrum_image(self, painter: QPainter, w: int, h: int) -> None:
+        """频谱热图本体（计算中显示进度占位文字）。"""
+        if self._samples is None:
+            return
+        if self._spectrum_state != "ready" or self._spectrum is None:
+            if self._spectrum_state == "error":
+                text = self.tr("声谱计算失败")
+            else:
+                text = self.tr("声谱计算中") + f" {max(0, self._spectrum_progress_pct)}%"
+            painter.setPen(theme.text_hint)
+            painter.drawText(
+                QRect(0, 0, w, h), Qt.AlignmentFlag.AlignCenter, text
+            )
+            return
+        view = self._compute_spectrum_view(w, h)
+        if view is None:
+            return
+        lut = self._spectrum_lut()
+        # 翻转行序（顶行 = 高频）并转成 QImage 需要的 (H, W, 4) 行主序。
+        rgba = np.ascontiguousarray(lut[np.flipud(view.T)])
+        buffer = rgba.tobytes()
+        image = QImage(buffer, w, h, w * 4, QImage.Format.Format_RGBA8888)
+        painter.drawImage(0, 0, image)
+
+    def _draw_freq_axis(self, painter: QPainter, axis_w: int, h: int) -> None:
+        """声谱左侧的独立频率轴区：背景 + 分隔线 + 刻度标签。
+
+        轴区与时间绘图区物理分离——tag/热图/播放头都在轴区右侧，频率刻度
+        不再被视口左缘的 tag 覆盖，反之亦然。
+        """
+        painter.fillRect(0, 0, axis_w, h, theme.waveform_bg)
+        painter.setPen(QPen(theme.border_primary, 1))
+        painter.drawLine(axis_w - 1, 0, axis_w - 1, h)
+        if h < 80:
+            return
+        nyquist = self._sample_rate / 2.0
+        if self._spectrum_freq_scale == "log":
+            f_lo, f_hi = spectrum_core.LOG_SCALE_MIN_HZ, nyquist
+            marks = (50, 100, 200, 500, 1000, 2000, 4000, 8000, 16000)
+
+            def freq_pos(f: float) -> float:
+                return math.log(f / f_lo) / math.log(f_hi / f_lo)
+        else:
+            f_lo, f_hi = 0.0, nyquist
+            step = 4000 if nyquist > 12000 else 2000
+            marks = tuple(range(step, int(nyquist) + 1, step))
+
+            def freq_pos(f: float) -> float:
+                return f / f_hi
+
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        last_y = None
+        for f in marks:
+            if not f_lo < f < f_hi:
+                continue
+            y = int((1.0 - freq_pos(f)) * (h - 1))
+            if last_y is not None and abs(y - last_y) < 26:
+                continue
+            last_y = y
+            text = str(int(f)) if f < 1000 else f"{f / 1000:g}k"
+            painter.setPen(theme.text_secondary)
+            painter.drawText(
+                QRect(2, y - 8, axis_w - 6, 16),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                text,
+            )
+            # 小刻度线
+            painter.setPen(QPen(theme.border_primary, 1))
+            painter.drawLine(axis_w - 5, y, axis_w - 1, y)
 
     @log_slow_method(
         "timeline.paint",
@@ -671,8 +1324,24 @@ class WaveformDisplay(QWidget):
             self._static_layer_key = layer_key
         painter.drawPixmap(0, 0, self._static_layer)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self._draw_playhead(painter, w, h, visible_start_ms, visible_duration_ms)
-        self._draw_drag_badge(painter, w, h, visible_start_ms, visible_duration_ms)
+        # 播放头/拖拽徽标画在轴区右侧的绘图区内（与静态层同一坐标系）
+        axis = self._spectrum_axis_width()
+        painter.save()
+        if axis:
+            painter.translate(axis, 0)
+        try:
+            self._draw_playhead(painter, w - axis, h, visible_start_ms, visible_duration_ms)
+            self._draw_drag_badge(painter, w - axis, h, visible_start_ms, visible_duration_ms)
+        finally:
+            painter.restore()
+
+    def _spectrum_axis_width(self) -> int:
+        """声谱模式左侧的频率轴 gutter 宽度（tag/热图不进入，防相互覆盖）。"""
+        return _SPECTRUM_AXIS_W if self._display_mode == "spectrum" else 0
+
+    def _plot_width(self) -> int:
+        """绘图区宽度（扣除频率轴 gutter）。"""
+        return max(1, self.width() - self._spectrum_axis_width())
 
     def _render_static_layer(
         self,
@@ -696,17 +1365,40 @@ class WaveformDisplay(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
-        self._draw_time_grid(painter, w, h, visible_start_ms, visible_end_ms)
-        self._draw_waveform(painter, w, h)
-        self._draw_playback_range(
-            painter, w, h, visible_start_ms, visible_duration_ms
-        )
-        self._draw_time_tags(painter, w, h, visible_start_ms, visible_end_ms)
+        # 频率轴 gutter：热图/网格/tag/播放头统一从轴区右侧开始（tag 不再
+        # 覆盖频率刻度，频率刻度也不盖 tag——两者物理分离）。
+        axis = self._spectrum_axis_width()
+        painter.save()
+        if axis:
+            painter.translate(axis, 0)
+        try:
+            plot_w = w - axis
+            # 频谱热图是不透明的整幅位图，必须垫在网格/标签之下；
+            # 波形是描线，画在网格之上即可。
+            if self._display_mode == "spectrum":
+                self._draw_spectrum_image(painter, plot_w, h)
+            self._draw_time_grid(painter, plot_w, h, visible_start_ms, visible_end_ms)
+            if self._display_mode != "spectrum":
+                self._draw_waveform(painter, plot_w, h)
+            self._draw_playback_range(
+                painter, plot_w, h, visible_start_ms, visible_duration_ms
+            )
+            self._draw_time_tags(painter, plot_w, h, visible_start_ms, visible_end_ms)
+        finally:
+            painter.restore()
+        # 轴区：不透明背景 + 分隔线 + 频率刻度（与绘图区物理分离）
+        if axis:
+            self._draw_freq_axis(painter, axis, h)
         painter.end()
         return layer
 
     def _draw_time_grid(self, painter: QPainter, w: int, h: int,
                         visible_start_ms: float, visible_end_ms: float):
+        if self._grid_line_width <= 0:
+            return  # 网格线宽 0 = 不绘制网格（时间/BPM 共用口径）
+        if self._grid_mode == "bpm" and self._grid_bpm > 0:
+            self._draw_bpm_grid(painter, w, h, visible_start_ms, visible_end_ms)
+            return
         visible_duration = visible_end_ms - visible_start_ms
         if visible_duration <= 10000:
             grid_interval = 1000
@@ -717,7 +1409,8 @@ class WaveformDisplay(QWidget):
         else:
             grid_interval = 60000
 
-        painter.setPen(QPen(theme.border_primary, 1))
+        grid_width = self._grid_line_width
+        painter.setPen(QPen(theme.border_primary, grid_width))
         first_grid = int(visible_start_ms / grid_interval) * grid_interval
         for t in range(first_grid, int(visible_end_ms) + 1, grid_interval):
             if visible_duration > 0:
@@ -729,9 +1422,68 @@ class WaveformDisplay(QWidget):
                 s = t // 1000
                 time_text = f"{s // 60}:{s % 60:02d}"
                 painter.drawText(x + 2, 12, time_text)
-                painter.setPen(QPen(theme.border_primary, 1))
+                painter.setPen(QPen(theme.border_primary, grid_width))
+
+    def _draw_bpm_grid(self, painter: QPainter, w: int, h: int,
+                       visible_start_ms: float, visible_end_ms: float) -> None:
+        """BPM 网格：拍线、每 4 拍小节线（加重 + 小节号）、深放大时半拍细分。"""
+        if self._grid_line_width <= 0:
+            return  # 网格线宽 0 = 不绘制网格
+        visible_duration = visible_end_ms - visible_start_ms
+        if visible_duration <= 0:
+            return
+        beat_ms = 60000.0 / self._grid_bpm
+        pixels_per_beat = beat_ms / visible_duration * w
+        first_beat = int(math.ceil(visible_start_ms / beat_ms))
+        last_beat = int(math.floor(visible_end_ms / beat_ms))
+        if last_beat < first_beat:
+            return
+
+        half, beat, bar = self._bpm_grid_widths()
+        half_color = QColor(theme.border_primary)
+        half_color.setAlpha(110)
+        pen_half = QPen(half_color, half)
+        pen_beat = QPen(theme.border_primary, beat)
+        pen_bar = QPen(theme.waveform_line, bar)
+
+        # 半拍细分线（放大到一拍 ≥28px 才画，避免糊成一片）
+        if pixels_per_beat >= 28:
+            painter.setPen(pen_half)
+            for b in range(first_beat, last_beat + 1):
+                x = int(((b + 0.5) * beat_ms - visible_start_ms) / visible_duration * w)
+                if 0 <= x < w:
+                    painter.drawLine(x, 0, x, h)
+
+        # 拍线与小节线（4/4：每 4 拍一个小节）。
+        # 像素密度门控 + 步长遍历：拍距小于 ~4px 时按 2 的幂提升步长并对齐
+        # 小节（4 拍），使绘制的线条数量与窗口宽度同量级——600BPM × 2 小时
+        # 全览时逐拍空转循环实测 173ms，会卡 UI。
+        beat_step = 1
+        while beat_step * pixels_per_beat < 4 and beat_step < 4096:
+            beat_step *= 2
+        if beat_step > 1:
+            beat_step = max(beat_step, 4)  # 粗化时至少按小节
+            first_beat += (-first_beat) % beat_step
+        draw_beats = beat_step == 1
+        for b in range(first_beat, last_beat + 1, beat_step):
+            x = int((b * beat_ms - visible_start_ms) / visible_duration * w)
+            if not 0 <= x < w:
+                continue
+            if b % 4 == 0:
+                painter.setPen(pen_bar)
+                painter.drawLine(x, 0, x, h)
+                painter.setPen(theme.text_secondary)
+                painter.drawText(x + 2, 12, str(b // 4 + 1))
+            elif draw_beats:
+                painter.setPen(pen_beat)
+                painter.drawLine(x, 0, x, h)
 
     def _draw_waveform(self, painter: QPainter, w: int, h: int):
+        """双层波形（Sonic Visualiser / Audacity 口径）：
+
+        - 外层：min/max 峰值轮廓（半透明 fill），展示瞬态极值；
+        - 内层：RMS 均方根核心带（更亮的 line 色），展示持续响度。
+        """
         peaks = self._compute_waveform_peaks(w)
         if not peaks:
             return
@@ -739,18 +1491,25 @@ class WaveformDisplay(QWidget):
         mid_y = h // 2
         amplitude_scale = h / 2.0 * 0.8
 
+        # 外层：min/max 峰值轮廓
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(theme.waveform_fill)
-
-        # 上半部分
-        for i, (_, max_val) in enumerate(peaks):
+        for i, (_, max_val, _rms) in enumerate(peaks):
             y = int(mid_y - max_val * amplitude_scale)
             painter.drawRect(i, y, 1, mid_y - y)
-
-        # 下半部分
-        for i, (min_val, _) in enumerate(peaks):
+        for i, (min_val, _, _rms) in enumerate(peaks):
             y = int(mid_y - min_val * amplitude_scale)
             painter.drawRect(i, mid_y, 1, y - mid_y)
+
+        # 内层：RMS 核心带（亮色，覆盖在外层轮廓之上；上下各自钳在峰值内）
+        if self._waveform_rms_enabled:
+            painter.setBrush(theme.waveform_line)
+            for i, (min_val, max_val, rms) in enumerate(peaks):
+                if rms <= 0.0:
+                    continue
+                top = int(mid_y - min(rms, abs(max_val)) * amplitude_scale)
+                bottom = int(mid_y + min(rms, abs(min_val)) * amplitude_scale)
+                painter.drawRect(i, top, 1, bottom - top)
 
         # 中心线
         painter.setPen(QPen(theme.waveform_line, 1))
@@ -812,10 +1571,11 @@ class WaveformDisplay(QWidget):
                           fm, text: str, color, text_w: int) -> None:
         """带半透明背景底片绘制标签文字：在文字后铺一层接近不透明的背景色底，
         把文字从蓝色波形上分离出来，可读性显著优于细光晕，且仍透出少量波形。
+        声谱模式下底片更不透明——热力图颜色杂乱，需要更强的分离。
         """
         top = label_y - fm.ascent()
         plate = QColor(theme.waveform_bg)
-        plate.setAlpha(225)
+        plate.setAlpha(245 if self._display_mode == "spectrum" else 225)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(plate))
         painter.drawRoundedRect(QRect(x - 2, top - 1, text_w + 4, fm.height() + 1), 2, 2)
@@ -834,7 +1594,7 @@ class WaveformDisplay(QWidget):
         painter.setFont(font)
         fm = painter.fontMetrics()
         label_y = fm.ascent() + 1  # 所有标签统一贴顶显示，竖线在其下方展开
-        # 把手已移至波形竖直中央，与顶部标签天然分离，标签无需再右移让位
+        # 把手贴近顶部标签轨道（声谱）或波形竖直中央（波形），与顶部标签分离
         label_dx = 2
         show_char = self._tag_char_enabled
         # 注音显示以字符显示为前提：字符关则注音也不显示
@@ -843,24 +1603,41 @@ class WaveformDisplay(QWidget):
         normal_color = theme.accent_warning
         warn_color = theme.timetag_nonmonotonic
 
+        # 声谱模式：竖线从顶部轨道一直延伸进内容区（把手在轨道下沿），
+        # 并加高对比 halo——inferno 色带覆盖紫/红/橙/黄，语义色竖线单靠
+        # 颜色在部分区域不可辨；警告 tag 额外用虚线区分（两模式一致）。
+        is_spec = self._display_mode == "spectrum"
+        if is_spec:
+            line_top, line_bot = 0.0, 0.92
+            warn_top, warn_bot = 0.0, 0.96
+        else:
+            line_top, line_bot = 0.2, 0.8
+            warn_top, warn_bot = 0.1, 0.9
+
         # ── pass 1：竖线（语义色不变，拖拽中的选中标签按 delta 平移）；收集可见标签 ──
         # entries：(x, tag, is_warning, color)
         entries: List[Tuple[int, TimeTag, bool, object]] = []
 
-        def _draw_line(tag: TimeTag, color, width_px: int, y_top_ratio: float, y_bot_ratio: float, is_warning: bool):
+        def _draw_line(tag: TimeTag, color, width_px: int, y_top: float, y_bot: float, is_warning: bool):
             ts = self._draw_ts(tag)
             if not (visible_start_ms <= ts <= visible_end_ms):
                 return
             x = self._ts_to_x(ts, visible_start_ms, visible_duration, w)
-            painter.setPen(QPen(color, width_px))
-            painter.drawLine(x, int(h * y_top_ratio), x, int(h * y_bot_ratio))
+            if is_spec:
+                painter.setPen(QPen(theme.waveform_bg, width_px + 3))
+                painter.drawLine(x, int(h * y_top), x, int(h * y_bot))
+            pen = QPen(color, width_px)
+            if is_warning:
+                pen.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(pen)
+            painter.drawLine(x, int(h * y_top), x, int(h * y_bot))
             entries.append((x, tag, is_warning, color))
 
         # A：只遍历可见窗内的标签（列表已按 ts 排序，二分定位），把每帧 O(N) 降到 O(可见数)
         for tag in self._visible_slice(self._time_tags, visible_start_ms, visible_end_ms):
-            _draw_line(tag, normal_color, 2, 0.2, 0.8, False)
+            _draw_line(tag, normal_color, 2, line_top, line_bot, False)
         for tag in self._visible_slice(self._warning_time_tags, visible_start_ms, visible_end_ms):
-            _draw_line(tag, warn_color, 3, 0.1, 0.9, True)
+            _draw_line(tag, warn_color, 3, warn_top, warn_bot, True)
 
         # ── pass 2：标签文字按优先级放置，避免重叠（先画，把手随后覆盖其上）──
         # 优先级：选中的标签无条件显示；其余按 x 从左到右贪心，左侧优先占位。
@@ -880,11 +1657,11 @@ class WaveformDisplay(QWidget):
         for a, b, tag, color, text in self._resolve_label_layout(labels):
             self._draw_label_plate(painter, a, label_y, fm, text, color, b - a)
 
-        # ── pass 3：把手居于波形竖直中央（仅编辑开启）。与顶部标签天然分离。
+        # ── pass 3：把手贴近顶部标签轨道（声谱）或波形竖直中央（波形）。仅编辑开启。
         # 密度门控：相邻把手过近则跳过（不绘制 / 不可命中）──
         if self._tag_edit_enabled:
             sel_color = theme.accent_secondary
-            cy = h // 2
+            cy = int(self._handle_center_y(h))
             last_x = None
             for x, tag, is_warning, color in sorted(entries, key=lambda e: e[0]):
                 if last_x is not None and (x - last_x) < self._MIN_HANDLE_SPACING:
@@ -893,8 +1670,8 @@ class WaveformDisplay(QWidget):
                 selected = tag.handle in self._selected_handles
                 half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
                 rect = QRect(x - half, cy - self._HANDLE_HEIGHT // 2, half * 2, self._HANDLE_HEIGHT)
-                # 实心色块（选中=蓝，未选中=标签语义色）+ 背景色描边，使其在波形上清晰可辨
-                painter.setPen(QPen(theme.waveform_bg, 1))
+                # 实心色块（选中=蓝，未选中=标签语义色）+ 背景色描边，声谱模式描边加宽
+                painter.setPen(QPen(theme.waveform_bg, 2 if is_spec else 1))
                 painter.setBrush(QBrush(sel_color if selected else color))
                 painter.drawRect(rect)
                 self._hit_boxes.append((x, tag.handle, tag.ts))
@@ -1042,7 +1819,7 @@ class WaveformDisplay(QWidget):
                 else:
                     return
             visible_duration_ms = self._visible_duration_ms()
-            raw_delta = (x - self._press_x) / self.width() * visible_duration_ms
+            raw_delta = (x - self._press_x) / self._plot_width() * visible_duration_ms
             self._drag_delta_ms = self._clamp_drag_delta(int(round(raw_delta)))
             self.update()
             return
@@ -1055,7 +1832,7 @@ class WaveformDisplay(QWidget):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
         if self._is_panning:
             visible_duration_ms = self._visible_duration_ms()
-            delta_ms = delta_x / self.width() * visible_duration_ms
+            delta_ms = delta_x / self._plot_width() * visible_duration_ms
             new_scroll = self._clamp_scroll(
                 self._pan_start_scroll - delta_ms / self._duration_ms)
             if new_scroll != self._scroll_position:
@@ -1122,10 +1899,17 @@ class WaveformDisplay(QWidget):
 
         if a0.modifiers() & Qt.KeyboardModifier.ControlModifier:
             new_zoom = self._zoom_factor * (1.2 if delta > 0 else 1 / 1.2)
-            new_zoom = max(1.0, min(100.0, new_zoom))
+            new_zoom = max(1.0, min(self._MAX_ZOOM, new_zoom))
 
             if new_zoom != self._zoom_factor:
-                mouse_ratio = a0.position().x() / max(1, self.width())
+                mouse_ratio = max(
+                    0.0,
+                    min(
+                        1.0,
+                        (a0.position().x() - self._spectrum_axis_width())
+                        / max(1, self._plot_width()),
+                    ),
+                )
                 visible_start = self._scroll_position
                 visible_duration = 1.0 / self._zoom_factor
                 audio_position = visible_start + mouse_ratio * visible_duration
@@ -1163,21 +1947,32 @@ class TimelineWidget(QWidget):
 
     seek_requested = pyqtSignal(int)
     waveform_visibility_changed = pyqtSignal(bool)
+    # 显示设置变化（display_settings() 的键），timing_interface 持久化用
+    display_settings_changed = pyqtSignal(dict)
+    # 声谱区实际显示高度变化（齿轮弹窗「实际 N px」提示实时同步）
+    actual_spectrum_height_changed = pyqtSignal(int)
     tag_clicked = pyqtSignal(int, int, int, bool)
     tags_drag_committed = pyqtSignal(object, int)
 
     # 横向滚动条整数分辨率：把"整段时长"映射为 [0, _SCROLL_SCALE] 个单位，
     # pageStep = 可见时间窗占比（_SCROLL_SCALE / zoom），使滑块长度随缩放自动伸缩。
     _SCROLL_SCALE = 100000
+    # 缩放上限：1000x 时 3 分钟歌曲的可见窗 ≈0.18s，可逐字核对瞬态
+    _MAX_ZOOM = 1000.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._duration_ms = 0
         self._waveform_visible = True
         self._zoom_enabled = True
+        # 高级设置对话框的强引用（非模态窗口，销毁前不回收）
+        self._advanced_dialog = None
         # 程序化 setValue 时抑制缩放滑条回调，避免反馈环（但不能 blockSignals，
         # 否则 qfluentwidgets Slider 的 valueChanged→_adjustHandlePos 抓手不跟动）
         self._suppress_zoom_slider = False
+        # 声谱活动性合成：波形开关请求 × 应用/窗口可见性
+        self._spectrum_requested = True
+        self._app_visible = True
         self._init_ui()
 
     def changeEvent(self, event):
@@ -1190,6 +1985,8 @@ class TimelineWidget(QWidget):
                 # pseudo 模式下需要我们的 tr 接管才能显示 ⟦⟧。
                 self.switch_waveform.setOnText(self.tr("开"))
                 self.switch_waveform.setOffText(self.tr("关"))
+            if hasattr(self, "btn_waveform_settings"):
+                self.btn_waveform_settings.setToolTip(self.tr("波形图高级设置"))
             # 音频名标签：用布尔 flag 标记是否是占位，不靠字符串比较——
             # 切到 ja_JP 后 "未加载音频" 变成 "音声未読み込み"，再切到
             # en_US 时字符串比较失败导致不刷新。
@@ -1213,10 +2010,22 @@ class TimelineWidget(QWidget):
         self.waveform_display.tag_clicked.connect(self.tag_clicked.emit)
         self.waveform_display.tags_drag_committed.connect(self.tags_drag_committed.emit)
         layout.addWidget(self.waveform_display, stretch=1)
+        # 显示区高度变化（含模式/期望/窗口变化）→ 实时推送实际显示高度
+        self.waveform_display.installEventFilter(self)
 
-        # 底部控制栏
-        bottom_layout = QHBoxLayout()
-        bottom_layout.setContentsMargins(4, 0, 4, 2)
+        # 底部控制栏：独立容器 + 明确最小高度 + 不透明背景。
+        # 不能用裸 QHBoxLayout——空间不足时 WaveformDisplay 的大 minimumHeight
+        # 会与底栏控件重叠（曾实测声谱侵入底栏 34~274px）。
+        self._bottom_bar = QWidget(self)
+        self._bottom_bar.setAutoFillBackground(True)
+        self._bottom_bar.setMinimumHeight(28)
+        # 垂直 Fixed: 波形区隐藏时底栏不被布局拉伸(否则产生大块空白)
+        from PyQt6.QtWidgets import QSizePolicy as _SP
+        self._bottom_bar.setSizePolicy(
+            _SP.Policy.Preferred, _SP.Policy.Fixed
+        )
+        bottom_layout = QHBoxLayout(self._bottom_bar)
+        bottom_layout.setContentsMargins(4, 2, 4, 2)
         bottom_layout.setSpacing(8)
 
         # 缩放控制（对数刻度：滑条 0-10000 线性对应 zoom 1x-100x 对数）
@@ -1253,6 +2062,14 @@ class TimelineWidget(QWidget):
         self.lbl_audio_name.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         bottom_layout.addWidget(self.lbl_audio_name)
 
+        # 波形图高级设置（齿轮）：显示模式 / BPM 网格 / 频谱参数
+        self.btn_waveform_settings = TransparentToolButton(FluentIcon.SETTING, self)
+        self.btn_waveform_settings.setFixedSize(24, 24)
+        self.btn_waveform_settings.setIconSize(QSize(14, 14))
+        self.btn_waveform_settings.setToolTip(self.tr("波形图高级设置"))
+        self.btn_waveform_settings.clicked.connect(self._on_waveform_settings_clicked)
+        bottom_layout.addWidget(self.btn_waveform_settings)
+
         # 波形显示开关
         self.switch_waveform = SwitchButton(self)
         self.switch_waveform.setChecked(True)
@@ -1265,7 +2082,63 @@ class TimelineWidget(QWidget):
         self.switch_waveform.checkedChanged.connect(self._on_waveform_visibility_changed)
         bottom_layout.addWidget(self.switch_waveform)
 
-        layout.addLayout(bottom_layout)
+        layout.addWidget(self._bottom_bar)
+
+    def sizeHint(self):
+        """高度提示: 波形可见 = 显示区 minimumHeight + 底栏; 隐藏 = 仅底栏.
+
+        用逻辑状态 _waveform_visible 而非 isVisible()——后者在父控件
+        未 show 时恒为 False. minimumHeight 由 _apply_display_height 设置
+        为用户期望的显示高度（同时是布局领取空间的手段）.
+        """
+        from PyQt6.QtCore import QSize
+
+        bar = (
+            self._bottom_bar.minimumHeight()
+            if hasattr(self, "_bottom_bar") else 28
+        )
+        spacing = self.layout().spacing() if self.layout() is not None else 2
+        if self._waveform_visible:
+            height = (
+                self.waveform_display.minimumHeight() + bar + spacing + 4
+            )
+        else:
+            height = bar + 4  # 仅底栏
+        return QSize(super().sizeHint().width(), height)
+
+    def actual_spectrum_display_height(self) -> int:
+        """当前实际显示的声谱区高度（弹窗提示用，区别于期望高度）。"""
+        return self.waveform_display.height()
+
+    def bottom_bar_height(self) -> int:
+        """底部控制栏（缩放/滚动/齿轮/开关）的当前高度。"""
+        return self._bottom_bar.height() or self._bottom_bar.minimumHeight()
+
+    def set_spectrum_active(self, active: bool) -> None:
+        """波形区显示开关变化（与全局可见性相与后下发到显示区）。"""
+        self._spectrum_requested = active
+        self._sync_spectrum_activity()
+
+    def set_app_visible(self, visible: bool) -> None:
+        """应用/窗口可见性变化（最小化、切后台）——不可见时暂停在途计算，
+        回到前台且仍处于声谱模式时按需恢复。"""
+        if visible == self._app_visible:
+            return
+        self._app_visible = visible
+        self._sync_spectrum_activity()
+
+    def _sync_spectrum_activity(self) -> None:
+        self.waveform_display.set_spectrum_active(
+            self._spectrum_requested and self._app_visible
+        )
+
+    def eventFilter(self, obj, event):
+        if (
+            obj is self.waveform_display
+            and event.type() == QEvent.Type.Resize
+        ):
+            self.actual_spectrum_height_changed.emit(self.waveform_display.height())
+        return super().eventFilter(obj, event)
 
     def set_duration(self, ms: int):
         self._duration_ms = ms
@@ -1304,11 +2177,26 @@ class TimelineWidget(QWidget):
     def clear_tag_selection(self) -> None:
         self.waveform_display.clear_tag_selection()
 
-    def set_audio_data(self, samples: np.ndarray, sample_rate: int, channels: int):
-        self.waveform_display.set_audio_data(samples, sample_rate, channels)
+    def set_audio_data(
+        self,
+        samples: np.ndarray,
+        sample_rate: int,
+        channels: int,
+        mono: Optional[np.ndarray] = None,
+    ):
+        self.waveform_display.set_audio_data(samples, sample_rate, channels, mono=mono)
+        # 非模态弹窗可能保持打开：立即推送新音源 + 刷新实际重叠率提示
+        dialog = getattr(self, "_advanced_dialog", None)
+        if dialog is not None:
+            dialog.set_audio_source(self.waveform_display.spectrum_audio_source())
+            dialog.refresh_overlap_hint(self.waveform_display.display_settings())
 
     def clear_audio_data(self):
         self.waveform_display.clear_audio_data()
+        dialog = getattr(self, "_advanced_dialog", None)
+        if dialog is not None:
+            dialog.set_audio_source(None)
+            dialog.refresh_overlap_hint(self.waveform_display.display_settings())
         self._audio_name_is_placeholder = True
         self.lbl_audio_name.setText(self.tr("未加载音频"))
 
@@ -1329,18 +2217,18 @@ class TimelineWidget(QWidget):
         self.zoom_slider.setEnabled(enabled)
         self.zoom_label.setEnabled(enabled)
 
-    # ---- 缩放对数刻度转换（zoom 范围 1x-100x，slider 范围 0-10000）----
+    # ---- 缩放对数刻度转换（zoom 范围 1x-1000x，slider 范围 0-10000）----
 
     @staticmethod
     def _slider_to_zoom(value: int) -> float:
         """滑条整数值 → 实际放大倍数（对数映射）。"""
-        return 100.0 ** (value / 10000.0)
+        return TimelineWidget._MAX_ZOOM ** (value / 10000.0)
 
     @staticmethod
     def _zoom_to_slider(zoom: float) -> int:
         """实际放大倍数 → 滑条整数值（对数映射）。"""
-        zoom = max(1.0, min(100.0, zoom))
-        return int(round(math.log(zoom) / math.log(100.0) * 10000))
+        zoom = max(1.0, min(TimelineWidget._MAX_ZOOM, zoom))
+        return int(round(math.log(zoom) / math.log(TimelineWidget._MAX_ZOOM) * 10000))
 
     # ---- 回调 ----
 
@@ -1393,16 +2281,121 @@ class TimelineWidget(QWidget):
         position = value / self._SCROLL_SCALE
         self.waveform_display.set_scroll_position(position)
 
-    def _on_waveform_visibility_changed(self, checked: bool):
+    def _apply_waveform_visibility(self, checked: bool) -> None:
+        """统一可见性处理入口: 只在此处改状态/发信号."""
+        if checked == self._waveform_visible:
+            return  # 相同状态的重复设置直接返回(不发信号)
         self._waveform_visible = checked
         self.waveform_display.setVisible(checked)
+        # 不直接下发 set_spectrum_active——那会绕过 _app_visible 后台门禁
+        #(应用后台时切开关会重启声谱 worker). 统一走 _sync_spectrum_activity.
+        self._sync_spectrum_activity()
+        # 波形隐藏/恢复后时间轴高度变化, 需重新协商布局
+        self.updateGeometry()
         self.waveform_visibility_changed.emit(checked)
+
+    def _on_waveform_visibility_changed(self, checked: bool):
+        self._apply_waveform_visibility(checked)
 
     def is_waveform_visible(self) -> bool:
         return self._waveform_visible
 
     def set_waveform_visible(self, visible: bool):
-        self._waveform_visible = visible
+        if visible == self._waveform_visible:
+            return  # 去重(P3-1: 不发重复信号)
+        # 只改开关状态, 由 checkedChanged -> _on_waveform_visibility_changed
+        # -> _apply_waveform_visibility 统一处理(信号只发一次)
         self.switch_waveform.setChecked(visible)
-        self.waveform_display.setVisible(visible)
-        self.waveform_visibility_changed.emit(visible)
+
+    # ---- 显示模式 / 高级设置（齿轮对话框） ----
+
+    def _on_waveform_settings_clicked(self):
+        from strange_uta_game.frontend.editor.timing.waveform_advanced_dialog import (
+            WaveformAdvancedDialog,
+        )
+
+        dialog = self._advanced_dialog
+        actual = self.actual_spectrum_display_height()
+        if dialog is not None:
+            # 已打开（可能只是被用户关闭隐藏）：刷新音源/实际高度后重新显示
+            dialog.set_audio_source(self.waveform_display.spectrum_audio_source())
+            dialog.set_height_cap(actual)
+            dialog.refresh_overlap_hint(self.waveform_display.display_settings())
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+            return
+        # 普通非模态顶层窗口：以主窗口为锚点定位/管理生命周期，不遮挡其他区域
+        dialog = WaveformAdvancedDialog(
+            self.waveform_display.display_settings(),
+            self.waveform_display.spectrum_audio_source(),
+            parent=self.window(),
+        )
+        dialog.applied.connect(self._apply_display_settings)
+        dialog.destroyed.connect(self._on_advanced_dialog_destroyed)
+        # 实际显示高度变化 → 弹窗「实际 N px」提示实时同步
+        #（拖滑条/窗口变化/预览让位都会改显示区高度）
+        self.actual_spectrum_height_changed.connect(dialog.set_height_cap)
+        self._advanced_dialog = dialog  # 强引用，销毁前不回收
+        dialog.set_height_cap(actual)  # 首开也要立即提示当前实际显示高度
+        dialog.show()
+
+    def _on_advanced_dialog_destroyed(self, *_args) -> None:
+        self._advanced_dialog = None
+
+    def _apply_display_settings(self, settings: dict):
+        """把对话框（或持久化设置）施加到波形区；实际变化时向外发持久化信号。"""
+        wd = self.waveform_display
+        before = wd.display_settings()
+        wd.set_display_mode(settings.get("display_mode", "waveform"))
+        wd.set_grid_mode(settings.get("grid_mode", "time"))
+        wd.set_grid_bpm(float(settings.get("grid_bpm", 120.0)))
+        wd.set_grid_line_width(int(settings.get("grid_line_width", 2)))
+        wd.set_waveform_rms_enabled(bool(settings.get("waveform_rms_enabled", True)))
+        wd.set_spectrum_params(
+            fft_size=settings.get("spectrum_fft_size"),
+            overlap=settings.get("spectrum_overlap"),
+            freq_scale=settings.get("spectrum_freq_scale"),
+            dyn_range_db=settings.get("spectrum_dyn_range_db"),
+            display_height=settings.get("display_height"),
+        )
+        after = wd.display_settings()
+        if after != before:
+            self.display_settings_changed.emit(dict(after))
+        # 刷新弹窗的实际重叠率提示（预算可能在本次设置变化后降/升级）
+        dialog = getattr(self, "_advanced_dialog", None)
+        if dialog is not None and hasattr(dialog, "refresh_overlap_hint"):
+            dialog.refresh_overlap_hint(after)
+
+    def set_display_mode(self, mode: str) -> None:
+        self.waveform_display.set_display_mode(mode)
+
+    def set_waveform_rms_enabled(self, enabled: bool) -> None:
+        """双层波形开关：关闭后只画外层 min/max 峰值轮廓（旧行为）。"""
+        enabled = bool(enabled)
+        if enabled == self._waveform_rms_enabled:
+            return
+        self._waveform_rms_enabled = enabled
+        self._invalidate_static_layer()
+        self.update()
+
+    def set_grid_mode(self, mode: str) -> None:
+        self.waveform_display.set_grid_mode(mode)
+
+    def set_grid_bpm(self, bpm: float) -> None:
+        self.waveform_display.set_grid_bpm(bpm)
+
+    def set_spectrum_params(
+        self,
+        fft_size: Optional[int] = None,
+        overlap: Optional[float] = None,
+        freq_scale: Optional[str] = None,
+        dyn_range_db: Optional[int] = None,
+        display_height: Optional[int] = None,
+    ) -> None:
+        self.waveform_display.set_spectrum_params(
+            fft_size, overlap, freq_scale, dyn_range_db, display_height
+        )
+
+    def display_settings(self) -> dict:
+        return self.waveform_display.display_settings()
