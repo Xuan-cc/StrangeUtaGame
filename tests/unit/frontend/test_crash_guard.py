@@ -25,15 +25,21 @@ def _process_events(qapp, rounds: int = 8) -> None:
 def guard(qapp, tmp_path, monkeypatch):
     """构建挂到临时日志目录的 CrashGuard，钩子随测试自动还原。
 
-    弹窗函数替换为记录器——测试关心的是「异常被吃掉、落了盘、请求了弹窗」，
-    不真的弹 Fluent 对话框。主线程路径固定为直接弹窗（关掉事件循环探测），
-    使断言不依赖队列派发时机；跨线程编组用例单独走真实队列。
+    InfoBar 与弹窗函数均替换为记录器/开关——测试关心的是「异常被吃掉、
+    落了盘、请求了提示」，不真的弹 Fluent 控件。InfoBar 固定返回 False，
+    使运行期路径确定性地回退到对话框记录器；主线程路径固定为直接提示
+    （关掉事件循环探测），使断言不依赖队列派发时机；跨线程编组用例单独
+    走真实队列。
     """
     g = CrashGuard(qapp, log_dir=tmp_path)
     shown: list[tuple[str, str]] = []
     monkeypatch.setattr(
         "strange_uta_game.frontend.crash_guard._show_error_dialog",
         lambda title, content: shown.append((title, content)),
+    )
+    monkeypatch.setattr(
+        "strange_uta_game.frontend.crash_guard._show_error_infobar",
+        lambda title, content: False,
     )
     monkeypatch.setattr(CrashGuard, "_main_loop_live", staticmethod(lambda: False))
     monkeypatch.setattr(sys, "excepthook", g._sys_hook)
@@ -79,6 +85,42 @@ def test_worker_thread_exception_marshals_dialog_to_main_thread(qapp, guard, tmp
     assert "ValueError: worker-boom" in log
     assert "线程 w1" in log
     assert guard.shown
+
+
+def test_runtime_notification_prefers_infobar_over_dialog(
+    qapp, guard, tmp_path, monkeypatch
+):
+    """事件循环存活时经 reporter 提示：优先非阻塞 InfoBar，不再弹对话框。"""
+    bars: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "strange_uta_game.frontend.crash_guard._show_error_infobar",
+        lambda title, content: bars.append((title, content)) or True,
+    )
+    monkeypatch.setattr(CrashGuard, "_main_loop_live", staticmethod(lambda: True))
+    guard._orig_sys_hook = sys.__excepthook__
+
+    def boom():
+        raise ValueError("ib-boom")
+
+    t = threading.Thread(target=boom, name="w2")
+    t.start()
+    t.join()
+    _process_events(qapp)
+
+    log = (tmp_path / "crash.log").read_text(encoding="utf-8")
+    assert "ValueError: ib-boom" in log
+    assert bars, "应走非阻塞 InfoBar"
+    assert "ib-boom" in bars[0][1]
+    assert not guard.shown, "InfoBar 成功时不得再弹对话框"
+
+
+def test_infobar_failure_falls_back_to_dialog(qapp, guard):
+    """InfoBar 无窗口/失败（fixture 固定 False）时回退到对话框提示。"""
+    guard._reporter.submit("标题", "fb-content")
+    _process_events(qapp)
+
+    assert guard.shown, "InfoBar 失败时应回退对话框"
+    assert guard.shown[0] == ("标题", "fb-content")
 
 
 def test_repeated_identical_exception_dialogs_once_but_logs_all(qapp, guard, tmp_path):

@@ -13,16 +13,24 @@ main.py）：standalone 与嵌入宿主（krok-helper 等）共用同一份保�
 进程中逃逸的异常同样被兜住。宿主自装的 excepthook 不会被剥夺：我们处理
 完后原样链式转交。
 
-行为：traceback 追加写入 ``logs/crash.log``（超限轮转），并在主线程弹 Fluent
-对话框告知用户，用户确认后程序继续运行而不是被 abort。
+行为：traceback 追加写入 ``logs/crash.log``（超限轮转），并在主线程以非阻塞
+Fluent ``InfoBar`` 提示用户（无可用窗口或 InfoBar 失败时回退 Fluent 对话框 →
+原生 ``QMessageBox``；启动期事件循环未起时直接阻塞对话框——进程可能即将
+退出，必须保证用户看得到），随后程序继续运行而不是被 abort。
+
+提示用非阻塞 InfoBar 而非模态对话框：第三方库析构期的噪音异常（如
+qfluentwidgets 菜单销毁竞争抛 ``RuntimeError: wrapped C/C++ object ... has
+been deleted``）不值得打断用户操作；日志照常逐条记录，提示只负责让用户
+知道发生过、去哪里找堆栈。
 
 健壮性设计（钩子自身绝不再抛）：
 
-- 处理中置位 ``_handling``：弹窗/落盘过程中的二次异常只尽力落盘，不再弹窗；
-- 同一异常签名 10 秒内只弹一次窗（防止 paint 风暴刷屏），日志照常记录；
-- worker 线程的异常经 ``QMetaObject.invokeMethod``（队列连接）转回主线程弹窗，
+- 处理中置位 ``_handling``：提示/落盘过程中的二次异常只尽力落盘，不再提示；
+- 同一异常签名 10 秒内只提示一次（防止 paint 风暴刷屏），日志照常记录；
+- worker 线程的异常经 ``QMetaObject.invokeMethod``（队列连接）转回主线程提示，
   不在工作线程碰任何控件；
-- Fluent 对话框失败时回退原生 ``QMessageBox``，再失败则仅落盘。
+- InfoBar 失败时回退 Fluent 对话框，再失败回退原生 ``QMessageBox``，
+  再失败则仅落盘。
 
 边界（文档化而非掩盖）：纯 C++ 层崩溃（访问违例、Qt 内部 use-after-free）
 不是 Python 异常，无法被本机制捕获——这类问题必须从源头修复，例如弹层
@@ -51,7 +59,7 @@ _DIALOG_COOLDOWN_S = 10.0
 
 
 class _CrashReporter(QObject):
-    """主线程驻留的弹窗转发器：任意线程 submit，主线程事件循环里统一弹窗。"""
+    """主线程驻留的提示转发器：任意线程 submit，主线程事件循环里统一提示。"""
 
     def __init__(self) -> None:
         super().__init__()
@@ -70,7 +78,7 @@ class _CrashReporter(QObject):
 
     @pyqtSlot()
     def _drain(self) -> None:
-        # 一次 drained 批量合并成一个对话框：异常风暴只打扰用户一次
+        # 一次 drained 批量合并成一个提示：异常风暴只打扰用户一次
         reports: list[tuple[str, str]] = []
         while True:
             try:
@@ -84,7 +92,40 @@ class _CrashReporter(QObject):
         else:
             title, content = reports[-1]
             content = f"（本次连续捕获 {len(reports)} 个未处理错误，以下为最近一个）\n\n{content}"
+        _show_error_notification(title, content)
+
+
+def _show_error_notification(title: str, content: str) -> None:
+    """运行期提示：优先非阻塞 InfoBar，无窗口/失败时回退阻塞对话框。"""
+    if not _show_error_infobar(title, content):
         _show_error_dialog(title, content)
+
+
+def _show_error_infobar(title: str, content: str) -> bool:
+    """尽力以非阻塞 InfoBar 提示；无可用宿主窗口或失败时返回 False。"""
+    try:
+        from PyQt6.QtWidgets import QApplication
+
+        win = QApplication.activeWindow()
+        if win is None:
+            visible = [w for w in QApplication.topLevelWidgets() if w.isVisible()]
+            win = visible[0] if visible else None
+        if win is None:
+            return False
+        from qfluentwidgets import InfoBar, InfoBarPosition
+
+        InfoBar.error(
+            title=title,
+            content=content,
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=8000,
+            parent=win,
+        )
+        return True
+    except Exception:
+        return False
 
 
 def _show_error_dialog(title: str, content: str) -> None:
@@ -180,9 +221,9 @@ class CrashGuard:
     # ---- 核心处理 ----
 
     def handle_exception(self, exc_type, exc_value, exc_tb, origin: str) -> None:
-        """记录 + （受控地）弹窗。绝不向上抛异常。"""
+        """记录 + （受控地）提示。绝不向上抛异常。"""
         if self._handling:
-            # 弹窗/落盘过程中的二次异常：只尽力留痕
+            # 提示/落盘过程中的二次异常：只尽力留痕
             self._write_log(self._format_report(exc_type, exc_value, exc_tb, origin, note="（处理期间的二次异常，仅记录）"))
             return
         self._handling = True
@@ -240,16 +281,18 @@ class CrashGuard:
         content = (
             f"{_exception_headline(exc_value)}\n\n"
             f"详细堆栈已记录到：{log_path}\n"
-            "点击「继续运行」尝试恢复；若反复出现请携带该日志反馈。"
+            "程序已自动继续运行；若反复出现请携带该日志反馈。"
         )
 
         in_app_thread = QThread.currentThread() is app.thread()
         if in_app_thread and self._main_loop_live():
-            # 事件循环运行中：弹窗延迟到下一轮（不在当前（可能是弹层销毁
-            # 中的）调用栈里再进嵌套事件循环），与下拉模型修复同一思路
+            # 事件循环运行中：提示延迟到下一轮（不在当前（可能是弹层销毁
+            # 中的）调用栈里再碰控件），与下拉模型修复同一思路；drain 里
+            # 走非阻塞 InfoBar
             self._reporter.submit(title, content)
         elif in_app_thread:
-            # 尚未进入事件循环（启动期）：直接弹，否则进程即将退出没人能看到
+            # 尚未进入事件循环（启动期）：直接弹阻塞对话框，否则进程即将
+            # 退出，非阻塞提示可能永远没机会渲染
             _show_error_dialog(title, content)
         else:
             # worker 线程：转回主线程
