@@ -488,7 +488,13 @@ def parse_lyric_content(
         if progress_cb:
             progress_cb(_tr("正在解析 Kirakara 格式..."))
         sentences = sentences_from_kasugamuki(content, default_singer_id)
-        return _apply_compensation(sentences), False, [], {"format": "krl"}
+        # 春日向/KRL 自带注音与逐字时间轴 → 交由上层弹「保留原有注音」三选一
+        return (
+            _apply_compensation(sentences),
+            False,
+            [],
+            {"format": "krl", "prompt_ruby_choice": True},
+        )
 
     # 带内联时间戳的注音文本格式（|| 分隔符）
     if fmt == "annotated":
@@ -631,6 +637,10 @@ def parse_lyric_content(
             parsed_lines, default_singer_id, singer_name_to_id=singer_name_to_id
         )
         meta = parser.parse_metadata()
+        meta["format"] = "ass"
+        # 含卡拉OK逐字时间轴或 Aegisub 注音语法的 ASS → 上层弹三选一
+        if parser.has_karaoke_tags or parser.has_ruby_syntax:
+            meta["prompt_ruby_choice"] = True
         return _apply_compensation(sentences), False, new_singers, meta
 
     # SRT 格式

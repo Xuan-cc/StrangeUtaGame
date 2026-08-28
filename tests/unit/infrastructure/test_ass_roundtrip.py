@@ -196,6 +196,15 @@ def _make_project_basic() -> Project:
         ch.set_offset(0)
     project.add_sentence(sent)
 
+    # Sentence 6: ♫ 间奏行（单字符符号，带 ts + 句尾释放）
+    sent = Sentence.from_text("♫", s1.id)
+    sent.characters[0].add_timestamp(11000)
+    sent.characters[0].is_sentence_end = True
+    sent.characters[0].sentence_end_ts = 12000
+    for ch in sent.characters:
+        ch.set_offset(0)
+    project.add_sentence(sent)
+
     return project
 
 
@@ -361,6 +370,18 @@ class TestASSRoundtrip:
             f"Title round-trip 丢失: {p2.metadata.title!r}"
         )
 
+    def test_musical_note_interlude_roundtrip(self):
+        """♫ 间奏行：ts + 句尾释放经 ASS 往返完整保留。"""
+        project = _make_project_basic()
+        _, _, p2 = _roundtrip(project)
+
+        sent6 = p2.sentences[5]  # ♫
+        ch = sent6.characters[0]
+        assert ch.char == "♫"
+        assert ch.global_timestamps == [11000]
+        assert ch.is_sentence_end is True
+        assert ch.global_sentence_end_ts == 12000
+
     def test_non_sug_ass_no_compensation(self):
         """第三方 ASS（无 SUG 哨兵）按 Dialogue Start 原始值解析，不补偿。"""
         third_party = (
@@ -390,6 +411,85 @@ class TestASSRoundtrip:
         assert first_ts == 1000, (
             f"第三方 ASS 不应当被补偿: 首字 ts = {first_ts}, 期望 1000"
         )
+
+    def test_third_party_plain_ass_dialogue_end_as_line_end(self):
+        """第三方无 \\k 的普通 Dialogue：Dialogue End → line_end_ts 绑行末字符。"""
+        third_party = (
+            "[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
+            "Effect, Text\n"
+            "Dialogue: 0,0:00:02.26,0:00:04.78,Default,,0,0,0,,As I'm here\n"
+        )
+        parser = ASSParser()
+        parsed_lines = parser.parse(third_party)
+
+        assert parser.has_karaoke_tags is False
+        assert parser.has_ruby_syntax is False
+        pl = parsed_lines[0]
+        assert pl.timetags == [(0, 2260)]
+        assert pl.line_end_ts == 4780
+        assert pl.line_end_bind_last is True
+
+        sentences = parse_to_sentences(parsed_lines, "s1")
+        tail = sentences[0].characters[-1]
+        assert tail.char == "e"
+        assert tail.is_sentence_end is True
+        assert tail.sentence_end_ts == 4780
+
+    def test_third_party_karaoke_ass_end_takes_max_of_chain_and_dialogue_end(self):
+        r"""第三方 \k 链：line_end = max(\k 链末, Dialogue End)，绑行末字符。
+
+        `{\k50}い{\k50}つ` 链末 = 1000 + 1000 = 2000 > Dialogue End 1.50 → 2000
+        （厘秒舍入导致链末略超 End 时以链末为准）。
+        """
+        third_party = (
+            "[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
+            "Effect, Text\n"
+            "Dialogue: 0,0:00:01.00,0:00:01.50,Default,,0,0,0,,"
+            "{\\k50}い{\\k50}つ\n"
+            "Dialogue: 0,0:00:02.00,0:00:04.00,Default,,0,0,0,,"
+            "{\\k50}か\n"
+        )
+        parser = ASSParser()
+        parsed_lines = parser.parse(third_party)
+
+        assert parser.has_karaoke_tags is True
+        assert parsed_lines[0].line_end_ts == 2000  # 链末 2000 > End 1500
+        assert parsed_lines[0].line_end_bind_last is True
+        # Dialogue End 超出链末（尾部 padding）→ 取 End
+        assert parsed_lines[1].line_end_ts == 4000
+
+        sentences = parse_to_sentences(parsed_lines, "s1")
+        tail0 = sentences[0].characters[-1]
+        assert tail0.is_sentence_end is True
+        assert tail0.sentence_end_ts == 2000
+        tail1 = sentences[1].characters[-1]
+        assert tail1.sentence_end_ts == 4000
+
+    def test_sug_sentinel_karaoke_keeps_chain_binding(self):
+        r"""SUG 哨兵文件：行尾释放仍按 \k 链绑链尾（bind_last=False），
+        Dialogue End 中的 post-roll 不进入 line_end_ts。"""
+        sug_ass = (
+            "[Script Info]\n"
+            "; Generator: StrangeUtaGame\n"
+            "; SUG-PreRollMs: 100\n"
+            "; SUG-PostRollMs: 500\n"
+            "\n"
+            "[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
+            "Effect, Text\n"
+            "Dialogue: 0,0:00:00.90,0:00:03.50,Default,,0,0,0,,"
+            "{\\k50}い{\\k50}つ{\\k0}\n"
+        )
+        parser = ASSParser()
+        parsed_lines = parser.parse(sug_ass)
+
+        # pre-roll 补偿：首字 ts = 900 + 100 = 1000
+        assert parsed_lines[0].timetags == [(0, 1000), (1, 1500)]
+        # post-roll 不进入：链末 = 1000 + 500 + 500 = 2000（Dialogue End 3500 被忽略）
+        assert parsed_lines[0].line_end_ts == 2000
+        assert parsed_lines[0].line_end_bind_last is False
 
     def test_midline_pause_export_contract(self):
         """句中断句轴点导出契约（用户反馈 bug 的回归）：

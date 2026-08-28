@@ -8,6 +8,10 @@ Aegisub 注音 (`{\k...}汉字|<かな`)，末尾 \k 的尾部时长（绑为句
 设计原则（与 entities.py 对齐）：
 1. 末尾 \k 的时长不再丢弃，作为 ParsedLine.line_end_ts 输出，
    parse_to_sentences 会把它绑给末字符的 sentence_end_ts。
+   第三方（非 SUG 哨兵）文件再与 Dialogue End 取较大者；无 \k 的
+   普通 Dialogue 行直接用 Dialogue End 作为 line_end_ts。
+1b. has_karaoke_tags / has_ruby_syntax 暴露内容特征，供上层在导入后
+   决定是否弹「保留原有注音」三选一（与 Nicokara 导入一致）。
 2. Aegisub 注音 `{\k...}汉字|<かな` 不再被无差别去掉，而是按段提取，
    写入 ParsedLine.ruby_map。
 3. 仅保留卡拉OK相关的 `\k/\kf/\ko/\\K/\kF/\kO` 与 `\\sing_*` 计算；
@@ -72,6 +76,12 @@ class ASSParser(LyricParser):
         self._is_sug: bool = False
         self._pre_roll_ms: int = 0
         self._post_roll_ms: int = 0
+        # parse() 填充的内容特征（供上层决定导入后处理，如是否弹
+        #「保留原有注音」三选一）：
+        # - has_karaoke_tags: 任一 Dialogue 行含 {\k...} 卡拉OK标签
+        # - has_ruby_syntax:  任一解析行产出 ruby_map（`汉字|かな` 语法）
+        self.has_karaoke_tags: bool = False
+        self.has_ruby_syntax: bool = False
 
     def parse_metadata(self) -> Dict[str, str]:
         """返回上一次 parse() 收集到的元数据（Title 等）。
@@ -87,6 +97,8 @@ class ASSParser(LyricParser):
         self._is_sug = False
         self._pre_roll_ms = 0
         self._post_roll_ms = 0
+        self.has_karaoke_tags = False
+        self.has_ruby_syntax = False
 
         lines: List[ParsedLine] = []
         section = ""  # 当前所在 section（小写）
@@ -115,19 +127,30 @@ class ASSParser(LyricParser):
                 continue
 
             start_time_str = match.group(1).strip()
+            end_time_str = match.group(2).strip()
             text_field = match.group(3)
 
             start_ms = self._parse_ass_timestamp(start_time_str)
             if start_ms is None:
                 continue
 
+            end_ms = self._parse_ass_timestamp(end_time_str)
+            # 结束时间戳必须晚于起始才有意义（防手写错位）
+            if end_ms is not None and end_ms <= start_ms:
+                end_ms = None
+
             # SUG 哨兵：实际首字 ts = Dialogue Start + pre_roll_ms。
             # 第三方 ASS 没有哨兵 → 不补偿。
             if self._is_sug:
                 start_ms = max(0, start_ms + self._pre_roll_ms)
 
-            parsed_line = self._parse_karaoke_text(text_field, start_ms)
+            if self.KARAOKE_TAG_PATTERN.search(text_field):
+                self.has_karaoke_tags = True
+
+            parsed_line = self._parse_karaoke_text(text_field, start_ms, end_ms)
             if parsed_line and parsed_line.text.strip():
+                if parsed_line.ruby_map:
+                    self.has_ruby_syntax = True
                 lines.append(parsed_line)
 
         return lines
@@ -216,7 +239,7 @@ class ASSParser(LyricParser):
         return "plain", segment, "", segment
 
     def _parse_karaoke_text(
-        self, text: str, start_ms: int
+        self, text: str, start_ms: int, end_ms: Optional[int] = None
     ) -> Optional[ParsedLine]:
         r"""解析含卡拉OK标签的文本。
 
@@ -253,7 +276,14 @@ class ASSParser(LyricParser):
             else:
                 main_text = clean_text.strip()
             if main_text:
-                return ParsedLine(text=main_text, timetags=[(0, start_ms)])
+                # 无 \k 的普通 Dialogue：行级时间轴，Start 给首字符，
+                # End（Dialogue End）即整行末尾 → line_end_ts 绑行末字符。
+                return ParsedLine(
+                    text=main_text,
+                    timetags=[(0, start_ms)],
+                    line_end_ts=end_ms,
+                    line_end_bind_last=True,
+                )
             return None
 
         # 预扫所有 \sing_ 位置 → 排序索引，按 \k 段切片时同步推进
@@ -395,10 +425,21 @@ class ASSParser(LyricParser):
                 if line_end_ts <= last_ts:
                     line_end_ts = last_ts + max(0, last_duration_ms)
 
+        # 第三方文件的 Dialogue End 是行时间轴末尾的权威声明：
+        # - 非 SUG 文件：\k 链末与 Dialogue End 取较大者（链末可能因厘秒
+        #   舍入略超 End；End 也可能含 \k 链之外的尾部 padding），
+        #   并绑到行末字符（line_end_bind_last）。
+        # - SUG 文件：post-roll 只加在 Dialogue End 上（见文件头注释），
+        #   行尾释放必须留在 \k 链末（链尾绑定），否则 round-trip 漂移。
+        if not self._is_sug and end_ms is not None:
+            if line_end_ts is None or end_ms > line_end_ts:
+                line_end_ts = end_ms
+
         return ParsedLine(
             text=lyric_text,
             timetags=timetags,
             line_end_ts=line_end_ts,
+            line_end_bind_last=not self._is_sug,
             ruby_map=ruby_map,
             extra_checkpoints_map=extra_checkpoints_map,
             gap_pause_map=gap_pause_map,

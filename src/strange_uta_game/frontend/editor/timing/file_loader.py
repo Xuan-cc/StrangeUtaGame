@@ -781,12 +781,8 @@ class FileLoader:
             parent=self._editor,
         )
 
-        if is_nicokara:
-            self._prompt_nicokara_ruby_choice()
-        elif parse_meta.get("format") == "utaten":
-            self._update_utaten_checkpoints_as_imported()
-        else:
-            self._editor._auto_analyze_rubies(only_noruby=True, auto_detect_chinese=True)
+        # 自带注音格式弹窗；其余格式自动跑一轮保持原有注音的注音分析
+        self._post_import_ruby_handling(is_nicokara, parse_meta)
 
     def can_load_from_clipboard(self) -> bool:
         """判断是否可以从剪贴板加载歌词。
@@ -1069,13 +1065,8 @@ class FileLoader:
                 parent=self._editor,
             )
 
-            # Nicokara 格式弹窗；非 nicokara 格式自动跑一轮保持原有注音的注音分析
-            if is_nicokara:
-                self._prompt_nicokara_ruby_choice()
-            elif parse_meta.get("format") == "utaten":
-                self._update_utaten_checkpoints_as_imported()
-            else:
-                self._editor._auto_analyze_rubies(only_noruby=True, auto_detect_chinese=True)
+            # 自带注音格式弹窗；其余格式自动跑一轮保持原有注音的注音分析
+            self._post_import_ruby_handling(is_nicokara, parse_meta)
 
         except ValueError as e:
             # SUG 项目文件：直接加载为项目
@@ -1151,16 +1142,54 @@ class FileLoader:
                 parent=self._editor,
             )
 
-    def _prompt_nicokara_ruby_choice(self):
-        """Nicokara 格式注音处理弹窗（三选一）"""
+    def _post_import_ruby_handling(self, is_nicokara: bool, parse_meta: dict) -> None:
+        """歌词装入后的注音处理路由（按格式决定弹窗/自动分析）。
+
+        - Nicokara / 含卡拉OK时间轴或注音的 ASS / 春日向·KRL：
+          弹「保留原有注音」三选一（这些格式自带注音与逐字时间轴）。
+        - UtaTen：按文件 ruby 更新节奏点，不重新注音。
+        - 其余：自动分析（仅补未注音字符）。
+        """
+        if is_nicokara:
+            self._prompt_import_ruby_choice(
+                "Nicokara",
+                self._editor.tr("检测到 Nicokara 格式歌词（已包含注音）。"),
+            )
+        elif parse_meta.get("format") == "utaten":
+            self._update_utaten_checkpoints_as_imported()
+        elif parse_meta.get("prompt_ruby_choice"):
+            fmt = str(parse_meta.get("format") or "")
+            if fmt == "ass":
+                label = "ASS"
+                detected = self._editor.tr("检测到含卡拉OK时间轴/注音的 ASS 字幕。")
+            elif fmt == "krl":
+                label = self._editor.tr("春日向/KRL")
+                detected = self._editor.tr("检测到春日向/KRL 格式歌词（已包含注音）。")
+            else:
+                label = fmt or self._editor.tr("歌词")
+                detected = self._editor.tr("检测到自带注音的歌词文件。")
+            self._prompt_import_ruby_choice(label, detected)
+        else:
+            self._editor._auto_analyze_rubies(only_noruby=True, auto_detect_chinese=True)
+
+    def _prompt_import_ruby_choice(self, format_label: str, detected_text: str):
+        """自带注音/逐字时间轴格式的导入处理弹窗（三选一，复用 message_choice）。
+
+        Nicokara（@Ruby 注音 + body 逐字 ts）、ASS（\\k 卡拉OK时间轴 +
+        `汉字|かな` 注音）、春日向/KRL（注音块）共用此弹窗。
+
+        「全部重新分析」按字典重新划分音节：文件时间戳在相同字符位被直接
+        复用，无法对齐到节奏点的时间戳被忽略（待测节奏点留给用户测量）。
+        「仅分析未注音字符」保留已有注音与已带时间戳的节奏点，只补充缺失。
+        """
         choice = message_choice(
             self._editor,
-            self._editor.tr("Nicokara 格式检测"),
-            self._editor.tr("检测到 Nicokara 格式歌词（已包含注音）。")
-            + "\n\n"
+            self._editor.tr("{format} 格式检测").format(format=format_label),
+            detected_text + "\n\n"
             + self._editor.tr(
-                "「保留原有注音」使用文件中的 @Ruby 注音。\n"
-                "「全部重新分析」清除原有注音，使用自动分析。\n"
+                "「保留原有注音」使用文件中的注音与逐字时间轴。\n"
+                "「全部重新分析」清除原有注音，使用自动分析；文件时间戳"
+                "将按音节位置复用，无法对齐的会被忽略。\n"
                 "「仅分析未注音字符」保留已有注音，补充缺失的。"
             ),
             [
@@ -1175,15 +1204,15 @@ class FileLoader:
         elif choice == 2:  # 仅分析未注音字符
             self._editor._auto_analyze_rubies(only_noruby=True, auto_detect_chinese=True)
         elif choice == 0:  # 保留原有注音
-            self._keep_nicokara_as_imported()
+            self._keep_imported_as_is()
 
-    def _keep_nicokara_as_imported(self):
+    def _keep_imported_as_is(self):
         """完全按文件导入（纯文件信任路径）。
 
-        Nicokara 的 body + @Ruby 已无歧义地编码了每个字符的节奏点数量
-        (check_count)、句尾/演唱停顿释放 (is_sentence_end/sentence_end_ts)、
-        行尾 (is_line_end) 与连词 (linked_to_next)，解析器
-        `nicokara_result_to_sentences` 已将其全部还原为终态。
+        Nicokara 的 body + @Ruby、ASS 的 \\k 链 + 注音、KRL 的注音块都已
+        无歧义地编码了每个字符的节奏点数量 (check_count)、句尾/演唱停顿
+        释放 (is_sentence_end/sentence_end_ts)、行尾 (is_line_end) 与
+        连词 (linked_to_next)，各解析器已将其全部还原为终态。
 
         因此这里**不**调用 AutoCheckService 的 flag 驱动节奏点重算，
         也不跑注音分析——避免用户的 auto_check 开关（check_n / 标点 /

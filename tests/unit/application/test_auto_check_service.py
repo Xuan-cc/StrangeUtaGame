@@ -1058,3 +1058,97 @@ class TestAnalyzeUpdateCheckpointsToggle:
         assert ch.ruby is not None
         assert "".join(p.text for p in ch.ruby.parts) == "さくら"
         assert ch.check_count == 1
+
+
+class TestTimedCheckpointPreservation:
+    """已持有时间戳的节奏点不可被截断——沿用原有的不区分分析模式的守卫
+    （_apply_english_and_endpoints），日文/中文路径行为完全一致。
+
+    注意：♫ 等音符记号本身仍受「記号」开关控制——无时间戳时照样清零。
+    """
+
+    def test_symbol_without_timestamp_still_filtered(self):
+        """♫ 无时间戳：記号开关关闭 → 节奏点照常清零（开关语义不变）。"""
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags={"symbol": False})
+        sentence = Sentence.from_text("間奏♫", "s1")
+
+        service.apply_to_sentence(sentence)
+
+        assert sentence.characters[1].check_count == 1  # 奏（漢字）不受影响
+        assert sentence.characters[2].check_count == 0  # ♫ 被記号开关清零
+
+    def test_symbol_without_timestamp_filtered_without_flags(self):
+        service = AutoCheckService(DummyAnalyzer())
+        sentence = Sentence.from_text("♫", "s1")
+
+        service.apply_to_sentence(sentence)
+
+        assert sentence.characters[0].check_count == 0
+
+    def test_pipeline_keeps_timed_symbol_checkpoint_both_modes(self):
+        """管线（分析 + 节奏点更新）不区分模式：带文件时间戳的 ♫ 节奏点保留。
+        对应 analyze_and_apply_pipeline 的 Step 1（apply_to_sentence）+
+        Step 2（update_checkpoints_from_rubies）。
+        """
+        service = AutoCheckService(DummyAnalyzer(), auto_check_flags={"symbol": False})
+        sentence = Sentence.from_text("♫", "s1")
+        sentence.characters[0].add_timestamp(27836)
+
+        # Step 1：全部重新分析（only_noruby=False，最严苛场景）
+        service.apply_to_sentence(sentence, only_noruby=False)
+        # Step 2：节奏点更新（守卫所在步骤）
+        service.update_checkpoints_from_rubies(sentence)
+
+        ch = sentence.characters[0]
+        assert ch.timestamps == [27836]
+        assert ch.check_count == 1
+
+    def test_chinese_path_keeps_timed_symbol_checkpoint_both_modes(self):
+        """中文/非假名路径与日文路径一致：带时间戳的 ♫ 节奏点保留。"""
+        service = AutoCheckService(
+            DummyAnalyzer(), auto_check_flags={"symbol": False}, chinese_mode=True
+        )
+        sentence = Sentence.from_text("♫", "s1")
+        sentence.characters[0].add_timestamp(27836)
+
+        service._apply_chinese_to_sentence(sentence, keep_existing_timetags=True)
+
+        ch = sentence.characters[0]
+        assert ch.timestamps == [27836]
+        assert ch.check_count == 1
+
+    def test_apply_restores_sentence_end_ts_at_original_position(self):
+        """行尾释放 ts 绑在非行末字符位（如英文词中段）时也按位恢复。"""
+        analyzer = _FixedReadingAnalyzer({})
+        service = AutoCheckService(analyzer, auto_check_flags={"symbol": False})
+        # 模拟 ASS 卡拉OK导入：ts 在词首字符，行尾释放绑在词尾
+        sentence = Sentence.from_text("today", "s1")
+        sentence.characters[0].add_timestamp(1000)
+        sentence.characters[4].is_sentence_end = True
+        sentence.characters[4].sentence_end_ts = 2500
+
+        service.apply_to_sentence(sentence, keep_existing_timetags=True)
+
+        chars = sentence.characters
+        assert chars[0].timestamps == [1000]
+        # 词尾不是行末规则标记位也必须保留文件里的释放 ts
+        assert chars[4].is_sentence_end is True
+        assert chars[4].sentence_end_ts == 2500
+
+    def test_chinese_path_restores_end_ts_and_keeps_timed_symbol(self):
+        """中文/非假名模式：释放 ts 按位恢复；带时间戳的 ♫ 节奏点保留。"""
+        service = AutoCheckService(
+            DummyAnalyzer(), auto_check_flags={"symbol": False}, chinese_mode=True
+        )
+        sentence = Sentence.from_text("♫", "s1")
+        sentence.characters[0].add_timestamp(27836)
+        sentence.characters[0].is_sentence_end = True
+        sentence.characters[0].sentence_end_ts = 42678
+
+        service._apply_chinese_to_sentence(sentence, keep_existing_timetags=True)
+
+        ch = sentence.characters[0]
+        assert ch.timestamps == [27836]
+        assert ch.check_count == 1
+        assert ch.is_sentence_end is True
+        assert ch.sentence_end_ts == 42678

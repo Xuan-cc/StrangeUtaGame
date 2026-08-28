@@ -68,6 +68,10 @@ class ParsedLine:
     text: str
     timetags: List[Tuple[int, int]]  # (char_idx, timestamp_ms) 列表
     line_end_ts: Optional[int] = None
+    # True = line_end_ts 绑到行末字符（SRT/无 \k 的 ASS 等行级时间轴格式，
+    # Dialogue End 即整行末尾）；False = 沿 linked_to_next 链走到连词组
+    # 尾字符（\k 链格式，与 SUG 导出契约对齐）
+    line_end_bind_last: bool = False
     ruby_map: Dict[int, Tuple[List[str], int]] = field(default_factory=dict)
     extra_checkpoints_map: Dict[int, List[int]] = field(default_factory=dict)
     gap_pause_map: Dict[int, int] = field(default_factory=dict)
@@ -1626,10 +1630,11 @@ def parse_to_sentences(
 
     对齐 entities.py 重构后契约（与 `nicokara_result_to_sentences` 同源）：
     1. 多 timestamps 同一字符 → 第二个 ts 自动绑为 sentence_end_ts。
-    2. ParsedLine.line_end_ts（如 ASS 末尾 \\k 的尾时长）→ 末字符的
-       sentence_end_ts；缺省时退化为「末 ts + 500ms」兜底拖音。
-       行尾释放点绑定到「连词组尾字符」（沿 linked_to_next 向右走到链尾），
-       而非简单的 last_idx_with_ts——否则连词链尾字符的 end_ts 会丢。
+    2. ParsedLine.line_end_ts（如 ASS 末尾 \\k 的尾时长、SRT/ASS 的行级
+       End 时间戳）→ 末字符的 sentence_end_ts；缺省时退化为「末 ts + 500ms」
+       兜底拖音。行尾释放点默认绑定到「连词组尾字符」（沿 linked_to_next
+       向右走到链尾），line_end_bind_last=True 时直接绑行末字符
+       （SRT/无 \\k 的 ASS 等行级时间轴格式）。
     2b. ParsedLine.gap_pause_map（ASS 非末尾空文本 \\k 段的段起点，
        SUG 断句轴点间隙）→ 对应字符的 sentence_end_ts（句中停顿）。
     3. ParsedLine.ruby_map（如 ASS 的 `汉字|<かな`）→ Character.set_ruby。
@@ -1810,15 +1815,24 @@ def parse_to_sentences(
                 if mapped:
                     sentence.characters[ch_idx].singer_id = mapped
 
-        # 行尾释放点：沿 linked_to_next 链从 last_idx_with_ts 走到连词组尾字符，
-        # 把 sentence_end_ts 绑到链尾——避免「大冒険」末字「険」的 end_ts 丢失。
+        # 行尾释放点：
+        # - line_end_bind_last（SRT/无 \k 的 ASS 等行级格式）：绑到行末字符，
+        #   与文件「整行末尾」语义一致，且重分析后行末规则仍标记该字符，
+        #   line_end_ts 能被 apply_to_sentence 按位恢复。
+        # - 默认（\k 链格式）：沿 linked_to_next 链从 last_idx_with_ts 走到
+        #   连词组尾字符——避免「大冒険」末字「険」的 end_ts 丢失。
         if last_idx_with_ts is not None:
-            tail_idx = last_idx_with_ts
-            while (
-                tail_idx < len(sentence.characters) - 1
-                and sentence.characters[tail_idx].linked_to_next
-            ):
-                tail_idx += 1
+            moved_along_chain = False
+            if parsed.line_end_bind_last and sentence.characters:
+                tail_idx = len(sentence.characters) - 1
+            else:
+                tail_idx = last_idx_with_ts
+                while (
+                    tail_idx < len(sentence.characters) - 1
+                    and sentence.characters[tail_idx].linked_to_next
+                ):
+                    tail_idx += 1
+                moved_along_chain = tail_idx != last_idx_with_ts
             tail_char = sentence.characters[tail_idx]
             if parsed.line_end_ts is not None:
                 tail_char.is_sentence_end = True
@@ -1827,7 +1841,8 @@ def parse_to_sentences(
                     tail_char.check_count = 1
                 # last_idx_with_ts 字符若被沿链转移，需要清掉它的 end_ts，
                 # 避免「锚字 + 链尾」同时持有 end_ts 导致二次导出多写一段
-                if tail_idx != last_idx_with_ts:
+                # （bind_last 跳绑行末，锚字上的双 ts/句中停顿是文件事实，不清）
+                if moved_along_chain:
                     anchor = sentence.characters[last_idx_with_ts]
                     anchor.is_sentence_end = False
                     anchor.sentence_end_ts = None

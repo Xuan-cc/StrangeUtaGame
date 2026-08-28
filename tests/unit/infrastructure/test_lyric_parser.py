@@ -174,6 +174,54 @@ class TestLyricParserFactory:
             LyricParserFactory.get_parser("test.mp3")
 
 
+class TestSRTParser:
+    """SRT 解析器：行尾时间戳 → line_end_ts（绑行末字符）"""
+
+    def _parse(self, content):
+        from strange_uta_game.backend.infrastructure.parsers.srt_parser import (
+            SRTParser,
+        )
+
+        return SRTParser().parse(content)
+
+    def test_end_timestamp_loaded_as_line_end(self):
+        content = (
+            "1\n"
+            "00:00:02,257 --> 00:00:04,783\n"
+            "As I'm still here alive\n"
+        )
+        result = self._parse(content)
+
+        assert len(result) == 1
+        assert result[0].text == "As I'm still here alive"
+        assert result[0].timetags == [(0, 2257)]
+        assert result[0].line_end_ts == 4783
+        assert result[0].line_end_bind_last is True
+
+    def test_end_before_start_is_ignored(self):
+        """手写错位（End <= Start）不产出 line_end_ts。"""
+        content = "1\n00:00:05,000 --> 00:00:04,000\n歌词\n"
+        result = self._parse(content)
+
+        assert result[0].timetags == [(0, 5000)]
+        assert result[0].line_end_ts is None
+
+    def test_musical_note_line_keeps_timing(self):
+        content = "1\n00:00:27,836 --> 00:00:42,678\n♫\n"
+        result = self._parse(content)
+
+        assert result[0].text == "♫"
+        assert result[0].timetags == [(0, 27836)]
+        assert result[0].line_end_ts == 42678
+
+    def test_comma_or_dot_millis(self):
+        content = "1\n00:00:01.500 --> 00:00:02,500\nx\n"
+        result = self._parse(content)
+
+        assert result[0].timetags == [(0, 1500)]
+        assert result[0].line_end_ts == 2500
+
+
 class TestParseToSentences:
     """测试转换为 Sentence"""
 
@@ -186,6 +234,38 @@ class TestParseToSentences:
 
         assert len(sentences) == 1
         assert sentences[0].text == "测试"
+
+    def test_line_end_bind_last_binds_to_last_char(self):
+        """SRT/无 \\k ASS 等行级格式：line_end_ts 绑行末字符（非首字符）。"""
+        parsed = ParsedLine(
+            text="いつか",
+            timetags=[(0, 1000)],
+            line_end_ts=2500,
+            line_end_bind_last=True,
+        )
+        sentences = parse_to_sentences([parsed], "singer_1")
+        chars = sentences[0].characters
+
+        # 行末「か」持有句尾释放 ts；首字只持有起始 ts
+        assert chars[0].sentence_end_ts is None
+        tail = chars[-1]
+        assert tail.is_sentence_end is True
+        assert tail.sentence_end_ts == 2500
+
+    def test_line_end_default_binds_to_chain_tail(self):
+        """默认（\\k 链格式）：沿 linked 链绑连词组尾字符，锚字不残留。"""
+        parsed = ParsedLine(
+            text="大冒険",
+            timetags=[(0, 7000)],
+            line_end_ts=8000,
+            ruby_map={0: (["だいぼうけん"], 3)},
+        )
+        sentences = parse_to_sentences([parsed], "singer_1")
+        chars = sentences[0].characters
+
+        assert chars[0].is_sentence_end is False
+        assert chars[2].is_sentence_end is True
+        assert chars[2].sentence_end_ts == 8000
 
     def test_utaten_flag_distributes_dict_split_per_kanji(self):
         # 字典命中（一字一音干净对应）：世界/せかい → 世=せ, 界=かい。

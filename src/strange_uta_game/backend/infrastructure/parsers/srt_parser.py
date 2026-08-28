@@ -17,7 +17,8 @@ class SRTParser(LyricParser):
     00:00:00,000 --> 00:00:04,580
     字幕文本
 
-    每个字幕块提取起始时间戳作为行级时间标签。
+    每个字幕块提取起始时间戳作为行级时间标签，
+    结束时间戳作为 line_end_ts（句尾释放点，绑在行末字符上）。
     """
 
     # SRT 时间戳行: HH:MM:SS,mmm --> HH:MM:SS,mmm
@@ -42,6 +43,7 @@ class SRTParser(LyricParser):
 
             # 查找时间戳行和文本行
             timestamp_ms = None
+            end_timestamp_ms = None
             text_lines: List[str] = []
 
             for line in block_lines:
@@ -55,6 +57,7 @@ class SRTParser(LyricParser):
                 ts_match = self.TIMESTAMP_PATTERN.search(line)
                 if ts_match:
                     timestamp_ms = self._parse_srt_timestamp(ts_match, start=True)
+                    end_timestamp_ms = self._parse_srt_timestamp(ts_match, start=False)
                     continue
 
                 # 其余为文本行
@@ -71,7 +74,20 @@ class SRTParser(LyricParser):
             text = " ".join(text_lines)
 
             if timestamp_ms is not None:
-                lines.append(ParsedLine(text=text, timetags=[(0, timestamp_ms)]))
+                # 结束时间戳必须晚于起始才有意义（防手写错位）
+                line_end = (
+                    end_timestamp_ms
+                    if end_timestamp_ms is not None and end_timestamp_ms > timestamp_ms
+                    else None
+                )
+                lines.append(
+                    ParsedLine(
+                        text=text,
+                        timetags=[(0, timestamp_ms)],
+                        line_end_ts=line_end,
+                        line_end_bind_last=True,
+                    )
+                )
             else:
                 lines.append(ParsedLine(text=text, timetags=[]))
 

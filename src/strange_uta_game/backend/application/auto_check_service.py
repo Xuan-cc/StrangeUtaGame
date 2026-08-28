@@ -1340,6 +1340,9 @@ class AutoCheckService:
         - 否则全程不产生 ruby（仅节奏点模式）。
 
         check 规则与日文路径共用 _apply_flags_filter + _apply_english_and_endpoints。
+        旧时间戳在过滤/端点规则**之前**回种到新字符上，
+        _apply_english_and_endpoints 的「已持有 timestamps 的字符不可被截断」
+        守卫（不区分分析模式）因此对本路径同样生效，与日文路径管线行为一致。
         """
         text = sentence.text
         if not text:
@@ -1386,14 +1389,23 @@ class AutoCheckService:
             new_characters.append(character)
         sentence.characters = new_characters
 
+        # 先回种旧时间戳，再跑过滤/端点规则（见方法 docstring）：
+        # 守卫读取的是字符当前持有的 timestamps，回种后中文/非假名路径
+        # 与日文路径管线（update_checkpoints_from_rubies）行为完全一致。
+        if keep_existing_timetags:
+            for i, char in enumerate(sentence.characters):
+                if i in old_timestamps:
+                    char.timestamps = list(old_timestamps[i])
+
         self._apply_flags_filter(chars, check_counts, text)
         self._apply_english_and_endpoints(sentence, check_counts)
 
         if keep_existing_timetags:
             for i, char in enumerate(sentence.characters):
-                if i in old_timestamps:
-                    char.timestamps = old_timestamps[i][: char.check_count]
-                if char.is_sentence_end and i in old_sentence_end_ts:
+                if i in old_sentence_end_ts:
+                    # 句尾释放 ts 按原字符位恢复并强制句尾标记——
+                    # 释放点是行尾时刻（时间事实），不随节奏点重算丢弃
+                    char.is_sentence_end = True
                     char.sentence_end_ts = old_sentence_end_ts[i]
                     char.push_to_ruby()
 
@@ -2159,8 +2171,16 @@ class AutoCheckService:
             for i, char in enumerate(new_characters):
                 if i in old_timestamps:
                     char.timestamps = old_timestamps[i]
-                if char.is_sentence_end and i in old_sentence_end_ts:
+                    # 节奏点是否保住由管线后续 update_checkpoints_from_rubies
+                    # 的「已持有 timestamps 的字符不可被截断」守卫统一处理
+                    #（不区分分析模式，与日文/中文路径一致）
+                if i in old_sentence_end_ts:
+                    # 句尾释放 ts 按原字符位恢复并强制句尾标记——重分析后
+                    # 该位可能不再被行尾/空格规则标记（如英文词中段承接了
+                    # 文件的行尾释放）；释放点是行尾时刻（时间事实），不随
+                    # 节奏点重算丢弃
                     char.sentence_end_ts = old_sentence_end_ts[i]
+                    char.is_sentence_end = True
                     char.push_to_ruby()
 
         sentence.characters = new_characters

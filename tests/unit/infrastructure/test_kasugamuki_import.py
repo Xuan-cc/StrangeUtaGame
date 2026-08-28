@@ -70,11 +70,38 @@ def test_parse_lyric_content_routes_krl_before_generic_inline_parser():
 
     assert not is_nicokara
     assert singers == []
-    assert metadata == {"format": "krl"}
+    # KRL 自带注音与逐字时间轴 → 要求上层弹「保留原有注音」三选一
+    assert metadata == {"format": "krl", "prompt_ruby_choice": True}
     assert sentences[0].text == "利"
     assert sentences[0].characters[0].ruby.text == "り"
     assert sentences[0].characters[0].timestamps == [12740]
     assert sentences[0].characters[0].sentence_end_ts == 12900
+
+
+def test_parse_lyric_content_ass_meta_prompts_only_for_karaoke_or_ruby():
+    r"""含 \k 卡拉OK（或注音语法）的 ASS 才要求弹三选一；普通 ASS 不弹。"""
+    events_header = (
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
+        "Effect, Text\n"
+    )
+    karaoke_content = (
+        events_header
+        + "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,"
+        "{\\k50}い{\\k50}つ\n"
+    )
+    plain_content = (
+        events_header
+        + "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,いつ\n"
+    )
+
+    _, _, _, karaoke_meta = parse_lyric_content(karaoke_content, SINGER_ID)
+    assert karaoke_meta.get("format") == "ass"
+    assert karaoke_meta.get("prompt_ruby_choice") is True
+
+    _, _, _, plain_meta = parse_lyric_content(plain_content, SINGER_ID)
+    assert plain_meta.get("format") == "ass"
+    assert "prompt_ruby_choice" not in plain_meta
 
 
 def test_project_import_service_accepts_krl_extension(monkeypatch):
