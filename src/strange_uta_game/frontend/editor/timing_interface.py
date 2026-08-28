@@ -846,6 +846,9 @@ class EditorInterface(QWidget):
                 "display_mode": settings.get("timing.waveform_display_mode", "waveform"),
                 "grid_mode": settings.get("timing.waveform_grid_mode", "time"),
                 "grid_bpm": float(settings.get("timing.waveform_grid_bpm", 120.0)),
+                "grid_offset_ms": int(
+                    settings.get("timing.waveform_grid_offset_ms", 0)
+                ),
                 "grid_line_width": int(
                     settings.get("timing.waveform_grid_line_width", 2)
                 ),
@@ -5361,6 +5364,10 @@ class EditorInterface(QWidget):
         s.set("timing.waveform_display_mode", settings.get("display_mode", "waveform"))
         s.set("timing.waveform_grid_mode", settings.get("grid_mode", "time"))
         s.set("timing.waveform_grid_bpm", float(settings.get("grid_bpm", 120.0)))
+        s.set(
+            "timing.waveform_grid_offset_ms",
+            int(settings.get("grid_offset_ms", 0)),
+        )
         s.set(
             "timing.waveform_grid_line_width",
             int(settings.get("grid_line_width", 2)),

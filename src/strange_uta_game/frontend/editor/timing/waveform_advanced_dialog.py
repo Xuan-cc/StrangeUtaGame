@@ -173,9 +173,29 @@ class WaveformAdvancedDialog(QDialog):
         width_row_layout.addStretch(1)
         self._last_valid_grid_width = 2
 
+        # BPM 网格偏移（毫秒）：拍线相位对齐——节拍通常不从 0ms 开始，
+        # 正值网格后移（延迟）、负值前移。与网格线宽同一套严格提交语义
+        #（失焦/回车生效；空/非法/越界恢复上次有效值）。
+        offset_row = QWidget(self._grid_group)
+        offset_row_layout = QHBoxLayout(offset_row)
+        offset_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._lbl_grid_offset = BodyLabel(self.tr("BPM 网格偏移"), offset_row)
+        self.grid_offset_edit = LineEdit(offset_row)
+        self.grid_offset_edit.setValidator(
+            QIntValidator(-600000, 600000, self.grid_offset_edit)
+        )
+        self.grid_offset_edit.setFixedWidth(72)
+        self._grid_offset_ms_label = BodyLabel("ms", offset_row)
+        offset_row_layout.addWidget(self._lbl_grid_offset)
+        offset_row_layout.addWidget(self.grid_offset_edit)
+        offset_row_layout.addWidget(self._grid_offset_ms_label)
+        offset_row_layout.addStretch(1)
+        self._last_valid_grid_offset = 0
+
         self._grid_group.contentLayout.addWidget(grid_row)
         self._grid_group.contentLayout.addWidget(bpm_row)
         self._grid_group.contentLayout.addWidget(width_row)
+        self._grid_group.contentLayout.addWidget(offset_row)
         self._grid_group.contentLayout.addWidget(self.bpm_status)
 
         # ── Panel 3：声谱参数 ──
@@ -270,6 +290,9 @@ class WaveformAdvancedDialog(QDialog):
         grid_width = int(init.get("grid_line_width", 2))
         self._last_valid_grid_width = max(0, min(100, grid_width))
         self.grid_width_edit.setText(str(self._last_valid_grid_width))
+        grid_offset = int(init.get("grid_offset_ms", 0))
+        self._last_valid_grid_offset = max(-600000, min(600000, grid_offset))
+        self.grid_offset_edit.setText(str(self._last_valid_grid_offset))
         self.bpm_spin.setValue(float(init.get("grid_bpm", 120.0)))
         fft = init.get("spectrum_fft_size", 2048)
         index = _FFT_CHOICES.index(fft) if fft in _FFT_CHOICES else 2
@@ -297,6 +320,7 @@ class WaveformAdvancedDialog(QDialog):
         # 清焦解决（见下），而非输入期定时提交。
         self.bpm_spin.editingFinished.connect(self._emit_applied)
         self.grid_width_edit.editingFinished.connect(self._commit_grid_width)
+        self.grid_offset_edit.editingFinished.connect(self._commit_grid_offset)
         self.fft_combo.currentIndexChanged.connect(self._emit_applied)
         self.overlap_combo.currentIndexChanged.connect(self._emit_applied)
         self.scale_combo.currentIndexChanged.connect(self._emit_applied)
@@ -329,6 +353,7 @@ class WaveformAdvancedDialog(QDialog):
         self.btn_detect_bpm.setText(self.tr("自动检测"))
         self.btn_close.setText(self.tr("关闭"))
         self._lbl_grid_width.setText(self.tr("网格线宽"))
+        self._lbl_grid_offset.setText(self.tr("BPM 网格偏移"))
         self._lbl_rms.setText(self.tr("双层波形（RMS）"))
         self.rms_switch.setOnText(self.tr("开"))
         self.rms_switch.setOffText(self.tr("关"))
@@ -402,11 +427,25 @@ class WaveformAdvancedDialog(QDialog):
         self.grid_width_edit.setText(str(value))
         self._emit_applied()
 
+    def _commit_grid_offset(self) -> None:
+        """提交 BPM 网格偏移；空/非法/越界恢复上一次有效值（±600000ms）。"""
+        text = self.grid_offset_edit.text().strip()
+        try:
+            value = int(text)
+        except ValueError:
+            value = self._last_valid_grid_offset
+        if not -600000 <= value <= 600000:
+            value = self._last_valid_grid_offset
+        self._last_valid_grid_offset = value
+        self.grid_offset_edit.setText(str(value))
+        self._emit_applied()
+
     def _collect(self) -> dict:
         return {
             "display_mode": "spectrum" if self.radio_spectrum.isChecked() else "waveform",
             "grid_mode": "bpm" if self.radio_grid_bpm.isChecked() else "time",
             "grid_bpm": float(self.bpm_spin.value()),
+            "grid_offset_ms": self._last_valid_grid_offset,
             "grid_line_width": self._last_valid_grid_width,
             "spectrum_fft_size": _FFT_CHOICES[self.fft_combo.currentIndex()],
             "spectrum_overlap": _OVERLAP_CHOICES[

@@ -26,6 +26,7 @@
     "waveform_display_mode": "waveform",
     "waveform_grid_mode": "time",
     "waveform_grid_bpm": 120.0,
+    "waveform_grid_offset_ms": 0,
     "waveform_grid_line_width": 2,
     "spectrum_overlap": 0.75,
     "spectrum_fft_size": 2048,

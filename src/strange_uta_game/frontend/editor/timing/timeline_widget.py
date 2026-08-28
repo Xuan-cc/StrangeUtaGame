@@ -138,6 +138,9 @@ class WaveformDisplay(QWidget):
         self._display_mode = "waveform"   # "waveform" | "spectrum"（互斥）
         self._grid_mode = "time"         # "time" | "bpm"
         self._grid_bpm = 120.0
+        # BPM 网格偏移（毫秒）：拍线相位对齐——歌曲节拍通常不从 0ms 开始，
+        # 正值网格整体后移（延迟）、负值前移。仅作用于 BPM 网格。
+        self._grid_offset_ms = 0
         self._grid_line_width = 2        # 网格线宽（0~100px，时间/BPM 共用；0=不绘制）
         self._spectrum_fft_size = 2048
         self._spectrum_overlap = 0.75   # 窗口重叠（SV 口径）；帧距=fft·(1-overlap)
@@ -880,6 +883,22 @@ class WaveformDisplay(QWidget):
         self._invalidate_static_layer()
         self.update()
 
+    def set_grid_offset(self, offset_ms: int) -> None:
+        """BPM 网格偏移（±10 分钟，毫秒）：拍线相位对齐用。
+
+        正值网格整体后移（延迟），负值前移；仅作用于 BPM 网格。
+        """
+        try:
+            offset_ms = int(offset_ms)
+        except (TypeError, ValueError):
+            return
+        offset_ms = max(-600000, min(600000, offset_ms))
+        if offset_ms == self._grid_offset_ms:
+            return
+        self._grid_offset_ms = offset_ms
+        self._invalidate_static_layer()
+        self.update()
+
     def set_grid_line_width(self, width_px: int) -> None:
         """网格线宽（0~100px，时间/BPM 共用）；半拍/拍线/小节线按层级递进。
 
@@ -949,6 +968,7 @@ class WaveformDisplay(QWidget):
             "display_mode": self._display_mode,
             "grid_mode": self._grid_mode,
             "grid_bpm": self._grid_bpm,
+            "grid_offset_ms": self._grid_offset_ms,
             "grid_line_width": self._grid_line_width,
             "spectrum_fft_size": self._spectrum_fft_size,
             "spectrum_overlap": self._spectrum_overlap,
@@ -1426,18 +1446,28 @@ class WaveformDisplay(QWidget):
 
     def _draw_bpm_grid(self, painter: QPainter, w: int, h: int,
                        visible_start_ms: float, visible_end_ms: float) -> None:
-        """BPM 网格：拍线、每 4 拍小节线（加重 + 小节号）、深放大时半拍细分。"""
+        """BPM 网格：拍线、每 4 拍小节线（加重 + 小节号）、深放大时半拍细分。
+
+        拍时刻 = 偏移 + b·拍长（b 为整数，可为负）——偏移用于把网格相位
+        对齐到歌曲实际节拍（节拍通常不从 0ms 开始）。b=0 是第 1 小节的
+        第 1 拍；负数拍仍画线但不标注小节号。
+        """
         if self._grid_line_width <= 0:
             return  # 网格线宽 0 = 不绘制网格
         visible_duration = visible_end_ms - visible_start_ms
         if visible_duration <= 0:
             return
         beat_ms = 60000.0 / self._grid_bpm
+        offset = float(self._grid_offset_ms)
         pixels_per_beat = beat_ms / visible_duration * w
-        first_beat = int(math.ceil(visible_start_ms / beat_ms))
-        last_beat = int(math.floor(visible_end_ms / beat_ms))
+        first_beat = int(math.ceil((visible_start_ms - offset) / beat_ms))
+        last_beat = int(math.floor((visible_end_ms - offset) / beat_ms))
         if last_beat < first_beat:
             return
+
+        def beat_x(b: float) -> int:
+            return int((offset + b * beat_ms - visible_start_ms)
+                       / visible_duration * w)
 
         half, beat, bar = self._bpm_grid_widths()
         half_color = QColor(theme.border_primary)
@@ -1450,7 +1480,7 @@ class WaveformDisplay(QWidget):
         if pixels_per_beat >= 28:
             painter.setPen(pen_half)
             for b in range(first_beat, last_beat + 1):
-                x = int(((b + 0.5) * beat_ms - visible_start_ms) / visible_duration * w)
+                x = beat_x(b + 0.5)
                 if 0 <= x < w:
                     painter.drawLine(x, 0, x, h)
 
@@ -1466,14 +1496,15 @@ class WaveformDisplay(QWidget):
             first_beat += (-first_beat) % beat_step
         draw_beats = beat_step == 1
         for b in range(first_beat, last_beat + 1, beat_step):
-            x = int((b * beat_ms - visible_start_ms) / visible_duration * w)
+            x = beat_x(b)
             if not 0 <= x < w:
                 continue
             if b % 4 == 0:
                 painter.setPen(pen_bar)
                 painter.drawLine(x, 0, x, h)
-                painter.setPen(theme.text_secondary)
-                painter.drawText(x + 2, 12, str(b // 4 + 1))
+                if b >= 0:
+                    painter.setPen(theme.text_secondary)
+                    painter.drawText(x + 2, 12, str(b // 4 + 1))
             elif draw_beats:
                 painter.setPen(pen_beat)
                 painter.drawLine(x, 0, x, h)
@@ -2350,6 +2381,7 @@ class TimelineWidget(QWidget):
         wd.set_display_mode(settings.get("display_mode", "waveform"))
         wd.set_grid_mode(settings.get("grid_mode", "time"))
         wd.set_grid_bpm(float(settings.get("grid_bpm", 120.0)))
+        wd.set_grid_offset(int(settings.get("grid_offset_ms", 0)))
         wd.set_grid_line_width(int(settings.get("grid_line_width", 2)))
         wd.set_waveform_rms_enabled(bool(settings.get("waveform_rms_enabled", True)))
         wd.set_spectrum_params(
@@ -2384,6 +2416,9 @@ class TimelineWidget(QWidget):
 
     def set_grid_bpm(self, bpm: float) -> None:
         self.waveform_display.set_grid_bpm(bpm)
+
+    def set_grid_offset(self, offset_ms: int) -> None:
+        self.waveform_display.set_grid_offset(offset_ms)
 
     def set_spectrum_params(
         self,

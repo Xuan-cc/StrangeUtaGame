@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 
 import numpy as np
+import pytest
 from PyQt6.QtCore import Qt
 
 from strange_uta_game.frontend.editor.timing.timeline_widget import (
@@ -1564,6 +1565,97 @@ class TestAxisCoordinateInteraction:
         display._scroll_position = 0.0
         t = display._x_to_time(x)
         assert t == 5_000  # 中央 → 5s（整窗 10s）
+
+class TestBpmGridOffset:
+    """BPM 网格偏移（毫秒）：拍线相位对齐——节拍通常不从 0ms 开始。"""
+
+    @staticmethod
+    def _line_centers(display, w=1000, h=60):
+        """把 BPM 网格画进透明位图，取中线（y=h//2）上有线素的竖线中心。
+
+        只扫中线行：小节号文本画在顶部（y≈12），不会混入。
+        """
+        from PyQt6.QtGui import QPainter, QPixmap
+
+        pm = QPixmap(w, h)
+        pm.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pm)
+        try:
+            display._draw_bpm_grid(painter, w, h, 0.0, 1000.0)
+        finally:
+            painter.end()
+        img = pm.toImage()
+        spans = []
+        for x in range(w):
+            if img.pixelColor(x, h // 2).alpha() > 0:
+                if spans and x - spans[-1][1] <= 1:
+                    spans[-1][1] = x
+                else:
+                    spans.append([x, x])
+        return [(a + b) / 2 for a, b in spans]
+
+    @staticmethod
+    def _grid_display(**kw):
+        display = WaveformDisplay()
+        display.set_duration(1000)
+        display.set_zoom(1.0)
+        display.set_grid_mode("bpm")
+        display.set_grid_bpm(kw.get("bpm", 120.0))  # 拍长 500ms
+        display.set_grid_offset(kw.get("offset", 0))
+        display.set_grid_line_width(2)
+        return display
+
+    def test_setter_clamps_and_reports(self, qapp):
+        display = WaveformDisplay()
+        assert display.display_settings()["grid_offset_ms"] == 0
+        display.set_grid_offset(250)
+        assert display.display_settings()["grid_offset_ms"] == 250
+        display.set_grid_offset(700000)  # 越界钳到 ±600000
+        assert display.display_settings()["grid_offset_ms"] == 600000
+        display.set_grid_offset(-700000)
+        assert display.display_settings()["grid_offset_ms"] == -600000
+        display.set_grid_offset("nonsense")  # 非法输入忽略
+        assert display.display_settings()["grid_offset_ms"] == -600000
+
+    def test_offset_shifts_grid_lines(self, qapp):
+        """120BPM（拍长 500ms）× 1s 视窗：偏移 250ms 后拍线整体右移。"""
+        base = self._line_centers(self._grid_display(offset=0))
+        # 无偏移：小节线 x=0（b=0）、半拍 250、拍线 500、半拍 750
+        #（pen 宽 2/3 有 ±0.5px 的中心取整，容差 1px）
+        assert base == [pytest.approx(v, abs=1) for v in (0, 250, 500, 750)]
+
+        shifted = self._line_centers(self._grid_display(offset=250))
+        # 偏移 250：小节线 250（b=0）、半拍 500、拍线 750（b=1 半拍 1000 出界）
+        assert shifted == [pytest.approx(v, abs=1) for v in (250, 500, 750)]
+
+    def test_negative_offset_draws_pre_roll_lines(self, qapp):
+        """负偏移 -500ms：b=1 拍线落到 x=0（网格前移），其后依次左移一拍。"""
+        centers = self._line_centers(self._grid_display(offset=-500))
+        # 拍（b=1）x=0、半拍 250、拍（b=2）500、半拍 750；b=0 拍与半拍出界
+        assert centers == [pytest.approx(v, abs=1) for v in (0, 250, 500, 750)]
+
+    def test_timeline_apply_display_settings_carries_offset(self, qapp):
+        timeline = TimelineWidget()
+        timeline._apply_display_settings({"grid_offset_ms": 321})
+        assert timeline.waveform_display.display_settings()["grid_offset_ms"] == 321
+
+    def test_dialog_offset_roundtrip_and_invalid_restore(self, qapp):
+        dialog = TestAdvancedDialog._make_dialog(
+            {"grid_mode": "bpm", "grid_offset_ms": 250}
+        )
+        assert dialog._collect()["grid_offset_ms"] == 250
+        # 失焦提交语义：非法文本恢复上次有效值并照常提交
+        dialog.grid_offset_edit.setText("abc")
+        dialog._commit_grid_offset()
+        assert dialog._collect()["grid_offset_ms"] == 250
+        dialog.grid_offset_edit.setText("-40")
+        dialog._commit_grid_offset()
+        assert dialog._collect()["grid_offset_ms"] == -40
+        # 越界（>600000）恢复上次有效值
+        dialog.grid_offset_edit.setText("999999")
+        dialog._commit_grid_offset()
+        assert dialog._collect()["grid_offset_ms"] == -40
+
 
 class TestBpmGridPerformance:
     def test_high_bpm_long_audio_grid_under_30ms(self, qapp):

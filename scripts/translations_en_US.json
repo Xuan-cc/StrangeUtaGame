@@ -1772,5 +1772,6 @@
   "歌词文件 (*.lrc *.txt *.kra *.krl *.ass *.srt);;所有文件 (*.*)": "Lyrics files (*.lrc *.txt *.kra *.krl *.ass *.srt);;All Files (*.*)",
   "正在解析 Kirakara 格式...": "Parsing Kirakara format...",
   "@HeadOffset（头部偏移）": "@HeadOffset (header offset)",
-  "@Offset（全局偏移）": "@Offset (global offset)"
+  "@Offset（全局偏移）": "@Offset (global offset)",
+  "BPM 网格偏移": "BPM grid offset"
 }
