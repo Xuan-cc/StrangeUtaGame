@@ -32,7 +32,7 @@
     "spectrum_fft_size": 2048,
     "spectrum_freq_scale": "log",
     "spectrum_dyn_range_db": 90,
-    "display_height": 220,
+    "display_height": 120,
     "waveform_rms_enabled": true,
     "disable_click_jump": false,
     "hide_hitbox_highlights": false,

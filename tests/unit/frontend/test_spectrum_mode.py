@@ -21,17 +21,18 @@ def _tone(seconds: float = 2.0, freq: float = 440.0) -> np.ndarray:
 
 class TestDisplayMode:
     def test_default_display_height_is_common(self, qapp):
-        """显示高度是波形/声谱公共属性：期望经 sizeHint 表达（默认 220）。
+        """显示高度是波形/声谱公共属性：期望经 sizeHint 表达（默认 120 =
+        旧版不可调时的波形窗口高度）。
 
         minimumHeight 恒为硬下限 80——空间不足时布局压缩显示区，
         而不是把顶层窗口撑出屏幕（P1：曾实测请求 713px 窗口被撑到 855px）。
         """
         display = WaveformDisplay()
         assert display.display_settings()["display_mode"] == "waveform"
-        assert display.sizeHint().height() == 220
-        assert display.minimumHeight() == 220  # 领取空间（Expanding 预览会吃掉 hint）
+        assert display.sizeHint().height() == 120
+        assert display.minimumHeight() == 120  # 领取空间（Expanding 预览会吃掉 hint）
         display.set_display_mode("spectrum")
-        assert display.sizeHint().height() == 220
+        assert display.sizeHint().height() == 120
 
     def test_display_height_adjustable_both_modes(self, qapp):
         display = WaveformDisplay()
@@ -412,7 +413,7 @@ class TestAdvancedDialog:
         received = []
         dialog.applied.connect(lambda d: received.append(d))
         dialog.set_height_cap(240)
-        assert dialog.height_slider.value() == 220  # 期望不变
+        assert dialog.height_slider.value() == 120  # 期望（默认）不变
         assert dialog.height_slider.maximum() == 400  # 期望域固定
         assert received == []  # 不因 cap 触发持久化
         dialog.height_slider.setValue(320)
@@ -555,7 +556,7 @@ class TestSettingsDefaults:
             "spectrum_fft_size": 2048,
             "spectrum_freq_scale": "log",
             "spectrum_dyn_range_db": 90,
-            "display_height": 220,
+            "display_height": 120,
         }
         for key, value in expected.items():
             assert timing.get(key) == value, key
@@ -776,7 +777,7 @@ class TestBpmGridLineWidth:
         timing = AppSettings.DEFAULT_SETTINGS["timing"]
         assert timing.get("waveform_grid_line_width") == 2
         assert timing.get("spectrum_overlap") == 0.75
-        assert timing.get("display_height") == 220
+        assert timing.get("display_height") == 120
 
 
 class TestSpectrumAxisGutter:

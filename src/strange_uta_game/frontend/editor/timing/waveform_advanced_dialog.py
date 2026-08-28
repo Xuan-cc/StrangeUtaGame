@@ -305,7 +305,7 @@ class WaveformAdvancedDialog(QDialog):
             0 if init.get("spectrum_freq_scale", "log") == "log" else 1
         )
         self.dyn_slider.setValue(int(init.get("spectrum_dyn_range_db", 90)))
-        self.height_slider.setValue(int(init.get("display_height", 220)))
+        self.height_slider.setValue(int(init.get("display_height", 120)))
         self._update_slider_captions()
         self._update_params_enabled()
 

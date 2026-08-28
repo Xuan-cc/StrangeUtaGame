@@ -147,7 +147,8 @@ class WaveformDisplay(QWidget):
         self._spectrum_freq_scale = "log"  # "log" | "linear"
         self._spectrum_dyn_range_db = 90
         # 显示高度（公共属性：波形与声谱共用，120~400px）
-        self._display_height = 220
+        # 默认 120px = 旧版不可调时的波形窗口高度
+        self._display_height = 120
         # 声谱活动门禁：False 时任何路径（换音频/改参数/切模式）都不得重启计算
         self._spectrum_active = True
         # 双层波形（外层 min/max 峰值 + 内层 RMS 核心带）绘制开关，默认开
@@ -202,7 +203,7 @@ class WaveformDisplay(QWidget):
         self._suspension_timer.setInterval(6000)
         self._suspension_timer.timeout.connect(self._resume_auto_scroll)
 
-        # 显示高度为公共期望高度（波形/声谱一致，默认 220）
+        # 显示高度为公共期望高度（波形/声谱一致，默认 120）
         self._apply_display_height()
         self.setMouseTracking(True)
 

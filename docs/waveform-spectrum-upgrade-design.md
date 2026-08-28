@@ -84,7 +84,7 @@ thread.finished → deleteLater`）；UI 槽经 `TaskRelay`（owner 子对象，
    + 「自动检测」按钮（无音频禁用；检测中显示进度百分比；成功填回数值并给置信度提示）。
 3. **频谱参数**（仅声谱图模式启用）：FFT 窗口（512/1024/2048/4096/8192，默认 2048≈21.5Hz 分辨率）、
    频率刻度（对数/线性，默认对数）、动态范围（40~120dB 滑条，默认 90）、
-   频谱高度（120~400px 滑条，默认 220）。
+   频谱高度（120~400px 滑条，默认 120 = 旧版不可调时的波形窗口高度）。
 
 ### 2.3 高度与布局协商
 
@@ -179,7 +179,7 @@ Ctrl+滚轮锚点全部按 `_plot_width()` 换算——频率刻度与视口左�
 3. **`frontend/settings/app_settings.py`**：`DEFAULT_SETTINGS["timing"]` 新增
    `waveform_display_mode`("waveform")、`waveform_visible`(true，顺手持久化现有开关)、
    `waveform_grid_mode`("time")、`waveform_grid_bpm`(120.0)、`spectrum_fft_size`(2048)、
-   `spectrum_freq_scale`("log")、`spectrum_dyn_range_db`(90)、`spectrum_height`(220)；
+   `spectrum_freq_scale`("log")、`spectrum_dyn_range_db`(90)、`spectrum_height`(120)；
    镜像到 `src/strange_uta_game/config/config.json`。
 4. **`frontend/editor/timing_interface.py`**：`_apply_settings` 推送新键；连接
    `display_settings_changed` → 写回 AppSettings；启动时应用持久化的显示开关状态。
