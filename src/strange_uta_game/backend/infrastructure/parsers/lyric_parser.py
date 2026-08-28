@@ -301,6 +301,14 @@ class LRCParser(LyricParser):
                 last_match = matches[-1]
                 lyric_text = _cjk_strip(line_text[last_match.end():])
 
+                # 行尾空时间标签：最后一个标签后无文本（[start]歌词[end]），
+                # 该标签即行末释放点（与 SRT/ASS 的 End 同义）
+                line_end_ts: Optional[int] = None
+                if not lyric_text and len(matches) >= 2:
+                    end_ts = self._parse_timestamp(last_match)
+                    if end_ts > self._parse_timestamp(matches[0]):
+                        line_end_ts = end_ts
+
                 if not lyric_text:
                     # 尝试提取时间标签之间的文本: [start]歌词[end]
                     if len(matches) >= 2:
@@ -318,6 +326,9 @@ class LRCParser(LyricParser):
                     ParsedLine(
                         text=lyric_text,
                         timetags=[(0, timestamp_ms)],  # 整行时间标签放在第一个字符
+                        # 行级时间轴：行尾释放绑行末字符（与 SRT/无 \k ASS 一致）
+                        line_end_ts=line_end_ts,
+                        line_end_bind_last=line_end_ts is not None,
                     )
                 )
 

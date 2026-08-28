@@ -80,6 +80,9 @@ class TestLRCParser:
         assert len(result) == 1
         assert result[0].text == "一闪一闪亮晶晶"
         assert result[0].timetags == [(0, 6540)]
+        # 行尾空标签 → 行末释放点，绑行末字符
+        assert result[0].line_end_ts == 9300
+        assert result[0].line_end_bind_last is True
 
     def test_parse_start_end_multi_lines(self):
         """测试多行 [start]歌词[end] 格式"""
@@ -94,10 +97,30 @@ class TestLRCParser:
         assert len(result) == 3
         assert result[0].text == "一闪一闪亮晶晶"
         assert result[0].timetags == [(0, 6540)]
+        assert result[0].line_end_ts == 9300
         assert result[1].text == "满天都是小星星"
         assert result[1].timetags == [(0, 9300)]
+        assert result[1].line_end_ts == 12120
         assert result[2].text == "挂在天上放光明"
         assert result[2].timetags == [(0, 12120)]
+        assert result[2].line_end_ts == 15060
+
+    def test_line_level_lrc_without_end_tag_has_no_line_end(self):
+        """标准逐行 LRC（无行尾空标签）不产出 line_end_ts。"""
+        parser = LRCParser()
+        result = parser.parse("[00:06.540]一闪一闪亮晶晶")
+
+        assert result[0].timetags == [(0, 6540)]
+        assert result[0].line_end_ts is None
+        assert result[0].line_end_bind_last is False
+
+    def test_end_tag_not_after_start_is_ignored(self):
+        """行尾标签不晚于首标签（手写错位）时不产出 line_end_ts。"""
+        parser = LRCParser()
+        result = parser.parse("[00:09.300]歌词[00:06.540]")
+
+        assert result[0].timetags == [(0, 9300)]
+        assert result[0].line_end_ts is None
 
     def test_parse_colon_separator(self):
         """测试冒号分隔的时间标签 [mm:ss:cc]"""
