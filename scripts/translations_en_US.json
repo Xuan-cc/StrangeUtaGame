@@ -1773,5 +1773,6 @@
   "正在解析 Kirakara 格式...": "Parsing Kirakara format...",
   "@HeadOffset（头部偏移）": "@HeadOffset (header offset)",
   "@Offset（全局偏移）": "@Offset (global offset)",
-  "BPM 网格偏移": "BPM grid offset"
+  "BPM 网格偏移": "BPM grid offset",
+  "与设置页「打轴 → 波形时间标签」共用，两处修改即时同步": "Shared with Settings → Tag → Waveform time tags; changes on either side sync instantly"
 }

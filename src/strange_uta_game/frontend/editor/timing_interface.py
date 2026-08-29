@@ -828,20 +828,9 @@ class EditorInterface(QWidget):
         self._refresh_position_poll_interval()
         # 波形时间标签拖拽编辑总开关（默认开启，关闭回退旧的纯显示/seek/pan 模式）
         if hasattr(self, "timeline"):
-            self.timeline.set_tag_edit_enabled(
-                settings.get("timing.waveform_tag_edit_enabled", True)
-            )
-            # 波形时间标签上是否显示本体字符 / 注音文本（两个独立开关，默认开启）
-            self.timeline.set_tag_char_enabled(
-                settings.get("timing.waveform_tag_char_enabled", True)
-            )
-            self.timeline.set_tag_ruby_enabled(
-                settings.get("timing.waveform_tag_ruby_enabled", True)
-            )
-            self.timeline.set_center_playhead_mode(
-                settings.get("timing.waveform_center_playhead_enabled", False)
-            )
-            # 波形区显示设置（齿轮对话框项）：模式 / 网格 / 频谱参数
+            # 波形区显示设置（齿轮对话框项）：模式 / 网格 / 频谱参数。
+            # 时间标签四开关（拖拽/居中/字符/注音）也并入同一 dict——齿轮弹窗
+            # 与设置页「波形时间标签」组经 _apply_display_settings 单路径联动
             self.timeline._apply_display_settings({
                 "display_mode": settings.get("timing.waveform_display_mode", "waveform"),
                 "grid_mode": settings.get("timing.waveform_grid_mode", "time"),
@@ -859,6 +848,18 @@ class EditorInterface(QWidget):
                 "display_height": int(settings.get("timing.display_height", 120)),
                 "waveform_rms_enabled": bool(
                     settings.get("timing.waveform_rms_enabled", True)
+                ),
+                "tag_edit_enabled": settings.get(
+                    "timing.waveform_tag_edit_enabled", True
+                ),
+                "center_playhead_enabled": settings.get(
+                    "timing.waveform_center_playhead_enabled", False
+                ),
+                "tag_char_enabled": settings.get(
+                    "timing.waveform_tag_char_enabled", True
+                ),
+                "tag_ruby_enabled": settings.get(
+                    "timing.waveform_tag_ruby_enabled", True
                 ),
             })
             # 波形显示开关的持久化状态（齿轮外的既有开关）
@@ -5386,6 +5387,23 @@ class EditorInterface(QWidget):
         s.set(
             "timing.waveform_rms_enabled",
             bool(settings.get("waveform_rms_enabled", True)),
+        )
+        # 时间标签四开关：与设置页「波形时间标签」组共用同一组键（两处联动）
+        s.set(
+            "timing.waveform_tag_edit_enabled",
+            bool(settings.get("tag_edit_enabled", True)),
+        )
+        s.set(
+            "timing.waveform_center_playhead_enabled",
+            bool(settings.get("center_playhead_enabled", False)),
+        )
+        s.set(
+            "timing.waveform_tag_char_enabled",
+            bool(settings.get("tag_char_enabled", True)),
+        )
+        s.set(
+            "timing.waveform_tag_ruby_enabled",
+            bool(settings.get("tag_ruby_enabled", True)),
         )
         s.save()
 

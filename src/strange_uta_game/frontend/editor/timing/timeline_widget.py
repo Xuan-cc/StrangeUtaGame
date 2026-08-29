@@ -978,6 +978,11 @@ class WaveformDisplay(QWidget):
             "display_height": self._display_height,
             "waveform_rms_enabled": self._waveform_rms_enabled,
             "actual_spectrum_overlap": self._actual_overlap,
+            # 时间标签行为（与设置页「波形时间标签」组共用 timing.* 键）
+            "tag_edit_enabled": self._tag_edit_enabled,
+            "center_playhead_enabled": self._center_playhead_mode,
+            "tag_char_enabled": self._tag_char_enabled,
+            "tag_ruby_enabled": self._tag_ruby_enabled,
         }
 
     def spectrum_audio_source(self) -> Optional[tuple]:
@@ -2385,6 +2390,19 @@ class TimelineWidget(QWidget):
         wd.set_grid_offset(int(settings.get("grid_offset_ms", 0)))
         wd.set_grid_line_width(int(settings.get("grid_line_width", 2)))
         wd.set_waveform_rms_enabled(bool(settings.get("waveform_rms_enabled", True)))
+        # 时间标签行为键（设置页「波形时间标签」组也走这里，保证两处联动）
+        tag_edit = settings.get("tag_edit_enabled")
+        if tag_edit is not None:
+            wd.set_tag_edit_enabled(bool(tag_edit))
+        center_playhead = settings.get("center_playhead_enabled")
+        if center_playhead is not None:
+            wd.set_center_playhead_mode(bool(center_playhead))
+        tag_char = settings.get("tag_char_enabled")
+        if tag_char is not None:
+            wd.set_tag_char_enabled(bool(tag_char))
+        tag_ruby = settings.get("tag_ruby_enabled")
+        if tag_ruby is not None:
+            wd.set_tag_ruby_enabled(bool(tag_ruby))
         wd.set_spectrum_params(
             fft_size=settings.get("spectrum_fft_size"),
             overlap=settings.get("spectrum_overlap"),
@@ -2399,6 +2417,9 @@ class TimelineWidget(QWidget):
         dialog = getattr(self, "_advanced_dialog", None)
         if dialog is not None and hasattr(dialog, "refresh_overlap_hint"):
             dialog.refresh_overlap_hint(after)
+        # 设置页改了时间标签键时同步弹窗开关（弹窗自身改动值相同，为空操作）
+        if dialog is not None and hasattr(dialog, "sync_tag_settings"):
+            dialog.sync_tag_settings(after)
 
     def set_display_mode(self, mode: str) -> None:
         self.waveform_display.set_display_mode(mode)

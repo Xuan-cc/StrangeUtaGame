@@ -1782,3 +1782,190 @@ class TestSpectrumThemeRender:
                 display.deleteLater()
         finally:
             theme_module.theme._colors = original_colors
+
+
+class TestTagSettingsLinkage:
+    """时间标签四开关：齿轮弹窗 ↔ 设置页「波形时间标签」组共用同一组键联动。"""
+
+    def test_display_settings_includes_tag_keys(self, qapp):
+        display = WaveformDisplay()
+        settings = display.display_settings()
+        assert settings["tag_edit_enabled"] is True
+        assert settings["center_playhead_enabled"] is False
+        assert settings["tag_char_enabled"] is True
+        assert settings["tag_ruby_enabled"] is True
+
+        display.set_tag_edit_enabled(False)
+        display.set_center_playhead_mode(True)
+        display.set_tag_char_enabled(False)
+        display.set_tag_ruby_enabled(False)
+
+        settings = display.display_settings()
+        assert settings["tag_edit_enabled"] is False
+        assert settings["center_playhead_enabled"] is True
+        assert settings["tag_char_enabled"] is False
+        assert settings["tag_ruby_enabled"] is False
+
+    def test_apply_display_settings_applies_tag_keys(self, qapp):
+        timeline = TimelineWidget()
+        received = []
+        timeline.display_settings_changed.connect(lambda d: received.append(dict(d)))
+
+        timeline._apply_display_settings({
+            "tag_edit_enabled": False,
+            "center_playhead_enabled": True,
+        })
+        wd = timeline.waveform_display
+        assert wd._tag_edit_enabled is False
+        assert wd._center_playhead_mode is True
+        # 未提供的键不受影响（不带标签键的旧调用方兼容）
+        assert wd._tag_char_enabled is True
+        assert wd._tag_ruby_enabled is True
+        assert len(received) == 1
+        assert received[0]["tag_edit_enabled"] is False
+
+        # 重复施加相同值不再发信号（避免无谓持久化）
+        timeline._apply_display_settings({
+            "tag_edit_enabled": False,
+            "center_playhead_enabled": True,
+        })
+        assert len(received) == 1
+
+    def test_dialog_loads_and_collects_tag_settings(self, qapp):
+        dialog = TestAdvancedDialog._make_dialog({
+            "tag_edit_enabled": False,
+            "center_playhead_enabled": True,
+            "tag_char_enabled": True,
+            "tag_ruby_enabled": False,
+        })
+        assert dialog.tag_edit_switch.isChecked() is False
+        assert dialog.center_playhead_switch.isChecked() is True
+        assert dialog.tag_char_switch.isChecked() is True
+        assert dialog.tag_ruby_switch.isChecked() is False
+        assert dialog.tag_ruby_switch.isEnabled()  # 字符开 → 注音可编辑
+
+        collected = dialog._collect()
+        assert collected["tag_edit_enabled"] is False
+        assert collected["center_playhead_enabled"] is True
+        assert collected["tag_char_enabled"] is True
+        assert collected["tag_ruby_enabled"] is False
+
+    def test_dialog_defaults_match_widget_defaults(self, qapp):
+        """弹窗缺省值与 WaveformDisplay/设置页默认一致（缺键回退默认）。"""
+        dialog = TestAdvancedDialog._make_dialog({})
+        assert dialog.tag_edit_switch.isChecked() is True
+        assert dialog.center_playhead_switch.isChecked() is False
+        assert dialog.tag_char_switch.isChecked() is True
+        assert dialog.tag_ruby_switch.isChecked() is True
+
+    def test_tag_panel_is_after_spectrum_params_panel(self, qapp):
+        """「时间标签」面板排在「声谱参数」之后（显示模式 → 网格 → 声谱 → 标签）。"""
+        dialog = TestAdvancedDialog._make_dialog({})
+        layout = dialog._tag_group.parentWidget().layout()
+        assert layout.indexOf(dialog._tag_group) > layout.indexOf(
+            dialog._params_group
+        )
+        assert layout.indexOf(dialog._params_group) > layout.indexOf(
+            dialog._grid_group
+        )
+
+    def test_dialog_char_off_disables_ruby_switch(self, qapp):
+        dialog = TestAdvancedDialog._make_dialog({"tag_char_enabled": False})
+        assert dialog.tag_char_switch.isChecked() is False
+        assert not dialog.tag_ruby_switch.isEnabled()
+
+    def test_dialog_switch_flip_emits_applied_with_tag_keys(self, qapp):
+        dialog = TestAdvancedDialog._make_dialog({})
+        emitted = []
+        dialog.applied.connect(lambda d: emitted.append(dict(d)))
+
+        dialog.tag_edit_switch.setChecked(False)
+
+        assert len(emitted) == 1
+        assert emitted[0]["tag_edit_enabled"] is False
+
+    def test_sync_tag_settings_updates_switches_without_emitting(self, qapp):
+        """外部（设置页）同步开关状态不触发 applied（防回环）。"""
+        dialog = TestAdvancedDialog._make_dialog({})
+        emitted = []
+        dialog.applied.connect(lambda d: emitted.append(dict(d)))
+
+        dialog.sync_tag_settings({
+            "tag_edit_enabled": False,
+            "center_playhead_enabled": True,
+            "tag_char_enabled": False,
+            "tag_ruby_enabled": True,
+        })
+
+        assert emitted == []
+        assert dialog.tag_edit_switch.isChecked() is False
+        assert dialog.center_playhead_switch.isChecked() is True
+        assert dialog.tag_char_switch.isChecked() is False
+        assert not dialog.tag_ruby_switch.isEnabled()  # 字符关 → 注音禁用
+
+    def test_timeline_apply_syncs_open_dialog_switches(self, qapp):
+        """设置页链路（_apply_settings_inner → _apply_display_settings）同步打开的弹窗。"""
+        timeline = TimelineWidget()
+        timeline._on_waveform_settings_clicked()
+        dialog = timeline._advanced_dialog
+        assert dialog is not None
+
+        timeline._apply_display_settings({
+            "tag_edit_enabled": False,
+            "tag_char_enabled": False,
+        })
+
+        assert dialog.tag_edit_switch.isChecked() is False
+        assert dialog.tag_char_switch.isChecked() is False
+        assert not dialog.tag_ruby_switch.isEnabled()
+        dialog.deleteLater()
+
+    def test_dialog_flip_applies_to_widget_and_emits_persist_signal(self, qapp):
+        """弹窗开关 → applied → _apply_display_settings 应用到波形区并发持久化信号。"""
+        timeline = TimelineWidget()
+        timeline._on_waveform_settings_clicked()
+        dialog = timeline._advanced_dialog
+        received = []
+        timeline.display_settings_changed.connect(lambda d: received.append(dict(d)))
+
+        dialog.tag_char_switch.setChecked(False)
+
+        assert timeline.waveform_display._tag_char_enabled is False
+        assert len(received) == 1
+        assert received[0]["tag_char_enabled"] is False
+        dialog.deleteLater()
+
+    def test_persist_handler_writes_shared_timing_keys(self, qapp, monkeypatch):
+        """display_settings 持久化槽把标签键写回设置页共用的 timing.* 键。"""
+        from types import SimpleNamespace
+
+        from strange_uta_game.frontend.editor.timing_interface import EditorInterface
+
+        class _Settings:
+            def __init__(self):
+                self.values = {}
+
+            def get(self, path, default=None):
+                return self.values.get(path, default)
+
+            def set(self, path, value):
+                self.values[path] = value
+
+            def save(self):
+                self.saved = True
+
+        settings = _Settings()
+        fake_editor = SimpleNamespace(
+            _get_setting_interface=lambda: SimpleNamespace(get_settings=lambda: settings),
+            _apply_preview_spectrum_yield=lambda: None,
+        )
+
+        EditorInterface._on_timeline_display_settings_changed(
+            fake_editor, {"tag_edit_enabled": False, "tag_ruby_enabled": False}
+        )
+
+        assert settings.values["timing.waveform_tag_edit_enabled"] is False
+        assert settings.values["timing.waveform_center_playhead_enabled"] is False
+        assert settings.values["timing.waveform_tag_char_enabled"] is True
+        assert settings.values["timing.waveform_tag_ruby_enabled"] is False
+        assert settings.saved

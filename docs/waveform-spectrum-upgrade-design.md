@@ -85,6 +85,13 @@ thread.finished → deleteLater`）；UI 槽经 `TaskRelay`（owner 子对象，
 3. **频谱参数**（仅声谱图模式启用）：FFT 窗口（512/1024/2048/4096/8192，默认 2048≈21.5Hz 分辨率）、
    频率刻度（对数/线性，默认对数）、动态范围（40~120dB 滑条，默认 90）、
    频谱高度（120~400px 滑条，默认 120 = 旧版不可调时的波形窗口高度）。
+4. **时间标签**（面板置于声谱参数之后）：标签拖拽 / 播放头居中 / 标签显示字符 /
+   标签显示注音四个开关，与设置页「打轴 → 波形时间标签」组**共用同一组
+   `timing.waveform_tag_*` 键**：弹窗改动经
+   `applied → _apply_display_settings → display_settings_changed` 持久化；
+   设置页改动经设置级联回到 `_apply_display_settings`，并经
+   `sync_tag_settings()`（blockSignals 防回环）刷新打开中的弹窗。字符关→注音
+   开关禁用，与设置页联动一致。
 
 ### 2.3 高度与布局协商
 

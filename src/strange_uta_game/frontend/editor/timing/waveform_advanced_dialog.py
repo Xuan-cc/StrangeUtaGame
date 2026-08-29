@@ -8,6 +8,8 @@
    （librosa 管线的 numpy 复刻，见 spectrum_core.detect_bpm；结果填回
    输入框供确认，并给出置信度）。
 3. 声谱参数：FFT 窗口、频率刻度、动态范围、频谱高度（仅声谱模式启用）。
+4. 时间标签：标签拖拽 / 播放头居中 / 标签显示字符 / 标签显示注音
+   （与设置页「打轴 → 波形时间标签」组共用同一组 timing.* 键，两处联动）。
 
 行为要点：
 
@@ -79,7 +81,7 @@ class WaveformAdvancedDialog(QDialog):
         self.setWindowModality(Qt.WindowModality.NonModal)
         # Windows 下去掉标题栏的 "?" 帮助按钮
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
-        fit_to_screen(self, 520, 580)
+        fit_to_screen(self, 520, 660)
         self.setMinimumSize(440, 300)
 
         # ── 内容区（ScrollArea 包裹，小屏可滚动） ──
@@ -252,9 +254,42 @@ class WaveformAdvancedDialog(QDialog):
         params_grid.setColumnStretch(1, 1)
         self._params_group.contentLayout.addLayout(params_grid)
 
+        # ── Panel 4：时间标签（与设置页「打轴 → 波形时间标签」组联动） ──
+        self._tag_group = FluentGroupBox(self.tr("时间标签"), content)
+        (
+            self._lbl_tag_edit,
+            self.tag_edit_switch,
+        ) = self._make_tag_switch_row(self.tr("波形时间标签拖拽"))
+        (
+            self._lbl_center_playhead,
+            self.center_playhead_switch,
+        ) = self._make_tag_switch_row(self.tr("播放头居中模式"))
+        (
+            self._lbl_tag_char,
+            self.tag_char_switch,
+        ) = self._make_tag_switch_row(self.tr("波形标签显示字符"))
+        (
+            self._lbl_tag_ruby,
+            self.tag_ruby_switch,
+        ) = self._make_tag_switch_row(self.tr("波形标签显示注音"))
+        self.tag_link_hint = CaptionLabel(
+            self.tr("与设置页「打轴 → 波形时间标签」共用，两处修改即时同步"),
+            self._tag_group,
+        )
+        self.tag_link_hint.setWordWrap(True)
+        for row in (
+            self._lbl_tag_edit.parentWidget(),
+            self._lbl_center_playhead.parentWidget(),
+            self._lbl_tag_char.parentWidget(),
+            self._lbl_tag_ruby.parentWidget(),
+        ):
+            self._tag_group.contentLayout.addWidget(row)
+        self._tag_group.contentLayout.addWidget(self.tag_link_hint)
+
         content_layout.addWidget(self._mode_group)
         content_layout.addWidget(self._grid_group)
         content_layout.addWidget(self._params_group)
+        content_layout.addWidget(self._tag_group)
         content_layout.addStretch(1)
         scroll.setWidget(content)
 
@@ -276,6 +311,20 @@ class WaveformAdvancedDialog(QDialog):
         self._update_slider_captions()
 
     # ── 初始化与信号 ──
+
+    def _make_tag_switch_row(self, label_text: str) -> tuple:
+        """时间标签面板的「标签 + 开关」行（结构与双层波形行一致）。"""
+        row = QWidget(self._tag_group)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        label = BodyLabel(label_text, row)
+        switch = SwitchButton(row)
+        switch.setOnText(self.tr("开"))
+        switch.setOffText(self.tr("关"))
+        row_layout.addWidget(label)
+        row_layout.addWidget(switch)
+        row_layout.addStretch(1)
+        return label, switch
 
     def _load_initial(self) -> None:
         init = self._initial
@@ -306,8 +355,15 @@ class WaveformAdvancedDialog(QDialog):
         )
         self.dyn_slider.setValue(int(init.get("spectrum_dyn_range_db", 90)))
         self.height_slider.setValue(int(init.get("display_height", 120)))
+        self.tag_edit_switch.setChecked(bool(init.get("tag_edit_enabled", True)))
+        self.center_playhead_switch.setChecked(
+            bool(init.get("center_playhead_enabled", False))
+        )
+        self.tag_char_switch.setChecked(bool(init.get("tag_char_enabled", True)))
+        self.tag_ruby_switch.setChecked(bool(init.get("tag_ruby_enabled", True)))
         self._update_slider_captions()
         self._update_params_enabled()
+        self._sync_tag_ruby_enabled()
 
     def _connect_signals(self) -> None:
         self.radio_spectrum.toggled.connect(self._on_mode_toggled)
@@ -334,7 +390,24 @@ class WaveformAdvancedDialog(QDialog):
         )
         self.dyn_slider.sliderReleased.connect(self._emit_applied)
         self.height_slider.sliderReleased.connect(self._emit_applied)
+        # 时间标签四开关：改动即时生效（applied → TimelineWidget 应用+持久化）
+        self.tag_edit_switch.checkedChanged.connect(lambda _v: self._emit_applied())
+        self.center_playhead_switch.checkedChanged.connect(
+            lambda _v: self._emit_applied()
+        )
+        self.tag_char_switch.checkedChanged.connect(self._on_tag_char_toggled)
+        self.tag_ruby_switch.checkedChanged.connect(lambda _v: self._emit_applied())
         self.btn_detect_bpm.clicked.connect(self._on_detect_bpm)
+
+    def _on_tag_char_toggled(self, _checked: bool) -> None:
+        """字符显示以注音显示为前提：字符关 → 注音开关禁用（与设置页联动一致）。"""
+        self._sync_tag_ruby_enabled()
+        self._emit_applied()
+
+    def _sync_tag_ruby_enabled(self) -> None:
+        enabled = self.tag_char_switch.isChecked()
+        self.tag_ruby_switch.setEnabled(enabled)
+        self._lbl_tag_ruby.setEnabled(enabled)
 
     def changeEvent(self, event) -> None:
         # 非模态窗口可能跨语言切换存活，静态文案需跟随重译
@@ -363,7 +436,23 @@ class WaveformAdvancedDialog(QDialog):
         )
         self._mode_group.setTitle(self.tr("显示模式"))
         self._grid_group.setTitle(self.tr("网格与节拍"))
+        self._tag_group.setTitle(self.tr("时间标签"))
         self._params_group.setTitle(self.tr("声谱参数"))
+        self._lbl_tag_edit.setText(self.tr("波形时间标签拖拽"))
+        self._lbl_center_playhead.setText(self.tr("播放头居中模式"))
+        self._lbl_tag_char.setText(self.tr("波形标签显示字符"))
+        self._lbl_tag_ruby.setText(self.tr("波形标签显示注音"))
+        self.tag_link_hint.setText(
+            self.tr("与设置页「打轴 → 波形时间标签」共用，两处修改即时同步")
+        )
+        for switch in (
+            self.tag_edit_switch,
+            self.center_playhead_switch,
+            self.tag_char_switch,
+            self.tag_ruby_switch,
+        ):
+            switch.setOnText(self.tr("开"))
+            switch.setOffText(self.tr("关"))
         self._lbl_fft.setText(self.tr("FFT 窗口"))
         self._lbl_scale.setText(self.tr("频率刻度"))
         self._lbl_dyn.setText(self.tr("动态范围"))
@@ -457,6 +546,10 @@ class WaveformAdvancedDialog(QDialog):
             "spectrum_dyn_range_db": int(self.dyn_slider.value()),
             "display_height": int(self.height_slider.value()),
             "waveform_rms_enabled": bool(self.rms_switch.isChecked()),
+            "tag_edit_enabled": bool(self.tag_edit_switch.isChecked()),
+            "center_playhead_enabled": bool(self.center_playhead_switch.isChecked()),
+            "tag_char_enabled": bool(self.tag_char_switch.isChecked()),
+            "tag_ruby_enabled": bool(self.tag_ruby_switch.isChecked()),
         }
 
     def _emit_applied(self, *_args) -> None:
@@ -494,6 +587,30 @@ class WaveformAdvancedDialog(QDialog):
             return
         self._actual_height_cap = cap_px
         self._update_slider_captions()
+
+    def sync_tag_settings(self, settings: dict) -> None:
+        """外部（设置页）改了时间标签键时同步本弹窗开关。
+
+        blockSignals 抑制 checkedChanged，避免同步本身再触发一轮
+        applied → _apply_display_settings 循环；值未变时 setChecked
+        本就不发 toggled，双保险。
+        """
+        pairs = (
+            (self.tag_edit_switch, bool(settings.get("tag_edit_enabled", True))),
+            (
+                self.center_playhead_switch,
+                bool(settings.get("center_playhead_enabled", False)),
+            ),
+            (self.tag_char_switch, bool(settings.get("tag_char_enabled", True))),
+            (self.tag_ruby_switch, bool(settings.get("tag_ruby_enabled", True))),
+        )
+        for switch, value in pairs:
+            if switch.isChecked() == value:
+                continue
+            switch.blockSignals(True)
+            switch.setChecked(value)
+            switch.blockSignals(False)
+        self._sync_tag_ruby_enabled()
 
     # ── BPM 自动检测（task_runner 自回收；槽按 sender 身份丢弃过期结果） ──
 
