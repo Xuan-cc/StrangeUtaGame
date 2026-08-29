@@ -52,6 +52,7 @@ from strange_uta_game.backend.application.ai_timing.models import (
 )
 from strange_uta_game.backend.application.ai_timing.runtime import (
     INSTALL_LOG_NAME,
+    AiRuntimeError,
     AiRuntimeManager,
 )
 from strange_uta_game.backend.application.ai_timing.service import (
@@ -214,6 +215,7 @@ class AiTimingDialog(QDialog):
         managed_runtime_python: str = "",
         embedded_mode: bool = False,
         open_separation_page: Optional[Callable] = None,
+        stop_separation_service: Optional[Callable] = None,
         context_checker: Optional[Callable[[], bool]] = None,
         parent=None,
     ):
@@ -237,6 +239,8 @@ class AiTimingDialog(QDialog):
         self._embedded_mode = embedded_mode
         # 宿主页面跳转（嵌入模式引导去第 2 步装环境）；None = 未提供
         self._open_separation_page = open_separation_page
+        # 宿主分离服务停止（方案 B 装前腾出解释器文件锁）；None = 未提供
+        self._stop_separation_service = stop_separation_service
         # 返回 True 表示打开时的工程/音频仍然有效（未切换/未关闭）
         self._context_checker = context_checker
 
@@ -1196,6 +1200,32 @@ class AiTimingDialog(QDialog):
                         pass
                     progress_cb("runtime", 1, model_note)
                 if mode == "shared":
+                    # 方案 B 前置：宿主分离服务进程加载中的 torch 等
+                    # .pyd 锁着该解释器的 site-packages，pip 覆盖被锁
+                    # 文件可能半失败、留下新旧混杂的安装——先让宿主
+                    # 阻塞停服（最多等约 30s）再开 pip；旧宿主未实现
+                    # 该可选能力（None）时静默跳过，不阻断安装
+                    if self._stop_separation_service is not None:
+                        progress_cb(
+                            "runtime", 1, self.tr("正在停止工作台分离服务…")
+                        )
+                        try:
+                            stop_result = self._stop_separation_service() or {}
+                        except Exception as exc:
+                            raise AiRuntimeError(
+                                self.tr("停止工作台分离服务失败：{e}").format(
+                                    e=exc
+                                )
+                            ) from exc
+                        if not stop_result.get("stopped"):
+                            # 拒绝原因来自宿主（中文，如任务执行中），
+                            # 原样透传给错误弹窗
+                            raise AiRuntimeError(
+                                str(
+                                    stop_result.get("message")
+                                    or self.tr("无法停止工作台分离服务，请稍后重试")
+                                )
+                            )
                     # 方案 B：向宿主托管解释器增量安装（不建 venv、不重装
                     # torch，torchaudio 按其 torch 版本自动配对）
                     status = self._runtime.install_shared(

@@ -2216,6 +2216,7 @@ class EditorInterface(QWidget):
             proxy,
             managed_runtime,
             open_separation,
+            stop_service,
             embedded,
         ) = parts
         duration_ms = 0
@@ -2239,6 +2240,7 @@ class EditorInterface(QWidget):
             managed_runtime_python=managed_runtime,
             embedded_mode=embedded,
             open_separation_page=open_separation,
+            stop_separation_service=stop_service,
             context_checker=lambda: (
                 self._project is not None
                 and getattr(self, "_audio_file_path", None) == audio_path
@@ -2439,6 +2441,13 @@ class EditorInterface(QWidget):
             page_opener = getattr(host, "open_separation_page", None)
             if callable(page_opener):
                 open_separation = page_opener
+        # 宿主分离服务停止（方案 B 装前腾出解释器文件锁）；未提供则
+        # 为 None（旧宿主，弹窗跳过停服直接增量安装）
+        stop_service = None
+        if host is not None:
+            stopper = getattr(host, "stop_separation_service", None)
+            if callable(stopper):
+                stop_service = stopper
         download_service = ModelDownloadService(
             registry,
             HfHubTransport(
@@ -2456,6 +2465,7 @@ class EditorInterface(QWidget):
             proxy,
             managed_runtime,
             open_separation,
+            stop_service,
             host is not None,
         )
 

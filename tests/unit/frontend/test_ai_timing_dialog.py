@@ -9,7 +9,10 @@ from pathlib import Path
 import pytest
 
 from strange_uta_game.backend.application.ai_timing.models import ModelRegistry
-from strange_uta_game.backend.application.ai_timing.runtime import RuntimeStatus
+from strange_uta_game.backend.application.ai_timing.runtime import (
+    AiRuntimeError,
+    RuntimeStatus,
+)
 from strange_uta_game.backend.application.ai_timing.service import (
     AiTimingService,
     AiTimingSnapshot,
@@ -648,6 +651,121 @@ class TestDiskUsageReminder:
         )
         assert "体检说明" in messages
         assert installed == [str(exe)]
+
+
+class TestSharedInstallStopsHostService:
+    """方案 B 装前腾环境：shared 增量安装开 pip 前先让宿主停分离服务。
+
+    宿主服务进程加载中的 .pyd 锁着解释器的 site-packages——停服失败
+    或被拒（任务执行中）时必须中止安装，不能带着文件锁开 pip。
+    """
+
+    def _prepare(
+        self, qapp, tmp_path, monkeypatch, stop_fn, *, managed=True
+    ):
+        from strange_uta_game.backend.application.ai_timing import (
+            separation as sep_mod,
+        )
+
+        snap = _ready_snapshot()
+        dialog, _ = _make_dialog(qapp, tmp_path, snap, [])
+        if managed:
+            exe = tmp_path / "managed" / "python.exe"
+            exe.parent.mkdir(parents=True, exist_ok=True)
+            exe.write_text("#m", encoding="utf-8")
+            dialog._managed_runtime_python = str(exe)
+        else:
+            exe = None
+            dialog._confirm_disk_usage = lambda *a, **k: True
+        dialog._stop_separation_service = stop_fn
+        monkeypatch.setattr(sep_mod, "ensure_separation_model", lambda root: "")
+        captured = {}
+        dialog._run_task = lambda fn, *a, **k: captured.update(fn=fn)
+        dialog._on_install_runtime()
+        return dialog, captured, exe
+
+    def test_stop_called_before_pip(self, qapp, tmp_path, monkeypatch):
+        order = []
+
+        def _stop():
+            order.append("stop")
+            return {"stopped": True, "message": "分离服务已停止"}
+
+        dialog, captured, exe = self._prepare(qapp, tmp_path, monkeypatch, _stop)
+
+        def _fake_install_shared(python, **kwargs):
+            order.append("pip")
+            return RuntimeStatus(available=True, python_path=python)
+
+        monkeypatch.setattr(
+            dialog._runtime, "install_shared", _fake_install_shared
+        )
+        messages = []
+        status = captured["fn"](
+            lambda stage, pct, msg: messages.append(msg), lambda: False
+        )
+        assert order == ["stop", "pip"]  # 停服完成前不开 pip
+        assert "正在停止工作台分离服务" in messages[0]
+        assert status.available and status.python_path == str(exe)
+
+    def test_refusal_aborts_install_with_host_reason(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        def _stop():
+            return {
+                "stopped": False,
+                "message": "分离环境正在执行任务，无法腾出安装环境，请稍后重试",
+            }
+
+        dialog, captured, _ = self._prepare(qapp, tmp_path, monkeypatch, _stop)
+        installed = []
+        monkeypatch.setattr(
+            dialog._runtime,
+            "install_shared",
+            lambda python, **kw: installed.append(python)
+            or RuntimeStatus(available=True, python_path=python),
+        )
+        with pytest.raises(AiRuntimeError, match="分离环境正在执行任务"):
+            captured["fn"](lambda *a: None, lambda: False)
+        assert installed == []  # 拒绝时绝不开 pip
+
+    def test_stop_failure_wrapped_as_runtime_error(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        def _stop():
+            raise RuntimeError("boom")
+
+        dialog, captured, _ = self._prepare(qapp, tmp_path, monkeypatch, _stop)
+        monkeypatch.setattr(
+            dialog._runtime,
+            "install_shared",
+            lambda python, **kw: RuntimeStatus(
+                available=True, python_path=python
+            ),
+        )
+        with pytest.raises(AiRuntimeError, match="停止工作台分离服务失败"):
+            captured["fn"](lambda *a: None, lambda: False)
+
+    def test_venv_mode_skips_stop(self, qapp, tmp_path, monkeypatch):
+        """standalone venv 路径装的是自有解释器，与宿主服务无关。"""
+        stopped = []
+
+        def _stop():
+            stopped.append(1)
+            return {"stopped": True, "message": ""}
+
+        dialog, captured, _ = self._prepare(
+            qapp, tmp_path, monkeypatch, _stop, managed=False
+        )
+        installed = []
+        monkeypatch.setattr(
+            dialog._runtime,
+            "install",
+            lambda target, **kw: installed.append(target)
+            or RuntimeStatus(available=True, python_path=str(target)),
+        )
+        captured["fn"](lambda *a: None, lambda: False)
+        assert stopped == [] and len(installed) == 1
 
 
 class TestDefaultWidthFits:

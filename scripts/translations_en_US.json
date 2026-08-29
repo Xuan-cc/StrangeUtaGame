@@ -1782,5 +1782,8 @@
   "检测到含卡拉OK时间轴/注音的 ASS 字幕。": "Detected ASS subtitles with karaoke timeline/ruby.",
   "检测到春日向/KRL 格式歌词（已包含注音）。": "Detected Kasugamuki/KRL-format lyrics (with ruby).",
   "检测到自带注音的歌词文件。": "Detected a lyrics file with ruby.",
-  "歌词": "Lyrics"
+  "歌词": "Lyrics",
+  "正在停止工作台分离服务…": "Stopping the workbench separation service…",
+  "停止工作台分离服务失败：{e}": "Failed to stop the workbench separation service: {e}",
+  "无法停止工作台分离服务，请稍后重试": "Could not stop the workbench separation service, please try again later"
 }

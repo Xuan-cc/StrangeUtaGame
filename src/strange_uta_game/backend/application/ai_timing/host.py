@@ -88,6 +88,22 @@ class AiTimingHost(Protocol):
         """
         ...
 
+    def stop_separation_service(self, timeout_s: float = 30) -> dict:
+        """（可选，方案 B 配套）增量安装前停止宿主分离服务。
+
+        宿主分离服务进程已加载的 torch 等 ``.pyd`` 会锁住 runtime 的
+        site-packages——SUG 的 ``install_shared`` 直接开 pip 覆盖被锁
+        文件可能半失败、留下新旧混杂的安装。SUG 在开 pip **前**调用
+        本方法：宿主应阻塞等到服务真正停止（穿过异步停止的中间态）
+        才返回，之后 pip 才开始写入。有分离任务在执行时拒绝
+        （``stopped=False`` + 中文原因，不打断任务）；服务本就没跑时
+        幂等返回 ``stopped=True``。装完由 ``note_runtime_changed``
+        重登记并重启服务；装前没跑则无需显式恢复——``separate_vocal``
+        执行时会自动拉起。返回 ``{"stopped": bool, "message": str}``；
+        未实现时 SUG 静默跳过（``getattr`` 能力发现）。
+        """
+        ...
+
     def open_separation_page(self) -> bool:
         """（可选）跳转到宿主的分离环境页（如工作台第 2 步）。
 

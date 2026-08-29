@@ -149,6 +149,7 @@ class SettingsProvider(Protocol):
 | `http_proxy() -> str`（可选） | 当前生效的下载代理 URL；空串/缺省 = 不显式代理（SUG 模型下载默认跟随宿主网络设置，standalone 则用 SUG 自身的「网络与代理」设置） |
 | `runtime_python() -> str \| None`（可选，方案 B） | 宿主托管 PyMSS Runtime 的 `python.exe`。路径存在时：SUG 的「安装/修复」向该解释器**增量**安装 AI 依赖（`install_shared`：不建 venv、不重装 torch，torchaudio 按其 torch 版本/变体自动配对），embedded 的对齐 worker 与分离共享同一份 torch（含 CUDA）；返回 None / 路径不存在 = 嵌入模式引导去宿主分离页安装，或经用户确认后独立安装兜底（用户自选/自装解释器优先于托管值）。能力发现用 `getattr`，不实现不影响其余协议 |
 | `note_runtime_changed() -> bool`（可选，方案 B 配套） | SUG 增量安装完成后的通知：pip 会升级/降级宿主清单登记在案的共用包（如 audio-separator 需要的 librosa 降级），宿主据此按磁盘现状重登记 installed manifest，否则其下次启动的完整性校验报「文件缺失或损坏」。返回 False / 未实现时 SUG 静默跳过；standalone 无宿主不触发 |
+| `stop_separation_service(timeout_s=30) -> dict`（可选，方案 B 配套） | SUG 增量安装（`install_shared`）**开 pip 前**调用：宿主分离服务进程已加载的 torch 等 `.pyd` 锁住 runtime 的 site-packages，pip 覆盖被锁文件可能半失败、留下新旧混杂的安装。宿主应**阻塞等到服务真正停止**（穿过 `SERVICE_STOPPING` 等异步中间态）才返回 `{"stopped": bool, "message": str}`，保证 pip 启动时文件锁已释放；有分离任务在执行时拒绝（`stopped=False` + 中文原因，不打断任务）；服务本就没跑时幂等返回 `stopped=True`。装完由 `note_runtime_changed` 重登记并重启服务；装前没跑则无需显式恢复——`separate_vocal` 执行时自动拉起。未实现时 SUG 静默跳过 |
 | `open_separation_page() -> bool`（可选） | 跳转到宿主分离环境页（工作台第 2 步「分离人声」）；返回 False / 未实现时 SUG 回落为文字提示 |
 
 embedded 语义（对应主仓库 AI 打轴计划 §6.2）：跟随工作台当前「分离人声」
