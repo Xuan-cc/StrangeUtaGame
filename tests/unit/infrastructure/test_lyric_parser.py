@@ -122,6 +122,49 @@ class TestLRCParser:
         assert result[0].timetags == [(0, 9300)]
         assert result[0].line_end_ts is None
 
+    def test_line_level_end_tag_binds_to_last_char(self):
+        """[start]歌词[end] 链路级：释放 ts 绑到行末字符（非首字符）。"""
+        parser = LRCParser()
+        parsed = parser.parse("[00:06.540]一闪一闪亮晶晶[00:09.300]")
+
+        sentences = parse_to_sentences(parsed, "singer_1")
+        chars = sentences[0].characters
+
+        assert chars[0].sentence_end_ts is None
+        assert chars[-1].char == "晶"
+        assert chars[-1].is_sentence_end is True
+        assert chars[-1].sentence_end_ts == 9300
+
+    def test_word_by_word_release_binds_to_line_end_char(self):
+        """逐字变体：行末是无 ts 的全角空格时，释放 ts 也绑行末字符。"""
+        parser = LRCParser()
+        parsed = parser.parse("[00:00.000]春[00:01.000]日\u3000[00:02.000]")
+
+        assert parsed[0].line_end_bind_last is True
+
+        sentences = parse_to_sentences(parsed, "singer_1")
+        chars = sentences[0].characters
+
+        # 行末全角空格承接释放 ts，而不是链尾的「日」
+        assert chars[-1].char == "\u3000"
+        assert chars[-1].is_sentence_end is True
+        assert chars[-1].sentence_end_ts == 2000
+        assert chars[1].sentence_end_ts is None
+
+    def test_enhanced_lrc_release_binds_to_line_end_char(self):
+        """增强型变体：行尾释放同样绑行末字符。"""
+        parser = LRCParser()
+        parsed = parser.parse("[00:00.000]<00:00.000>春<00:01.000>日\u3000<00:02.000>")
+
+        assert parsed[0].line_end_bind_last is True
+
+        sentences = parse_to_sentences(parsed, "singer_1")
+        chars = sentences[0].characters
+
+        assert chars[-1].char == "\u3000"
+        assert chars[-1].is_sentence_end is True
+        assert chars[-1].sentence_end_ts == 2000
+
     def test_parse_colon_separator(self):
         """测试冒号分隔的时间标签 [mm:ss:cc]"""
         parser = LRCParser()

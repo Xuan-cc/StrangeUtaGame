@@ -273,7 +273,11 @@ class LRCParser(LyricParser):
                 if lyric_text:
                     lines.append(
                         ParsedLine(
-                            text=lyric_text, timetags=timetags, line_end_ts=end_ts
+                            text=lyric_text,
+                            timetags=timetags,
+                            line_end_ts=end_ts,
+                            # 行尾释放绑行末字符（同逐字格式，理由见下文）
+                            line_end_bind_last=end_ts is not None,
                         )
                     )
                 continue
@@ -293,7 +297,13 @@ class LRCParser(LyricParser):
                 if lyric_text:
                     lines.append(
                         ParsedLine(
-                            text=lyric_text, timetags=timetags, line_end_ts=end_ts
+                            text=lyric_text,
+                            timetags=timetags,
+                            line_end_ts=end_ts,
+                            # 行尾释放绑行末字符：链尾绑定会落在最后一个
+                            # 有 ts 的字符上（行末是全角空格等无 ts 排版
+                            # 字符时不在行末）
+                            line_end_bind_last=end_ts is not None,
                         )
                     )
             else:
