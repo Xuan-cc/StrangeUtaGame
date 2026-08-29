@@ -122,6 +122,24 @@ class TestLRCParser:
         assert result[0].timetags == [(0, 9300)]
         assert result[0].line_end_ts is None
 
+    def test_line_level_lrc_without_end_tag_no_fabricated_release(self):
+        """逐行 LRC 无行尾标签：不凭空伪造 sentence_end_ts（用户反馈 bug）。
+
+        `[00:08.55]目移りしちゃう あっちこっち` 只有行级起始 ts——
+        任何字符都不该出现首 ts + 500ms 之类的兜底释放时刻。
+        """
+        parser = LRCParser()
+        parsed = parser.parse("[00:08.55]目移りしちゃう あっちこっち")
+
+        sentences = parse_to_sentences(parsed, "singer_1")
+        chars = sentences[0].characters
+
+        assert chars[0].timestamps == [8550]
+        for ch in chars:
+            assert ch.sentence_end_ts is None, (
+                f"{ch.char!r} 不应持有伪造的释放 ts: {ch.sentence_end_ts}"
+            )
+
     def test_line_level_end_tag_binds_to_last_char(self):
         """[start]歌词[end] 链路级：释放 ts 绑到行末字符（非首字符）。"""
         parser = LRCParser()

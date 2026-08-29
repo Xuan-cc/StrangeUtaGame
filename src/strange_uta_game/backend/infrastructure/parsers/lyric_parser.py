@@ -1652,10 +1652,10 @@ def parse_to_sentences(
     对齐 entities.py 重构后契约（与 `nicokara_result_to_sentences` 同源）：
     1. 多 timestamps 同一字符 → 第二个 ts 自动绑为 sentence_end_ts。
     2. ParsedLine.line_end_ts（如 ASS 末尾 \\k 的尾时长、SRT/ASS 的行级
-       End 时间戳）→ 末字符的 sentence_end_ts；缺省时退化为「末 ts + 500ms」
-       兜底拖音。行尾释放点默认绑定到「连词组尾字符」（沿 linked_to_next
-       向右走到链尾），line_end_bind_last=True 时直接绑行末字符
-       （SRT/无 \\k 的 ASS 等行级时间轴格式）。
+       End 时间戳）→ 末字符的 sentence_end_ts。文件没有行尾释放事实时
+       **不伪造**释放 ts（待测状态）。行尾释放点默认绑定到「连词组尾
+       字符」（沿 linked_to_next 向右走到链尾），line_end_bind_last=True
+       时直接绑行末字符（SRT/无 \\k 的 ASS 等行级时间轴格式）。
     2b. ParsedLine.gap_pause_map（ASS 非末尾空文本 \\k 段的段起点，
        SUG 断句轴点间隙）→ 对应字符的 sentence_end_ts（句中停顿）。
     3. ParsedLine.ruby_map（如 ASS 的 `汉字|<かな`）→ Character.set_ruby。
@@ -1867,15 +1867,9 @@ def parse_to_sentences(
                     anchor = sentence.characters[last_idx_with_ts]
                     anchor.is_sentence_end = False
                     anchor.sentence_end_ts = None
-            elif not tail_char.is_sentence_end:
-                # 兜底：给一个 500ms 拖音，保证导出有句尾释放点。
-                # 末字若没有 ts（连词组尾字），用 last_idx_with_ts 字符的最末 ts 作基准
-                anchor = sentence.characters[last_idx_with_ts]
-                base = anchor.timestamps[-1] if anchor.timestamps else 0
-                tail_char.is_sentence_end = True
-                tail_char.sentence_end_ts = base + 500
-                if tail_char.check_count == 0:
-                    tail_char.check_count = 1
+            # 文件没有行尾释放事实（如逐行 LRC 无行尾标签）时不做兜底：
+            # 不凭空伪造 sentence_end_ts——句尾标记留给 from_text/分析规则，
+            # 释放时刻保持「待测」（[>T]），导出侧各自决定缺省策略。
 
         # 核心：派生 global_timestamps / global_sentence_end_ts，
         # 否则导出器无法读到全局时间（这是旧版 bug）。
