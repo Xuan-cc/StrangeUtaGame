@@ -397,6 +397,9 @@ def _single_char_to_ruby_node(char: Character) -> str:
     - 无时间戳: {display|[count]ruby}
     - 有句尾 CP 有时间戳: ...}[10|ts]
     - 有句尾 CP 无时间戳: ...}[10]
+
+    停顿符占位 part 原样保留：RL 编辑模式面向打轴软件
+    （RhythmicaLyrics），占位拍在该侧是有意义的，不剥离。
     """
     assert char.ruby is not None
     display = char.char
@@ -492,6 +495,8 @@ def _linked_group_to_ruby_node(group: List[Character]) -> str:
     有注音的字符输出注音，无注音的字符输出空的分隔符。
 
     格式: {display|[count|ts]ruby＋＋＋}[10|ts]
+
+    停顿符占位 part 原样保留（RL 编辑模式面向打轴软件，不剥离）。
     """
     display = "".join(c.char for c in group)
 
@@ -830,8 +835,16 @@ def _parse_ruby_group(
 
         timestamps = [ts for ts in all_timestamps[:count] if ts is not None]
 
-        # per-char ruby 分段（结构化）
-        ruby_parts = [RubyPart(text=p) for p in ruby_text_parts if p]
+        # per-char ruby 分段（结构化）。空段（该拍无新文字，如
+        # `[2|ts]か[ts]` 的第二个拍）按占位符（停顿符）还原，段数不足
+        # N 时补齐——维持 len(parts) == check_count 不变式，与
+        # set_check_count 的收口行为一致（外部/手写文件同样适用）。
+        pause = get_ruby_pause_char()
+        ruby_parts = [
+            RubyPart(text=p if p else pause) for p in ruby_text_parts
+        ]
+        if len(ruby_parts) < count:
+            ruby_parts += [RubyPart(text=pause)] * (count - len(ruby_parts))
         ruby_obj = Ruby(parts=ruby_parts) if ruby_parts else None
 
         character = Character(

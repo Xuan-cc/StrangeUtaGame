@@ -97,6 +97,22 @@ def pause_char_variants(pause_char: str) -> set:
     return variants
 
 
+def strip_ruby_pause_chars(text: str) -> str:
+    """移除 ruby 文本中的停顿符占位（连同全/半角变体）。
+
+    占位 part 表示「该拍无新文字（延音/停顿）」，是应用内部表示；
+    导出给播放器的带注音格式（Nicokara @Ruby、ASS 注音、春日向/
+    Kirakara）不得把它泄漏给消费方——剥离后该拍退化为纯时间戳段
+    （如 ``す[ts][ts]``），导入侧再把空段还原为占位符。RL 编辑模式
+    面向打轴软件（RhythmicaLyrics），占位符在该侧有意义，不剥离。
+    """
+    if not text:
+        return text
+    for pc in pause_char_variants(get_ruby_pause_char()):
+        text = text.replace(pc, "")
+    return text
+
+
 class TimeTagType(Enum):
     """时间标签类型（用于导出兼容）
 

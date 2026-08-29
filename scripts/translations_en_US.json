@@ -395,6 +395,7 @@
   "导入歌词文件": "Import lyrics file",
   "导出": "Export",
   "导出Nicokara（带注音）格式时，删除rubyTag中的此字符": "When exporting Nicokara (with ruby), remove this character from rubyTag",
+  "导出带注音的格式（Nicokara·ASS·KRL）时，删除ruby中的此字符": "When exporting ruby-tagged formats (Nicokara / ASS / KRL), remove this character from ruby",
   "导出失败": "Export failed",
   "导出成功": "Exported",
   "导出提醒": "Export notice",

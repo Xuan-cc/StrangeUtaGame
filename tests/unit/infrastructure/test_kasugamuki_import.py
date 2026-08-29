@@ -190,3 +190,105 @@ def test_linked_group_line_key_up_is_restored_on_group_tail():
     assert characters[1].is_sentence_end
     assert characters[1].sentence_end_ts == 2000
     assert sentences_to_kasugamuki(sentences) == source
+
+
+def _placeholder_sentence():
+    from strange_uta_game.backend.domain.entities import Sentence
+    from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
+
+    return Sentence(
+        singer_id=SINGER_ID,
+        characters=[
+            Character(
+                char="寿",
+                check_count=3,
+                timestamps=[5000, 5150, 5300],
+                ruby=Ruby(
+                    parts=[
+                        RubyPart(text="す"),
+                        RubyPart(text="^"),
+                        RubyPart(text="^"),
+                    ]
+                ),
+                singer_id=SINGER_ID,
+            )
+        ],
+    )
+
+
+def test_placeholder_beats_stripped_and_round_trip():
+    """占位拍（停顿符）导出剥离为裸时间标签，导入按位置还原。
+
+    导出契约：停顿符是应用内部占位，不得泄漏给消费方——假名注音层
+    剥离后该拍只留 `[ts]` 裸标签；导入把空段按位置还原为占位符，
+    ruby parts 与 check_count / timestamps 保持对齐。
+    """
+    exported = sentences_to_kasugamuki([_placeholder_sentence()])
+    assert exported == "{寿|[00:05:00]す[00:05:15][00:05:30]}"
+    assert "^" not in exported
+
+    reparsed = sentences_from_kasugamuki(exported, SINGER_ID)[0]
+    ch = reparsed.characters[0]
+    assert ch.check_count == 3
+    assert [p.text for p in ch.ruby.parts] == ["す", "^", "^"]
+    assert ch.timestamps == [5000, 5150, 5300]
+
+
+def test_placeholder_beat_in_head_keeps_position_on_reparse():
+    """占位拍在开头时按位置还原，不后移到段尾（否则读音/时间轴错位）。"""
+    from strange_uta_game.backend.domain.entities import Sentence
+    from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
+
+    sentence = Sentence(
+        singer_id=SINGER_ID,
+        characters=[
+            Character(
+                char="漢",
+                check_count=2,
+                timestamps=[5000, 5150],
+                ruby=Ruby(parts=[RubyPart(text="^"), RubyPart(text="か")]),
+                singer_id=SINGER_ID,
+            )
+        ],
+    )
+
+    exported = sentences_to_kasugamuki([sentence])
+    assert exported == "{漢|[00:05:00][00:05:15]か}"
+
+    reparsed = sentences_from_kasugamuki(exported, SINGER_ID)[0]
+    ch = reparsed.characters[0]
+    assert ch.check_count == 2
+    assert [p.text for p in ch.ruby.parts] == ["^", "か"]
+    assert ch.timestamps == [5000, 5150]
+
+
+def test_kirakara_romaji_export_strips_placeholder_beats():
+    """Kirakara 双层导出：假名层占位拍留裸时间标签，罗马音层整拍跳过。"""
+    from strange_uta_game.backend.infrastructure.parsers.kasugamuki_format import (
+        sentences_to_kasugamuki_romaji,
+    )
+
+    exported = sentences_to_kasugamuki_romaji([_placeholder_sentence()])
+    # 罗马音层的时间轴以假名层为准，"^"（罗马音化原样透传）不输出
+    assert exported == "{寿|[00:05:00]す[00:05:15][00:05:30]>[00:05:00]su}"
+    assert "^" not in exported
+
+
+def test_all_placeholder_untimed_ruby_degrades_to_plain_char():
+    """注音全是停顿占位且未打轴：退化为普通字符，不输出空注音块。"""
+    from strange_uta_game.backend.domain.entities import Sentence
+    from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
+
+    sentence = Sentence(
+        singer_id=SINGER_ID,
+        characters=[
+            Character(
+                char="寿",
+                check_count=2,
+                ruby=Ruby(parts=[RubyPart(text="^"), RubyPart(text="^")]),
+                singer_id=SINGER_ID,
+            )
+        ],
+    )
+
+    assert sentences_to_kasugamuki([sentence]) == "寿"

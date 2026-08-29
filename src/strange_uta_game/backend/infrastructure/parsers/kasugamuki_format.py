@@ -15,7 +15,13 @@ from copy import deepcopy
 from typing import Dict, List, Optional, Tuple
 
 from strange_uta_game.backend.domain.entities import Sentence
-from strange_uta_game.backend.domain.models import Character, Ruby, RubyPart
+from strange_uta_game.backend.domain.models import (
+    Character,
+    Ruby,
+    RubyPart,
+    get_ruby_pause_char,
+    strip_ruby_pause_chars,
+)
 from strange_uta_game.backend.infrastructure.parsers.inline_format import (
     format_timestamp,
     parse_timestamp,
@@ -124,7 +130,11 @@ def _krl_block_to_characters(block: str, singer_id: str) -> List[Character]:
     # The kana layer is the source pronunciation.  For self-ruby blocks such
     # as {しょ|>[00:19:77]sho}, only take timing from the romaji layer.
     timestamps = kana_timestamps or romaji_timestamps
-    ruby_parts = [RubyPart(text=text) for text in kana_parts if text]
+    # Empty kana segments are pause-placeholder beats whose char was stripped
+    # on export ({漢|[ts]す[ts][ts]}); restore them in position so ruby parts
+    # stay aligned with checkpoints (same contract as the Nicokara importer).
+    pause = get_ruby_pause_char()
+    ruby_parts = [RubyPart(text=text if text else pause) for text in kana_parts]
     ruby = Ruby(parts=ruby_parts) if ruby_parts else None
     check_count = max(len(timestamps), len(ruby_parts), 1)
     character = Character(
@@ -316,15 +326,30 @@ def _char_particle_indices(
 
 
 def _build_tagged_parts(
-    parts: List[str], ts_list: List[int]
+    parts: List[str],
+    ts_list: List[int],
+    *,
+    keep_empty_ts: bool = False,
 ) -> str:
     """构造带时间标签的文本串。
 
     格式: [ts0]text0[ts1]text1[ts2]text2...
+
+    所有 part 文本先剥离停顿符占位（导出契约：占位不泄漏给消费方）。
+    剥离后为空的拍：
+
+    - ``keep_empty_ts=True``（假名注音层——占位拍的时间轴必须保留）：
+      输出裸时间标签 ``[ts]``，导入侧把空段还原为占位符，roundtrip 不丢拍。
+    - ``keep_empty_ts=False``（默认；罗马音层等派生层）：整个拍跳过。
+      罗马音层的时间轴以假名层为准，且存在天然的空 part
+      （拗音/促音被前导 part 吸收），保持既有跳过行为。
     """
     result: List[str] = []
     for i, text in enumerate(parts):
+        text = strip_ruby_pause_chars(text)
         if not text:
+            if keep_empty_ts and i < len(ts_list):
+                result.append(f"[{format_timestamp(ts_list[i])}]")
             continue
         if i < len(ts_list):
             result.append(f"[{format_timestamp(ts_list[i])}]")
@@ -372,7 +397,10 @@ def _char_ruby_kana(char: Character) -> str:
     assert char.ruby is not None
     kana_texts = [p.text for p in char.ruby.parts]
     ts_list = _get_ts_list(char)
-    tagged = _build_tagged_parts(kana_texts, ts_list)
+    tagged = _build_tagged_parts(kana_texts, ts_list, keep_empty_ts=True)
+    if not tagged:
+        # 注音全是停顿占位且未打轴 → 退化为普通字符，不输出空注音块
+        return _char_plain(char)
     return f"{{{char.char}|{tagged}}}{_format_sentence_end(char)}"
 
 
@@ -383,7 +411,9 @@ def _linked_group_kana(group: List[Character]) -> str:
         if ch.ruby:
             tagged.append(
                 _build_tagged_parts(
-                    [part.text for part in ch.ruby.parts], _get_ts_list(ch)
+                    [part.text for part in ch.ruby.parts],
+                    _get_ts_list(ch),
+                    keep_empty_ts=True,
                 )
             )
     annotation = "".join(tagged)
@@ -499,16 +529,22 @@ def _char_ruby_romaji(
     ts_list = _get_ts_list(char)
     parts = char.ruby.parts
     kana_texts = [p.text for p in parts]
-    kana_tagged = _build_tagged_parts(kana_texts, ts_list)
+    kana_tagged = _build_tagged_parts(kana_texts, ts_list, keep_empty_ts=True)
 
     romaji_tagged = _build_tagged_parts(romaji_list, ts_list)
 
+    if not kana_tagged and not romaji_tagged:
+        # 两层全是停顿占位且未打轴 → 退化为普通字符，不输出空注音块
+        return _char_plain(char)
     return f"{{{char.char}|{kana_tagged}>{romaji_tagged}}}{_format_sentence_end(char)}"
 
 
 def _char_self_ruby_romaji(char: Character, romaji_list: List[str]) -> str:
     ts_list = _get_ts_list(char)
     romaji_tagged = _build_tagged_parts(romaji_list, ts_list)
+    if not romaji_tagged:
+        # 罗马音层全是停顿占位且未打轴 → 退化为普通字符，不输出空注音块
+        return _char_plain(char)
     return f"{{{char.char}|>{romaji_tagged}}}{_format_sentence_end(char)}"
 
 
@@ -522,6 +558,9 @@ def _self_kana_group_romaji(
     romaji_tagged = _build_tagged_parts(
         romaji_list, _get_ts_list(group[romaji_char_index])
     )
+    if not romaji_tagged:
+        # 罗马音层全是停顿占位且未打轴 → 退化为普通字符组
+        return "".join(_char_plain(ch) for ch in group)
     return f"{{{base}|>{romaji_tagged}}}{_format_sentence_end(group[-1])}"
 
 
@@ -537,7 +576,11 @@ def _linked_group_romaji(
         ts_list = _get_ts_list(ch)
         if ch.ruby:
             kana_tagged.append(
-                _build_tagged_parts([part.text for part in ch.ruby.parts], ts_list)
+                _build_tagged_parts(
+                    [part.text for part in ch.ruby.parts],
+                    ts_list,
+                    keep_empty_ts=True,
+                )
             )
         romaji = romaji_by_char.get(group_start + local_idx, [])
         if romaji:
@@ -634,6 +677,7 @@ def _process_kana_batch(
     for bi, ch in enumerate(batch):
         ts_list = _get_ts_list(ch)
         rm = char_romaji_list[bi] if bi < len(char_romaji_list) else ""
+        rm = strip_ruby_pause_chars(rm)
         km = char_kana_list[bi]
 
         if not rm:

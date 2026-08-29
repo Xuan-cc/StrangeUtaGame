@@ -487,6 +487,48 @@ class TestRoundtrip:
         assert [p.text for p in restored.rubies[0].parts] == ["や", "わ"]
         assert sum(len(c.all_timestamps) for c in restored.characters) == 3
 
+    def test_placeholder_part_kept_verbatim(self):
+        """RL 编辑模式面向打轴软件（RhythmicaLyrics）：停顿符占位
+        part 原样保留在导出中，roundtrip 逐字不丢。"""
+        original = _make_sentence(
+            "寿",
+            characters=[
+                Character(
+                    char="寿",
+                    check_count=3,
+                    timestamps=[5000, 5150, 5300],
+                    ruby=Ruby(
+                        parts=[
+                            RubyPart(text="す"),
+                            RubyPart(text="^"),
+                            RubyPart(text="^"),
+                        ]
+                    ),
+                    singer_id="s1",
+                )
+            ],
+        )
+        text = to_inline_text(original)
+        assert text == "{寿|[3|00:05:00]す[00:05:15]^[00:05:30]^}"
+        restored = from_inline_text(text, singer_id="s1")
+        ch = restored.characters[0]
+        assert ch.check_count == 3
+        assert [p.text for p in ch.ruby.parts] == ["す", "^", "^"]
+        assert ch.timestamps == [5000, 5150, 5300]
+
+    def test_import_restores_empty_segment_in_place(self):
+        """空段（手写/外部文件）按占位符还原且补齐到 N，维持不变式。"""
+        sentence = from_inline_text("{漢|[2|00:05:00]か[00:05:15]}", "s1")
+        ch = sentence.characters[0]
+        assert ch.check_count == 2
+        assert [p.text for p in ch.ruby.parts] == ["か", "^"]
+        assert ch.timestamps == [5000, 5150]
+
+        sentence = from_inline_text("{漢|[2]か}", "s1")
+        ch = sentence.characters[0]
+        assert ch.check_count == 2
+        assert [p.text for p in ch.ruby.parts] == ["か", "^"]
+
     def test_multiline_roundtrip(self):
         sentences = [
             _make_sentence(

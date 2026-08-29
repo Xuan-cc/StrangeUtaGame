@@ -4803,8 +4803,8 @@ Zoom defaults to 100% (subtitle size); Zoom allows 10%~500%; Fix keeps original 
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/export.py" line="69" />
-        <source>导出Nicokara（带注音）格式时，删除rubyTag中的此字符</source>
-        <translation>When exporting Nicokara (with ruby), remove this character from rubyTag</translation>
+        <source>导出带注音的格式（Nicokara·ASS·KRL）时，删除ruby中的此字符</source>
+        <translation>When exporting ruby-tagged formats (Nicokara / ASS / KRL), remove this character from ruby</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/export.py" line="63" />

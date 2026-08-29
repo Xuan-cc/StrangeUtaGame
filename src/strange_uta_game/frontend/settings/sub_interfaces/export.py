@@ -66,10 +66,10 @@ class ExportSubInterface(SubSettingInterface):
             content_source="导出时给时间戳加上此补偿值（除.sug外的所有格式），负值=提前，正值=延后")
         self.card_nicokara_pause_char = self._tr_register(
             TextSettingCard(FIF.EDIT, tr("Nicokara停顿符"),
-                tr("导出Nicokara（带注音）格式时，删除rubyTag中的此字符"),
+                tr("导出带注音的格式（Nicokara·ASS·KRL）时，删除ruby中的此字符"),
                 placeholder=tr("输入停顿符"), max_length=5, parent=g),
             title_source="Nicokara停顿符",
-            content_source="导出Nicokara（带注音）格式时，删除rubyTag中的此字符")
+            content_source="导出带注音的格式（Nicokara·ASS·KRL）时，删除ruby中的此字符")
         for c in [self.card_default_format, self.card_export_dir,
                   self.card_software_compensation, self.card_nicokara_pause_char]:
             g.addSettingCard(c)

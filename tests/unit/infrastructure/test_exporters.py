@@ -277,8 +277,39 @@ class TestASSDirectExporter:
         line_end_ms = exporter._compute_line_end_ms(sentence)
         text = exporter._generate_karaoke_text(sentence, line_start_ms, line_end_ms)
 
-        # "合言葉" 应整体出现在首个 \\k 块的注音前
+        # "合言葉" 应整体出现在首个 \k 块的注音前
         assert "合言葉|<あ" in text, f"连词 kanji 未整体输出: {text}"
+
+    def test_generate_karaoke_text_strips_placeholder_parts(self):
+        """占位 part（停顿符）在 ASS 注音中剥离，该拍输出纯时长段 `#|`。"""
+        from strange_uta_game.backend.domain import Ruby, RubyPart
+
+        project = Project()
+        singer = project.singers[0]
+
+        sentence = Sentence.from_text("寿", singer.id)
+        ch0 = sentence.characters[0]
+        ch0.check_count = 3
+        ch0.set_ruby(
+            Ruby(parts=[
+                RubyPart(text="す"),
+                RubyPart(text="^"),
+                RubyPart(text="^"),
+            ])
+        )
+        for i, ts in enumerate([5000, 5150, 5300]):
+            ch0.add_timestamp(ts, checkpoint_idx=i)
+        project.add_sentence(sentence)
+
+        exporter = ASSDirectExporter()
+        line_start_ms = sentence.global_timing_start_ms
+        line_end_ms = exporter._compute_line_end_ms(sentence)
+        text = exporter._generate_karaoke_text(sentence, line_start_ms, line_end_ms)
+
+        assert "寿|<す" in text, text
+        # 占位拍退化为纯时长段（#| 后无文字），停顿符不泄漏
+        assert "^" not in text, text
+        assert text.count("#|") == 2, text
         # "言葉" 不应出现在末尾（tail_text bug）
         assert not text.endswith("言葉{\\k0}"), f"言葉 被错误地追加到末尾: {text}"
         assert "ば言葉" not in text, f"言葉 混入续段尾部: {text}"

@@ -527,17 +527,11 @@ class ASSDirectExporter(BaseExporter):
 
         check_count 多于读音 mora 数的节奏点用停顿符占位（领域层不变式），
         ASS 输出中该段应为纯时长段（无文字），与占位符引入前的行为一致。
+        剥离规则与所有带注音导出格式共享（models.strip_ruby_pause_chars）。
         """
-        if not text:
-            return text
-        from strange_uta_game.backend.domain.models import (
-            get_ruby_pause_char,
-            pause_char_variants,
-        )
+        from strange_uta_game.backend.domain.models import strip_ruby_pause_chars
 
-        for pc in pause_char_variants(get_ruby_pause_char()):
-            text = text.replace(pc, "")
-        return text
+        return strip_ruby_pause_chars(text)
 
     @staticmethod
     def _escape_ass_field(text: str) -> str:

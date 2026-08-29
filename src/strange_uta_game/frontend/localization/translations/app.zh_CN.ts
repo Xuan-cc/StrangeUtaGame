@@ -4804,8 +4804,8 @@
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/export.py" line="69" />
-        <source>导出Nicokara（带注音）格式时，删除rubyTag中的此字符</source>
-        <translation>导出Nicokara（带注音）格式时，删除rubyTag中的此字符</translation>
+        <source>导出带注音的格式（Nicokara·ASS·KRL）时，删除ruby中的此字符</source>
+        <translation>导出带注音的格式（Nicokara·ASS·KRL）时，删除ruby中的此字符</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/export.py" line="63" />
