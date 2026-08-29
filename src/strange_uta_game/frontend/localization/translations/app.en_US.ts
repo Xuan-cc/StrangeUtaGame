@@ -4864,14 +4864,16 @@ Leave empty to disable, and automatically use the saved project / last loaded fi
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1187" />
         <source>{format} 格式检测</source>
-        <translation type="unfinished" />
+        <translation>{format} format detection</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1189" />
         <source>「保留原有注音」使用文件中的注音与逐字时间轴。
 「全部重新分析」清除原有注音，使用自动分析；文件时间戳将按音节位置复用，无法对齐的会被忽略。
 「仅分析未注音字符」保留已有注音，补充缺失的。</source>
-        <translation type="unfinished" />
+        <translation>'Keep existing ruby' uses the ruby and per-character timestamps from the file.
+'Re-analyze all' clears existing ruby and uses automatic analysis; file timestamps are reused where they align with syllable positions, the rest are ignored.
+'Only analyze un-rubied characters' keeps existing ruby and fills in the missing ones.</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="590" />
@@ -4988,7 +4990,7 @@ Leave empty to disable, and automatically use the saved project / last loaded fi
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1166" />
         <source>春日向/KRL</source>
-        <translation type="unfinished" />
+        <translation>Kasugamuki/KRL</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="233" />
@@ -5008,22 +5010,22 @@ Leave empty to disable, and automatically use the saved project / last loaded fi
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1164" />
         <source>检测到含卡拉OK时间轴/注音的 ASS 字幕。</source>
-        <translation type="unfinished" />
+        <translation>Detected ASS subtitles with karaoke timeline/ruby.</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1167" />
         <source>检测到春日向/KRL 格式歌词（已包含注音）。</source>
-        <translation type="unfinished" />
+        <translation>Detected Kasugamuki/KRL-format lyrics (with ruby).</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1170" />
         <source>检测到自带注音的歌词文件。</source>
-        <translation type="unfinished" />
+        <translation>Detected a lyrics file with ruby.</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1169" />
         <source>歌词</source>
-        <translation type="unfinished" />
+        <translation>Lyrics</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="777" />

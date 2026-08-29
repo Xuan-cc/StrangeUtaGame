@@ -10670,230 +10670,230 @@ KS 来源的配置将优先覆盖同名设置。</translation>
     <name>WaveformAdvancedDialog</name>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="133" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="424" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="425" />
         <source>BPM 网格</source>
         <translation>BPM 网格</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="184" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="428" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="429" />
         <source>BPM 网格偏移</source>
         <translation>BPM 网格偏移</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="268" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="455" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="237" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="456" />
         <source>FFT 窗口</source>
         <translation>FFT 窗口</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="222" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="445" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="276" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="446" />
         <source>与设置页「打轴 → 波形时间标签」共用，两处修改即时同步</source>
         <translation>与设置页「打轴 → 波形时间标签」共用，两处修改即时同步</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="680" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="681" />
         <source>中</source>
         <translation>中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="680" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="681" />
         <source>低</source>
         <translation>低</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="121" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="322" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="431" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="454" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="323" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="432" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="455" />
         <source>关</source>
         <translation>关</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="296" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="426" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="297" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="427" />
         <source>关闭</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="271" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="457" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="240" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="458" />
         <source>动态范围</source>
         <translation>动态范围</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="118" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="429" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="430" />
         <source>双层波形（RMS）</source>
         <translation>双层波形（RMS）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="468" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="469" />
         <source>因内存预算，实际使用 {p}% 重叠</source>
         <translation>因内存预算，实际使用 {p}% 重叠</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="235" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="439" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="204" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="440" />
         <source>声谱参数</source>
         <translation>声谱参数</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="102" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="422" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="423" />
         <source>声谱图</source>
         <translation>声谱图</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="486" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="487" />
         <source>实际 {px} px</source>
         <translation>实际 {px} px</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="243" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="459" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="212" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="460" />
         <source>对数</source>
         <translation>对数</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="120" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="321" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="430" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="453" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="322" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="431" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="454" />
         <source>开</source>
         <translation>开</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="212" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="441" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="266" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="442" />
         <source>播放头居中模式</source>
         <translation>播放头居中模式</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="204" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="438" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="258" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="439" />
         <source>时间标签</source>
         <translation>时间标签</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="132" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="423" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="424" />
         <source>时间网格</source>
         <translation>时间网格</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="97" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="436" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="437" />
         <source>显示模式</source>
         <translation>显示模式</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="259" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="458" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="228" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="459" />
         <source>显示高度</source>
         <translation>显示高度</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="673" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="674" />
         <source>未能识别 BPM，请手动输入</source>
         <translation>未能识别 BPM，请手动输入</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="624" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="662" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="625" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="663" />
         <source>检测中…</source>
         <translation>检测中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="683" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="684" />
         <source>检测到</source>
         <translation>检测到</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="692" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="693" />
         <source>检测失败</source>
         <translation>检测失败</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="101" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="421" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="422" />
         <source>波形图</source>
         <translation>波形图</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="107" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="434" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="435" />
         <source>波形图适合观察整体响度；声谱图按频率展示能量分布，适合音高定位</source>
         <translation>波形图适合观察整体响度；声谱图按频率展示能量分布，适合音高定位</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="80" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="420" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="421" />
         <source>波形图高级设置</source>
         <translation>波形图高级设置</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="208" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="440" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="262" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="441" />
         <source>波形时间标签拖拽</source>
         <translation>波形时间标签拖拽</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="216" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="442" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="270" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="443" />
         <source>波形标签显示字符</source>
         <translation>波形标签显示字符</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="220" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="443" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="274" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="444" />
         <source>波形标签显示注音</source>
         <translation>波形标签显示注音</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="269" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="432" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="238" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="433" />
         <source>窗口重叠</source>
         <translation>窗口重叠</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="244" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="460" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="213" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="461" />
         <source>线性</source>
         <translation>线性</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="128" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="437" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="438" />
         <source>网格与节拍</source>
         <translation>网格与节拍</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="167" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="427" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="428" />
         <source>网格线宽</source>
         <translation>网格线宽</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="683" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="684" />
         <source>置信度</source>
         <translation>置信度</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="143" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="425" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="426" />
         <source>自动检测</source>
         <translation>自动检测</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="270" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="456" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="239" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="457" />
         <source>频率刻度</source>
         <translation>频率刻度</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="679" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="680" />
         <source>高</source>
         <translation>高</translation>
     </message>

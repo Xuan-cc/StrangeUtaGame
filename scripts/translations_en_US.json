@@ -1774,5 +1774,12 @@
   "@HeadOffset（头部偏移）": "@HeadOffset (header offset)",
   "@Offset（全局偏移）": "@Offset (global offset)",
   "BPM 网格偏移": "BPM grid offset",
-  "与设置页「打轴 → 波形时间标签」共用，两处修改即时同步": "Shared with Settings → Tag → Waveform time tags; changes on either side sync instantly"
+  "与设置页「打轴 → 波形时间标签」共用，两处修改即时同步": "Shared with Settings → Tag → Waveform time tags; changes on either side sync instantly",
+  "{format} 格式检测": "{format} format detection",
+  "「保留原有注音」使用文件中的注音与逐字时间轴。\n「全部重新分析」清除原有注音，使用自动分析；文件时间戳将按音节位置复用，无法对齐的会被忽略。\n「仅分析未注音字符」保留已有注音，补充缺失的。": "'Keep existing ruby' uses the ruby and per-character timestamps from the file.\n'Re-analyze all' clears existing ruby and uses automatic analysis; file timestamps are reused where they align with syllable positions, the rest are ignored.\n'Only analyze un-rubied characters' keeps existing ruby and fills in the missing ones.",
+  "春日向/KRL": "Kasugamuki/KRL",
+  "检测到含卡拉OK时间轴/注音的 ASS 字幕。": "Detected ASS subtitles with karaoke timeline/ruby.",
+  "检测到春日向/KRL 格式歌词（已包含注音）。": "Detected Kasugamuki/KRL-format lyrics (with ruby).",
+  "检测到自带注音的歌词文件。": "Detected a lyrics file with ruby.",
+  "歌词": "Lyrics"
 }
