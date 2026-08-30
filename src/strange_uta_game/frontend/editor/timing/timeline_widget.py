@@ -146,7 +146,7 @@ class WaveformDisplay(QWidget):
         self._beats_per_bar = 4
         self._grid_line_width = 2        # 网格线宽（0~100px，时间/BPM 共用；0=不绘制）
         self._spectrum_fft_size = 8192
-        self._spectrum_overlap = 0.9375  # 窗口重叠（SV 口径）；帧距=fft·(1-overlap)
+        self._spectrum_overlap = 0.75  # 窗口重叠（SV 口径）；帧距=fft·(1-overlap)
         self._spectrum_freq_scale = "log"  # "log" | "linear"
         self._spectrum_dyn_range_db = 60
         # 显示期频率钳制（Hz，0 = 自动/全谱）：只影响行映射与频率轴，

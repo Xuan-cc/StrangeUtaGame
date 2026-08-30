@@ -423,9 +423,9 @@ class WaveformAdvancedDialog(QDialog):
         fft = init.get("spectrum_fft_size", 8192)
         index = _FFT_CHOICES.index(fft) if fft in _FFT_CHOICES else 4
         self.fft_combo.setCurrentIndex(index)
-        overlap = float(init.get("spectrum_overlap", 0.9375))
+        overlap = float(init.get("spectrum_overlap", 0.75))
         self.overlap_combo.setCurrentIndex(
-            _OVERLAP_CHOICES.index(overlap) if overlap in _OVERLAP_CHOICES else 3
+            _OVERLAP_CHOICES.index(overlap) if overlap in _OVERLAP_CHOICES else 1
         )
         self.scale_combo.setCurrentIndex(
             0 if init.get("spectrum_freq_scale", "log") == "log" else 1

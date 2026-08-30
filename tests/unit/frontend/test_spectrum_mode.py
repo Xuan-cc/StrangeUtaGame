@@ -896,7 +896,7 @@ class TestBpmGridLineWidth:
 
         timing = AppSettings.DEFAULT_SETTINGS["timing"]
         assert timing.get("waveform_grid_line_width") == 2
-        assert timing.get("spectrum_overlap") == 0.9375  # 用户反馈的最舒服组合
+        assert timing.get("spectrum_overlap") == 0.75
         assert timing.get("display_height") == 120
 
 

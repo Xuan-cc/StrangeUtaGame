@@ -138,7 +138,7 @@ class AppSettings:
             "waveform_grid_bpm": 120.0,
             "waveform_grid_offset_ms": 0,         # BPM 网格偏移（±600000ms，拍线相位对齐）
             "waveform_grid_line_width": 2,        # 网格线宽 0~100px；0=不绘制
-            "spectrum_overlap": 0.9375,           # 窗口重叠（帧距=fft·(1-overlap)）
+            "spectrum_overlap": 0.75,             # 窗口重叠（帧距=fft·(1-overlap)）
             "spectrum_fft_size": 8192,
             "spectrum_freq_scale": "log",         # log / linear
             "spectrum_dyn_range_db": 60,
