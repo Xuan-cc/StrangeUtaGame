@@ -411,6 +411,90 @@ def build_peak_levels_single_pass(
     return result
 
 
+def reduce_peaks_by_edges(
+    samples: np.ndarray, edges: np.ndarray
+) -> tuple:
+    """按像素段边界归约 min/max/RMS（深放大直读路径）。
+
+    edges 为长度 P+1 的单调不减整数数组：像素 i 归约 samples[edges[i]:edges[i+1])，
+    空段（clamp 或 rounding 产生的重合边界）该像素返回 0/0/0。内部用
+    unique 折叠重合边界后一次 reduceat，绝不逐像素进入 Python 循环。
+    返回 (mins, maxs, rmss)，float32，长度 P。
+    """
+    edges = np.asarray(edges, dtype=np.int64)
+    p = len(edges) - 1
+    mins = np.zeros(p, dtype=np.float32)
+    maxs = np.zeros(p, dtype=np.float32)
+    rmss = np.zeros(p, dtype=np.float32)
+    if p <= 0 or len(samples) == 0:
+        return mins, maxs, rmss
+
+    clipped = np.clip(edges, 0, len(samples))
+    # 折叠重合边界：uniq[j]→uniq[j+1] 是互不重叠的归约段，非空段一起
+    # reduceat；再经 lookup 把结果摊回原像素（left==right 的像素保持 0）
+    uniq, seg_of_edge = np.unique(clipped, return_inverse=True)
+    gap = np.diff(uniq)
+    nonempty = gap > 0
+    if not nonempty.any():
+        return mins, maxs, rmss
+    starts = uniq[:-1][nonempty]
+    lens = gap[nonempty]
+
+    # 关键：先切出可见跨度再归约。reduceat 的末段会延伸到数组末尾、
+    # np.square 作用于整个入参数组——不切片会把 O(可见采样) 退化成
+    # 每帧全曲扫描（3 分钟歌实测 ~280ms/帧，播放必卡）。
+    s0 = int(starts[0])
+    s1 = int(starts[-1] + lens[-1])
+    seg = samples[s0:s1]
+    inner = starts - s0
+    seg_min = np.minimum.reduceat(seg, inner)
+    seg_max = np.maximum.reduceat(seg, inner)
+    seg_sumsq = np.add.reduceat(np.square(seg.astype(np.float32)), inner)
+
+    lookup = -np.ones(len(uniq), dtype=np.int64)
+    lookup[np.nonzero(nonempty)[0]] = np.arange(len(starts))
+    pix_left = seg_of_edge[:-1]
+    pix_right = seg_of_edge[1:]
+    seg_id = lookup[pix_left]
+    ok = (pix_right > pix_left) & (seg_id >= 0)
+    mins[ok] = seg_min[seg_id[ok]]
+    maxs[ok] = seg_max[seg_id[ok]]
+    rmss[ok] = np.sqrt(seg_sumsq[seg_id[ok]] / lens[seg_id[ok]])
+    return mins, maxs, rmss
+
+
+def oversample_windowed_sinc(
+    samples: np.ndarray, positions: np.ndarray, half_width: int = 16
+) -> np.ndarray:
+    """任意分数采样位置的窗化 sinc 插值（SV WaveformOversampler 口径）。
+
+    Blackman 窗 sinc，半宽 half_width 个输入采样；信号边界外按 0 参与
+    求和且不归一化——边缘幅度自然衰减，与"界外信号真实为 0"一致。
+    positions 的单位是采样坐标（1.0 = 一个采样间隔）。向量化实现：
+    width×2·half_width 的 tap 矩阵一次乘加。
+    """
+    samples = np.asarray(samples, dtype=np.float32)
+    positions = np.asarray(positions, dtype=np.float64)
+    n = len(samples)
+    if n == 0 or len(positions) == 0:
+        return np.zeros(len(positions), dtype=np.float32)
+
+    base = np.floor(positions).astype(np.int64)
+    frac = positions - base
+    offs = np.arange(-half_width + 1, half_width + 1, dtype=np.int64)
+    idx = base[:, None] + offs[None, :]
+    inside = (idx >= 0) & (idx < n)
+    t = frac[:, None] - offs[None, :]
+    x = t / half_width
+    # Blackman 窗：0.42 + 0.5cos(πx) + 0.08cos(2πx)，|x|≥1 权重为 0
+    w = np.sinc(t) * (
+        0.42 + 0.5 * np.cos(np.pi * x) + 0.08 * np.cos(2.0 * np.pi * x)
+    )
+    w = np.where((np.abs(x) < 1.0) & inside, w, 0.0)
+    vals = samples[np.clip(idx, 0, n - 1)]
+    return (vals * w).sum(axis=1).astype(np.float32)
+
+
 def pyramid_depth(rows: int) -> int:
     """build_pyramid 对给定行数会构建的额外层数（不含第 0 层）。"""
     depth = 0

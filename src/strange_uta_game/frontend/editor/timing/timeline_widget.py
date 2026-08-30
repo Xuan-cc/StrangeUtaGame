@@ -12,7 +12,7 @@ from collections import OrderedDict
 from typing import Callable, List, NamedTuple, Optional, Tuple
 
 import numpy as np
-from PyQt6.QtCore import QEvent, QPoint, QSize, QRect, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QSize, QRect, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -21,9 +21,11 @@ from PyQt6.QtGui import (
     QWheelEvent,
     QPainter,
     QPaintEvent,
+    QPainterPath,
     QPen,
     QPixmap,
     QPolygon,
+    QPolygonF,
     QResizeEvent,
 )
 from PyQt6.QtWidgets import (
@@ -126,6 +128,9 @@ class WaveformDisplay(QWidget):
         # 波形峰值缓存
         self._peaks_cache: Optional[List[tuple]] = None
         self._peaks_cache_key: Optional[tuple] = None  # (width, zoom, scroll, samples_id)
+        # 逐采样视图缓存（spp<1 区间）：(values, anchor_x, anchor_v)
+        self._sample_view_cache: Optional[tuple] = None
+        self._sample_view_cache_key: Optional[tuple] = None
         # 整段音频的多分辨率峰值缓存：bin_size -> (mins, maxs, rmss)。同一缩放
         # 粒度只归约一次，播放滚动时仅从缓存中取当前窗口。LRU + 内存预算：
         # 长音频多缩放层不设限会累积数百 MB。
@@ -453,7 +458,12 @@ class WaveformDisplay(QWidget):
         # 清除波形缓存
         self._peaks_cache = None
         self._peaks_cache_key = None
+        self._sample_view_cache = None
+        self._sample_view_cache_key = None
         self._waveform_peak_levels.clear()
+        # 长音频换短音频时缩放上限收缩，旧 zoom 可能越界
+        self._zoom_factor = min(self._zoom_factor, self.zoom_cap())
+        self._scroll_position = self._clamp_scroll(self._scroll_position)
         # 声谱缓存随音频作废；声谱模式下立即重启后台计算
         self._reset_spectrum_cache()
         self._ensure_spectrum()
@@ -469,6 +479,8 @@ class WaveformDisplay(QWidget):
         self._channels = 0
         self._peaks_cache = None
         self._peaks_cache_key = None
+        self._sample_view_cache = None
+        self._sample_view_cache_key = None
         self._waveform_peak_levels.clear()
         self._cancel_peak_preheat()
         self._reset_spectrum_cache()
@@ -476,7 +488,7 @@ class WaveformDisplay(QWidget):
         self.update()
 
     def set_zoom(self, zoom: float):
-        self._zoom_factor = max(1.0, min(self._MAX_ZOOM, zoom))
+        self._zoom_factor = max(1.0, min(self.zoom_cap(), zoom))
         # 缩放变化后重新 clamp，避免当前滚动位置超出新的有效范围
         self._scroll_position = self._clamp_scroll(self._scroll_position)
         self._invalidate_static_layer()
@@ -659,6 +671,49 @@ class WaveformDisplay(QWidget):
         # 量化到 2 的幂，缩放/resize 时可复用少量固定层级；选不大于目标
         # 粒度的层，确保缓存不会吃掉瞬态峰值。
         bin_size = 1 << max(0, int(math.floor(math.log2(samples_per_pixel))))
+
+        # 直读路径（SV getSummaries 的 direct-read 分支）：目标粒度深于最细
+        # 缓存层（长音频的峰值层受内存预算所限建不了那么细）而可见采样量
+        # 有界时，直接对原始单声道逐像素归约——比任何缓存层都准（无 bin
+        # 量化涂抹），成本 O(可见采样)，≈0.3ms @128K 采样。
+        n_visible = visible_duration_ms / 1000.0 * self._sample_rate
+        finest_cached = min(self._waveform_peak_levels.keys(), default=None)
+        if (
+            finest_cached is None or bin_size < finest_cached
+        ) and n_visible <= self._DIRECT_READ_MAX_SAMPLES:
+            ms_per_pixel = visible_duration_ms / width
+            left_times = (
+                visible_start_ms + np.arange(width, dtype=np.float64) * ms_per_pixel
+            )
+            right_times = left_times + ms_per_pixel
+            # 像素段边界 = 各像素左端时间的采样索引（floor，与金字塔
+            # _level_indices 同口径）：段间无缝无重叠，瞬态不跨像素丢失
+            edges = np.floor(
+                left_times / 1000.0 * self._sample_rate
+            ).astype(np.int64)
+            edges = np.append(
+                edges,
+                int(
+                    np.clip(
+                        np.ceil(right_times[-1] / 1000.0 * self._sample_rate),
+                        0,
+                        len(samples),
+                    )
+                ),
+            )
+            mins, maxs, rmss = spectrum_core.reduce_peaks_by_edges(samples, edges)
+            valid = (right_times > 0.0) & (left_times < self._duration_ms)
+            mins = np.where(valid, mins, 0.0)
+            maxs = np.where(valid, maxs, 0.0)
+            rmss = np.where(valid, rmss, 0.0)
+            peaks = [
+                (float(lo), float(hi), float(rm))
+                for lo, hi, rm in zip(mins, maxs, rmss)
+            ]
+            self._peaks_cache = peaks
+            self._peaks_cache_key = cache_key
+            return peaks
+
         cached = self._waveform_peak_levels.get(bin_size)
         if cached is not None:
             self._waveform_peak_levels.move_to_end(bin_size)
@@ -728,11 +783,13 @@ class WaveformDisplay(QWidget):
         if best_bin is not None:
             self._waveform_peak_levels.move_to_end(best_bin)
             return best_bin, self._waveform_peak_levels[best_bin]
-        # 所有可用层都比目标粗——用最粗的也行（好过没有）
+        # 所有可用层都比目标粗——退而用最细的可用层：min/max/RMS 仍然真实，
+        # 只是时间分辨率低。绝不能用最粗层（旧 bug）：那会把整窗极值抹进
+        # 每个像素，深放大的长音频整屏糊成实心砖块。
         if self._waveform_peak_levels:
-            coarsest = max(self._waveform_peak_levels.keys())
-            self._waveform_peak_levels.move_to_end(coarsest)
-            return coarsest, self._waveform_peak_levels[coarsest]
+            finest = min(self._waveform_peak_levels.keys())
+            self._waveform_peak_levels.move_to_end(finest)
+            return finest, self._waveform_peak_levels[finest]
         return None
 
     # 峰值层缓存总预算（min/max/rms 三个 float32 数组 × 各层）
@@ -827,8 +884,29 @@ class WaveformDisplay(QWidget):
     _SPECTRUM_FFT_CHOICES = (512, 1024, 2048, 4096, 8192, 16384, 32768)
     # 窗口重叠选项（Sonic Visualiser 口径：overlap = 1 - hop/fft）
     _SPECTRUM_OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375, 0.96875, 0.984375)
-    # 缩放上限（与 TimelineWidget._MAX_ZOOM 保持一致）
+    # 缩放上限基准（无音频/短音频时 zoom_cap() 的下限；加载长音频后动态放宽）
     _MAX_ZOOM = 1000.0
+    # 最深缩放的采样密度（采样/像素）下限：0.25 = 一帧摊 4 像素——进入
+    # 逐采样区间（SV PixelsPerFrame）后靠过采样曲线保持平滑。旧口径是
+    # "全曲 1/1000"的相对上限，长音频永远到不了采样级。
+    _ZOOM_CAP_MIN_SPP = 0.25
+    # 直读路径的可见采样量上限：paint 路径 O(可见采样) 的安全阀
+    _DIRECT_READ_MAX_SAMPLES = 128 * 1024
+    # 逐采样视图的过采样 sinc 半宽（输入采样数）——SV WaveformOversampler 口径
+    _OVERSAMPLE_HALF_WIDTH = 16
+
+    def zoom_cap(self) -> float:
+        """动态缩放上限：不浅于 _MAX_ZOOM，最深约 _ZOOM_CAP_MIN_SPP 采样/像素。
+
+        绝对深度口径（对齐 SV 的帧/像素）：cap = 总采样数 / (屏宽 × 最浅
+        采样密度)。3 分钟歌 @44.1kHz、屏宽 1200 → cap ≈ 26400x，最深处
+        一帧摊 4 像素，可逐字核对 0.0001s 量级的瞬态位置。
+        """
+        width = self._plot_width()
+        if self._duration_ms <= 0 or self._sample_rate <= 0 or width <= 0:
+            return self._MAX_ZOOM
+        total_samples = self._duration_ms / 1000.0 * self._sample_rate
+        return max(self._MAX_ZOOM, total_samples / (width * self._ZOOM_CAP_MIN_SPP))
 
     @classmethod
     def _spectrum_hop_for(cls, fft_size: int, overlap: float) -> int:
@@ -1494,27 +1572,43 @@ class WaveformDisplay(QWidget):
             self._draw_bpm_grid(painter, w, h, visible_start_ms, visible_end_ms)
             return
         visible_duration = visible_end_ms - visible_start_ms
-        if visible_duration <= 10000:
-            grid_interval = 1000
-        elif visible_duration <= 60000:
-            grid_interval = 5000
-        elif visible_duration <= 300000:
-            grid_interval = 10000
-        else:
-            grid_interval = 60000
+        # 粒度按像素密度选（每根线 ≥64px）：粗览保持 1s~1min 档；深放大
+        # 细分到 0.1ms——采样级缩放下时间轴读得出 0.0001s 量级的位置
+        threshold = visible_duration * 64.0 / max(1, w)
+        grid_interval = next(
+            (
+                iv
+                for iv in (
+                    0.1, 0.5, 1, 5, 10, 50, 100, 500,
+                    1000, 5000, 10000, 60000,
+                )
+                if iv >= threshold
+            ),
+            60000.0,
+        )
 
         grid_width = self._grid_line_width
         painter.setPen(QPen(theme.border_primary, grid_width))
-        first_grid = int(visible_start_ms / grid_interval) * grid_interval
-        for t in range(first_grid, int(visible_end_ms) + 1, grid_interval):
+        # 整数序号循环（t = n×interval）避开浮点步进漂移；亚秒档用秒的
+        # 小数标注（interval=0.1ms → "0.0001s"）
+        first_n = int(math.ceil(visible_start_ms / grid_interval - 1e-9))
+        last_n = int(math.floor(visible_end_ms / grid_interval + 1e-9))
+        if grid_interval >= 1000:
+            decimals = 0
+        else:
+            decimals = max(1, min(4, int(math.ceil(math.log10(1000.0 / grid_interval)))))
+        for n_idx in range(first_n, last_n + 1):
+            t = n_idx * grid_interval
             if visible_duration > 0:
-                ratio = (t - visible_start_ms) / visible_duration
-                x = int(ratio * w)
+                x = int((t - visible_start_ms) / visible_duration * w)
                 painter.drawLine(x, 0, x, h)
 
                 painter.setPen(theme.text_secondary)
-                s = t // 1000
-                time_text = f"{s // 60}:{s % 60:02d}"
+                if decimals == 0:
+                    s = int(t // 1000)
+                    time_text = f"{s // 60}:{s % 60:02d}"
+                else:
+                    time_text = f"{t / 1000.0:.{decimals}f}s"
                 painter.drawText(x + 2, 12, time_text)
                 painter.setPen(QPen(theme.border_primary, grid_width))
 
@@ -1589,42 +1683,253 @@ class WaveformDisplay(QWidget):
                 painter.setPen(pen_beat)
                 painter.drawLine(x, 0, x, h)
 
-    def _draw_waveform(self, painter: QPainter, w: int, h: int):
-        """双层波形（Sonic Visualiser / Audacity 口径）：
+    def _samples_per_pixel(self) -> float:
+        """当前视窗的采样密度（采样数/像素）；< 1 时进入逐采样显示区间。"""
+        width = self._plot_width()
+        if self._duration_ms <= 0 or self._sample_rate <= 0 or width <= 0:
+            return float("inf")
+        return self._visible_duration_ms() / 1000.0 * self._sample_rate / width
 
-        - 外层：min/max 峰值轮廓（半透明 fill），展示瞬态极值；
-        - 内层：RMS 均方根核心带（更亮的 line 色），展示持续响度。
+    def _compute_sample_view(self, width: int) -> Optional[tuple]:
+        """逐采样视图（SV PixelsPerFrame 区间，每像素不足一个采样时）。
+
+        返回 (values, anchor_x, anchor_v)：values 为各像素中心位置的窗化
+        sinc 过采样值（长 width，音频范围外为 0）；anchor_x/anchor_v 为可见
+        真实采样落点所在的像素列与原始值（描点方块用，SV 口径画 2px 方块）。
+        不可用返回 None。
         """
-        peaks = self._compute_waveform_peaks(w)
-        if not peaks:
-            return
+        if self._samples is None or self._duration_ms <= 0 or width <= 0:
+            return None
+        samples = self._waveform_samples
+        if samples is None or len(samples) == 0:
+            return None
 
+        visible_start_ms = self._visible_start_ms()
+        cache_key = (width, self._zoom_factor, visible_start_ms, id(samples))
+        if (
+            self._sample_view_cache_key == cache_key
+            and self._sample_view_cache is not None
+        ):
+            return self._sample_view_cache
+
+        visible_duration_ms = self._visible_duration_ms()
+        ms_per_pixel = visible_duration_ms / width
+        center_times = (
+            visible_start_ms
+            + (np.arange(width, dtype=np.float64) + 0.5) * ms_per_pixel
+        )
+        positions = center_times / 1000.0 * self._sample_rate
+        values = spectrum_core.oversample_windowed_sinc(
+            samples, positions, self._OVERSAMPLE_HALF_WIDTH
+        )
+        # 音频范围外的像素（居中播放的半屏空白等）置 0，与包络口径一致
+        valid = (center_times > 0.0) & (center_times < self._duration_ms)
+        values = np.where(valid, values, 0.0).astype(np.float32)
+
+        # 可见采样 → 锚点像素（采样时间落在哪一列，方块就画在哪一列；
+        # spp<1 时每列至多一个采样）
+        first_k = max(0, int(np.floor(visible_start_ms / 1000.0 * self._sample_rate)))
+        last_k = min(
+            len(samples),
+            int(
+                np.ceil(
+                    (visible_start_ms + visible_duration_ms)
+                    / 1000.0
+                    * self._sample_rate
+                )
+            ),
+        )
+        if first_k < last_k:
+            ks = np.arange(first_k, last_k, dtype=np.int64)
+            anchor_x = np.floor(
+                (ks / self._sample_rate * 1000.0 - visible_start_ms) / ms_per_pixel
+            ).astype(np.int64)
+            keep = (anchor_x >= 0) & (anchor_x < width)
+            anchor_x = anchor_x[keep]
+            anchor_v = samples[first_k:last_k][keep].astype(np.float32)
+        else:
+            anchor_x = np.empty(0, dtype=np.int64)
+            anchor_v = np.empty(0, dtype=np.float32)
+
+        view = (values, anchor_x, anchor_v)
+        self._sample_view_cache = view
+        self._sample_view_cache_key = cache_key
+        return view
+
+    def _draw_sample_view(self, painter: QPainter, w: int, h: int) -> None:
+        """逐采样绘制：过采样平滑曲线 + 采样点方块（SV PixelsPerFrame 口径）。"""
         mid_y = h // 2
-        amplitude_scale = h / 2.0 * 0.8
-
-        # 外层：min/max 峰值轮廓
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(theme.waveform_fill)
-        for i, (_, max_val, _rms) in enumerate(peaks):
-            y = int(mid_y - max_val * amplitude_scale)
-            painter.drawRect(i, y, 1, mid_y - y)
-        for i, (min_val, _, _rms) in enumerate(peaks):
-            y = int(mid_y - min_val * amplitude_scale)
-            painter.drawRect(i, mid_y, 1, y - mid_y)
-
-        # 内层：RMS 核心带（亮色，覆盖在外层轮廓之上；上下各自钳在峰值内）
-        if self._waveform_rms_enabled:
-            painter.setBrush(theme.waveform_line)
-            for i, (min_val, max_val, rms) in enumerate(peaks):
-                if rms <= 0.0:
-                    continue
-                top = int(mid_y - min(rms, abs(max_val)) * amplitude_scale)
-                bottom = int(mid_y + min(rms, abs(min_val)) * amplitude_scale)
-                painter.drawRect(i, top, 1, bottom - top)
+        amplitude_scale = h / 2.0
 
         # 中心线
         painter.setPen(QPen(theme.waveform_line, 1))
         painter.drawLine(0, mid_y, w, mid_y)
+
+        view = self._compute_sample_view(w)
+        if view is None:
+            return
+        values, anchor_x, anchor_v = view
+
+        # 平滑曲线：一条 polyline 穿过所有像素中心的过采样值
+        ys = mid_y - values * amplitude_scale
+        polygon = QPolygonF()
+        for x in range(w):
+            polygon.append(QPointF(float(x), float(ys[x])))
+        painter.setPen(QPen(theme.waveform_line, 1))
+        painter.drawPolyline(polygon)
+
+        # 采样点方块：真实采样值（非插值值），SV 在该区间的小方块描点
+        if len(anchor_x):
+            size = 2.0
+            path = QPainterPath()
+            for ax, av in zip(anchor_x, anchor_v):
+                y = mid_y - av * amplitude_scale
+                path.addRect(
+                    QRectF(ax + 0.5 - size / 2, y - size / 2, size, size)
+                )
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(theme.waveform_line)
+            painter.drawPath(path)
+
+    def _rasterize_waveform_bars(
+        self, painter: QPainter, w: int, h: int, peaks: List[tuple]
+    ) -> Optional[QImage]:
+        """把 min/max 包络 + RMS 核心带直接光栅化进 ARGB 缓冲（numpy）。
+
+        播放（居中跟随）时静态层逐帧全量重建，QPainter 逐像素图元
+        （drawRect 循环实测 ~12ms/层、数千子路径的 drawPath+AA 实测
+        ~280ms）都撑不住 60fps；这里每像素只算一对整数行界，掩码填充
+        两个颜色层，一次 drawImage 上屏（实测 ~2ms/帧）。
+
+        必须按**物理像素**出图：静态层 QPixmap 带 DPR（Windows 125%/
+        150%/200% 缩放），若按逻辑分辨率出图再交给 Qt 放大，每根柱会被
+        拉成 dpr 个物理像素（变粗发糊）；这里在物理网格上填充并把 QImage
+        的 DPR 设成同值，blit 时 1:1 无重采样。
+
+        峰值按**物理列**计算和绘制：HiDPI 下 1 个逻辑像素对应 dpr 个不同
+        的峰值列，而不是只画中间一列留下规则空隙。SV 的 HiDPI 支持同样
+        会让 layer data 使用设备分辨率；这是截图中密实而不呈“栅栏”的关键。
+
+        竖线之外还有 **中点连接线**（SV WaveformLayer.cpp 情况 B 的
+        ``lineTo(rangeMiddle)``）：相邻列幅值范围不重叠（contiguous=
+        false）或本列范围不足 1px 高（trivialRange）时，从上一列中点
+        连一条 1px 折线到本列中点——波形的低谷/细尾因此是连续细线而非
+        散点（漏掉它就是"峰与峰之间全是间隙"）。范围重叠的相邻列不画
+        连接线（竖线本身已覆盖，SV 情况 A 同样只画竖线）。
+
+        RMS 核心带是横向连续的带状，保持整列填充。
+        """
+        if not peaks or w <= 0 or h <= 0:
+            return None
+        arr = np.asarray(peaks, dtype=np.float32)  # (w, 3): min, max, rms
+        dpr = max(1.0, float(painter.device().devicePixelRatioF()))
+        pw = max(1, int(math.ceil(w * dpr)))
+        ph = max(1, int(math.ceil(h * dpr)))
+        # 兼容直接调用者传入逻辑列；正式绘制路径会传入 pw 个独立峰值。
+        if len(arr) != pw:
+            src = np.minimum(
+                (np.arange(pw, dtype=np.float64) * len(arr) / pw).astype(np.int64),
+                len(arr) - 1,
+            )
+            arr = arr[src]
+        mins = arr[:, 0]
+        maxs = arr[:, 1]
+        rmss = arr[:, 2]
+
+        mid = h / 2.0
+        amp = h / 2.0
+
+        # 连续性/细线判断必须留在逻辑坐标中：SV 的阈值是 1.0/0.5
+        # 逻辑像素。若先乘 DPR 再取整，125%~200% 屏幕会在不同缩放倍率
+        # 得到不同拓扑，细尾时断时续。
+        top_logical = np.clip(mid - maxs * amp, 0.0, float(h))
+        bot_logical = np.clip(mid - mins * amp, 0.0, float(h))
+        top = np.clip(np.rint(top_logical * dpr), 0, ph).astype(np.int32)
+        bot = np.clip(np.rint(bot_logical * dpr), 0, ph).astype(np.int32)
+        bot = np.minimum(np.maximum(bot, top + 1), ph)  # 每列至少 1px
+
+        stroke_argb = int(theme.waveform_fill.rgba())
+        line_argb = int(theme.waveform_line.rgba())
+
+        buf = np.zeros((ph, pw), dtype=np.uint32)
+
+        # 包络：每个物理列都有自己对应时间片的 min/max，不留规则空列。
+        rows = np.arange(ph, dtype=np.int32)[:, None]
+        stroke_mask = (rows >= top[None, :]) & (rows < bot[None, :])
+        buf[stroke_mask] = stroke_argb
+
+        # 中点连接线（SV 情况 B）：非重叠相邻列 / 不足 1px 高的列之间，
+        # 在竖线列之间的空隙物理列上补 1px 插值点，串成连续折线
+        mids = ((top + bot) // 2).astype(np.int32)
+        trivial = (bot_logical - top_logical) < 1.0
+        contig = np.ones(pw, dtype=bool)
+        contig[1:] = (
+            (top_logical[1:] <= bot_logical[:-1] + 0.5)
+            & (bot_logical[1:] >= top_logical[:-1] - 0.5)
+        )
+        active = (~contig) | trivial  # 本列与前一列之间需要连接线
+        active[0] = False
+        if pw > 1:
+            # 相邻物理列之间没有空 x 可插值；在当前列补齐两个中点间的
+            # 像素，等价于无 AA 的陡斜线，避免低幅尾部断成散点。
+            conn_top = np.minimum(mids, np.r_[mids[0], mids[:-1]])
+            conn_bot = np.maximum(mids, np.r_[mids[0], mids[:-1]]) + 1
+            conn_mask = (
+                (rows >= conn_top[None, :])
+                & (rows < conn_bot[None, :])
+                & active[None, :]
+            )
+            buf[conn_mask] = stroke_argb
+
+        if self._waveform_rms_enabled:
+            # RMS 核心带：钳在包络内，整列填充（带状横向连续）
+            r_top = np.clip(
+                np.rint((mid - np.minimum(rmss, np.abs(maxs)) * amp) * dpr),
+                top,
+                ph,
+            ).astype(np.int32)
+            r_bot = np.clip(
+                np.rint((mid + np.minimum(rmss, np.abs(mins)) * amp) * dpr),
+                0,
+                bot,
+            ).astype(np.int32)
+            drawn = rmss > 0.0
+            r_bot = np.where(
+                drawn, np.minimum(np.maximum(r_bot, r_top + 1), ph), r_top
+            )
+            buf[
+                (rows >= r_top[None, :]) & (rows < r_bot[None, :])
+            ] = line_argb
+
+        image = QImage(buf.tobytes(), pw, ph, pw * 4, QImage.Format.Format_ARGB32)
+        image.setDevicePixelRatio(dpr)
+        return image
+
+    def _draw_waveform(self, painter: QPainter, w: int, h: int):
+        """波形绘制（Sonic Visualiser 口径，按采样密度分区间）：
+
+        - 每像素 ≥ 1 采样（FramesPerPixel）：双层包络——外层 min/max 峰值
+          cosmetic 细线（瞬态极值）+ 可选的内层 RMS 核心带；
+        - 每像素 < 1 采样（PixelsPerFrame）：逐采样视图（过采样平滑曲线 +
+          采样点方块），见 _draw_sample_view。
+        """
+        if self._samples_per_pixel() < 1.0:
+            self._draw_sample_view(painter, w, h)
+            return
+
+        dpr = max(1.0, float(painter.device().devicePixelRatioF()))
+        peak_columns = max(1, int(math.ceil(w * dpr)))
+        peaks = self._compute_waveform_peaks(peak_columns)
+        if not peaks:
+            return
+
+        image = self._rasterize_waveform_bars(painter, w, h, peaks)
+        if image is not None:
+            painter.drawImage(0, 0, image)
+
+        # 中心线
+        painter.setPen(QPen(theme.waveform_line, 1))
+        painter.drawLine(0, h // 2, w, h // 2)
 
     def _draw_playback_range(
         self,
@@ -2010,7 +2315,7 @@ class WaveformDisplay(QWidget):
 
         if a0.modifiers() & Qt.KeyboardModifier.ControlModifier:
             new_zoom = self._zoom_factor * (1.2 if delta > 0 else 1 / 1.2)
-            new_zoom = max(1.0, min(self._MAX_ZOOM, new_zoom))
+            new_zoom = max(1.0, min(self.zoom_cap(), new_zoom))
 
             if new_zoom != self._zoom_factor:
                 mouse_ratio = max(
@@ -2068,7 +2373,7 @@ class TimelineWidget(QWidget):
     # 横向滚动条整数分辨率：把"整段时长"映射为 [0, _SCROLL_SCALE] 个单位，
     # pageStep = 可见时间窗占比（_SCROLL_SCALE / zoom），使滑块长度随缩放自动伸缩。
     _SCROLL_SCALE = 100000
-    # 缩放上限：1000x 时 3 分钟歌曲的可见窗 ≈0.18s，可逐字核对瞬态
+    # 缩放上限基准（滑杆映射下限；长音频实际由 zoom_cap() 放宽到采样级）
     _MAX_ZOOM = 1000.0
 
     def __init__(self, parent=None):
@@ -2296,6 +2601,8 @@ class TimelineWidget(QWidget):
         mono: Optional[np.ndarray] = None,
     ):
         self.waveform_display.set_audio_data(samples, sample_rate, channels, mono=mono)
+        # 缩放上限随音频长度变化：重算滑杆位置/读数/滚动条长度
+        self._on_zoom_changed(self.waveform_display._zoom_factor)
         # 非模态弹窗可能保持打开：立即推送新音源 + 刷新实际重叠率提示
         dialog = getattr(self, "_advanced_dialog", None)
         if dialog is not None:
@@ -2328,18 +2635,19 @@ class TimelineWidget(QWidget):
         self.zoom_slider.setEnabled(enabled)
         self.zoom_label.setEnabled(enabled)
 
-    # ---- 缩放对数刻度转换（zoom 范围 1x-1000x，slider 范围 0-10000）----
+    # ---- 缩放对数刻度转换（slider 0-10000 → 1x..上限；上限随音频长度动态，
+    # 无音频时为 _MAX_ZOOM，长音频可到采样级——见 WaveformDisplay.zoom_cap）----
 
-    @staticmethod
-    def _slider_to_zoom(value: int) -> float:
-        """滑条整数值 → 实际放大倍数（对数映射）。"""
-        return TimelineWidget._MAX_ZOOM ** (value / 10000.0)
+    def _slider_to_zoom(self, value: int) -> float:
+        """滑条整数值 → 实际放大倍数（对数映射，上限随音频长度动态）。"""
+        cap = self.waveform_display.zoom_cap()
+        return cap ** (value / 10000.0)
 
-    @staticmethod
-    def _zoom_to_slider(zoom: float) -> int:
-        """实际放大倍数 → 滑条整数值（对数映射）。"""
-        zoom = max(1.0, min(TimelineWidget._MAX_ZOOM, zoom))
-        return int(round(math.log(zoom) / math.log(TimelineWidget._MAX_ZOOM) * 10000))
+    def _zoom_to_slider(self, zoom: float) -> int:
+        """实际放大倍数 → 滑条整数值（对数映射，上限随音频长度动态）。"""
+        cap = self.waveform_display.zoom_cap()
+        zoom = max(1.0, min(cap, zoom))
+        return int(round(math.log(zoom) / math.log(cap) * 10000))
 
     # ---- 回调 ----
 
