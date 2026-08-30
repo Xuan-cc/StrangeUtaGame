@@ -566,8 +566,9 @@ def test_alt_wheel_scrolls_horizontally_without_using_vertical_scroll(
     assert preview._scroll_center_line == vertical_before + 1
 
 
-def test_prewarm_is_batched_not_synchronous(qapp, monkeypatch):
-    """打开项目只同步预热一屏，剩余行由 _prewarm_tick 分批补齐（不阻塞主线程）。"""
+def test_prewarm_targets_current_line_and_visible_window(qapp, monkeypatch):
+    """双路预热：打开只预热 current_line 附近一屏；滚动停稳预热新可视窗口；
+    版本未失效的行重复 settle 直接复用缓存，不重复渲染。"""
     monkeypatch.setattr(preview_module, "theme", _DummyTheme())
     preview = preview_module.KaraokePreview()
     preview.resize(800, 560)
@@ -575,14 +576,22 @@ def test_prewarm_is_batched_not_synchronous(qapp, monkeypatch):
     total = 60
     preview.set_project(_plain_project(line_count=total, chars_per_line=4))
 
-    # 同步阶段：仅 focus 附近一屏有缓存，绝不全量
-    assert 0 < len(preview._sentence_cache) < total
+    # 打开：仅 current_line 附近一屏有缓存，绝不全量
+    cached_after_open = len(preview._sentence_cache)
+    assert 0 < cached_after_open < total
 
-    # 分批补齐：手动驱动 tick（每批 _PREWARM_BATCH_LINES 行）
-    batch = preview_module.KaraokePreview._PREWARM_BATCH_LINES
-    ticks = 0
-    while len(preview._sentence_cache) < total and ticks < total // batch + 2:
-        preview._prewarm_tick()
-        ticks += 1
-    assert len(preview._sentence_cache) == total
-    assert preview._prewarm_cursor >= total
+    # 滚动到远处行，防抖触发（_on_viewport_settled）后新可视窗口被预热
+    preview._scroll_center_line = 40.0
+    preview._on_viewport_settled()
+    assert 40 in preview._sentence_cache
+    assert len(preview._sentence_cache) > cached_after_open
+
+    # 版本校验：重复 settle 不重复渲染（缓存条目对象被原样复用）
+    marker = preview._sentence_cache[40]
+    preview._on_viewport_settled()
+    assert preview._sentence_cache[40] is marker
+
+    # 编辑使版本失效（含相邻依赖行）→ settle 后按新版本重渲
+    preview._invalidate_line_and_dependents(40)
+    preview._on_viewport_settled()
+    assert preview._sentence_cache[40] is not marker
