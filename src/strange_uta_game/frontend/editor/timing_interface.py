@@ -1056,6 +1056,7 @@ class EditorInterface(QWidget):
             self._timing_service.set_speed(new_speed_pct / 100.0)
         # 应用渲染偏移（与导出偏移联动）
         render_offset = settings.get("export.offset_ms", 0)
+        prev_render_offset = self.preview._global_offset_ms
         self.preview.set_global_offset(render_offset)
         # 同步工具栏偏移控件
         self.toolbar.edit_offset.blockSignals(True)
@@ -1073,6 +1074,10 @@ class EditorInterface(QWidget):
                         ch.set_offset(render_offset)
                     except Exception as e:
                         print(f"[Settings] set_offset 跳过脏字符: {e}")
+        # 设置页改「全局偏移」走本路径：值变化时波形时间标签同样要重刷
+        # （标签时间戳带偏移，不重刷会停在旧位置）
+        if render_offset != prev_render_offset:
+            self._schedule_time_tags_update()
         # 停顿符变更时立即迁移所有 ruby parts（不等重开项目）
         new_pause_char = settings.get("export.nicokara_pause_char", "^") or "^"
         if self._last_pause_char and new_pause_char != self._last_pause_char and self._project:
@@ -1232,6 +1237,9 @@ class EditorInterface(QWidget):
             self.preview.set_global_offset(offset_ms)
         except Exception as e:
             print(f"[Offset] preview.set_global_offset 失败: {e}")
+        # 波形时间标签用的也是带偏移的全局时间戳——偏移一变必须重刷，
+        # 否则 Tag 停在旧位置不跟随（33ms 防抖与打轴路径一致）
+        self._schedule_time_tags_update()
         # 通知 ProjectStore，使 Settings 页面等监听者同步更新
         if hasattr(self, "_store") and self._store:
             self._store.notify("settings")
