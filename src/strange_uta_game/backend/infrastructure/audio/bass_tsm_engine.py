@@ -754,6 +754,9 @@ class BassTsmEngine(IAudioEngine):
     def get_duration_ms(self) -> int:
         return self._duration_ms
 
+    def get_output_latency_ms(self) -> int:
+        return self._output_latency_ms
+
     # ════════════════════════════════════ state / recovery
 
     def get_playback_state(self) -> PlaybackState:

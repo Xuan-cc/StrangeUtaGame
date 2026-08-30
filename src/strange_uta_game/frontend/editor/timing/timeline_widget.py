@@ -141,6 +141,9 @@ class WaveformDisplay(QWidget):
         # BPM 网格偏移（毫秒）：拍线相位对齐——歌曲节拍通常不从 0ms 开始，
         # 正值网格整体后移（延迟）、负值前移。仅作用于 BPM 网格。
         self._grid_offset_ms = 0
+        # 拍号分子（每小节拍数，1~16）：BPM 网格小节线/小节号与节拍器重音
+        # 共用的循环周期（默认 4/4）
+        self._beats_per_bar = 4
         self._grid_line_width = 2        # 网格线宽（0~100px，时间/BPM 共用；0=不绘制）
         self._spectrum_fft_size = 2048
         self._spectrum_overlap = 0.75   # 窗口重叠（SV 口径）；帧距=fft·(1-overlap)
@@ -153,6 +156,10 @@ class WaveformDisplay(QWidget):
         self._spectrum_active = True
         # 双层波形（外层 min/max 峰值 + 内层 RMS 核心带）绘制开关，默认开
         self._waveform_rms_enabled = True
+        # 节拍器（纯状态，不参与绘制）：播放期间按 BPM/偏移触发节拍音，
+        # 由 EditorInterface 的 PlaybackMetronome 消费（经设置链透传/持久化）
+        self._metronome_enabled = False
+        self._metronome_volume = 100
         # 实际使用的重叠率（预算降级后可能与用户选择不同；None=未计算）
         self._actual_overlap: Optional[float] = None
 
@@ -869,6 +876,14 @@ class WaveformDisplay(QWidget):
         self._invalidate_static_layer()
         self.update()
 
+    def set_metronome_enabled(self, enabled: bool) -> None:
+        """节拍器开关（纯状态，不重绘；实际调度在 EditorInterface）。"""
+        self._metronome_enabled = bool(enabled)
+
+    def set_metronome_volume(self, volume_pct: int) -> None:
+        """节拍器音量（0~100%，纯状态；实际音量在播放器上设置）。"""
+        self._metronome_volume = int(max(0, min(100, int(volume_pct))))
+
     def set_grid_mode(self, mode: str) -> None:
         if mode not in ("time", "bpm") or mode == self._grid_mode:
             return
@@ -897,6 +912,19 @@ class WaveformDisplay(QWidget):
         if offset_ms == self._grid_offset_ms:
             return
         self._grid_offset_ms = offset_ms
+        self._invalidate_static_layer()
+        self.update()
+
+    def set_beats_per_bar(self, beats: int) -> None:
+        """拍号分子（每小节 1~16 拍）：小节线/小节号与节拍器重音的循环周期。"""
+        try:
+            beats = int(beats)
+        except (TypeError, ValueError):
+            return
+        beats = max(1, min(16, beats))
+        if beats == self._beats_per_bar:
+            return
+        self._beats_per_bar = beats
         self._invalidate_static_layer()
         self.update()
 
@@ -970,6 +998,7 @@ class WaveformDisplay(QWidget):
             "grid_mode": self._grid_mode,
             "grid_bpm": self._grid_bpm,
             "grid_offset_ms": self._grid_offset_ms,
+            "beats_per_bar": self._beats_per_bar,
             "grid_line_width": self._grid_line_width,
             "spectrum_fft_size": self._spectrum_fft_size,
             "spectrum_overlap": self._spectrum_overlap,
@@ -983,6 +1012,9 @@ class WaveformDisplay(QWidget):
             "center_playhead_enabled": self._center_playhead_mode,
             "tag_char_enabled": self._tag_char_enabled,
             "tag_ruby_enabled": self._tag_ruby_enabled,
+            # 节拍器（EditorInterface 的调度器消费；此处仅为设置链快照）
+            "metronome_enabled": self._metronome_enabled,
+            "metronome_volume": self._metronome_volume,
         }
 
     def spectrum_audio_source(self) -> Optional[tuple]:
@@ -1452,11 +1484,12 @@ class WaveformDisplay(QWidget):
 
     def _draw_bpm_grid(self, painter: QPainter, w: int, h: int,
                        visible_start_ms: float, visible_end_ms: float) -> None:
-        """BPM 网格：拍线、每 4 拍小节线（加重 + 小节号）、深放大时半拍细分。
+        """BPM 网格：拍线、按拍号的小节线（加重 + 小节号）、深放大时半拍细分。
 
         拍时刻 = 偏移 + b·拍长（b 为整数，可为负）——偏移用于把网格相位
         对齐到歌曲实际节拍（节拍通常不从 0ms 开始）。b=0 是第 1 小节的
-        第 1 拍；负数拍仍画线但不标注小节号。
+        第 1 拍；负数拍仍画线但不标注小节号。小节线/小节号与节拍器重音
+        共用 ``_beats_per_bar``（拍号分子）作为循环周期。
         """
         if self._grid_line_width <= 0:
             return  # 网格线宽 0 = 不绘制网格
@@ -1490,27 +1523,32 @@ class WaveformDisplay(QWidget):
                 if 0 <= x < w:
                     painter.drawLine(x, 0, x, h)
 
-        # 拍线与小节线（4/4：每 4 拍一个小节）。
+        # 拍线与小节线（按拍号：每 bar_beats 拍一个小节）。
         # 像素密度门控 + 步长遍历：拍距小于 ~4px 时按 2 的幂提升步长并对齐
-        # 小节（4 拍），使绘制的线条数量与窗口宽度同量级——600BPM × 2 小时
+        # 小节，使绘制的线条数量与窗口宽度同量级——600BPM × 2 小时
         # 全览时逐拍空转循环实测 173ms，会卡 UI。
+        bar_beats = self._beats_per_bar
         beat_step = 1
         while beat_step * pixels_per_beat < 4 and beat_step < 4096:
             beat_step *= 2
         if beat_step > 1:
-            beat_step = max(beat_step, 4)  # 粗化时至少按小节
+            # 粗化时至少按小节，且步长须为小节拍数的倍数——非 2 幂拍号
+            #（3/4、5/4、7/4）下向上取整到小节倍数，否则小节线会被跳过
+            beat_step = max(beat_step, bar_beats)
+            if beat_step % bar_beats:
+                beat_step += bar_beats - (beat_step % bar_beats)
             first_beat += (-first_beat) % beat_step
         draw_beats = beat_step == 1
         for b in range(first_beat, last_beat + 1, beat_step):
             x = beat_x(b)
             if not 0 <= x < w:
                 continue
-            if b % 4 == 0:
+            if b % bar_beats == 0:
                 painter.setPen(pen_bar)
                 painter.drawLine(x, 0, x, h)
                 if b >= 0:
                     painter.setPen(theme.text_secondary)
-                    painter.drawText(x + 2, 12, str(b // 4 + 1))
+                    painter.drawText(x + 2, 12, str(b // bar_beats + 1))
             elif draw_beats:
                 painter.setPen(pen_beat)
                 painter.drawLine(x, 0, x, h)
@@ -2388,6 +2426,9 @@ class TimelineWidget(QWidget):
         wd.set_grid_mode(settings.get("grid_mode", "time"))
         wd.set_grid_bpm(float(settings.get("grid_bpm", 120.0)))
         wd.set_grid_offset(int(settings.get("grid_offset_ms", 0)))
+        beats_per_bar = settings.get("beats_per_bar")
+        if beats_per_bar is not None:
+            wd.set_beats_per_bar(int(beats_per_bar))
         wd.set_grid_line_width(int(settings.get("grid_line_width", 2)))
         wd.set_waveform_rms_enabled(bool(settings.get("waveform_rms_enabled", True)))
         # 时间标签行为键（设置页「波形时间标签」组也走这里，保证两处联动）
@@ -2403,6 +2444,13 @@ class TimelineWidget(QWidget):
         tag_ruby = settings.get("tag_ruby_enabled")
         if tag_ruby is not None:
             wd.set_tag_ruby_enabled(bool(tag_ruby))
+        # 节拍器两键（纯状态）：缺席时保持现值（兼容旧调用方）
+        metronome_enabled = settings.get("metronome_enabled")
+        if metronome_enabled is not None:
+            wd.set_metronome_enabled(bool(metronome_enabled))
+        metronome_volume = settings.get("metronome_volume")
+        if metronome_volume is not None:
+            wd.set_metronome_volume(int(metronome_volume))
         wd.set_spectrum_params(
             fft_size=settings.get("spectrum_fft_size"),
             overlap=settings.get("spectrum_overlap"),

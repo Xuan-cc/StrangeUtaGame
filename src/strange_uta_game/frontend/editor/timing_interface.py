@@ -229,6 +229,13 @@ class EditorInterface(QWidget):
         self._keysound_style = None
         self._init_keysound()
 
+        # 节拍器（齿轮弹窗「网格与节拍」）：播放期间按 BPM 网格的 BPM/偏移
+        # 触发节拍音，每 4 拍一记重音；调度/播放器见 playback_metronome
+        self._metronome_player = None
+        self._metronome = None
+        self._metronome_enabled: bool = False
+        self._init_metronome()
+
     def changeEvent(self, event):
         """切语言时刷新可见 labels/buttons——本 widget 持有音频引擎等重状态，
         不能整体 rebuild。改成精确 retranslate：每个文本独立 setText 一遍。"""
@@ -358,6 +365,113 @@ class EditorInterface(QWidget):
         style = style or "default"
         self._keysound_style = style
         self._reload_keysound(style)
+
+    # ── 节拍器（播放期间按 BPM 网格 BPM/偏移触发节拍音） ──
+
+    def _init_metronome(self) -> None:
+        """创建节拍音播放器与调度器并预热样本（失败静默，不影响主功能）。"""
+        try:
+            from ...backend.infrastructure.audio.metronome_player import (
+                create_metronome_player,
+            )
+            from .timing.playback_metronome import PlaybackMetronome
+
+            self._metronome_player = create_metronome_player()
+            self._metronome = PlaybackMetronome(
+                self._metronome_player,
+                position_ms=self._metronome_position_ms,
+                is_playing=self._metronome_is_playing,
+                speed=self._metronome_speed,
+                output_latency_ms=self._metronome_output_latency_ms,
+            )
+            self._reload_metronome_after_audio()  # 预热：加载节拍音样本
+        except Exception as e:
+            print(f"[Metronome] 初始化失败: {e}")
+
+    def _metronome_engine(self):
+        """节拍器使用的音频引擎（直接读原始位置：延迟补偿后的可听时刻，
+        且不触碰 get_display_position_ms 的 UI 单调状态——调度在后台线程）。"""
+        service = self._timing_service
+        return getattr(service, "_audio_engine", None) if service else None
+
+    def _metronome_position_ms(self) -> float:
+        engine = self._metronome_engine()
+        return float(engine.get_position_ms()) if engine is not None else 0.0
+
+    def _metronome_is_playing(self) -> bool:
+        engine = self._metronome_engine()
+        return engine is not None and engine.is_playing()
+
+    def _metronome_speed(self) -> float:
+        engine = self._metronome_engine()
+        if engine is None:
+            return 1.0
+        try:
+            return float(engine.get_speed())
+        except Exception:
+            return 1.0
+
+    def _metronome_output_latency_ms(self) -> float:
+        engine = self._metronome_engine()
+        return float(engine.get_output_latency_ms()) if engine is not None else 0.0
+
+    def _reload_metronome_after_audio(self) -> None:
+        """音频(重新)加载后重载节拍音样本——加载/切换音频触发 BASS 设备
+        释放+重建，旧 sample handle 失效（与按键音同一套生命周期处理）。"""
+        if self._metronome_player is None:
+            return
+        from ...backend.infrastructure.audio.metronome_player import (
+            metronome_sound_paths,
+        )
+
+        beat_path, accent_path = metronome_sound_paths()
+        try:
+            self._metronome_player.load(beat_path, accent_path)
+        except Exception as e:
+            print(f"[Metronome] 样本加载失败: {e}")
+
+    def _ensure_metronome_samples(self) -> None:
+        """节拍音样本自愈：失效（BASS 会话重建后 handle 归零）即重载。
+
+        与按键音 ``_apply_settings`` 里的 samples_invalid 判定同款兜底——
+        换项目/切歌/设备恢复等路径中，样本可能在 ``_on_audio_loaded`` 的
+        重载之外失效（如项目未附带媒体、加载被防重入拒绝、BASS 设备恢复
+        重建会话），没有这层兜底节拍器会永久静默。
+        """
+        if self._metronome_player is None:
+            return
+        if not self._metronome_player.is_loaded():
+            self._reload_metronome_after_audio()
+
+    def _configure_metronome_from_settings(self) -> None:
+        """按 timing.* 设置配置节拍器：参数（BPM/偏移）、开关与音量。
+
+        播放中开启 → 立即开始随播调度；关闭 → 立即停。设置页重应用与齿轮
+        弹窗 applied 两条入口共用本方法（值未变化时 configure 内部为空操作）。
+        """
+        if self._metronome is None or self._metronome_player is None:
+            return
+        self._ensure_metronome_samples()
+        enabled = False
+        bpm = 120.0
+        offset_ms = 0
+        volume = 100
+        beats_per_bar = 4
+        setting_iface = self._get_setting_interface()
+        if setting_iface is not None:
+            s = setting_iface.get_settings()
+            enabled = bool(s.get("timing.waveform_metronome_enabled", False))
+            bpm = float(s.get("timing.waveform_grid_bpm", 120.0))
+            offset_ms = int(s.get("timing.waveform_grid_offset_ms", 0))
+            volume = int(s.get("timing.waveform_metronome_volume", 100))
+            beats_per_bar = int(s.get("timing.waveform_beats_per_bar", 4))
+        self._metronome_enabled = enabled
+        self._metronome_player.set_volume(volume)
+        self._metronome.configure(bpm, offset_ms, beats_per_bar)
+        if enabled and self._metronome_is_playing():
+            self._metronome.start()
+        elif not enabled:
+            self._metronome.stop()
 
     def _bind_callback_signals(self):
         self._position_changed_signal.connect(self._handle_position_changed)
@@ -838,6 +952,9 @@ class EditorInterface(QWidget):
                 "grid_offset_ms": int(
                     settings.get("timing.waveform_grid_offset_ms", 0)
                 ),
+                "beats_per_bar": int(
+                    settings.get("timing.waveform_beats_per_bar", 4)
+                ),
                 "grid_line_width": int(
                     settings.get("timing.waveform_grid_line_width", 2)
                 ),
@@ -861,7 +978,15 @@ class EditorInterface(QWidget):
                 "tag_ruby_enabled": settings.get(
                     "timing.waveform_tag_ruby_enabled", True
                 ),
+                "metronome_enabled": settings.get(
+                    "timing.waveform_metronome_enabled", False
+                ),
+                "metronome_volume": int(
+                    settings.get("timing.waveform_metronome_volume", 100)
+                ),
             })
+            # 节拍器参数/开关/音量（值未变时弹窗链不会发信号，须显式配置）
+            self._configure_metronome_from_settings()
             # 波形显示开关的持久化状态（齿轮外的既有开关）
             self.timeline.set_waveform_visible(
                 bool(settings.get("timing.waveform_visible", True))
@@ -1321,6 +1446,11 @@ class EditorInterface(QWidget):
         if self._keysound_player is not None:
             self._keysound_player.invalidate()
         self._keysound_style = None
+        # 节拍器同理：停调度 + 归零 sample handle（下次音频加载完成后重载）
+        if self._metronome is not None:
+            self._metronome.stop()
+        if self._metronome_player is not None:
+            self._metronome_player.invalidate()
 
     def _clear_audio_state(self):
         """清除音频状态并重置所有音频相关子控件。
@@ -5060,6 +5190,8 @@ class EditorInterface(QWidget):
         # 音频加载会(重)初始化 BASS 设备，使按键音样本失效；在此重载，
         # 确保导入新歌后无需手动切换音效即有按键音。
         self._reload_keysound_after_audio()
+        # 节拍音样本同理（同一 BASS 会话重建）
+        self._reload_metronome_after_audio()
         self._audio_loading = False
 
     def _on_audio_load_error(self, error_msg: str) -> None:
@@ -5278,6 +5410,11 @@ class EditorInterface(QWidget):
                 self.preview._auto_scroll_suspended = False
                 # 启动位置主动拉取定时器
                 self._position_poll_timer.start()
+                # 节拍器随播放启动（开关/参数在齿轮弹窗「网格与节拍」）；
+                # 播放是节拍发声的关键动作，样本失效在此自愈重载
+                if self._metronome_enabled and self._metronome is not None:
+                    self._ensure_metronome_samples()
+                    self._metronome.start()
             except Exception as e:
                 self._show_runtime_error(str(e))
 
@@ -5294,6 +5431,9 @@ class EditorInterface(QWidget):
             self._auto_scroll_suspended = False
             self._auto_scroll_new_line_reached = False
             self._auto_scroll_cooldown_timer.stop()
+            # 节拍器随暂停停止（调度线程自退，不阻塞 UI）
+            if self._metronome is not None:
+                self._metronome.stop()
             # 停止位置拉取定时器
             self._position_poll_timer.stop()
             # 切换到编辑模式时校验所有行时间戳
@@ -5314,6 +5454,9 @@ class EditorInterface(QWidget):
             self._auto_scroll_suspended = False
             self._auto_scroll_new_line_reached = False
             self._auto_scroll_cooldown_timer.stop()
+            # 节拍器随停止停响
+            if self._metronome is not None:
+                self._metronome.stop()
             # 停止位置拉取定时器
             self._position_poll_timer.stop()
             # 切换到编辑模式时校验所有行时间戳
@@ -5342,6 +5485,9 @@ class EditorInterface(QWidget):
             self.transport.set_position(ms)
             self.timeline.set_position(ms)
             self.preview.set_current_time_ms(ms)
+            # 播放中 seek：节拍器按新位置重新对齐（不补响）
+            if self._metronome is not None:
+                self._metronome.resync()
         log_perf_event("editor.seek.end", target_ms=ms, line=getattr(self, "_current_line_idx", -1))
 
     def _on_speed_changed(self, speed: float):
@@ -5388,6 +5534,10 @@ class EditorInterface(QWidget):
             int(settings.get("grid_offset_ms", 0)),
         )
         s.set(
+            "timing.waveform_beats_per_bar",
+            int(settings.get("beats_per_bar", 4)),
+        )
+        s.set(
             "timing.waveform_grid_line_width",
             int(settings.get("grid_line_width", 2)),
         )
@@ -5423,7 +5573,18 @@ class EditorInterface(QWidget):
             "timing.waveform_tag_ruby_enabled",
             bool(settings.get("tag_ruby_enabled", True)),
         )
+        # 节拍器：开关 + 音量（BPM/偏移复用 waveform_grid_* 两键）
+        s.set(
+            "timing.waveform_metronome_enabled",
+            bool(settings.get("metronome_enabled", False)),
+        )
+        s.set(
+            "timing.waveform_metronome_volume",
+            int(settings.get("metronome_volume", 100)),
+        )
         s.save()
+        # 即时生效：播放中开关/改 BPM/偏移/音量都立即反映到调度器
+        self._configure_metronome_from_settings()
 
     def _toggle_waveform_spectrum(self) -> None:
         """快捷键：在波形图 / 声谱图之间切换，并走既有持久化链。"""
@@ -8029,6 +8190,9 @@ class EditorInterface(QWidget):
             self._auto_scroll_suspended = False
             self._auto_scroll_new_line_reached = False
             self._auto_scroll_cooldown_timer.stop()
+            # 节拍器随播放完毕停响（调度线程自退，不阻塞 UI）
+            if self._metronome is not None:
+                self._metronome.stop()
             # 停止位置拉取定时器
             self._position_poll_timer.stop()
             # 切换到编辑模式时校验所有行时间戳

@@ -398,6 +398,11 @@ class SoundDeviceEngine(IAudioEngine):
     def get_duration_ms(self) -> int:
         return self._duration_ms
 
+    def get_output_latency_ms(self) -> int:
+        if self._sample_rate <= 0:
+            return 0
+        return int(round(self._stream_latency_frames / self._sample_rate * 1000))
+
     # ==================== 状态查询 ====================
 
     def get_playback_state(self) -> PlaybackState:

@@ -350,6 +350,39 @@ def gen_sci_release():
     return audio
 
 
+# ── Metronome（节拍器 tick：正弦 ping + 纯衰减包络）─────────────────────────
+# 常用节拍器音色配方（软件节拍器通行约定；合成手法参考 Sound Design SE 的
+# AD 包络 + 正弦 ping 指引，频率参考 Ableton 社区对默认 click 的频谱分析）：
+# 纯正弦基调 + 轻量三次谐波（约 -15dB）给起振棱角，attack ~1ms 线性爬升、
+# 指数衰减、无 sustain、无音高滑动。普通拍 1000Hz；重音 1500Hz——更高更亮
+# 且稍长，小节第一拍更突出。
+
+def _gen_metronome_tick(freq_hz, decay_ms):
+    n = ms(decay_ms)
+    t = np.arange(n) / SR
+
+    # 正弦主体 + 三次谐波（约 -15dB ≈ 0.18 倍幅度）
+    audio = np.sin(2 * np.pi * freq_hz * t)
+    audio += 0.18 * np.sin(2 * np.pi * freq_hz * 3 * t)
+
+    # 包络：τ = decay/4.2 的指数衰减（收尾约 -36dB 后自然截断），
+    # 前置 1ms 线性 attack 抑制爆音并形成干脆的起振
+    env = np.exp(-t / (decay_ms / 1000 / 4.2))
+    atk = ms(1)
+    env[:atk] *= np.linspace(0, 1, atk)
+    audio *= env
+
+    return audio
+
+
+def gen_metronome_beat():
+    return _gen_metronome_tick(1000, 55)
+
+
+def gen_metronome_accent():
+    return _gen_metronome_tick(1500, 75)
+
+
 # ── 生成并保存 ─────────────────────────────────────────────────────────────────
 
 OUT = r"src/strange_uta_game/resource/sounds"
@@ -373,3 +406,9 @@ sci_p = gen_sci_press()
 sci_r = gen_sci_release()
 save(f"{OUT}/sci_press.wav",   sci_p, peak_db=-2.0)
 save(f"{OUT}/sci_release.wav", sci_r, peak_db=-4.0)   # 比 press 低 2dB
+
+# Metronome（节拍器：普通拍 1000Hz / 重音 1500Hz，正弦 tick）
+met_b = gen_metronome_beat()
+met_a = gen_metronome_accent()
+save(f"{OUT}/metronome_beat.wav",   met_b, peak_db=-4.0)
+save(f"{OUT}/metronome_accent.wav", met_a, peak_db=-2.0)  # 比普通拍高 2dB

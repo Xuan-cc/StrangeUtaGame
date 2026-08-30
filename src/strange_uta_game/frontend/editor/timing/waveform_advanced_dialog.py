@@ -6,7 +6,8 @@
 1. 显示模式：波形图 / 声谱图（互斥），附两种模式用途说明。
 2. 网格与节拍：时间网格 / BPM 网格；BPM 手动输入 + 「自动检测」按钮
    （librosa 管线的 numpy 复刻，见 spectrum_core.detect_bpm；结果填回
-   输入框供确认，并给出置信度）。
+   输入框供确认，并给出置信度）；节拍器开关 + 音量（播放期间按
+   BPM/偏移触发节拍音，见 playback_metronome.PlaybackMetronome）。
 3. 声谱参数：FFT 窗口、频率刻度、动态范围、频谱高度（仅声谱模式启用）。
 4. 时间标签：标签拖拽 / 播放头居中 / 标签显示字符 / 标签显示注音
    （与设置页「打轴 → 波形时间标签」组共用同一组 timing.* 键，两处联动）。
@@ -53,6 +54,8 @@ from strange_uta_game.frontend.window_sizing import fit_to_screen
 from strange_uta_game.frontend.workers import BpmDetectWorker
 
 _FFT_CHOICES = (512, 1024, 2048, 4096, 8192)
+# 拍号选项（N/4，BPM 恒为四分音符时值 → 分子即每小节拍数）
+_TIME_SIGNATURE_CHOICES = (2, 3, 4, 5, 6, 7, 8)
 # 窗口重叠（Sonic Visualiser 口径）：overlap = 1 - hop/fft。
 # 大 FFT 窗口损失的时间分辨率靠更大重叠补偿；重叠越大计算量/内存越大。
 _OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375)
@@ -158,46 +161,89 @@ class WaveformAdvancedDialog(QDialog):
         bpm_row_layout.addWidget(self.btn_detect_bpm)
         bpm_row_layout.addStretch(1)
 
-        # 网格线宽：时间网格与 BPM 网格共用；Fluent 风格 LineEdit（非 SpinBox，
-        # 与 AI 打轴/自动导唱等新式窗口一致），QIntValidator 限 0~100，
-        # 失焦/回车提交；空串/非法/越界恢复上次有效值；0 = 不绘制网格
-        width_row = QWidget(self._grid_group)
-        width_row_layout = QHBoxLayout(width_row)
-        width_row_layout.setContentsMargins(0, 0, 0, 0)
-        self._lbl_grid_width = BodyLabel(self.tr("网格线宽"), width_row)
-        self.grid_width_edit = LineEdit(width_row)
+        # 网格数值行（线宽 + 偏移并排，折叠纵向高度）：
+        # - 线宽：时间/BPM 网格共用；Fluent 风格 LineEdit（非 SpinBox，与
+        #   AI 打轴/自动导唱等新式窗口一致），QIntValidator 限 0~100，
+        #   失焦/回车提交；空串/非法/越界恢复上次有效值；0 = 不绘制网格
+        # - 偏移（毫秒）：拍线相位对齐——节拍通常不从 0ms 开始，正值网格
+        #   后移（延迟）、负值前移；与线宽同一套严格提交语义
+        num_row = QWidget(self._grid_group)
+        num_row_layout = QHBoxLayout(num_row)
+        num_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._lbl_grid_width = BodyLabel(self.tr("网格线宽"), num_row)
+        self.grid_width_edit = LineEdit(num_row)
         self.grid_width_edit.setValidator(QIntValidator(0, 100, self.grid_width_edit))
         self.grid_width_edit.setFixedWidth(56)
-        self._grid_width_px_label = BodyLabel("px", width_row)
-        width_row_layout.addWidget(self._lbl_grid_width)
-        width_row_layout.addWidget(self.grid_width_edit)
-        width_row_layout.addWidget(self._grid_width_px_label)
-        width_row_layout.addStretch(1)
-        self._last_valid_grid_width = 2
-
-        # BPM 网格偏移（毫秒）：拍线相位对齐——节拍通常不从 0ms 开始，
-        # 正值网格后移（延迟）、负值前移。与网格线宽同一套严格提交语义
-        #（失焦/回车生效；空/非法/越界恢复上次有效值）。
-        offset_row = QWidget(self._grid_group)
-        offset_row_layout = QHBoxLayout(offset_row)
-        offset_row_layout.setContentsMargins(0, 0, 0, 0)
-        self._lbl_grid_offset = BodyLabel(self.tr("BPM 网格偏移"), offset_row)
-        self.grid_offset_edit = LineEdit(offset_row)
+        self._grid_width_px_label = BodyLabel("px", num_row)
+        self._lbl_grid_offset = BodyLabel(self.tr("BPM 网格偏移"), num_row)
+        self.grid_offset_edit = LineEdit(num_row)
         self.grid_offset_edit.setValidator(
             QIntValidator(-600000, 600000, self.grid_offset_edit)
         )
         self.grid_offset_edit.setFixedWidth(72)
-        self._grid_offset_ms_label = BodyLabel("ms", offset_row)
-        offset_row_layout.addWidget(self._lbl_grid_offset)
-        offset_row_layout.addWidget(self.grid_offset_edit)
-        offset_row_layout.addWidget(self._grid_offset_ms_label)
-        offset_row_layout.addStretch(1)
+        self._grid_offset_ms_label = BodyLabel("ms", num_row)
+        num_row_layout.addWidget(self._lbl_grid_width)
+        num_row_layout.addWidget(self.grid_width_edit)
+        num_row_layout.addWidget(self._grid_width_px_label)
+        num_row_layout.addSpacing(16)
+        num_row_layout.addWidget(self._lbl_grid_offset)
+        num_row_layout.addWidget(self.grid_offset_edit)
+        num_row_layout.addWidget(self._grid_offset_ms_label)
+        num_row_layout.addStretch(1)
+        self._last_valid_grid_width = 2
         self._last_valid_grid_offset = 0
+
+        # 节拍行（拍号 + 节拍器开关并排）：
+        # - 拍号（N/4）：小节线/小节号与节拍器重音共用的循环周期；BPM 为
+        #   四分音符时值，分子即每小节拍数
+        # - 节拍器：播放期间按上方 BPM 与「BPM 网格偏移」触发节拍音（仅
+        #   播放中响；seek 重新对齐；变速下拍点仍在正确时间轴时刻）
+        self.beats_per_bar_combo = ComboBox(self._grid_group)
+        for numerator in _TIME_SIGNATURE_CHOICES:
+            self.beats_per_bar_combo.addItem(f"{numerator}/4")
+        ts_met_row = QWidget(self._grid_group)
+        ts_met_row_layout = QHBoxLayout(ts_met_row)
+        ts_met_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._lbl_beats_per_bar = BodyLabel(self.tr("拍号"), ts_met_row)
+        self._lbl_metronome = BodyLabel(self.tr("节拍器"), ts_met_row)
+        self.metronome_switch = SwitchButton(ts_met_row)
+        self.metronome_switch.setOnText(self.tr("开"))
+        self.metronome_switch.setOffText(self.tr("关"))
+        ts_met_row_layout.addWidget(self._lbl_beats_per_bar)
+        ts_met_row_layout.addWidget(self.beats_per_bar_combo)
+        ts_met_row_layout.addSpacing(16)
+        ts_met_row_layout.addWidget(self._lbl_metronome)
+        ts_met_row_layout.addWidget(self.metronome_switch)
+        ts_met_row_layout.addStretch(1)
+
+        # 节拍器音量（0~100%）：结构同「显示高度」行；开关关闭时联动禁用
+        # （同 tag_char→tag_ruby 的禁用模式）；拖动中只刷新数字，松手/点击
+        # 轨道时应用（与其他滑条一致）
+        self.met_volume_slider = Slider(Qt.Orientation.Horizontal, self._grid_group)
+        self.met_volume_slider.setRange(0, 100)
+        self.met_volume_caption = CaptionLabel("", self._grid_group)
+        self.met_volume_caption.setMinimumWidth(56)
+        met_volume_row = QWidget(self._grid_group)
+        met_volume_row_layout = QHBoxLayout(met_volume_row)
+        met_volume_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._lbl_met_volume = BodyLabel(self.tr("节拍器音量"), met_volume_row)
+        met_volume_row_layout.addWidget(self._lbl_met_volume)
+        met_volume_row_layout.addWidget(self.met_volume_slider)
+        met_volume_row_layout.addWidget(self.met_volume_caption)
+
+        # 拍号与节拍器共用一条说明（折叠两条 caption 为一条）
+        self.ts_met_hint = CaptionLabel(
+            self.tr("节拍器播放时按上述 BPM 与偏移打拍；重音与网格小节线按拍号循环"),
+            self._grid_group,
+        )
+        self.ts_met_hint.setWordWrap(True)
 
         self._grid_group.contentLayout.addWidget(grid_row)
         self._grid_group.contentLayout.addWidget(bpm_row)
-        self._grid_group.contentLayout.addWidget(width_row)
-        self._grid_group.contentLayout.addWidget(offset_row)
+        self._grid_group.contentLayout.addWidget(num_row)
+        self._grid_group.contentLayout.addWidget(ts_met_row)
+        self._grid_group.contentLayout.addWidget(met_volume_row)
+        self._grid_group.contentLayout.addWidget(self.ts_met_hint)
         self._grid_group.contentLayout.addWidget(self.bpm_status)
 
         # ── Panel 3：声谱参数 ──
@@ -342,6 +388,12 @@ class WaveformAdvancedDialog(QDialog):
         grid_offset = int(init.get("grid_offset_ms", 0))
         self._last_valid_grid_offset = max(-600000, min(600000, grid_offset))
         self.grid_offset_edit.setText(str(self._last_valid_grid_offset))
+        beats_per_bar = int(init.get("beats_per_bar", 4) or 4)
+        if beats_per_bar not in _TIME_SIGNATURE_CHOICES:
+            beats_per_bar = 4
+        self.beats_per_bar_combo.setCurrentIndex(
+            _TIME_SIGNATURE_CHOICES.index(beats_per_bar)
+        )
         self.bpm_spin.setValue(float(init.get("grid_bpm", 120.0)))
         fft = init.get("spectrum_fft_size", 2048)
         index = _FFT_CHOICES.index(fft) if fft in _FFT_CHOICES else 2
@@ -361,9 +413,14 @@ class WaveformAdvancedDialog(QDialog):
         )
         self.tag_char_switch.setChecked(bool(init.get("tag_char_enabled", True)))
         self.tag_ruby_switch.setChecked(bool(init.get("tag_ruby_enabled", True)))
+        self.metronome_switch.setChecked(bool(init.get("metronome_enabled", False)))
+        self.met_volume_slider.setValue(
+            max(0, min(100, int(init.get("metronome_volume", 100))))
+        )
         self._update_slider_captions()
         self._update_params_enabled()
         self._sync_tag_ruby_enabled()
+        self._sync_met_volume_enabled()
 
     def _connect_signals(self) -> None:
         self.radio_spectrum.toggled.connect(self._on_mode_toggled)
@@ -380,6 +437,7 @@ class WaveformAdvancedDialog(QDialog):
         self.fft_combo.currentIndexChanged.connect(self._emit_applied)
         self.overlap_combo.currentIndexChanged.connect(self._emit_applied)
         self.scale_combo.currentIndexChanged.connect(self._emit_applied)
+        self.beats_per_bar_combo.currentIndexChanged.connect(self._emit_applied)
         # 滑条：拖动中只刷新数字（避免高频写配置+重绘），
         # 松手或非拖动变更（点击轨道/键盘/滚轮）时立即应用
         self.dyn_slider.valueChanged.connect(
@@ -397,6 +455,12 @@ class WaveformAdvancedDialog(QDialog):
         )
         self.tag_char_switch.checkedChanged.connect(self._on_tag_char_toggled)
         self.tag_ruby_switch.checkedChanged.connect(lambda _v: self._emit_applied())
+        # 节拍器开关即时生效；音量滑条与其他滑条同一套拖动/提交语义
+        self.metronome_switch.checkedChanged.connect(self._on_metronome_toggled)
+        self.met_volume_slider.valueChanged.connect(
+            lambda v: self._on_slider_value_changed(self.met_volume_slider, v)
+        )
+        self.met_volume_slider.sliderReleased.connect(self._emit_applied)
         self.btn_detect_bpm.clicked.connect(self._on_detect_bpm)
 
     def _on_tag_char_toggled(self, _checked: bool) -> None:
@@ -408,6 +472,16 @@ class WaveformAdvancedDialog(QDialog):
         enabled = self.tag_char_switch.isChecked()
         self.tag_ruby_switch.setEnabled(enabled)
         self._lbl_tag_ruby.setEnabled(enabled)
+
+    def _on_metronome_toggled(self, _checked: bool) -> None:
+        """节拍器开关：联动音量滑条可用性，改动即时生效。"""
+        self._sync_met_volume_enabled()
+        self._emit_applied()
+
+    def _sync_met_volume_enabled(self) -> None:
+        enabled = self.metronome_switch.isChecked()
+        self.met_volume_slider.setEnabled(enabled)
+        self._lbl_met_volume.setEnabled(enabled)
 
     def changeEvent(self, event) -> None:
         # 非模态窗口可能跨语言切换存活，静态文案需跟随重译
@@ -427,6 +501,10 @@ class WaveformAdvancedDialog(QDialog):
         self.btn_close.setText(self.tr("关闭"))
         self._lbl_grid_width.setText(self.tr("网格线宽"))
         self._lbl_grid_offset.setText(self.tr("BPM 网格偏移"))
+        self._lbl_beats_per_bar.setText(self.tr("拍号"))
+        self.ts_met_hint.setText(
+            self.tr("节拍器播放时按上述 BPM 与偏移打拍；重音与网格小节线按拍号循环")
+        )
         self._lbl_rms.setText(self.tr("双层波形（RMS）"))
         self.rms_switch.setOnText(self.tr("开"))
         self.rms_switch.setOffText(self.tr("关"))
@@ -442,6 +520,10 @@ class WaveformAdvancedDialog(QDialog):
         self._lbl_center_playhead.setText(self.tr("播放头居中模式"))
         self._lbl_tag_char.setText(self.tr("波形标签显示字符"))
         self._lbl_tag_ruby.setText(self.tr("波形标签显示注音"))
+        self._lbl_metronome.setText(self.tr("节拍器"))
+        self._lbl_met_volume.setText(self.tr("节拍器音量"))
+        self.metronome_switch.setOnText(self.tr("开"))
+        self.metronome_switch.setOffText(self.tr("关"))
         self.tag_link_hint.setText(
             self.tr("与设置页「打轴 → 波形时间标签」共用，两处修改即时同步")
         )
@@ -481,6 +563,7 @@ class WaveformAdvancedDialog(QDialog):
 
     def _update_slider_captions(self, *_args) -> None:
         self.dyn_caption.setText(f"{self.dyn_slider.value()} dB")
+        self.met_volume_caption.setText(f"{self.met_volume_slider.value()}%")
         value = self.height_slider.value()
         if value > self._actual_height_cap:
             self.height_caption.setText(
@@ -535,6 +618,9 @@ class WaveformAdvancedDialog(QDialog):
             "grid_mode": "bpm" if self.radio_grid_bpm.isChecked() else "time",
             "grid_bpm": float(self.bpm_spin.value()),
             "grid_offset_ms": self._last_valid_grid_offset,
+            "beats_per_bar": _TIME_SIGNATURE_CHOICES[
+                max(0, self.beats_per_bar_combo.currentIndex())
+            ],
             "grid_line_width": self._last_valid_grid_width,
             "spectrum_fft_size": _FFT_CHOICES[self.fft_combo.currentIndex()],
             "spectrum_overlap": _OVERLAP_CHOICES[
@@ -550,6 +636,8 @@ class WaveformAdvancedDialog(QDialog):
             "center_playhead_enabled": bool(self.center_playhead_switch.isChecked()),
             "tag_char_enabled": bool(self.tag_char_switch.isChecked()),
             "tag_ruby_enabled": bool(self.tag_ruby_switch.isChecked()),
+            "metronome_enabled": bool(self.metronome_switch.isChecked()),
+            "metronome_volume": int(self.met_volume_slider.value()),
         }
 
     def _emit_applied(self, *_args) -> None:

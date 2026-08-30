@@ -179,6 +179,15 @@ class IAudioEngine(ABC):
         """获取当前音量"""
         pass
 
+    def get_output_latency_ms(self) -> int:
+        """输出延迟（毫秒）——"数据写入输出缓冲"到"硬件实际播出"的固定差值。
+
+        引擎的位置读取已按该值补偿（返回值即"当前可听到的媒体时刻"）；
+        节拍器这类需要预置提前量的消费方用它对齐自身触发时刻。默认
+        实现返回 0（未知/无需补偿）。
+        """
+        return 0
+
     @abstractmethod
     def set_position_callback(self, callback: Callable[[int], None]) -> None:
         """设置位置变化回调

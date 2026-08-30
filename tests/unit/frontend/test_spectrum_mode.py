@@ -557,6 +557,9 @@ class TestSettingsDefaults:
             "spectrum_freq_scale": "log",
             "spectrum_dyn_range_db": 90,
             "display_height": 120,
+            "waveform_metronome_enabled": False,
+            "waveform_metronome_volume": 100,
+            "waveform_beats_per_bar": 4,
         }
         for key, value in expected.items():
             assert timing.get(key) == value, key
@@ -1958,14 +1961,27 @@ class TestTagSettingsLinkage:
         fake_editor = SimpleNamespace(
             _get_setting_interface=lambda: SimpleNamespace(get_settings=lambda: settings),
             _apply_preview_spectrum_yield=lambda: None,
+            _configure_metronome_from_settings=lambda: None,
         )
 
         EditorInterface._on_timeline_display_settings_changed(
-            fake_editor, {"tag_edit_enabled": False, "tag_ruby_enabled": False}
+            fake_editor,
+            {
+                "tag_edit_enabled": False,
+                "tag_ruby_enabled": False,
+                "metronome_enabled": True,
+                "metronome_volume": 70,
+                "beats_per_bar": 3,
+            },
         )
 
         assert settings.values["timing.waveform_tag_edit_enabled"] is False
         assert settings.values["timing.waveform_center_playhead_enabled"] is False
         assert settings.values["timing.waveform_tag_char_enabled"] is True
         assert settings.values["timing.waveform_tag_ruby_enabled"] is False
+        # 节拍器两键同链路落盘（BPM/偏移复用 waveform_grid_* 键）
+        assert settings.values["timing.waveform_metronome_enabled"] is True
+        assert settings.values["timing.waveform_metronome_volume"] == 70
+        # 拍号分子同链路落盘
+        assert settings.values["timing.waveform_beats_per_bar"] == 3
         assert settings.saved

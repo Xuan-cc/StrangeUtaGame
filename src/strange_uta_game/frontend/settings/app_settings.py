@@ -156,6 +156,12 @@ class AppSettings:
             "keysound_enabled": False,
             "keysound_volume": 100,
             "keysound_style": "default",
+            # 节拍器（齿轮弹窗「网格与节拍」）：播放期间按 BPM 网格的
+            # BPM/偏移触发节拍音，每小节第一拍重音
+            "waveform_metronome_enabled": False,
+            "waveform_metronome_volume": 100,
+            # 拍号分子（每小节拍数）：小节线与节拍器重音共用的循环周期
+            "waveform_beats_per_bar": 4,
             "guide_symbol": "",
             "guide_count": 1,
             "guide_duration_ms": 1000,
