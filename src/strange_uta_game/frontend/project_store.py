@@ -6,7 +6,6 @@ ProjectStore 是整个前端的唯一数据来源，替代之前的信号链同�
 """
 
 import re
-from copy import deepcopy
 from datetime import datetime
 from time import perf_counter
 
@@ -485,16 +484,18 @@ class ProjectStore(QObject):
             if self._save_thread is not None and self._save_thread.isRunning():
                 return
 
-        project_copy = deepcopy(self._project)
-        nicokara_tags = self._get_nicokara_tags_for_save()
-        media_path = self.get_saveable_media_path()
+        # 主线程构建纯 dict 快照（几 ms），取代旧方案 deepcopy（大项目几十 ms 冻结）。
+        # dict 不引用 domain 对象，后台写盘期间 UI 继续编辑不影响快照内容。
+        if not is_background:
+            self.save_progress.emit("正在序列化项目数据...")
+        data = SugProjectParser.serialize(
+            self._project,
+            nicokara_tags=self._get_nicokara_tags_for_save(),
+            media_path=self.get_saveable_media_path(),
+        )
 
         thread = QThread(self)
-        worker = ProjectSaveWorker(
-            project_copy, file_path,
-            nicokara_tags=nicokara_tags,
-            media_path=media_path,
-        )
+        worker = ProjectSaveWorker(data, file_path)
         worker.moveToThread(thread)
 
         thread.started.connect(worker.run)

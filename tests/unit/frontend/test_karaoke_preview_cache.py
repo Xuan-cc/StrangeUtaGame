@@ -564,3 +564,25 @@ def test_alt_wheel_scrolls_horizontally_without_using_vertical_scroll(
 
     assert preview._horizontal_scrollbar.value() == horizontal_after_alt
     assert preview._scroll_center_line == vertical_before + 1
+
+
+def test_prewarm_is_batched_not_synchronous(qapp, monkeypatch):
+    """打开项目只同步预热一屏，剩余行由 _prewarm_tick 分批补齐（不阻塞主线程）。"""
+    monkeypatch.setattr(preview_module, "theme", _DummyTheme())
+    preview = preview_module.KaraokePreview()
+    preview.resize(800, 560)
+    preview.show()
+    total = 60
+    preview.set_project(_plain_project(line_count=total, chars_per_line=4))
+
+    # 同步阶段：仅 focus 附近一屏有缓存，绝不全量
+    assert 0 < len(preview._sentence_cache) < total
+
+    # 分批补齐：手动驱动 tick（每批 _PREWARM_BATCH_LINES 行）
+    batch = preview_module.KaraokePreview._PREWARM_BATCH_LINES
+    ticks = 0
+    while len(preview._sentence_cache) < total and ticks < total // batch + 2:
+        preview._prewarm_tick()
+        ticks += 1
+    assert len(preview._sentence_cache) == total
+    assert preview._prewarm_cursor >= total

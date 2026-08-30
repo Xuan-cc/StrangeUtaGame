@@ -266,22 +266,21 @@ class ProjectLoadWorker(QObject):
 
 
 class ProjectSaveWorker(QObject):
-    """后台保存项目。
+    """后台写盘 .sug 项目文件。
 
-    接收 Project 的深拷贝，避免保存过程中 UI 线程修改 project 导致数据竞争。
-    nicokara_tags 和 media_path 在创建 worker 时从主线程读取并传入，保证线程安全。
+    接收主线程 ``SugProjectParser.serialize()`` 产出的纯 dict 快照——
+    快照不引用任何 domain 对象，后台写盘期间 UI 继续编辑不影响内容，
+    无需再对 Project 做 deepcopy（大项目主线程几十 ms → 几 ms）。
     """
 
     progress = pyqtSignal(str)  # stage description
     finished = pyqtSignal(str)  # saved path
     error = pyqtSignal(str)
 
-    def __init__(self, project: Project, file_path: str, *, nicokara_tags=None, media_path=None):
+    def __init__(self, data: dict, file_path: str):
         super().__init__()
-        self._project = project
+        self._data = data
         self._file_path = file_path
-        self._nicokara_tags = nicokara_tags
-        self._media_path = media_path
 
     def run(self) -> None:
         try:
@@ -289,12 +288,8 @@ class ProjectSaveWorker(QObject):
                 SugProjectParser,
             )
 
-            SugProjectParser.save(
-                self._project,
-                self._file_path,
-                nicokara_tags=self._nicokara_tags,
-                media_path=self._media_path,
-                progress_cb=self.progress.emit,
+            SugProjectParser.write(
+                self._data, self._file_path, progress_cb=self.progress.emit
             )
             self.finished.emit(self._file_path)
         except Exception as e:

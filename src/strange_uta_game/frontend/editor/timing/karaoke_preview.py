@@ -366,6 +366,14 @@ class KaraokePreview(QWidget):
         self._drag_scroll_direction: int = 0  # -1=上, 0=无, 1=下
         self._drag_scroll_mouse_y: int = 0
 
+        # 后台分批预热：打开/换项目时同步只渲染一屏，剩余行由本定时器
+        # 在事件循环空隙分批补齐（单一定时器，set_project 重置游标即换代）
+        self._prewarm_timer = QTimer(self)
+        self._prewarm_timer.setSingleShot(True)
+        self._prewarm_timer.setInterval(0)
+        self._prewarm_timer.timeout.connect(self._prewarm_tick)
+        self._prewarm_cursor: int = 0
+
         # 缓存字体和 QFontMetrics，避免每帧重建
         self._font_current = ui_font(22, QFont.Weight.Bold)
         self._font_context = ui_font(18)
@@ -449,6 +457,8 @@ class KaraokePreview(QWidget):
         self._HORIZONTAL_SCROLLBAR_HEIGHT = 14
         self._horizontal_max_shift = 0
         self._horizontal_layout_dirty = True
+        # 横向滚动条范围只按可视窗口计算；滚动中心变化后 paint 补算
+        self._hscroll_calc_center: float = -1.0
 
         # 监听主题变化，触发重绘
         theme.changed.connect(self.update)
@@ -644,8 +654,8 @@ class KaraokePreview(QWidget):
                     self._focus_line_range_end = idx
                     self._focus_char_range_end = 0
                     break
-            # 预渲染所有句子到缓存
-            self._prewarm_all_sentences()
+            # 预热：同步只渲染一屏（focus 附近），剩余分批后台补齐
+            self._start_prewarm()
         # 换工程后换行快照必须重建：旧快照的行号指向新工程会找错播放行
         # （暂停 seek / 未播放时局部重绘也依赖此快照定位受影响行）
         self._build_line_switch_points()
@@ -908,16 +918,67 @@ class KaraokePreview(QWidget):
         else:
             self.update()
 
-    def _prewarm_all_sentences(self) -> None:
-        """项目加载时预渲染所有句子到缓存，避免切换界面时卡顿。"""
+    _PREWARM_BATCH_LINES = 16
+
+    def _start_prewarm(self) -> None:
+        """打开/换项目时启动预热：同步只渲染 focus 附近一屏，其余分批补齐。
+
+        旧实现对全部句子同步预渲染，大项目会把主线程卡住几十 ms（10k 字符
+        实测 ≈67ms）。现在同步部分只保证首屏有缓存，剩余交给 _prewarm_tick
+        在事件循环空隙完成，任何单帧都不超几 ms。
+
+        代数安全：全部在主线程且只有一个定时器——set_project 在 tick 挂起时
+        再次调用只会重置游标并重启同一 timer，不存在两代预热并发写入。
+        """
+        self._warm_nearby_cache(budget=max(getattr(self, "_visible_lines", 8) + 2, 8))
+        self._prewarm_cursor = 0
+        self._prewarm_timer.start(0)
+
+    def _prewarm_tick(self) -> None:
+        """事件循环空隙分批预热剩余行。
+
+        预热期间被编辑的行走正常 invalidate（版本号 +1）→ 此处版本校验
+        不匹配 → 按最新数据渲染；播放/滚动路径另有 _warm_nearby_cache 就近
+        补充，未预热到的行 paint 时也会按需渲染，均不依赖本批完成。
+        """
         if not self._project or not self._project.sentences:
             return
-        # 使用默认字体预渲染，实际渲染时会按 is_current 切换字体
-        for idx, sentence in enumerate(self._project.sentences):
-            if sentence.characters:
-                self._get_sentence_render_data(idx, sentence, self._fm_context, "ctx")
-                if idx == self._current_line_idx:
-                    self._get_sentence_render_data(idx, sentence, self._fm_current, "cur")
+        # 控件不可见（用户停留其他界面）：暂停，showEvent 恢复
+        if not self.isVisible():
+            return
+        sentences = self._project.sentences
+        n = len(sentences)
+        rendered = 0
+        while rendered < self._PREWARM_BATCH_LINES and self._prewarm_cursor < n:
+            idx = self._prewarm_cursor
+            self._prewarm_cursor += 1
+            sentence = sentences[idx]
+            if not sentence.characters:
+                continue
+            fk = "cur" if idx == self._current_line_idx else "ctx"
+            entry = self._sentence_cache.get(idx)
+            if (
+                entry
+                and entry["v"] == self._line_versions.get(idx, 0)
+                and entry["gv"] == self._global_version
+                and entry["fk"] == fk
+            ):
+                continue
+            fm = self._fm_current if fk == "cur" else self._fm_context
+            self._get_sentence_render_data(idx, sentence, fm, fk)
+            rendered += 1
+        if self._prewarm_cursor < n:
+            self._prewarm_timer.start(0)
+
+    def showEvent(self, a0):
+        super().showEvent(a0)
+        # 恢复不可见期间暂停的后台预热
+        if (
+            self._project
+            and self._project.sentences
+            and self._prewarm_cursor < len(self._project.sentences)
+        ):
+            self._prewarm_timer.start(0)
 
     @log_slow_method(
         "preview.warm_nearby_cache",
@@ -1295,8 +1356,13 @@ class KaraokePreview(QWidget):
         )
 
     def _update_horizontal_scrollbar_range(self) -> None:
-        """Show the bottom scrollbar iff any currently rendered line overflows."""
+        """Show the bottom scrollbar iff any currently rendered line overflows.
+
+        只测量可视窗口内的行（滚动到宽行时由 paint 的滚动中心变化检测补算），
+        避免旧实现对全部行调用 _get_sentence_render_data 的全曲同步扫描。
+        """
         self._horizontal_layout_dirty = False
+        self._hscroll_calc_center = self._scroll_center_line
         bar = self._horizontal_scrollbar
         old_shift = self._horizontal_shift()
 
@@ -1320,7 +1386,12 @@ class KaraokePreview(QWidget):
         min_x = left
         max_right = right
         effective_current = self._effective_current_line()
-        for idx, sentence in enumerate(self._project.sentences):
+        n = len(self._project.sentences)
+        half = self._visible_lines / 2 + 1
+        first = max(0, int(self._scroll_center_line - half))
+        last = min(n - 1, int(self._scroll_center_line + half) + 1)
+        for idx in range(first, last + 1):
+            sentence = self._project.sentences[idx]
             is_current = idx == effective_current
             fm = self._fm_current if is_current else self._fm_context
             render_data = self._get_sentence_render_data(
@@ -2578,7 +2649,10 @@ class KaraokePreview(QWidget):
         },
     )
     def paintEvent(self, a0: Optional[QPaintEvent]):
-        if self._horizontal_layout_dirty:
+        if (
+            self._horizontal_layout_dirty
+            or self._hscroll_calc_center != self._scroll_center_line
+        ):
             self._update_horizontal_scrollbar_range()
 
         painter = QPainter(self)

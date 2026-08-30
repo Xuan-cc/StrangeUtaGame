@@ -68,11 +68,13 @@ def _reset_nicokara_tags() -> None:
 
 
 class HomeInterface(QWidget):
-    """主页界面
+    """主页界面（遗留页：默认隐藏，入口保留待移除）
 
     提供：
     - 创建新项目（歌词输入 + 音频选择）
     - 打开已有项目
+
+    data_changed 刷新本页只有按钮状态一处且轻量，隐藏期间无需跳过。
     """
 
     project_created = pyqtSignal(Project, str)  # (project, audio_path)

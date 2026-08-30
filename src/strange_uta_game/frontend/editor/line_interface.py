@@ -815,6 +815,13 @@ class LineDetailDialog(QDialog):
 
 
 class EditInterface(QWidget):
+    """行编辑视图（遗留页：默认隐藏，入口保留待移除）。
+
+    本页当前不随主界面展示，但 data_changed 仍会广播到此处。全量表格重建
+    （每行 7 个 item + 1 个按钮 cell widget）对不可见页面是纯浪费——
+    _update_table 在不可见时跳过重建，showEvent 显示时无条件补刷。
+    """
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("editInterface")
@@ -842,7 +849,7 @@ class EditInterface(QWidget):
         toolbar = QHBoxLayout()
         self.btn_refresh = PushButton(self.tr("刷新"), self)
         self.btn_refresh.setIcon(FIF.SYNC)
-        self.btn_refresh.clicked.connect(self._update_table)
+        self.btn_refresh.clicked.connect(lambda: self._update_table(force=True))
         toolbar.addWidget(self.btn_refresh)
         self.btn_add_row = PushButton(self.tr("添加行"), self)
         self.btn_add_row.clicked.connect(self._add_row)
@@ -924,7 +931,10 @@ class EditInterface(QWidget):
                 change_type, e, exc_info=True)
             self._store.error_notify.emit("数据刷新异常", str(e))
 
-    def _update_table(self):
+    def _update_table(self, *, force: bool = False):
+        # 隐藏期间跳过重建（默认隐藏的遗留页）；显示时 showEvent(force=True) 补刷
+        if not force and not self.isVisible():
+            return
         if not self.project:
             self.table.setRowCount(0)
             self.stats_label.setText(self.tr("共 0 行 | 已完成 0 行 | 进度 0%"))
@@ -1172,4 +1182,4 @@ class EditInterface(QWidget):
 
     def showEvent(self, a0):
         super().showEvent(a0)
-        self._update_table()
+        self._update_table(force=True)

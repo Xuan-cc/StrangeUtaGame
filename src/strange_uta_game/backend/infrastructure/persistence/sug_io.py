@@ -283,20 +283,41 @@ class SugProjectParser:
         try:
             if progress_cb:
                 progress_cb("正在序列化项目数据...")
-            data = SugProjectParser._project_to_dict(
+            data = SugProjectParser.serialize(
                 project, nicokara_tags=nicokara_tags, media_path=media_path
             )
-
-            path = Path(file_path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-
-            if progress_cb:
-                progress_cb("正在写入文件...")
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-
+            SugProjectParser.write(data, file_path, progress_cb=progress_cb)
+        except SugParseError:
+            raise
         except Exception as e:
             raise SugParseError(f"保存项目失败: {e}")
+
+    @staticmethod
+    def serialize(
+        project: Project,
+        *,
+        nicokara_tags: Optional[Dict[str, Any]] = None,
+        media_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """将 Project 序列化为当前版本的纯 dict 快照。
+
+        快照只含 str/int/list 等值类型、不引用任何 domain 对象——构建完成
+        那一刻即与后续编辑隔离，可安全交给后台线程写盘（见 write）。
+        主线程成本为几 ms 级，远低于 deepcopy 整个 Project。
+        """
+        return SugProjectParser._project_to_dict(
+            project, nicokara_tags=nicokara_tags, media_path=media_path
+        )
+
+    @staticmethod
+    def write(data: Dict[str, Any], file_path: str, *, progress_cb=None) -> None:
+        """将 serialize 产出的 dict 快照写入 SUG 文件（可放后台线程）。"""
+        path = Path(file_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if progress_cb:
+            progress_cb("正在写入文件...")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
     @staticmethod
     def load(file_path: str) -> Project:
