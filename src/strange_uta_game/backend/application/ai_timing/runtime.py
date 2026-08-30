@@ -50,6 +50,13 @@ RUNTIME_REQUIREMENTS: List[str] = [
 TORCH_CUDA_TAG = "cu128"
 TORCH_CUDA_INDEX_URL = f"https://download.pytorch.org/whl/{TORCH_CUDA_TAG}"
 
+# pip 默认索引走阿里云 PyPI 镜像：官方 PyPI 国内直连经常超时/极慢，阿里源
+# 完整镜像 PyPI 且全球可达。CUDA 路线不受影响——pytorch 官方索引仍以
+# ``--extra-index-url`` 附加，``+cu128`` 版本钉子只在官方索引存在。
+# 需要换源时经 ``install``/``install_shared`` 的 ``mirror`` 参数覆盖（注意：
+# AI 打轴弹窗的「下载镜像」是 Hugging Face 端点，与 pip 索引无关）。
+PIP_DEFAULT_INDEX = "https://mirrors.aliyun.com/pypi/simple/"
+
 # CUDA 路由的版本钉子。两个原因都必须钉到「版本+cu128 本地标签」：
 # 1. PyPI 的 torch 版本可能高于 CUDA 索引（实测 PyPI 2.13.0+cpu vs
 #    cu128 索引 2.11.0+cu128），不钉版本 pip 依旧选 PyPI 的 CPU wheel；
@@ -372,23 +379,93 @@ def release_manifest_url(variant: str) -> str:
     )
 
 
+def _github_mirror_candidates(
+    url: str, order: Optional[List[str]] = None
+) -> List[str]:
+    """GitHub 直链 → gh-proxy 各镜像 URL（镜像排在更新源序中 github 之后）。
+
+    镜像顺序跟随「设置 → 网络与代理」的更新源排序（用户把 gh-proxy 拖到
+    第一位时 AI 打轴下载也镜像优先）。非 GitHub URL（如 torch wheel 的
+    ``download-r2.pytorch.org``）返回空列表——gh-proxy 只代理 GitHub。
+    """
+    if not url.startswith("https://github.com/"):
+        return []
+    try:
+        from strange_uta_game.updater.sources import (
+            GH_PROXY_PREFIXES,
+            SOURCE_IDS,
+            normalize_order,
+        )
+    except Exception:
+        return []
+    if order is None:
+        order = list(SOURCE_IDS)
+        try:
+            from strange_uta_game.updater.settings import UpdaterSettings
+
+            order = normalize_order(list(UpdaterSettings.load().source_order))
+        except Exception:
+            pass
+    out: List[str] = []
+    for sid in order:
+        if sid != "github":
+            out.extend(f"{prefix}/{url}" for prefix in GH_PROXY_PREFIXES)
+    return out
+
+
+def _download_attempts(url: str, proxy: str) -> List[Tuple[str, Optional[dict]]]:
+    """构造 ``[(url, proxies)]`` 尝试链：先走代理，再走镜像。
+
+    顺序（与更新器多源接力同一语义）：
+
+    1. 官方直链 + 应用代理——代理可用时通常就此成功；未配置代理 =
+       直连（requests 仍读环境变量）；
+    2. gh-proxy 各镜像 + 应用代理；
+    3. 配置了代理时补一轮**镜像直连**——镜像 CDN 国内直连友好，代理
+       失效不至于全链路失败；非 GitHub URL（pytorch CDN）同理补一次
+       直连兜底。
+    """
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    mirrors = _github_mirror_candidates(url)
+    attempts: List[Tuple[str, Optional[dict]]] = [(url, proxies)]
+    attempts.extend((m, proxies) for m in mirrors)
+    if proxies is not None:
+        direct = {"http": None, "https": None}
+        attempts.extend((m, direct) for m in mirrors)
+        if not mirrors:
+            attempts.append((url, direct))
+    return attempts
+
+
 def fetch_runtime_release_manifest(
     variant: str, *, proxy: str = ""
 ) -> dict:
-    """拉取并校验 runtime release 的 JSON 清单（schema 1）。"""
+    """拉取并校验 runtime release 的 JSON 清单（schema 1）。
+
+    清单 URL 是 GitHub release 资产：按 :func:`_download_attempts` 的
+    尝试链接力（代理官方直链 → gh-proxy 镜像 → 镜像直连兜底）。
+    """
     import requests
 
     url = release_manifest_url(variant)
-    try:
-        resp = requests.get(
-            url,
-            timeout=(10, 30),
-            proxies=({"http": proxy, "https": proxy} if proxy else None),
+    attempts = _download_attempts(url, proxy)
+    errors: List[str] = []
+    manifest = None
+    for cand_url, cand_proxies in attempts:
+        try:
+            resp = requests.get(
+                cand_url, timeout=(10, 30), proxies=cand_proxies
+            )
+            resp.raise_for_status()
+            manifest = resp.json()
+            break
+        except Exception as exc:
+            errors.append(f"{cand_url}: {exc}")
+    if manifest is None:
+        raise AiRuntimeError(
+            f"获取运行环境清单失败（已尝试 {len(attempts)} 个下载源）："
+            + "；".join(errors[-3:])
         )
-        resp.raise_for_status()
-        manifest = resp.json()
-    except Exception as exc:
-        raise AiRuntimeError(f"获取运行环境清单失败：{exc}") from exc
     if manifest.get("schema") != 1:
         raise AiRuntimeError("运行环境清单格式不受支持")
     parts = ((manifest.get("archive") or {}).get("parts")) or []
@@ -505,11 +582,14 @@ def _download_verified(
 ) -> None:
     """流式下载到 ``.part`` 并做 sha256 校验（字节级进度 + 速度/ETA 文案）。
 
-    已存在且校验通过的文件直接复用（修复重装不重下大文件）。
+    已存在且校验通过的文件直接复用（修复重装不重下大文件）。下载源按
+    :func:`_download_attempts` 尝试链接力（代理官方直链 → gh-proxy 镜像
+    → 镜像直连兜底），单源失败自动换下一个，每个源都从全新 ``.part``
+    开始（杜绝跨源数据拼接）。
     """
     import hashlib
 
-    sha = hashlib.sha256()
+    progress = progress or (lambda p, m: None)
 
     def _ok(path: Path) -> bool:
         if not path.is_file() or path.stat().st_size != expected_size:
@@ -526,59 +606,88 @@ def _download_verified(
 
     part = dest.with_name(dest.name + ".part")
     part.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        import requests
-
-        resp = requests.get(
-            url,
-            stream=True,
-            timeout=(10, 60),
-            proxies=({"http": proxy, "https": proxy} if proxy else None),
-        )
-        resp.raise_for_status()
-    except Exception as exc:
-        raise AiRuntimeError(f"下载失败（{label or url}）：{exc}") from exc
-
+    attempts = _download_attempts(url, proxy)
+    errors: List[str] = []
     import time as _time
 
-    done = 0
-    t0 = _time.monotonic()
-    try:
-        with part.open("wb") as fh:
-            for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                if cancel and cancel():
-                    raise AiRuntimeError("已取消")
-                if not chunk:
-                    continue
-                fh.write(chunk)
-                sha.update(chunk)
-                done += len(chunk)
-                if expected_size and progress:
-                    elapsed = max(0.001, _time.monotonic() - t0)
-                    rate = done / elapsed / 1024 / 1024
-                    remain_s = (
-                        int((expected_size - done) / 1024 / 1024 / max(rate, 0.001))
-                        if rate > 0.001
-                        else 0
-                    )
-                    m, s = divmod(remain_s, 60)
-                    progress(
-                        base_pct
-                        + int(span_pct * min(1.0, done / max(1, expected_size))),
-                        f"{label}{done // 1024 // 1024}MB/"
-                        f"{expected_size // 1024 // 1024}MB"
-                        f"（{rate:.1f}MB/s，预计剩余 {m}:{s:02d}）",
-                    )
-    except AiRuntimeError:
-        raise
-    except Exception as exc:
-        raise AiRuntimeError(f"下载失败（{label or url}）：{exc}") from exc
+    for attempt_idx, (cand_url, cand_proxies) in enumerate(attempts):
+        if attempt_idx:
+            progress(
+                base_pct,
+                f"{label}下载源失败，切换备用源重试"
+                f"（{attempt_idx + 1}/{len(attempts)}）",
+            )
+        sha = hashlib.sha256()
+        try:
+            import requests
 
-    if sha.hexdigest() != expected_sha256 or (
-        expected_size and done != expected_size
-    ):
-        raise AiRuntimeError(f"下载校验失败（{label or url}），请重试")
-    part.replace(dest)
+            resp = requests.get(
+                cand_url,
+                stream=True,
+                timeout=(10, 60),
+                proxies=cand_proxies,
+            )
+            resp.raise_for_status()
+        except Exception as exc:
+            errors.append(f"{cand_url}: {exc}")
+            continue
+
+        done = 0
+        t0 = _time.monotonic()
+        try:
+            with resp, part.open("wb") as fh:
+                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                    if cancel and cancel():
+                        raise AiRuntimeError("已取消")
+                    if not chunk:
+                        continue
+                    fh.write(chunk)
+                    sha.update(chunk)
+                    done += len(chunk)
+                    if expected_size and progress:
+                        elapsed = max(0.001, _time.monotonic() - t0)
+                        rate = done / elapsed / 1024 / 1024
+                        remain_s = (
+                            int(
+                                (expected_size - done)
+                                / 1024
+                                / 1024
+                                / max(rate, 0.001)
+                            )
+                            if rate > 0.001
+                            else 0
+                        )
+                        m, s = divmod(remain_s, 60)
+                        progress(
+                            base_pct
+                            + int(
+                                span_pct * min(1.0, done / max(1, expected_size))
+                            ),
+                            f"{label}{done // 1024 // 1024}MB/"
+                            f"{expected_size // 1024 // 1024}MB"
+                            f"（{rate:.1f}MB/s，预计剩余 {m}:{s:02d}）",
+                        )
+        except AiRuntimeError as exc:
+            if str(exc) == "已取消":
+                raise
+            errors.append(f"{cand_url}: {exc}")
+            continue
+        except Exception as exc:
+            errors.append(f"{cand_url}: {exc}")
+            continue
+
+        if sha.hexdigest() != expected_sha256 or (
+            expected_size and done != expected_size
+        ):
+            errors.append(f"{cand_url}: 下载校验失败")
+            continue
+        part.replace(dest)
+        return
+
+    raise AiRuntimeError(
+        f"下载失败（{label or url}），已尝试 {len(attempts)} 个下载源："
+        + "；".join(errors[-3:])
+    )
 
 
 class AiRuntimeError(RuntimeError):
@@ -789,7 +898,7 @@ class AiRuntimeManager:
 
         Args:
             index_url / extra_index_url: pip 源（如 PyTorch CPU 轮子源）。
-            mirror: pip 镜像（如清华源），优先级低于 index_url。
+            mirror: pip 索引覆盖；缺省走 :data:`PIP_DEFAULT_INDEX`（阿里源）。
         """
         progress = progress or (lambda p, m: None)
         cancel = cancel or (lambda: False)
@@ -905,12 +1014,14 @@ class AiRuntimeManager:
             args += ["--proxy", proxy]
         if index_url:
             args += ["--index-url", index_url]
+        else:
+            # 默认阿里源；CUDA 路线同样适用——pytorch 官方索引走下面的
+            # --extra-index-url 附加，+cu128 钉子只在官方索引存在
+            args += ["-i", mirror or PIP_DEFAULT_INDEX]
         if extra_index_url:
             args += ["--extra-index-url", extra_index_url]
         elif use_cuda:
             args += ["--extra-index-url", TORCH_CUDA_INDEX_URL]
-        elif mirror:
-            args += ["-i", mirror]
         requirements = list(requirements or RUNTIME_REQUIREMENTS)
         if use_cuda:
             # 钉住 torch/torchaudio 到 CUDA 索引可用的版本（见常量注释），
@@ -1194,8 +1305,8 @@ class AiRuntimeManager:
             ]
             if proxy:
                 pip_args += ["--proxy", proxy]
-            if mirror:
-                pip_args += ["-i", mirror]
+            # wheel 依赖（filelock/sympy 等）默认从阿里源解析
+            pip_args += ["-i", mirror or PIP_DEFAULT_INDEX]
             returncode = self._pip_runner(
                 str(python_exe),
                 pip_args[1:],
@@ -1315,9 +1426,10 @@ class AiRuntimeManager:
         ]
         if proxy:
             args += ["--proxy", proxy]
+        # torchaudio 的 +cu128/+cpu 本地标签只在 pytorch 官方索引，走
+        # --extra-index-url；其余依赖默认从阿里源解析（mirror 可覆盖）
         args += ["--extra-index-url", index_url]
-        if mirror:
-            args += ["-i", mirror]
+        args += ["-i", mirror or PIP_DEFAULT_INDEX]
         args += list(requirements)
         status = self._pip_install_requirements(
             str(exe), args, progress=progress, cancel=cancel

@@ -434,6 +434,32 @@ class TestRuntimeInstall:
         assert "安装会话开始" in text
         assert "安装完成" in text
 
+    def test_install_cpu_defaults_to_aliyun_index(self, tmp_path, monkeypatch):
+        """CPU 路线未指定镜像：pip 默认走阿里源（官方 PyPI 国内常超时）。"""
+        self._fake_venv(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(rt, "detect_nvidia_gpu", lambda: "")
+        monkeypatch.setattr(rt, "_wmi_adapters", lambda: [])
+        seen = {}
+
+        def fake_runner(exe, args, on_line, cancel):
+            seen.setdefault("args", args)
+            return 0
+
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        manager.install(tmp_path / "rt")
+        args = seen["args"]
+        i = args.index("-i")
+        assert args[i + 1] == rt.PIP_DEFAULT_INDEX
+
     def test_install_cpu_route_without_gpu(self, tmp_path, monkeypatch):
         """无 NVIDIA GPU：不加 CUDA 索引/-U，镜像参数不受影响。"""
         self._fake_venv(monkeypatch, tmp_path)
@@ -799,6 +825,38 @@ class TestSharedRuntimeInstall:
         assert "transformers==5.15.0" in args and "librosa==0.10.2.post1" in args
         assert any("增量" in m or "复用" in m for _, m in events)
         assert events[-1][1] == "运行环境就绪"
+
+    def test_install_shared_defaults_to_aliyun_index(
+        self, tmp_path, monkeypatch
+    ):
+        """增量安装未指定镜像：pip 默认走阿里源；pytorch 索引仍以
+        --extra-index-url 附加（+cu128 本地标签只在官方索引）。"""
+        exe = self._fake_managed_python(tmp_path)
+        monkeypatch.setattr(
+            AiRuntimeManager,
+            "probe",
+            lambda self, python_exe="", timeout_s=30.0: RuntimeStatus(
+                available=True, python_path=str(python_exe)
+            ),
+        )
+        import strange_uta_game.backend.application.ai_timing.runtime as rt
+
+        monkeypatch.setattr(
+            rt, "detect_torch_build", lambda exe: ("2.7.1", "cu128")
+        )
+        seen = {}
+
+        def fake_runner(python, args, on_line, cancel):
+            seen.setdefault("args", list(args))
+            return 0
+
+        manager = AiRuntimeManager(pip_runner=fake_runner)
+        manager.install_shared(exe)
+        args = seen["args"]
+        i = args.index("-i")
+        assert args[i + 1] == rt.PIP_DEFAULT_INDEX
+        j = args.index("--extra-index-url")
+        assert args[j + 1] == "https://download.pytorch.org/whl/cu128"
 
     def test_install_shared_notifies_runtime_changed_hook(
         self, tmp_path, monkeypatch

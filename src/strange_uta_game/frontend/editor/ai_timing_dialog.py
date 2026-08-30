@@ -1227,10 +1227,11 @@ class AiTimingDialog(QDialog):
                                 )
                             )
                     # 方案 B：向宿主托管解释器增量安装（不建 venv、不重装
-                    # torch，torchaudio 按其 torch 版本自动配对）
+                    # torch，torchaudio 按其 torch 版本自动配对）。
+                    # 注：不再把「下载镜像」（Hugging Face 端点）传给 pip——
+                    # pip 索引由 runtime 层默认阿里源（mirror 参数可覆盖）
                     status = self._runtime.install_shared(
                         str(target),
-                        mirror=self._settings.download_mirror,
                         proxy=self._download_proxy,
                         progress=lambda p, m: progress_cb("runtime", p, m),
                         cancel=cancel_check,
@@ -1238,7 +1239,6 @@ class AiTimingDialog(QDialog):
                 else:
                     status = self._runtime.install(
                         target,
-                        mirror=self._settings.download_mirror,
                         proxy=self._download_proxy,
                         progress=lambda p, m: progress_cb("runtime", p, m),
                         cancel=cancel_check,

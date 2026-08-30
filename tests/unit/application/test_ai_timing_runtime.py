@@ -405,3 +405,150 @@ def test_ailog_rotates_over_limit(monkeypatch, tmp_path):
     rotated = tmp_path / "ai_timing.log.1"
     assert rotated.is_file()
     assert "轮转后的新行" in log_file.read_text(encoding="utf-8")
+
+
+# ── 底座下载源尝试链：先走代理再走镜像 ──
+
+
+GH_URL = (
+    "https://github.com/karaoke-studio/karaoke-studio-runtime"
+    "/releases/download/pymss-runtime-v2.0.18-r1/base.zip.001"
+)
+
+
+def test_github_mirror_candidates_follow_source_order():
+    # 显式传 order，避免依赖本机 config.json 的源排序
+    assert rt._github_mirror_candidates(GH_URL, order=["github"]) == []
+    mirrors = rt._github_mirror_candidates(GH_URL, order=["gh-proxy", "github"])
+    from strange_uta_game.updater.sources import GH_PROXY_PREFIXES
+
+    assert mirrors == [f"{prefix}/{GH_URL}" for prefix in GH_PROXY_PREFIXES]
+    # 非 GitHub URL（torch wheel 的 pytorch CDN）不套镜像
+    assert (
+        rt._github_mirror_candidates("https://download-r2.pytorch.org/whl/x.whl")
+        == []
+    )
+
+
+def test_download_attempts_proxy_first_then_mirror(monkeypatch):
+    monkeypatch.setattr(
+        rt,
+        "_github_mirror_candidates",
+        lambda url, order=None: (
+            [f"https://gh-proxy.com/{url}"]
+            if url.startswith("https://github.com/")
+            else []
+        ),
+    )
+    proxy = "http://127.0.0.1:7897"
+    proxied = {"http": proxy, "https": proxy}
+    direct = {"http": None, "https": None}
+
+    att = rt._download_attempts(GH_URL, proxy)
+    # 1) 官方直链 + 代理；2) 镜像 + 代理；3) 镜像直连兜底
+    assert att == [
+        (GH_URL, proxied),
+        (f"https://gh-proxy.com/{GH_URL}", proxied),
+        (f"https://gh-proxy.com/{GH_URL}", direct),
+    ]
+    # 未配置代理：直连（proxies=None → requests 读环境变量）+ 镜像直连
+    assert rt._download_attempts(GH_URL, "") == [
+        (GH_URL, None),
+        (f"https://gh-proxy.com/{GH_URL}", None),
+    ]
+    # 非 GitHub URL：代理 + 直连兜底，无镜像展开
+    att3 = rt._download_attempts("https://download-r2.pytorch.org/whl/x.whl", proxy)
+    assert att3 == [
+        ("https://download-r2.pytorch.org/whl/x.whl", proxied),
+        ("https://download-r2.pytorch.org/whl/x.whl", direct),
+    ]
+
+
+class _FakeResp:
+    def __init__(self, payload: bytes):
+        self._payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size):
+        yield self._payload
+
+
+def test_download_verified_rotates_to_mirror(monkeypatch, tmp_path):
+    """官方直连失败 → 自动换 gh-proxy 镜像；哈希校验照常。"""
+    import hashlib
+
+    monkeypatch.setattr(
+        rt, "_github_mirror_candidates", lambda url, order=None: [f"https://gh-proxy.com/{url}"]
+    )
+    seen = []
+
+    def fake_get(url, **kwargs):
+        seen.append(url)
+        if url == GH_URL:
+            raise RuntimeError("direct blocked")
+        return _FakeResp(b"hello-runtime")
+
+    monkeypatch.setattr("requests.get", fake_get)
+    dest = tmp_path / "base.zip.001"
+    rt._download_verified(
+        GH_URL,
+        dest,
+        expected_size=len(b"hello-runtime"),
+        expected_sha256=hashlib.sha256(b"hello-runtime").hexdigest(),
+        progress=lambda p, m: None,
+    )
+    assert seen == [GH_URL, f"https://gh-proxy.com/{GH_URL}"]
+    assert dest.read_bytes() == b"hello-runtime"
+
+
+def test_download_verified_all_sources_fail(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        rt, "_github_mirror_candidates", lambda url, order=None: [f"https://gh-proxy.com/{url}"]
+    )
+
+    def fake_get(url, **kwargs):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr("requests.get", fake_get)
+    with pytest.raises(rt.AiRuntimeError) as ei:
+        rt._download_verified(
+            GH_URL,
+            tmp_path / "x.zip",
+            expected_size=1,
+            expected_sha256="0" * 64,
+        )
+    assert "已尝试 2 个下载源" in str(ei.value)
+
+
+def test_fetch_manifest_rotates_to_mirror(monkeypatch):
+    """清单拉取同样走尝试链：直连失败自动换镜像。"""
+    import types
+
+    monkeypatch.setattr(
+        rt, "_github_mirror_candidates", lambda url, order=None: [f"https://gh-proxy.com/{url}"]
+    )
+
+    def fake_get(url, **kwargs):
+        if url == rt.release_manifest_url("windows-cpu"):
+            raise RuntimeError("direct blocked")
+        return types.SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"schema": 1, "archive": {"parts": [{"url": "x"}]}},
+        )
+
+    monkeypatch.setattr("requests.get", fake_get)
+    manifest = rt.fetch_runtime_release_manifest("windows-cpu")
+    assert manifest["schema"] == 1
+
+
+def test_pip_default_index_is_aliyun():
+    """pip 默认索引 = 阿里源（官方 PyPI 国内直连常超时）。"""
+    assert rt.PIP_DEFAULT_INDEX == "https://mirrors.aliyun.com/pypi/simple/"
