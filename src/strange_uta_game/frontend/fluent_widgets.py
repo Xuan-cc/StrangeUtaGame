@@ -85,7 +85,10 @@ class RangeSlider(QWidget):
     - 两柄间保持最小间距（默认值域跨度的 5%），低柄恒 ≤ 高柄；点击
       轨道空白处吸附最近的柄到点击位置并进入拖动。
     - 仅鼠标交互（拖动/点击轨道）；外观：轨道两端 border 色、选中段
-      themeColor，圆形手柄。
+      themeColor，圆形手柄；禁用态整体降透明度。
+    - 主题（明暗）切换经 ``theme.changed``、强调色变更经 qfluentwidgets
+      ``qconfig.themeColorChanged`` 触发重绘——自绘控件不随 QSS 自动刷新，
+      颜色在 paintEvent 现取现用。
 
     线程性：仅在 UI 线程使用。
     """
@@ -107,6 +110,16 @@ class RangeSlider(QWidget):
         self.setFixedHeight(22)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMouseTracking(False)
+        # 自绘控件不随 QSS 自动刷新：主题（明暗）切换与 qfluentwidgets 强调色
+        # 变化都要显式重绘，颜色在 paintEvent 里现取现用（与 WaveformDisplay
+        # 挂 theme.changed 的模式一致；themeColorChanged 覆盖单独改强调色）
+        theme.changed.connect(self.update)
+        try:
+            from qfluentwidgets.common.config import qconfig
+
+            qconfig.themeColorChanged.connect(self.update)
+        except Exception:
+            pass
 
     # ── 值域与取值 ──
 
@@ -222,11 +235,17 @@ class RangeSlider(QWidget):
         cy = self.height() / 2.0
         low_x, high_x = self._value_to_x(self._low), self._value_to_x(self._high)
 
+        # 禁用态整体降透明度（随所在 FluentGroupBox 一起被禁用时与
+        # qfluentwidgets 控件的变淡观感一致）
+        dim = self.isEnabled()
         track = QColor(theme.border_primary)
-        track.setAlpha(120)
+        track.setAlpha(120 if dim else 60)
         pen_track = QPen(track, self._GROOVE_H)
         pen_track.setCapStyle(Qt.PenCapStyle.RoundCap)
         accent = themeColor()
+        if not dim:
+            accent = QColor(accent)
+            accent.setAlpha(100)
 
         x_min, x_max = self._value_to_x(self._min_value), self._value_to_x(self._max_value)
         painter.setPen(pen_track)
@@ -237,7 +256,7 @@ class RangeSlider(QWidget):
 
         # 手柄：accent 填充 + 白色描边，与 Fluent Slider 同族
         for x in (low_x, high_x):
-            painter.setPen(QPen(QColor(255, 255, 255), 2))
+            painter.setPen(QPen(QColor(255, 255, 255, 255 if dim else 120), 2))
             painter.setBrush(accent)
             painter.drawEllipse(QPointF(x, cy), float(self._HANDLE_R), float(self._HANDLE_R))
 

@@ -130,3 +130,44 @@ class TestRangeSliderMouse:
         _send_mouse(slider, QEvent.Type.MouseButtonRelease, slider._value_to_x(95.0))
         assert slider.low() == pytest.approx(65.0)
         assert slider.high() == 70.0
+
+
+class TestRangeSliderThemeSync:
+    """自绘控件的主题同步：明暗切换与 qfluentwidgets 强调色变更都要重绘。"""
+
+    @staticmethod
+    def _count_repaints(slider, emit):
+        calls = []
+        original = slider.paintEvent
+
+        def _recording(event):
+            calls.append(1)
+            original(event)
+
+        slider.paintEvent = _recording
+        try:
+            emit()
+            QApplication.processEvents()
+        finally:
+            slider.paintEvent = original
+        return len(calls)
+
+    def test_repaints_on_theme_changed(self, qapp):
+        from strange_uta_game.frontend.theme import theme
+
+        slider = RangeSlider()
+        slider.resize(208, 22)
+        slider.show()
+        assert self._count_repaints(slider, theme.changed.emit) >= 1
+
+    def test_repaints_on_accent_color_changed(self, qapp):
+        from qfluentwidgets.common.config import qconfig
+        from PyQt6.QtGui import QColor
+
+        slider = RangeSlider()
+        slider.resize(208, 22)
+        slider.show()
+        assert (
+            self._count_repaints(slider, lambda: qconfig.themeColorChanged.emit(QColor("#ff0000")))
+            >= 1
+        )
