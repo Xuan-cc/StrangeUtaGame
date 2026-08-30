@@ -31,6 +31,7 @@ from qfluentwidgets import (
     PushButton,
     SimpleCardWidget,
     StrongBodyLabel,
+    isDarkTheme,
     themeColor,
 )
 
@@ -96,9 +97,9 @@ class RangeSlider(QWidget):
     rangeChanged = pyqtSignal(float, float)      # 拖动中（low, high）
     rangeCommitted = pyqtSignal(float, float)    # 松手（low, high）
 
-    _HANDLE_R = 6          # 手柄半径（px）
-    _GROOVE_H = 4          # 轨道厚度（px）
-    _PICK_RADIUS = 14      # 按下时判定手柄的命中半径（px）
+    _HANDLE_R = 9         # 手柄外圈半径（px）；内圈 themeColor 半径 5
+    _GROOVE_H = 4         # 轨道厚度（px）
+    _PICK_RADIUS = 14     # 按下时判定手柄的命中半径（px）
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -230,35 +231,51 @@ class RangeSlider(QWidget):
     # ── 绘制 ──
 
     def paintEvent(self, _event) -> None:
+        """配色逐项对齐 qfluentwidgets Slider / SliderHandle（明暗两套）。
+
+        - 轨道底色：深色 rgba(255,255,255,115) / 浅色 rgba(0,0,0,100)；
+        - 选中段：themeColor；
+        - 手柄外圈：深色 (69,69,69) / 浅色白（描边黑 90/25）；
+          内圈 themeColor 半径 5。
+        颜色在 paint 时现取（isDarkTheme/themeColor），主题切换经
+        __init__ 挂的 theme.changed / themeColorChanged 触发重绘。
+        禁用态整体降透明度（随所在 FluentGroupBox 一起被禁用时与
+        qfluentwidgets 控件的变淡观感一致）。
+        """
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         cy = self.height() / 2.0
         low_x, high_x = self._value_to_x(self._low), self._value_to_x(self._high)
 
-        # 禁用态整体降透明度（随所在 FluentGroupBox 一起被禁用时与
-        # qfluentwidgets 控件的变淡观感一致）
-        dim = self.isEnabled()
-        track = QColor(theme.border_primary)
-        track.setAlpha(120 if dim else 60)
-        pen_track = QPen(track, self._GROOVE_H)
-        pen_track.setCapStyle(Qt.PenCapStyle.RoundCap)
+        is_dark = isDarkTheme()
+        enabled = self.isEnabled()
+        groove = QColor(255, 255, 255, 115) if is_dark else QColor(0, 0, 0, 100)
+        outer = QColor(69, 69, 69) if is_dark else QColor(255, 255, 255)
+        outer_pen = QColor(0, 0, 0, 90 if is_dark else 25)
         accent = themeColor()
-        if not dim:
+        if not enabled:
+            groove.setAlpha(max(1, groove.alpha() // 2))
+            outer_pen.setAlpha(max(1, outer_pen.alpha() // 2))
             accent = QColor(accent)
-            accent.setAlpha(100)
+            accent.setAlpha(110)
 
         x_min, x_max = self._value_to_x(self._min_value), self._value_to_x(self._max_value)
+        pen_track = QPen(groove, self._GROOVE_H)
+        pen_track.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen_track)
         painter.drawLine(QPointF(x_min, cy), QPointF(x_max, cy))
         painter.setPen(QPen(accent, self._GROOVE_H, Qt.PenStyle.SolidLine,
                             Qt.PenCapStyle.RoundCap))
         painter.drawLine(QPointF(low_x, cy), QPointF(high_x, cy))
 
-        # 手柄：accent 填充 + 白色描边，与 Fluent Slider 同族
+        # 手柄：外圈（同 SliderHandle）+ 内圈 themeColor
         for x in (low_x, high_x):
-            painter.setPen(QPen(QColor(255, 255, 255, 255 if dim else 120), 2))
-            painter.setBrush(accent)
+            painter.setPen(QPen(outer_pen, 1))
+            painter.setBrush(outer)
             painter.drawEllipse(QPointF(x, cy), float(self._HANDLE_R), float(self._HANDLE_R))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(accent)
+            painter.drawEllipse(QPointF(x, cy), 5.0, 5.0)
 
 
 def make_message_box(

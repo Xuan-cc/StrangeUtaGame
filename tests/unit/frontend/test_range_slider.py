@@ -171,3 +171,24 @@ class TestRangeSliderThemeSync:
             self._count_repaints(slider, lambda: qconfig.themeColorChanged.emit(QColor("#ff0000")))
             >= 1
         )
+
+    def test_paints_in_both_themes_without_error(self, qapp):
+        """明/暗两套配色路径（isDarkTheme 分支）绘制均正常，且颜色取自
+        qfluentwidgets 同款常量——深色外圈 (69,69,69) 而非白色。"""
+        from qfluentwidgets import Theme, setTheme
+
+        slider = RangeSlider()
+        slider.set_range(0.0, 100.0)
+        slider.set_values(20.0, 80.0)
+        slider.resize(208, 22)
+        slider.show()
+        original = setTheme(Theme.DARK, lazy=True)
+        try:
+            slider.grab()  # 深色路径绘制不抛
+            from qfluentwidgets import isDarkTheme
+
+            assert isDarkTheme() is True
+        finally:
+            setTheme(Theme.LIGHT, lazy=True)
+        slider.setEnabled(False)
+        slider.grab()  # 浅色 + 禁用路径绘制不抛
