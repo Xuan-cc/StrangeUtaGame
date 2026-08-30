@@ -962,6 +962,12 @@ class EditorInterface(QWidget):
                 "spectrum_overlap": float(settings.get("timing.spectrum_overlap", 0.75)),
                 "spectrum_freq_scale": settings.get("timing.spectrum_freq_scale", "log"),
                 "spectrum_dyn_range_db": int(settings.get("timing.spectrum_dyn_range_db", 90)),
+                "spectrum_freq_min_hz": int(
+                    settings.get("timing.spectrum_freq_min_hz", 0)
+                ),
+                "spectrum_freq_max_hz": int(
+                    settings.get("timing.spectrum_freq_max_hz", 0)
+                ),
                 "display_height": int(settings.get("timing.display_height", 120)),
                 "waveform_rms_enabled": bool(
                     settings.get("timing.waveform_rms_enabled", True)
@@ -5556,6 +5562,14 @@ class EditorInterface(QWidget):
         s.set(
             "timing.spectrum_dyn_range_db",
             int(settings.get("spectrum_dyn_range_db", 90)),
+        )
+        s.set(
+            "timing.spectrum_freq_min_hz",
+            int(settings.get("spectrum_freq_min_hz", 0)),
+        )
+        s.set(
+            "timing.spectrum_freq_max_hz",
+            int(settings.get("spectrum_freq_max_hz", 0)),
         )
         s.set("timing.display_height", int(settings.get("display_height", 120)))
         s.set(

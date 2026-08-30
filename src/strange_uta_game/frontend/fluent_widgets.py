@@ -5,17 +5,18 @@
 
 - ``FluentGroupBox``：替代原生 ``QGroupBox``（qfluentwidgets 无 GroupBox，
   这里用受主题管理的 ``SimpleCardWidget`` + 标题实现）。
+- ``RangeSlider``：双柄范围滑块（qfluentwidgets 社区版无此控件，自绘）。
 - ``message_info`` / ``message_warning`` / ``message_error`` / ``message_question``：
   替代 ``QMessageBox`` 的常见用法，内部使用 qfluentwidgets ``MessageBox``。
 """
 
 from __future__ import annotations
 
-from typing import Optional
+import math
+from typing import Optional, Sequence
 
-from typing import Sequence
-
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QPointF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -30,7 +31,10 @@ from qfluentwidgets import (
     PushButton,
     SimpleCardWidget,
     StrongBodyLabel,
+    themeColor,
 )
+
+from strange_uta_game.frontend.theme import theme
 
 
 class FluentMessageBox(Dialog):
@@ -68,6 +72,174 @@ class FluentMessageBox(Dialog):
         # 只在首次显示时将新窗口带到前台，不持续争抢焦点。
         self._ensure_active()
         QTimer.singleShot(0, self._ensure_active)
+
+
+class RangeSlider(QWidget):
+    """双柄范围滑块（qfluentwidgets 社区版无此控件，自绘实现）。
+
+    - 线性值域 ``[min_value, max_value]``（float）；调用方把值取对数即可
+      得到对数刻度滑块（声谱「频率范围」：value = ln(Hz)）。
+    - 拖动中持续发 ``rangeChanged``（供实时刷新数字），松手才发
+      ``rangeCommitted``（供应用设置）——与其他滑条"拖动看数字、松手
+      应用"的语义一致。
+    - 两柄间保持最小间距（默认值域跨度的 5%），低柄恒 ≤ 高柄；点击
+      轨道空白处吸附最近的柄到点击位置并进入拖动。
+    - 仅鼠标交互（拖动/点击轨道）；外观：轨道两端 border 色、选中段
+      themeColor，圆形手柄。
+
+    线程性：仅在 UI 线程使用。
+    """
+
+    rangeChanged = pyqtSignal(float, float)      # 拖动中（low, high）
+    rangeCommitted = pyqtSignal(float, float)    # 松手（low, high）
+
+    _HANDLE_R = 6          # 手柄半径（px）
+    _GROOVE_H = 4          # 轨道厚度（px）
+    _PICK_RADIUS = 14      # 按下时判定手柄的命中半径（px）
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._min_value = 0.0
+        self._max_value = 1.0
+        self._low = 0.0
+        self._high = 1.0
+        self._dragging: Optional[str] = None
+        self.setFixedHeight(22)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMouseTracking(False)
+
+    # ── 值域与取值 ──
+
+    def set_range(self, min_value: float, max_value: float) -> None:
+        """设置值域并复位两柄到端点（不发信号）。"""
+        if max_value <= min_value:
+            return
+        self._min_value = float(min_value)
+        self._max_value = float(max_value)
+        self._low = self._min_value
+        self._high = self._max_value
+        self.update()
+
+    def _min_span(self) -> float:
+        return (self._max_value - self._min_value) * 0.05
+
+    def set_low(self, value: float) -> None:
+        self._set_handle("low", value)
+
+    def set_high(self, value: float) -> None:
+        self._set_handle("high", value)
+
+    def low(self) -> float:
+        return self._low
+
+    def high(self) -> float:
+        return self._high
+
+    def set_values(self, low: float, high: float, emit: bool = False) -> None:
+        """同时设置两柄（钳制到值域与最小间距）；emit=True 时发两个信号。"""
+        lo = max(self._min_value, min(self._max_value, float(low)))
+        hi = max(self._min_value, min(self._max_value, float(high)))
+        if hi - lo < self._min_span():
+            # 间距不足：以中点对撑到最小间距（仍钳在值域内）
+            mid = (lo + hi) / 2.0
+            half = self._min_span() / 2.0
+            lo = max(self._min_value, mid - half)
+            hi = min(self._max_value, lo + self._min_span())
+            lo = hi - self._min_span()
+        if lo == self._low and hi == self._high:
+            return
+        self._low, self._high = lo, hi
+        self.update()
+        if emit:
+            self.rangeChanged.emit(self._low, self._high)
+            self.rangeCommitted.emit(self._low, self._high)
+
+    def _set_handle(self, which: str, value: float) -> None:
+        value = max(self._min_value, min(self._max_value, float(value)))
+        if which == "low":
+            self._low = min(value, self._high - self._min_span())
+            self._low = max(self._low, self._min_value)
+        else:
+            self._high = max(value, self._low + self._min_span())
+            self._high = min(self._high, self._max_value)
+        self.update()
+
+    # ── 坐标换算 ──
+
+    def _value_to_x(self, value: float) -> float:
+        span = self._max_value - self._min_value
+        frac = 0.0 if span <= 0 else (value - self._min_value) / span
+        margin = self._HANDLE_R + 2.0
+        return margin + frac * (self.width() - 2.0 * margin)
+
+    def _x_to_value(self, x: float) -> float:
+        margin = self._HANDLE_R + 2.0
+        usable = max(1.0, self.width() - 2.0 * margin)
+        frac = (x - margin) / usable
+        frac = max(0.0, min(1.0, frac))
+        return self._min_value + frac * (self._max_value - self._min_value)
+
+    # ── 交互 ──
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() != Qt.MouseButton.LeftButton:
+            super().mousePressEvent(event)
+            return
+        x = float(event.position().x())
+        low_x, high_x = self._value_to_x(self._low), self._value_to_x(self._high)
+        d_low, d_high = abs(x - low_x), abs(x - high_x)
+        if d_low <= self._PICK_RADIUS and d_low <= d_high:
+            self._dragging = "low"
+            self._set_handle("low", self._x_to_value(x))
+        elif d_high <= self._PICK_RADIUS:
+            self._dragging = "high"
+            self._set_handle("high", self._x_to_value(x))
+        else:
+            # 点轨道空白：吸附较近的柄到点击处再拖动
+            self._dragging = "low" if d_low < d_high else "high"
+            self._set_handle(self._dragging, self._x_to_value(x))
+        self.rangeChanged.emit(self._low, self._high)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._dragging is None:
+            super().mouseMoveEvent(event)
+            return
+        self._set_handle(self._dragging, self._x_to_value(float(event.position().x())))
+        self.rangeChanged.emit(self._low, self._high)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._dragging is not None:
+            self._dragging = None
+            self.rangeCommitted.emit(self._low, self._high)
+            return
+        super().mouseReleaseEvent(event)
+
+    # ── 绘制 ──
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cy = self.height() / 2.0
+        low_x, high_x = self._value_to_x(self._low), self._value_to_x(self._high)
+
+        track = QColor(theme.border_primary)
+        track.setAlpha(120)
+        pen_track = QPen(track, self._GROOVE_H)
+        pen_track.setCapStyle(Qt.PenCapStyle.RoundCap)
+        accent = themeColor()
+
+        x_min, x_max = self._value_to_x(self._min_value), self._value_to_x(self._max_value)
+        painter.setPen(pen_track)
+        painter.drawLine(QPointF(x_min, cy), QPointF(x_max, cy))
+        painter.setPen(QPen(accent, self._GROOVE_H, Qt.PenStyle.SolidLine,
+                            Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(low_x, cy), QPointF(high_x, cy))
+
+        # 手柄：accent 填充 + 白色描边，与 Fluent Slider 同族
+        for x in (low_x, high_x):
+            painter.setPen(QPen(QColor(255, 255, 255), 2))
+            painter.setBrush(accent)
+            painter.drawEllipse(QPointF(x, cy), float(self._HANDLE_R), float(self._HANDLE_R))
 
 
 def make_message_box(

@@ -172,15 +172,131 @@ class TestDisplayMode:
         assert display._spectrum is not None
 
     def test_dyn_range_floor_direction(self, qapp):
-        """动态范围 R 的可见下沿应在 -R dB（u≈(128-R)·255/128），方向不能反。"""
+        """动态范围 R 的可见下沿应在 -R dB（u≈(128-R)·255/128），方向不能反。
+
+        低于地板填色带底部色（实底，不露控件背景）：低动态范围时声谱是
+        连续色场，不再斑驳。
+        """
         display = WaveformDisplay()
         lut = display._spectrum_lut()  # 默认 90dB
         floor = int(round((128 - 90) * 255.0 / 128.0))
-        bg = (240, 240, 240)  # 测试环境为浅色主题
-        assert tuple(lut[floor - 1][:3]) == bg  # 低于地板 → 背景
-        assert tuple(lut[floor][:3]) != bg      # 地板之上进入色带
+        assert tuple(lut[floor - 1][:3]) == (0, 0, 4)  # 低于地板 → 色带底色
+        assert tuple(lut[floor][:3]) != (240, 240, 240)  # 不再是浅色主题背景
         assert tuple(lut[floor][:3]) == (0, 0, 4)  # 地板=渐变底部（拉伸）
         assert tuple(lut[255][:3]) == (252, 255, 164)
+        assert lut[:, 3].min() == 255  # 全不透明（实底）
+
+    def test_low_dyn_range_fills_solid_floor(self, qapp):
+        """低动态范围（40dB）下低于地板的区域为色带底色实底。"""
+        display = WaveformDisplay()
+        display.set_spectrum_params(dyn_range_db=40)
+        lut = display._spectrum_lut()
+        floor = int(round((128 - 40) * 255.0 / 128.0))
+        # 地板以下（含 u=0）全部是同一深色，且与地板处一致
+        assert tuple(lut[0][:3]) == (0, 0, 4)
+        assert tuple(lut[floor - 1][:3]) == tuple(lut[floor][:3])
+        assert lut[:floor, 3].min() == 255
+
+
+class TestSpectrumFreqRange:
+    """声谱频率钳制（显示期参数，不触发矩阵重算）。"""
+
+    def test_display_state_roundtrip_and_clamp(self, qapp):
+        display = WaveformDisplay()
+        s = display.display_settings()
+        assert s["spectrum_freq_min_hz"] == 0
+        assert s["spectrum_freq_max_hz"] == 0
+
+        display.set_spectrum_params(freq_min_hz=300, freq_max_hz=4000)
+        s = display.display_settings()
+        assert s["spectrum_freq_min_hz"] == 300
+        assert s["spectrum_freq_max_hz"] == 4000
+
+        display.set_spectrum_params(freq_min_hz=99000)
+        assert display.display_settings()["spectrum_freq_min_hz"] == 96000
+
+    def test_freq_range_change_does_not_reset_spectrum_cache(self, qapp, qtbot):
+        """钳制是渲染期参数：变化不重算/作废声谱矩阵（对比 FFT 变更）。"""
+        display = WaveformDisplay()
+        display.set_duration(2000)
+        display.set_display_mode("spectrum")
+        display.set_audio_data(_tone(2.0), SR, 1)
+        qtbot.waitUntil(lambda: display._spectrum_state == "ready", timeout=15000)
+
+        matrix_before = display._spectrum["matrix"]
+        state_before = display._spectrum_state
+        display.set_spectrum_params(freq_min_hz=200, freq_max_hz=6000)
+        # 同一矩阵对象、状态不变（未走重算链路）
+        assert display._spectrum["matrix"] is matrix_before
+        assert display._spectrum_state == state_before
+
+    def test_freq_range_change_invalidates_static_layer(self, qapp):
+        """钳制变化 → 静态图层失效重绘；视图缓存键含钳制值（下一次重取）。"""
+        display = WaveformDisplay()
+        display._static_layer = object()  # 占位非 None
+        display.set_spectrum_params(freq_max_hz=4000)
+        assert display._static_layer is None  # 已失效，等待按新键重取视图
+
+    def test_timeline_apply_carries_freq_range(self, qapp):
+        timeline = TimelineWidget()
+        timeline._apply_display_settings(
+            {"spectrum_freq_min_hz": 300, "spectrum_freq_max_hz": 4000}
+        )
+        s = timeline.waveform_display.display_settings()
+        assert s["spectrum_freq_min_hz"] == 300
+        assert s["spectrum_freq_max_hz"] == 4000
+        # 缺席键保持现值（兼容旧调用方）
+        timeline._apply_display_settings({})
+        assert timeline.waveform_display.display_settings()["spectrum_freq_min_hz"] == 300
+
+
+class TestSpectrumFreqRangeDialog:
+    @staticmethod
+    def _make_dialog(initial):
+        from PyQt6.QtWidgets import QWidget
+
+        from strange_uta_game.frontend.editor.timing.waveform_advanced_dialog import (
+            WaveformAdvancedDialog,
+        )
+
+        parent = QWidget()
+        dialog = WaveformAdvancedDialog(initial, None, parent=parent)
+        dialog._test_parent_ref = parent
+        return dialog
+
+    def test_defaults_collect_full_spectrum(self, qapp):
+        dialog = self._make_dialog({})
+        assert dialog._collect()["spectrum_freq_min_hz"] == 0
+        assert dialog._collect()["spectrum_freq_max_hz"] == 0
+        assert dialog.freq_range_caption.text() == "全谱"
+
+    def test_roundtrip_and_caption(self, qapp):
+        dialog = self._make_dialog(
+            {"spectrum_freq_min_hz": 300, "spectrum_freq_max_hz": 4000}
+        )
+        collected = dialog._collect()
+        assert collected["spectrum_freq_min_hz"] == 300
+        assert collected["spectrum_freq_max_hz"] == 4000
+        assert "300 Hz" in dialog.freq_range_caption.text()
+        assert "4 kHz" in dialog.freq_range_caption.text()
+
+    def test_commit_emits_applied(self, qapp):
+        dialog = self._make_dialog({})
+        emitted = []
+        dialog.applied.connect(lambda d: emitted.append(dict(d)))
+        dialog._set_freq_range_values(100, 8000)
+        dialog._on_freq_range_committed(dialog.freq_range_slider.low(),
+                                        dialog.freq_range_slider.high())
+        assert len(emitted) == 1
+        assert emitted[0]["spectrum_freq_min_hz"] == 100
+        assert emitted[0]["spectrum_freq_max_hz"] == 8000
+
+    def test_single_sided_clamp(self, qapp):
+        """只钳上限（下限自动）→ 收集 (0, f_max)。"""
+        dialog = self._make_dialog({"spectrum_freq_max_hz": 4000})
+        collected = dialog._collect()
+        assert collected["spectrum_freq_min_hz"] == 0
+        assert collected["spectrum_freq_max_hz"] == 4000
 
     def test_view_cache_reused_for_same_window(self, qapp, qtbot):
         display = WaveformDisplay()
@@ -1183,9 +1299,9 @@ class TestPeakLevelTailAndCancel:
         assert result is None
 
     def test_peak_level_worker_runs(self, qapp):
-        from strange_uta_game.frontend.workers import PeakLevelWorker
-
         import numpy as np
+
+        from strange_uta_game.frontend.workers import PeakLevelWorker
 
         samples = np.zeros(44100, dtype=np.float32)
         w = PeakLevelWorker(samples)

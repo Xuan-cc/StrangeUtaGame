@@ -142,6 +142,8 @@ class AppSettings:
             "spectrum_fft_size": 2048,
             "spectrum_freq_scale": "log",         # log / linear
             "spectrum_dyn_range_db": 90,
+            "spectrum_freq_min_hz": 0,            # 声谱频率钳制（0=自动/全谱）
+            "spectrum_freq_max_hz": 0,
             "display_height": 120,                # 显示高度（波形/声谱公共；默认=旧版固定高度）
             "waveform_rms_enabled": True,         # 双层波形（峰值+RMS）
             "disable_click_jump": False,

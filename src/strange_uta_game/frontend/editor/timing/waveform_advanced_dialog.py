@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 import numpy as np
@@ -50,13 +51,16 @@ from qfluentwidgets import (
 )
 
 from strange_uta_game.backend.infrastructure.audio.spectrum import first_sound_ms
-from strange_uta_game.frontend.fluent_widgets import FluentGroupBox
+from strange_uta_game.frontend.fluent_widgets import FluentGroupBox, RangeSlider
 from strange_uta_game.frontend.window_sizing import fit_to_screen
 from strange_uta_game.frontend.workers import BpmDetectWorker
 
 _FFT_CHOICES = (512, 1024, 2048, 4096, 8192)
 # 拍号选项（N/4，BPM 恒为四分音符时值 → 分子即每小节拍数）
 _TIME_SIGNATURE_CHOICES = (2, 3, 4, 5, 6, 7, 8)
+# 频率范围双柄滑块的值域（Hz，对数刻度）：覆盖 CD 频带；两柄都拉到端点 = 全谱
+_FREQ_RANGE_MIN_HZ = 30.0
+_FREQ_RANGE_MAX_HZ = 22050.0
 # 窗口重叠（Sonic Visualiser 口径）：overlap = 1 - hop/fft。
 # 大 FFT 窗口损失的时间分辨率靠更大重叠补偿；重叠越大计算量/内存越大。
 _OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375)
@@ -269,6 +273,15 @@ class WaveformAdvancedDialog(QDialog):
         self.dyn_caption = CaptionLabel("", self._params_group)
         self.dyn_caption.setMinimumWidth(56)
 
+        # 频率范围（双柄对数滑块）：两柄都拉到端点 = 全谱（收集为 0/0）。
+        # 仅影响渲染期行映射与频率轴，不触发声谱重算
+        self.freq_range_slider = RangeSlider(self._params_group)
+        self.freq_range_slider.set_range(
+            math.log(_FREQ_RANGE_MIN_HZ), math.log(_FREQ_RANGE_MAX_HZ)
+        )
+        self.freq_range_caption = CaptionLabel("", self._params_group)
+        self.freq_range_caption.setMinimumWidth(72)
+
         # 显示高度（波形/声谱公共属性）放在「网格与节拍」Panel：
         # 对两种模式同时生效
         self.height_slider = Slider(Qt.Orientation.Horizontal, self._grid_group)
@@ -291,6 +304,7 @@ class WaveformAdvancedDialog(QDialog):
         self._lbl_overlap = BodyLabel(self.tr("窗口重叠"), self._params_group)
         self._lbl_scale = BodyLabel(self.tr("频率刻度"), self._params_group)
         self._lbl_dyn = BodyLabel(self.tr("动态范围"), self._params_group)
+        self._lbl_freq_range = BodyLabel(self.tr("频率范围"), self._params_group)
         self.overlap_hint = CaptionLabel("", self._params_group)
         self.overlap_hint.setWordWrap(True)
         params_grid.addWidget(self._lbl_fft, 0, 0)
@@ -300,8 +314,11 @@ class WaveformAdvancedDialog(QDialog):
         params_grid.addWidget(self._lbl_scale, 2, 0)
         params_grid.addWidget(self.scale_combo, 2, 1)
         params_grid.addWidget(self._lbl_dyn, 3, 0)
+        params_grid.addWidget(self.freq_range_slider, 4, 1)
+        params_grid.addWidget(self.freq_range_caption, 4, 2)
+        params_grid.addWidget(self._lbl_freq_range, 4, 0)
         # 实际 overlap 提示占位（跨三列）
-        params_grid.addWidget(self.overlap_hint, 4, 0, 1, 3)
+        params_grid.addWidget(self.overlap_hint, 5, 0, 1, 3)
         params_grid.addWidget(self.dyn_slider, 3, 1)
         params_grid.addWidget(self.dyn_caption, 3, 2)
         params_grid.setColumnStretch(1, 1)
@@ -413,6 +430,10 @@ class WaveformAdvancedDialog(QDialog):
             0 if init.get("spectrum_freq_scale", "log") == "log" else 1
         )
         self.dyn_slider.setValue(int(init.get("spectrum_dyn_range_db", 90)))
+        self._set_freq_range_values(
+            int(init.get("spectrum_freq_min_hz", 0) or 0),
+            int(init.get("spectrum_freq_max_hz", 0) or 0),
+        )
         self.height_slider.setValue(int(init.get("display_height", 120)))
         self.tag_edit_switch.setChecked(bool(init.get("tag_edit_enabled", True)))
         self.center_playhead_switch.setChecked(
@@ -455,6 +476,9 @@ class WaveformAdvancedDialog(QDialog):
         )
         self.dyn_slider.sliderReleased.connect(self._emit_applied)
         self.height_slider.sliderReleased.connect(self._emit_applied)
+        # 频率范围双柄滑块：拖动中只刷新数字，松手应用（与其他滑条一致）
+        self.freq_range_slider.rangeChanged.connect(self._on_freq_range_changed)
+        self.freq_range_slider.rangeCommitted.connect(self._on_freq_range_committed)
         # 时间标签四开关：改动即时生效（applied → TimelineWidget 应用+持久化）
         self.tag_edit_switch.checkedChanged.connect(lambda _v: self._emit_applied())
         self.center_playhead_switch.checkedChanged.connect(
@@ -484,6 +508,61 @@ class WaveformAdvancedDialog(QDialog):
     def _on_metronome_toggled(self, _checked: bool) -> None:
         """节拍器开关：联动音量滑条可用性，改动即时生效。"""
         self._sync_met_volume_enabled()
+        self._emit_applied()
+
+    # ── 频率范围双柄滑块（对数域 ↔ Hz，0 = 自动/全谱） ──
+
+    @staticmethod
+    def _round_freq_hz(hz: float) -> int:
+        """滑块连续值 → 设置值的合理取整（低频细、高频粗）。"""
+        if hz < 100:
+            return max(1, int(round(hz)))
+        if hz < 1000:
+            return int(round(hz / 10.0)) * 10
+        return int(round(hz / 100.0)) * 100
+
+    def _freq_range_values(self) -> tuple:
+        """滑块位置 → (f_min, f_max) Hz；两柄都在端点 → (0, 0)（全谱）。"""
+        lo_log = self.freq_range_slider.low()
+        hi_log = self.freq_range_slider.high()
+        at_min = lo_log <= math.log(_FREQ_RANGE_MIN_HZ) + 1e-9
+        at_max = hi_log >= math.log(_FREQ_RANGE_MAX_HZ) - 1e-9
+        if at_min and at_max:
+            return 0, 0
+        f_min = 0 if at_min else self._round_freq_hz(math.exp(lo_log))
+        f_max = 0 if at_max else self._round_freq_hz(math.exp(hi_log))
+        return f_min, f_max
+
+    def _set_freq_range_values(self, f_min: int, f_max: int) -> None:
+        """Hz → 滑块位置（0/越界钳到端点）；加载初始用，不发信号。"""
+        lo_hz = _FREQ_RANGE_MIN_HZ if f_min <= 0 else min(
+            max(float(f_min), _FREQ_RANGE_MIN_HZ), _FREQ_RANGE_MAX_HZ
+        )
+        hi_hz = _FREQ_RANGE_MAX_HZ if f_max <= 0 else min(
+            max(float(f_max), _FREQ_RANGE_MIN_HZ), _FREQ_RANGE_MAX_HZ
+        )
+        self.freq_range_slider.set_values(math.log(lo_hz), math.log(hi_hz))
+
+    def _freq_caption_text(self) -> str:
+        f_min, f_max = self._freq_range_values()
+        if f_min <= 0 and f_max <= 0:
+            return self.tr("全谱")
+
+        def fmt(v: int) -> str:
+            return f"{v} Hz" if v < 1000 else f"{v / 1000:g} kHz"
+
+        lo = fmt(f_min) if f_min > 0 else self.tr("自动")
+        hi = fmt(f_max) if f_max > 0 else self.tr("自动")
+        return f"{lo} ~ {hi}"
+
+    def _update_freq_caption(self) -> None:
+        self.freq_range_caption.setText(self._freq_caption_text())
+
+    def _on_freq_range_changed(self, _lo: float, _hi: float) -> None:
+        self._update_freq_caption()
+
+    def _on_freq_range_committed(self, _lo: float, _hi: float) -> None:
+        self._update_freq_caption()
         self._emit_applied()
 
     def _sync_met_volume_enabled(self) -> None:
@@ -547,6 +626,8 @@ class WaveformAdvancedDialog(QDialog):
         self._lbl_fft.setText(self.tr("FFT 窗口"))
         self._lbl_scale.setText(self.tr("频率刻度"))
         self._lbl_dyn.setText(self.tr("动态范围"))
+        self._lbl_freq_range.setText(self.tr("频率范围"))
+        self._update_freq_caption()
         self._lbl_height.setText(self.tr("显示高度"))
         self.scale_combo.setItemText(0, self.tr("对数"))
         self.scale_combo.setItemText(1, self.tr("线性"))
@@ -573,6 +654,7 @@ class WaveformAdvancedDialog(QDialog):
     def _update_slider_captions(self, *_args) -> None:
         self.dyn_caption.setText(f"{self.dyn_slider.value()} dB")
         self.met_volume_caption.setText(f"{self.met_volume_slider.value()}%")
+        self._update_freq_caption()
         value = self.height_slider.value()
         if value > self._actual_height_cap:
             self.height_caption.setText(
@@ -622,6 +704,7 @@ class WaveformAdvancedDialog(QDialog):
         self._emit_applied()
 
     def _collect(self) -> dict:
+        freq_min_hz, freq_max_hz = self._freq_range_values()
         return {
             "display_mode": "spectrum" if self.radio_spectrum.isChecked() else "waveform",
             "grid_mode": "bpm" if self.radio_grid_bpm.isChecked() else "time",
@@ -639,6 +722,8 @@ class WaveformAdvancedDialog(QDialog):
                 "log" if self.scale_combo.currentIndex() == 0 else "linear"
             ),
             "spectrum_dyn_range_db": int(self.dyn_slider.value()),
+            "spectrum_freq_min_hz": freq_min_hz,
+            "spectrum_freq_max_hz": freq_max_hz,
             "display_height": int(self.height_slider.value()),
             "waveform_rms_enabled": bool(self.rms_switch.isChecked()),
             "tag_edit_enabled": bool(self.tag_edit_switch.isChecked()),

@@ -458,45 +458,85 @@ def build_level(matrix: np.ndarray, level: int) -> np.ndarray:
     return out
 
 
+def resolve_freq_range(
+    nyquist: float,
+    scale: str,
+    f_min_hz: float = 0.0,
+    f_max_hz: float = 0.0,
+) -> tuple:
+    """钳制后的显示频率区间 ``(f_lo, f_hi)``；热图行映射与频率轴刻度共用。
+
+    0 = 自动（log 下限 30Hz / linear 下限 0，上限 Nyquist）；钳制后为空
+    （f_min ≥ f_max）回退全范围。
+    """
+    if scale == "log":
+        f_lo, f_hi = LOG_SCALE_MIN_HZ, max(nyquist, LOG_SCALE_MIN_HZ * 2.0)
+    else:
+        f_lo, f_hi = 0.0, nyquist
+    if f_min_hz > 0:
+        f_lo = max(f_lo, float(f_min_hz))
+    if f_max_hz > 0:
+        f_hi = min(f_hi, float(f_max_hz))
+    if f_hi <= f_lo:
+        if scale == "log":
+            return LOG_SCALE_MIN_HZ, max(nyquist, LOG_SCALE_MIN_HZ * 2.0)
+        return 0.0, nyquist
+    return f_lo, f_hi
+
+
 def frequency_bin_edges(
-    n_bins: int, sample_rate: int, fft_size: int, rows: int, scale: str
+    n_bins: int,
+    sample_rate: int,
+    fft_size: int,
+    rows: int,
+    scale: str,
+    f_min_hz: float = 0.0,
+    f_max_hz: float = 0.0,
 ) -> np.ndarray:
     """频率轴 → bin 边界数组（长度 rows+1，单位：bin 序号，浮点）。
 
-    scale="log"：[LOG_SCALE_MIN_HZ, nyquist] 对数均分；"linear"：[0, nyquist] 线性均分。
+    scale="log"：[LOG_SCALE_MIN_HZ, nyquist] 对数均分；"linear"：[0, nyquist]
+    线性均分。f_min_hz / f_max_hz 为显示期频率钳制（Hz，0 = 自动/不限，
+    见 :func:`resolve_freq_range`）——纯渲染期参数，不触发矩阵重算，
+    默认 0/0 与无钳制时逐位一致。
     """
-    nyq = sample_rate / 2.0
+    f_lo, f_hi = resolve_freq_range(sample_rate / 2.0, scale, f_min_hz, f_max_hz)
     bins_per_hz = fft_size / float(sample_rate)
     if scale == "log":
-        f_hi = max(nyq, LOG_SCALE_MIN_HZ * 2.0)
-        freqs = np.geomspace(LOG_SCALE_MIN_HZ, f_hi, rows + 1)
+        freqs = np.geomspace(f_lo, f_hi, rows + 1)
     else:
-        freqs = np.linspace(0.0, nyq, rows + 1)
+        freqs = np.linspace(f_lo, f_hi, rows + 1)
     return np.clip(freqs * bins_per_hz, 0, n_bins - 1)
 
 
-def build_colormap_lut(bg_rgb: tuple, floor_u: int) -> np.ndarray:
+def build_colormap_lut(floor_u: int) -> np.ndarray:
     """构造 256×4 RGBA 查找表。
 
     矩阵编码为 -128dB→0、0dB→255，故 `floor_u` 必须按
     ``(128 - range_db) * 255 / 128`` 换算（range dB 动态范围的下沿电平）。
-    u < floor_u 映射为背景色；[floor_u, 255] 的可见段重新归一化拉伸到
-    完整 inferno 渐变（动态范围越小对比越强）。
+    [floor_u, 255] 的可见段重新归一化拉伸到完整 inferno 渐变（动态范围
+    越小对比越强）；u < floor_u 填**色带底部色**（拉伸段 t=0 的深色）而非
+    背景——低动态范围时低于地板的区域是连续深色实底，不会露出控件背景
+    形成"破洞"观感（Sonic Visualiser / Audacity 同款行为）。
     """
     stops_t = np.array([s[0] for s in _COLORMAP_STOPS], dtype=np.float64)
     stops_rgb = np.array([s[1] for s in _COLORMAP_STOPS], dtype=np.float64)
     floor_u = int(max(0, min(255, floor_u)))
     lut = np.empty((256, 4), dtype=np.uint8)
     lut[:, 3] = 255
-    lut[:floor_u, :3] = bg_rgb
-    if floor_u < 255:
-        # 可见段 [floor_u, 255] 线性映射到渐变参数 t∈[0,1]
-        t_band = (np.arange(floor_u, 256) - floor_u) / float(255 - floor_u)
-        band = np.stack(
-            [np.interp(t_band, stops_t, stops_rgb[:, c]) for c in range(3)],
-            axis=1,
-        )
-        lut[floor_u:, :3] = np.round(band).astype(np.uint8)
+    if floor_u >= 255:
+        lut[:, :3] = np.round(
+            np.interp(0.0, stops_t, stops_rgb)
+        ).astype(np.uint8)
+        return lut
+    t_band = (np.arange(floor_u, 256) - floor_u) / float(255 - floor_u)
+    band = np.stack(
+        [np.interp(t_band, stops_t, stops_rgb[:, c]) for c in range(3)],
+        axis=1,
+    )
+    lut[floor_u:, :3] = np.round(band).astype(np.uint8)
+    # 低于地板 → 色带底部色（= band[0]，拉伸段的 t=0）
+    lut[:floor_u, :3] = band[0].astype(np.uint8)
     return lut
 
 

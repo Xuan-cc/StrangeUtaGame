@@ -297,20 +297,64 @@ class TestFrequencyEdges:
         assert edges[0] == 0.0
         assert edges[-1] == pytest.approx(512.0, abs=1e-6)
 
+    def test_default_zero_clamp_identical_to_no_clamp(self):
+        """钳制参数默认 0/0 与无钳制逐位一致（纯渲染期参数，向后兼容）。"""
+        for scale in ("log", "linear"):
+            base = sc.frequency_bin_edges(513, SR, 2048, 64, scale)
+            auto = sc.frequency_bin_edges(513, SR, 2048, 64, scale, 0.0, 0.0)
+            assert np.array_equal(base, auto)
+
+    def test_linear_clamp_span(self):
+        # 44100Hz 采样 → Nyquist 22050Hz；钳到 [300, 4000]
+        edges = sc.frequency_bin_edges(513, SR, 2048, 32, "linear", 300.0, 4000.0)
+        bins_per_hz = 2048 / SR
+        assert edges[0] == pytest.approx(300 * bins_per_hz, abs=1e-6)
+        assert edges[-1] == pytest.approx(4000 * bins_per_hz, abs=1e-6)
+        assert np.all(np.diff(edges) > 0)
+
+    def test_log_clamp_intersects_30hz_floor(self):
+        # log 下限 30Hz：f_min=100 生效；f_max 与 Nyquist 取小
+        edges = sc.frequency_bin_edges(513, SR, 2048, 32, "log", 100.0, 8000.0)
+        bins_per_hz = 2048 / SR
+        assert edges[0] == pytest.approx(100 * bins_per_hz, rel=1e-6)
+        assert edges[-1] == pytest.approx(8000 * bins_per_hz, rel=1e-6)
+        # 对数均分：中点应在几何均值附近
+        mid_hz = 100 * (8000 / 100) ** 0.5
+        mid_pos = np.interp(16, np.arange(33), edges)
+        assert mid_pos == pytest.approx(mid_hz * bins_per_hz, rel=1e-3)
+
+    def test_invalid_clamp_falls_back_to_full_range(self):
+        """f_min ≥ f_max（钳后为空）回退全范围，不产生空区间。"""
+        for scale in ("log", "linear"):
+            full = sc.frequency_bin_edges(513, SR, 2048, 32, scale)
+            bad = sc.frequency_bin_edges(513, SR, 2048, 32, scale, 5000.0, 2000.0)
+            assert np.array_equal(full, bad)
+
+    def test_resolve_freq_range_matches_edges(self):
+        """resolve_freq_range 与 frequency_bin_edges 的区间一致（轴刻度共用）。"""
+        for scale in ("log", "linear"):
+            f_lo, f_hi = sc.resolve_freq_range(SR / 2.0, scale, 200.0, 6000.0)
+            edges = sc.frequency_bin_edges(513, SR, 2048, 16, scale, 200.0, 6000.0)
+            bins_per_hz = 2048 / SR
+            assert edges[0] == pytest.approx(f_lo * bins_per_hz, rel=1e-6)
+            assert edges[-1] == pytest.approx(f_hi * bins_per_hz, rel=1e-6)
+
 
 class TestColormapLut:
-    def test_floor_region_is_background_band_stretched(self):
-        lut = sc.build_colormap_lut((30, 30, 30), 100)
+    def test_floor_region_is_band_bottom_solid(self):
+        """低于地板填色带底部色（实底），不露背景；可见段拉伸不变。"""
+        lut = sc.build_colormap_lut(100)
         assert lut.shape == (256, 4)
-        # u < floor → 背景
-        assert tuple(lut[50][:3]) == (30, 30, 30)
+        # u < floor → 色带底色（= 地板处颜色），整段同色实底
+        assert tuple(lut[50][:3]) == (0, 0, 4)
+        assert tuple(lut[99][:3]) == tuple(lut[100][:3])
         # 可见段 [floor, 255] 拉伸到完整渐变：地板处渐变底部、顶端浅黄
         assert tuple(lut[100][:3]) == (0, 0, 4)
         assert tuple(lut[255][:3]) == (252, 255, 164)
         assert lut[:, 3].min() == 255
 
     def test_full_range_floor_zero_keeps_entire_ramp(self):
-        lut = sc.build_colormap_lut((9, 9, 9), 0)
+        lut = sc.build_colormap_lut(0)
         assert tuple(lut[0][:3]) == (0, 0, 4)
         assert tuple(lut[255][:3]) == (252, 255, 164)
 
