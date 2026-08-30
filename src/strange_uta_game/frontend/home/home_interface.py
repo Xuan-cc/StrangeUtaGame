@@ -76,7 +76,7 @@ class HomeInterface(QWidget):
     """
 
     project_created = pyqtSignal(Project, str)  # (project, audio_path)
-    project_opened = pyqtSignal(Project, str)  # (project, file_path)
+    project_opened = pyqtSignal(Project, str, object)  # (project, file_path, extras)
     project_save_requested = pyqtSignal()  # 请求保存当前项目
     _LYRIC_EXTENSIONS = {".lrc", ".txt", ".kra", ".krl", ".ass", ".srt"}
     _PROJECT_EXTENSIONS = {".sug"}
@@ -1046,7 +1046,7 @@ class HomeInterface(QWidget):
         # 启动线程
         self._loading_thread.start()
 
-    def _on_project_load_success(self, project: Project, file_path: str) -> None:
+    def _on_project_load_success(self, project: Project, file_path: str, extras: dict = None) -> None:
         """项目加载成功回调"""
         if self._state_tooltip:
             self._state_tooltip.setState(True)
@@ -1054,7 +1054,7 @@ class HomeInterface(QWidget):
             self._state_tooltip.close()
             self._state_tooltip = None
 
-        self.project_opened.emit(project, file_path)
+        self.project_opened.emit(project, file_path, extras or {})
 
     def _on_project_load_error(self, error_msg: str) -> None:
         """项目加载失败回调"""

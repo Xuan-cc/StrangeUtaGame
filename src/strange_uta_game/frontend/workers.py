@@ -245,7 +245,7 @@ class VideoExtractOnlyWorker(QObject):
 class ProjectLoadWorker(QObject):
     """后台加载 .sug 项目文件。"""
 
-    finished = pyqtSignal(object, str)  # (Project, file_path)
+    finished = pyqtSignal(object, str, object)  # (Project, file_path, extras)
     error = pyqtSignal(str)
 
     def __init__(self, file_path: str):
@@ -258,8 +258,9 @@ class ProjectLoadWorker(QObject):
                 SugProjectParser,
             )
 
-            project = SugProjectParser.load(self._file_path)
-            self.finished.emit(project, self._file_path)
+            # 单次解析同时拿到 Project 与 extras，UI 侧不再二次解析文件
+            project, extras = SugProjectParser.load_with_extras(self._file_path)
+            self.finished.emit(project, self._file_path, extras)
         except Exception as e:
             self.error.emit(str(e))
 

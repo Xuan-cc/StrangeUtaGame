@@ -759,14 +759,15 @@ class ProjectStore(QObject):
         return False
 
     @staticmethod
-    def load_crash_recovery() -> Optional[tuple[Project, str]]:
+    def load_crash_recovery() -> Optional[tuple[Project, str, dict]]:
         """加载闪退恢复文件（优先加载未命名项目的恢复文件）。
 
         扫描当前 .temp 目录及旧版 .cache（升级兼容）。
 
         Returns:
-            (project, temp_file_path) — temp_file_path 是 .sug.temp 实际文件路径，
-            调用方可借此读取 nicokara_tags / media_path 等 extras。失败时返回 None。
+            (project, temp_file_path, extras) — temp_file_path 是 .sug.temp 实际
+            文件路径，extras 含 nicokara_tags / media_path（单次解析一并产出）。
+            失败时返回 None。
         """
         # 优先检查未命名项目的恢复文件
         untitled_name = _untitled_temp_path().name
@@ -774,7 +775,8 @@ class ProjectStore(QObject):
             untitled_temp = d / untitled_name
             if untitled_temp.exists():
                 try:
-                    return SugProjectParser.load(str(untitled_temp)), str(untitled_temp)
+                    project, extras = SugProjectParser.load_with_extras(str(untitled_temp))
+                    return project, str(untitled_temp), extras
                 except Exception:
                     pass
 
@@ -782,7 +784,8 @@ class ProjectStore(QObject):
         for d in ProjectStore._crash_recovery_dirs():
             for temp_file in d.glob(".*.sug.temp"):
                 try:
-                    return SugProjectParser.load(str(temp_file)), str(temp_file)
+                    project, extras = SugProjectParser.load_with_extras(str(temp_file))
+                    return project, str(temp_file), extras
                 except Exception:
                     continue
         return None

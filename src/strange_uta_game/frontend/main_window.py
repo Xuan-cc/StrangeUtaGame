@@ -698,13 +698,13 @@ class MainWindow(MSFluentWindow):
             parent=self,
         )
 
-    def _on_project_opened(self, project: Project, file_path: str = ""):
+    def _on_project_opened(self, project: Project, file_path: str = "", extras: dict = None):
         """项目打开完成"""
         self._store.load_project(project, save_path=file_path if file_path else None)
         self.switchTo(self.editorInterface)
 
         if file_path:
-            self._apply_project_extras(file_path)
+            self._apply_project_extras(extras or {})
 
         InfoBar.success(
             title=self.tr("项目打开成功"),
@@ -718,19 +718,19 @@ class MainWindow(MSFluentWindow):
 
         self._refresh_frameless()
 
-    def _apply_project_extras(self, file_path: str) -> None:
-        """读取并应用 .sug 的附加字段（nicokara_tags、media_path）。"""
+    def _apply_project_extras(self, extras: dict) -> None:
+        """应用 .sug 的附加字段（nicokara_tags、media_path）。
+
+        extras 由加载侧（ProjectLoadWorker / 崩溃恢复）单次解析一并带回，
+        主线程不再二次解析文件。
+        """
         from pathlib import Path
 
         from strange_uta_game.backend.infrastructure.audio.video_converter import (
             is_video_file,
         )
-        from strange_uta_game.backend.infrastructure.persistence.sug_io import (
-            SugProjectParser,
-        )
         from strange_uta_game.frontend.settings.app_settings import AppSettings
 
-        extras = SugProjectParser.load_extras(file_path)
         # extras 可能为空（旧版 sug 无 extras 字段），但仍需重置 nicokara_tags，
         # 否则上一个项目残留的 tags 会在保存时回写到当前 sug，造成跨项目污染。
 
@@ -993,11 +993,11 @@ class MainWindow(MSFluentWindow):
         ):
             recovered = ProjectStore.load_crash_recovery()
             if recovered:
-                project, temp_path = recovered
+                project, temp_path, extras = recovered
                 self._store.load_project(project)
                 # 从 .sug.temp 回灌 nicokara_tags / media_path 到 AppSettings 与 store。
                 # 不把 temp_path 当 save_path，以免用户误存到 .cache。
-                self._apply_project_extras(temp_path)
+                self._apply_project_extras(extras)
                 self.switchTo(self.editorInterface)
                 InfoBar.success(
                     title=self.tr("恢复成功"),

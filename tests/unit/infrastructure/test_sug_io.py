@@ -230,6 +230,90 @@ class TestSugProjectParser:
         assert "JSON" in str(exc_info.value)
 
 
+class TestLoadWithExtras:
+    """load_with_extras：单次解析同时返回 Project 与附加字段"""
+
+    def test_roundtrip_returns_project_and_extras(self, tmp_path):
+        """保存时带 nicokara_tags/media_path，加载一并带回"""
+        project = Project()
+        singer = project.get_default_singer()
+        project.add_sentence(Sentence.from_text("测试歌词", singer.id))
+
+        file_path = tmp_path / "extras.sug"
+        SugProjectParser.save(
+            project,
+            str(file_path),
+            nicokara_tags={"tag1": {"enabled": True}},
+            media_path="X:/media/song.mp3",
+        )
+
+        loaded, extras = SugProjectParser.load_with_extras(str(file_path))
+
+        assert loaded.id == project.id
+        assert loaded.sentences[0].text == "测试歌词"
+        assert extras == {
+            "nicokara_tags": {"tag1": {"enabled": True}},
+            "media_path": "X:/media/song.mp3",
+        }
+
+    def test_no_extras_returns_empty_dict(self, tmp_path):
+        """旧版 sug 无附加字段时 extras 为空 dict（不抛错）"""
+        project = Project()
+        file_path = tmp_path / "plain.sug"
+        SugProjectParser.save(project, str(file_path))
+
+        _, extras = SugProjectParser.load_with_extras(str(file_path))
+        assert extras == {}
+
+    def test_extras_extracted_before_migration(self, tmp_path):
+        """v1.0 迁移会重建字典丢弃附加字段——extras 必须取自迁移前原始数据"""
+        file_path = tmp_path / "v1_with_media.sug"
+        file_path.write_text(
+            """
+{
+  "version": "1.0",
+  "id": "p1",
+  "metadata": {},
+  "audio_duration_ms": 0,
+  "singers": [
+    {
+      "id": "s1",
+      "name": "默认",
+      "color": "#FF6B6B",
+      "is_default": true,
+      "display_priority": 0,
+      "enabled": true,
+      "backend_number": 1
+    }
+  ],
+  "lines": [
+    {
+      "id": "l1",
+      "singer_id": "s1",
+      "text": "花",
+      "chars": ["花"],
+      "checkpoints": [{"char_idx": 0, "check_count": 1}],
+      "timetags": [{"char_idx": 0, "checkpoint_idx": 0, "timestamp_ms": 1000}],
+      "rubies": []
+    }
+  ],
+  "media_path": "X:/media/song.mp3"
+}
+            """.strip(),
+            encoding="utf-8",
+        )
+
+        project, extras = SugProjectParser.load_with_extras(str(file_path))
+
+        assert len(project.sentences) == 1
+        assert project.sentences[0].text == "花"
+        assert extras == {"media_path": "X:/media/song.mp3"}
+
+    def test_nonexistent_file_raises_error(self, tmp_path):
+        with pytest.raises(SugParseError):
+            SugProjectParser.load_with_extras(str(tmp_path / "nonexistent.sug"))
+
+
 class TestRubyPlaceholderRoundtrip:
     """ruby 占位符（停顿符）的存档哨兵映射与不变式自愈"""
 

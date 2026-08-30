@@ -10,7 +10,7 @@ StrangeUtaGame 项目文件格式 (.sug)
 """
 
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 from datetime import datetime
 from uuid import uuid4
@@ -313,6 +313,25 @@ class SugProjectParser:
         Raises:
             SugParseError: 加载失败或文件损坏
         """
+        project, _ = SugProjectParser.load_with_extras(file_path)
+        return project
+
+    @staticmethod
+    def load_with_extras(file_path: str) -> Tuple[Project, Dict[str, Any]]:
+        """从 SUG 文件加载项目，并同时返回附加字段（nicokara_tags、media_path）。
+
+        单次解析同时产出 Project 与 extras，调用方不应为读取 extras
+        重新解析整个文件。
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            (项目对象, extras dict) — extras 仅包含文件中存在的字段
+
+        Raises:
+            SugParseError: 加载失败或文件损坏
+        """
         path = Path(file_path)
 
         if not path.exists():
@@ -327,15 +346,25 @@ class SugProjectParser:
         except Exception as e:
             raise SugParseError(f"读取文件失败: {e}")
 
+        # extras 必须在版本迁移前提取：旧版本迁移（如 v1.0）会重建
+        # 字典丢弃附加字段
+        extras: Dict[str, Any] = {}
+        if "nicokara_tags" in data:
+            extras["nicokara_tags"] = data["nicokara_tags"]
+        if "media_path" in data:
+            extras["media_path"] = data["media_path"]
+
         # 版本检查和迁移
         version = data.get("version", "1.0")
         if version != SugMigrator.CURRENT_VERSION:
             data = SugMigrator.migrate(data, version)
 
         try:
-            return SugProjectParser._dict_to_project(data)
+            project = SugProjectParser._dict_to_project(data)
         except (ValueError, KeyError, TypeError, DomainError) as e:
             raise SugParseError(f"项目数据解析失败: {e}") from e
+
+        return project, extras
 
     # ==================== 序列化 (Project → Dict) ====================
 
@@ -391,26 +420,6 @@ class SugProjectParser:
         if media_path:
             result["media_path"] = media_path
         return result
-
-    @staticmethod
-    def load_extras(file_path: str) -> Dict[str, Any]:
-        """读取 .sug 文件中的附加字段，不解析完整项目。
-
-        Returns:
-            包含 nicokara_tags 和/或 media_path 的字典，字段缺失则不包含对应键。
-            读取失败时返回空字典。
-        """
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            result: Dict[str, Any] = {}
-            if "nicokara_tags" in data:
-                result["nicokara_tags"] = data["nicokara_tags"]
-            if "media_path" in data:
-                result["media_path"] = data["media_path"]
-            return result
-        except Exception:
-            return {}
 
     @staticmethod
     def _sentence_to_dict(

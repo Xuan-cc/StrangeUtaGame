@@ -531,7 +531,7 @@ class FileLoader:
         # 启动线程
         self._loading_thread.start()
 
-    def _on_project_loaded(self, project, file_path: str) -> None:
+    def _on_project_loaded(self, project, file_path: str, extras: dict = None) -> None:
         """项目加载完成的回调"""
         if self._state_tooltip:
             self._state_tooltip.setState(True)
@@ -545,7 +545,7 @@ class FileLoader:
         else:
             self._editor.set_project(project)
 
-        self._apply_project_extras(file_path)
+        self._apply_project_extras(extras or {})
         self._record_recent_project(file_path)
 
         if self._project_on_success:
@@ -555,15 +555,13 @@ class FileLoader:
 
         self._notify_main_window_frameless_refresh()
 
-    def _apply_project_extras(self, file_path: str) -> None:
-        """读取并应用 .sug 的附加字段（nicokara_tags、media_path）。"""
-        from strange_uta_game.backend.infrastructure.persistence.sug_io import (
-            SugProjectParser,
-        )
+    def _apply_project_extras(self, extras: dict) -> None:
+        """应用 .sug 的附加字段（nicokara_tags、media_path）。
 
-        extras = SugProjectParser.load_extras(file_path)
-        # extras 可能为空（旧版 sug 无 extras 字段），但仍需重置 nicokara_tags，
-        # 否则上一个项目残留的 tags 会在保存时回写到当前 sug，造成跨项目污染。
+        extras 由 ProjectLoadWorker 解析文件时一并带回，主线程不再二次解析。
+        extras 可能为空（旧版 sug 无 extras 字段），但仍需重置 nicokara_tags，
+        否则上一个项目残留的 tags 会在保存时回写到当前 sug，造成跨项目污染。
+        """
 
         # nicokara_tags：始终覆盖到 AppSettings；sug 内缺失则 reset 为默认值。
         # 必须写到 SettingsInterface 共享的 _settings 实例（而非新建 AppSettings()），
