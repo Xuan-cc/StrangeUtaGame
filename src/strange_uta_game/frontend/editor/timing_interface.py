@@ -5411,10 +5411,13 @@ class EditorInterface(QWidget):
                 # 启动位置主动拉取定时器
                 self._position_poll_timer.start()
                 # 节拍器随播放启动（开关/参数在齿轮弹窗「网格与节拍」）；
-                # 播放是节拍发声的关键动作，样本失效在此自愈重载
-                if self._metronome_enabled and self._metronome is not None:
+                # 播放是节拍发声的关键动作，样本失效在此自愈重载。
+                # getattr 防御：最小化假对象测试不携带节拍器属性（同
+                # _timetags_dirty_while_hidden 的防御访问先例）
+                metronome = getattr(self, "_metronome", None)
+                if getattr(self, "_metronome_enabled", False) and metronome is not None:
                     self._ensure_metronome_samples()
-                    self._metronome.start()
+                    metronome.start()
             except Exception as e:
                 self._show_runtime_error(str(e))
 
@@ -5432,8 +5435,9 @@ class EditorInterface(QWidget):
             self._auto_scroll_new_line_reached = False
             self._auto_scroll_cooldown_timer.stop()
             # 节拍器随暂停停止（调度线程自退，不阻塞 UI）
-            if self._metronome is not None:
-                self._metronome.stop()
+            metronome = getattr(self, "_metronome", None)
+            if metronome is not None:
+                metronome.stop()
             # 停止位置拉取定时器
             self._position_poll_timer.stop()
             # 切换到编辑模式时校验所有行时间戳
@@ -5455,8 +5459,9 @@ class EditorInterface(QWidget):
             self._auto_scroll_new_line_reached = False
             self._auto_scroll_cooldown_timer.stop()
             # 节拍器随停止停响
-            if self._metronome is not None:
-                self._metronome.stop()
+            metronome = getattr(self, "_metronome", None)
+            if metronome is not None:
+                metronome.stop()
             # 停止位置拉取定时器
             self._position_poll_timer.stop()
             # 切换到编辑模式时校验所有行时间戳
@@ -5486,8 +5491,9 @@ class EditorInterface(QWidget):
             self.timeline.set_position(ms)
             self.preview.set_current_time_ms(ms)
             # 播放中 seek：节拍器按新位置重新对齐（不补响）
-            if self._metronome is not None:
-                self._metronome.resync()
+            metronome = getattr(self, "_metronome", None)
+            if metronome is not None:
+                metronome.resync()
         log_perf_event("editor.seek.end", target_ms=ms, line=getattr(self, "_current_line_idx", -1))
 
     def _on_speed_changed(self, speed: float):
@@ -8191,8 +8197,9 @@ class EditorInterface(QWidget):
             self._auto_scroll_new_line_reached = False
             self._auto_scroll_cooldown_timer.stop()
             # 节拍器随播放完毕停响（调度线程自退，不阻塞 UI）
-            if self._metronome is not None:
-                self._metronome.stop()
+            metronome = getattr(self, "_metronome", None)
+            if metronome is not None:
+                metronome.stop()
             # 停止位置拉取定时器
             self._position_poll_timer.stop()
             # 切换到编辑模式时校验所有行时间戳
