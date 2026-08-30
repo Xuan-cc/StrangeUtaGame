@@ -178,7 +178,8 @@ class TestDisplayMode:
         连续色场，不再斑驳。
         """
         display = WaveformDisplay()
-        lut = display._spectrum_lut()  # 默认 90dB
+        display.set_spectrum_params(dyn_range_db=90)  # 显式固定，与默认解耦
+        lut = display._spectrum_lut()
         floor = int(round((128 - 90) * 255.0 / 128.0))
         assert tuple(lut[floor - 1][:3]) == (0, 0, 4)  # 低于地板 → 色带底色
         assert tuple(lut[floor][:3]) != (240, 240, 240)  # 不再是浅色主题背景
@@ -669,9 +670,9 @@ class TestSettingsDefaults:
             "waveform_display_mode": "waveform",
             "waveform_grid_mode": "time",
             "waveform_grid_bpm": 120.0,
-            "spectrum_fft_size": 2048,
+            "spectrum_fft_size": 8192,
             "spectrum_freq_scale": "log",
-            "spectrum_dyn_range_db": 90,
+            "spectrum_dyn_range_db": 60,
             "display_height": 120,
             "waveform_metronome_enabled": False,
             "waveform_metronome_volume": 100,
@@ -895,7 +896,7 @@ class TestBpmGridLineWidth:
 
         timing = AppSettings.DEFAULT_SETTINGS["timing"]
         assert timing.get("waveform_grid_line_width") == 2
-        assert timing.get("spectrum_overlap") == 0.75
+        assert timing.get("spectrum_overlap") == 0.9375  # 用户反馈的最舒服组合
         assert timing.get("display_height") == 120
 
 
@@ -1013,7 +1014,10 @@ class TestAnalysisGranularity:
         display.set_display_mode("spectrum")
         display.set_audio_data(_tone(2.0), SR, 1)
         qtbot.waitUntil(lambda: display._spectrum_state == "ready", timeout=15000)
-        assert display._spectrum["hop"] == 512  # 默认 75% 重叠
+        # 显式固定参数（与本用例断言解耦，默认值变更不影响此处）
+        display.set_spectrum_params(fft_size=2048, overlap=0.75)
+        qtbot.waitUntil(lambda: display._spectrum_state == "ready", timeout=15000)
+        assert display._spectrum["hop"] == 512  # 2048 @75% → 帧距 fft/4
 
         display.set_spectrum_params(overlap=0.9375)
 

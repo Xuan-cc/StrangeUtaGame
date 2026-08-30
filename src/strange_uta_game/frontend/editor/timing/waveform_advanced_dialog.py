@@ -55,15 +55,16 @@ from strange_uta_game.frontend.fluent_widgets import FluentGroupBox, RangeSlider
 from strange_uta_game.frontend.window_sizing import fit_to_screen
 from strange_uta_game.frontend.workers import BpmDetectWorker
 
-_FFT_CHOICES = (512, 1024, 2048, 4096, 8192)
+_FFT_CHOICES = (512, 1024, 2048, 4096, 8192, 16384, 32768)
 # 拍号选项（N/4，BPM 恒为四分音符时值 → 分子即每小节拍数）
 _TIME_SIGNATURE_CHOICES = (2, 3, 4, 5, 6, 7, 8)
+# 窗口重叠（Sonic Visualiser 口径）：overlap = 1 - hop/fft。
+# 大 FFT 窗口损失的时间分辨率靠更大重叠补偿；重叠越大计算量/内存越大
+#（超出矩阵预算会自动逐档降级，见 spectrum.pick_overlap_within_budget）。
+_OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375, 0.96875, 0.984375)
 # 频率范围双柄滑块的值域（Hz，对数刻度）：覆盖 CD 频带；两柄都拉到端点 = 全谱
 _FREQ_RANGE_MIN_HZ = 30.0
 _FREQ_RANGE_MAX_HZ = 22050.0
-# 窗口重叠（Sonic Visualiser 口径）：overlap = 1 - hop/fft。
-# 大 FFT 窗口损失的时间分辨率靠更大重叠补偿；重叠越大计算量/内存越大。
-_OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375)
 
 
 class WaveformAdvancedDialog(QDialog):
@@ -269,7 +270,7 @@ class WaveformAdvancedDialog(QDialog):
         self.scale_combo.addItem(self.tr("对数"))
         self.scale_combo.addItem(self.tr("线性"))
         self.dyn_slider = Slider(Qt.Orientation.Horizontal, self._params_group)
-        self.dyn_slider.setRange(40, 120)
+        self.dyn_slider.setRange(20, 120)
         self.dyn_caption = CaptionLabel("", self._params_group)
         self.dyn_caption.setMinimumWidth(56)
 
@@ -419,17 +420,17 @@ class WaveformAdvancedDialog(QDialog):
             _TIME_SIGNATURE_CHOICES.index(beats_per_bar)
         )
         self.bpm_spin.setValue(float(init.get("grid_bpm", 120.0)))
-        fft = init.get("spectrum_fft_size", 2048)
-        index = _FFT_CHOICES.index(fft) if fft in _FFT_CHOICES else 2
+        fft = init.get("spectrum_fft_size", 8192)
+        index = _FFT_CHOICES.index(fft) if fft in _FFT_CHOICES else 4
         self.fft_combo.setCurrentIndex(index)
-        overlap = float(init.get("spectrum_overlap", 0.75))
+        overlap = float(init.get("spectrum_overlap", 0.9375))
         self.overlap_combo.setCurrentIndex(
-            _OVERLAP_CHOICES.index(overlap) if overlap in _OVERLAP_CHOICES else 1
+            _OVERLAP_CHOICES.index(overlap) if overlap in _OVERLAP_CHOICES else 3
         )
         self.scale_combo.setCurrentIndex(
             0 if init.get("spectrum_freq_scale", "log") == "log" else 1
         )
-        self.dyn_slider.setValue(int(init.get("spectrum_dyn_range_db", 90)))
+        self.dyn_slider.setValue(int(init.get("spectrum_dyn_range_db", 60)))
         self._set_freq_range_values(
             int(init.get("spectrum_freq_min_hz", 0) or 0),
             int(init.get("spectrum_freq_max_hz", 0) or 0),

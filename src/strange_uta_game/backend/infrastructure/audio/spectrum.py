@@ -63,13 +63,17 @@ def pick_overlap_within_budget(
     """
     if budget_bytes is None:
         budget_bytes = SPECTRUM_MATRIX_BUDGET_BYTES
-    fallbacks = [preferred_overlap, 0.875, 0.75, 0.5]
+    # 降级阶梯：从首选重叠往下逐档（含 96.875%/98.4375% 新档位），
+    # 超出预算即降；全部超限返回 None（调用方拒绝计算）
+    ladder = (0.984375, 0.96875, 0.9375, 0.875, 0.75, 0.5)
+    divisors = {0.5: 2, 0.75: 4, 0.875: 8, 0.9375: 16, 0.96875: 32, 0.984375: 64}
+    candidates = [preferred_overlap] + [o for o in ladder if o < preferred_overlap]
     seen = set()
-    for overlap in fallbacks:
+    for overlap in candidates:
         if overlap in seen:
             continue
         seen.add(overlap)
-        hop = max(1, fft_size // {0.5: 2, 0.75: 4, 0.875: 8, 0.9375: 16}.get(overlap, 4))
+        hop = max(1, fft_size // divisors.get(overlap, 4))
         if estimate_matrix_bytes(n_samples, sample_rate, fft_size, hop) <= budget_bytes:
             return overlap
     return None

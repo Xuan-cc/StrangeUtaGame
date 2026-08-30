@@ -145,10 +145,10 @@ class WaveformDisplay(QWidget):
         # 共用的循环周期（默认 4/4）
         self._beats_per_bar = 4
         self._grid_line_width = 2        # 网格线宽（0~100px，时间/BPM 共用；0=不绘制）
-        self._spectrum_fft_size = 2048
-        self._spectrum_overlap = 0.75   # 窗口重叠（SV 口径）；帧距=fft·(1-overlap)
+        self._spectrum_fft_size = 8192
+        self._spectrum_overlap = 0.9375  # 窗口重叠（SV 口径）；帧距=fft·(1-overlap)
         self._spectrum_freq_scale = "log"  # "log" | "linear"
-        self._spectrum_dyn_range_db = 90
+        self._spectrum_dyn_range_db = 60
         # 显示期频率钳制（Hz，0 = 自动/全谱）：只影响行映射与频率轴，
         # 不触发声谱重算；f_min ≥ f_max 时按全范围渲染（resolve_freq_range）
         self._spectrum_freq_min_hz = 0
@@ -824,16 +824,16 @@ class WaveformDisplay(QWidget):
     # ── 显示模式 / 高级设置（齿轮对话框消费） ──
 
     _WAVEFORM_MIN_HEIGHT = 80
-    _SPECTRUM_FFT_CHOICES = (512, 1024, 2048, 4096, 8192)
+    _SPECTRUM_FFT_CHOICES = (512, 1024, 2048, 4096, 8192, 16384, 32768)
     # 窗口重叠选项（Sonic Visualiser 口径：overlap = 1 - hop/fft）
-    _SPECTRUM_OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375)
+    _SPECTRUM_OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375, 0.96875, 0.984375)
     # 缩放上限（与 TimelineWidget._MAX_ZOOM 保持一致）
     _MAX_ZOOM = 1000.0
 
     @classmethod
     def _spectrum_hop_for(cls, fft_size: int, overlap: float) -> int:
         """窗口重叠 → STFT 帧距（hop）。重叠越大，时间粒度越细。"""
-        divisors = {0.5: 2, 0.75: 4, 0.875: 8, 0.9375: 16}
+        divisors = {0.5: 2, 0.75: 4, 0.875: 8, 0.9375: 16, 0.96875: 32, 0.984375: 64}
         return max(1, fft_size // divisors.get(overlap, 4))
 
     def set_display_mode(self, mode: str) -> None:
@@ -983,7 +983,7 @@ class WaveformDisplay(QWidget):
             self._spectrum_freq_scale = freq_scale
             changed = True
         if dyn_range_db is not None:
-            dyn_range_db = int(max(40, min(120, dyn_range_db)))
+            dyn_range_db = int(max(20, min(120, dyn_range_db)))
             if dyn_range_db != self._spectrum_dyn_range_db:
                 self._spectrum_dyn_range_db = dyn_range_db
                 changed = True

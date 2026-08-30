@@ -138,10 +138,10 @@ class AppSettings:
             "waveform_grid_bpm": 120.0,
             "waveform_grid_offset_ms": 0,         # BPM 网格偏移（±600000ms，拍线相位对齐）
             "waveform_grid_line_width": 2,        # 网格线宽 0~100px；0=不绘制
-            "spectrum_overlap": 0.75,             # 窗口重叠（帧距=fft·(1-overlap)）
-            "spectrum_fft_size": 2048,
+            "spectrum_overlap": 0.9375,           # 窗口重叠（帧距=fft·(1-overlap)）
+            "spectrum_fft_size": 8192,
             "spectrum_freq_scale": "log",         # log / linear
-            "spectrum_dyn_range_db": 90,
+            "spectrum_dyn_range_db": 60,
             "spectrum_freq_min_hz": 0,            # 声谱频率钳制（0=自动/全谱）
             "spectrum_freq_max_hz": 0,
             "display_height": 120,                # 显示高度（波形/声谱公共；默认=旧版固定高度）
