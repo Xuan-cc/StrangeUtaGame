@@ -261,6 +261,56 @@ class TestDisplayMetronomeState:
         layer = display._render_static_layer(300, 150, 0.0, 4000.0, 4000.0)
         assert not layer.isNull()
 
+    def test_bar_lines_follow_beats_per_bar(self, qapp):
+        """小节线间隔按拍号分子循环：3/4 的加重线落在第 0/3/6 拍，
+        4/4 落在第 0/4 拍；小节号同步。直接以记录型 painter 验证绘制层。"""
+
+        class _RecordingPainter:
+            def __init__(self):
+                self.lines = []  # (x, pen_width)
+                self.texts = []  # (x, text)
+                self._pen_width = 0
+
+            def setPen(self, pen):
+                # 小节号文字传的是 QColor（无 width），画线传 QPen
+                width = getattr(pen, "width", None)
+                self._pen_width = int(width()) if callable(width) else 0
+
+            def drawLine(self, x1, _y1, _x2, _y2):
+                self.lines.append((int(x1), self._pen_width))
+
+            def drawText(self, x, _y, text):
+                self.texts.append((int(x), text))
+
+        def bar_lines_of(beats_per_bar: int):
+            display = WaveformDisplay()
+            display.set_grid_mode("bpm")
+            display.set_grid_bpm(120.0)  # 拍长 500ms
+            display.set_grid_line_width(2)
+            display.set_beats_per_bar(beats_per_bar)
+            painter = _RecordingPainter()
+            # 视窗 0~3000ms（6 拍），beat_x(b) = b·500
+            display._draw_bpm_grid(painter, 3000, 100, 0.0, 3000.0)
+            bar_width = display._bpm_grid_widths()[2]  # 小节线宽 = 基准+1
+            bar_xs = sorted(x for x, width in painter.lines if width == bar_width)
+            texts = [text for _, text in sorted(painter.texts)]
+            return bar_xs, texts
+
+        # 3/4：小节线在第 0、3 拍（x=0/1500），两小节
+        bar_xs, texts = bar_lines_of(3)
+        assert bar_xs == [0, 1500]
+        assert texts == ["1", "2"]
+
+        # 4/4：小节线在第 0、4 拍（x=0/2000）
+        bar_xs, texts = bar_lines_of(4)
+        assert bar_xs == [0, 2000]
+        assert texts == ["1", "2"]
+
+        # 2/4：第 0、2、4 拍（x=0/1000/2000），三小节
+        bar_xs, texts = bar_lines_of(2)
+        assert bar_xs == [0, 1000, 2000]
+        assert texts == ["1", "2", "3"]
+
     def test_timeline_apply_emits_and_holds_state(self, qapp):
         timeline = TimelineWidget()
         received = []
