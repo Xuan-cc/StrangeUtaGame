@@ -47,9 +47,9 @@ from strange_uta_game.frontend.workers import SpectrogramWorker
 # 选中态、命中测试、拖拽提交都以此为身份，跨 set_time_tags 重排存活。
 TagHandle = Tuple[int, int, int, bool]
 
-# 声谱模式左侧频率轴 gutter 宽度（px）：tag/热图/播放头从轴区右侧开始，
-# 频率刻度独占轴区，两者物理分离互不覆盖。
-_SPECTRUM_AXIS_W = 40
+# 声谱模式左侧频率轴 gutter 宽度（px）：容纳强度色卡和频率刻度；
+# tag/热图/播放头从轴区右侧开始，两者物理分离互不覆盖。
+_SPECTRUM_AXIS_W = 50
 
 
 class TimeTag(NamedTuple):
@@ -154,6 +154,7 @@ class WaveformDisplay(QWidget):
         self._spectrum_overlap = 0.75  # 窗口重叠（SV 口径）；帧距=fft·(1-overlap)
         self._spectrum_freq_scale = "log"  # "log" | "linear"
         self._spectrum_dyn_range_db = 60
+        self._spectrum_colormap = "inferno"  # 项目原有色带；渲染期参数
         # 显示期频率钳制（Hz，0 = 自动/全谱）：只影响行映射与频率轴，
         # 不触发声谱重算；f_min ≥ f_max 时按全范围渲染（resolve_freq_range）
         self._spectrum_freq_min_hz = 0
@@ -881,7 +882,9 @@ class WaveformDisplay(QWidget):
     # ── 显示模式 / 高级设置（齿轮对话框消费） ──
 
     _WAVEFORM_MIN_HEIGHT = 80
-    _SPECTRUM_FFT_CHOICES = (512, 1024, 2048, 4096, 8192, 16384, 32768)
+    _SPECTRUM_FFT_CHOICES = (
+        64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
+    )
     # 窗口重叠选项（Sonic Visualiser 口径：overlap = 1 - hop/fft）
     _SPECTRUM_OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375, 0.96875, 0.984375)
     # 缩放上限基准（无音频/短音频时 zoom_cap() 的下限；加载长音频后动态放宽）
@@ -1036,6 +1039,7 @@ class WaveformDisplay(QWidget):
         display_height: Optional[int] = None,
         freq_min_hz: Optional[int] = None,
         freq_max_hz: Optional[int] = None,
+        colormap: Optional[str] = None,
     ) -> None:
         """频谱参数；FFT 窗口/重叠变化触发后台重算，其余即时生效。
 
@@ -1065,6 +1069,9 @@ class WaveformDisplay(QWidget):
             if dyn_range_db != self._spectrum_dyn_range_db:
                 self._spectrum_dyn_range_db = dyn_range_db
                 changed = True
+        if colormap in spectrum_core.SPECTRUM_COLORMAPS and colormap != self._spectrum_colormap:
+            self._spectrum_colormap = colormap
+            changed = True
         if freq_min_hz is not None:
             freq_min_hz = int(max(0, min(96000, int(freq_min_hz))))
             if freq_min_hz != self._spectrum_freq_min_hz:
@@ -1101,6 +1108,7 @@ class WaveformDisplay(QWidget):
             "spectrum_overlap": self._spectrum_overlap,
             "spectrum_freq_scale": self._spectrum_freq_scale,
             "spectrum_dyn_range_db": self._spectrum_dyn_range_db,
+            "spectrum_colormap": self._spectrum_colormap,
             "spectrum_freq_min_hz": self._spectrum_freq_min_hz,
             "spectrum_freq_max_hz": self._spectrum_freq_max_hz,
             "display_height": self._display_height,
@@ -1355,13 +1363,15 @@ class WaveformDisplay(QWidget):
         矩阵编码为 -128dB→0、0dB→255，动态范围 R(dB) 的可见下沿
         (-R dB) 对应 u = (128 - R)·255/128（方向不能反，否则 R 越大
         截得越狠）。LUT 内部把可见段拉伸到完整色带；低于地板填色带
-        底部色（不依赖主题背景，LUT 缓存键只含 floor_u）。
+        底部色（不依赖主题背景，LUT 缓存键包含 floor_u 与色带名）。
         """
         floor_u = int(round((128 - self._spectrum_dyn_range_db) * 255.0 / 128.0))
         floor_u = max(0, min(255, floor_u))
-        key = floor_u
+        key = (floor_u, self._spectrum_colormap)
         if self._spectrum_lut_cache is None or self._spectrum_lut_cache_key != key:
-            self._spectrum_lut_cache = spectrum_core.build_colormap_lut(floor_u)
+            self._spectrum_lut_cache = spectrum_core.build_colormap_lut(
+                floor_u, self._spectrum_colormap
+            )
             self._spectrum_lut_cache_key = key
         return self._spectrum_lut_cache
 
@@ -1390,7 +1400,7 @@ class WaveformDisplay(QWidget):
         painter.drawImage(0, 0, image)
 
     def _draw_freq_axis(self, painter: QPainter, axis_w: int, h: int) -> None:
-        """声谱左侧的独立频率轴区：背景 + 分隔线 + 刻度标签。
+        """声谱左侧独立轴区：强度色卡 + 频率刻度 + 分隔线。
 
         轴区与时间绘图区物理分离——tag/热图/播放头都在轴区右侧，频率刻度
         不再被视口左缘的 tag 覆盖，反之亦然。
@@ -1398,6 +1408,7 @@ class WaveformDisplay(QWidget):
         painter.fillRect(0, 0, axis_w, h, theme.waveform_bg)
         painter.setPen(QPen(theme.border_primary, 1))
         painter.drawLine(axis_w - 1, 0, axis_w - 1, h)
+        self._draw_spectrum_colorbar(painter, h)
         if h < 80:
             return
         nyquist = self._sample_rate / 2.0
@@ -1441,13 +1452,26 @@ class WaveformDisplay(QWidget):
             text = str(int(f)) if f < 1000 else f"{f / 1000:g}k"
             painter.setPen(theme.text_secondary)
             painter.drawText(
-                QRect(2, y - 8, axis_w - 6, 16),
+                QRect(12, y - 8, axis_w - 18, 16),
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                 text,
             )
             # 小刻度线
             painter.setPen(QPen(theme.border_primary, 1))
             painter.drawLine(axis_w - 5, y, axis_w - 1, y)
+
+    def _draw_spectrum_colorbar(self, painter: QPainter, h: int) -> None:
+        """在频率轴左缘绘制当前色带；顶部强、底部为动态范围下沿。"""
+        bar_h = max(1, h - 4)
+        floor_u = int(round((128 - self._spectrum_dyn_range_db) * 255.0 / 128.0))
+        floor_u = max(0, min(255, floor_u))
+        levels = np.rint(np.linspace(255, floor_u, bar_h)).astype(np.uint8)
+        rgba = np.ascontiguousarray(self._spectrum_lut()[levels].reshape(bar_h, 1, 4))
+        buffer = rgba.tobytes()
+        image = QImage(buffer, 1, bar_h, 4, QImage.Format.Format_RGBA8888)
+        painter.drawImage(QRect(2, 2, 7, bar_h), image)
+        painter.setPen(QPen(theme.border_primary, 1))
+        painter.drawRect(1, 1, 8, bar_h + 1)
 
     @log_slow_method(
         "timeline.paint",
@@ -1558,7 +1582,7 @@ class WaveformDisplay(QWidget):
             self._draw_time_tags(painter, plot_w, h, visible_start_ms, visible_end_ms)
         finally:
             painter.restore()
-        # 轴区：不透明背景 + 分隔线 + 频率刻度（与绘图区物理分离）
+        # 轴区：不透明背景 + 强度色卡 + 分隔线 + 频率刻度。
         if axis:
             self._draw_freq_axis(painter, axis, h)
         painter.end()
@@ -2803,6 +2827,7 @@ class TimelineWidget(QWidget):
             display_height=settings.get("display_height"),
             freq_min_hz=settings.get("spectrum_freq_min_hz"),
             freq_max_hz=settings.get("spectrum_freq_max_hz"),
+            colormap=settings.get("spectrum_colormap"),
         )
         after = wd.display_settings()
         if after != before:
@@ -2845,10 +2870,11 @@ class TimelineWidget(QWidget):
         display_height: Optional[int] = None,
         freq_min_hz: Optional[int] = None,
         freq_max_hz: Optional[int] = None,
+        colormap: Optional[str] = None,
     ) -> None:
         self.waveform_display.set_spectrum_params(
             fft_size, overlap, freq_scale, dyn_range_db, display_height,
-            freq_min_hz, freq_max_hz,
+            freq_min_hz, freq_max_hz, colormap,
         )
 
     def display_settings(self) -> dict:

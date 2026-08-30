@@ -141,6 +141,7 @@ class AppSettings:
             "spectrum_overlap": 0.75,             # 窗口重叠（帧距=fft·(1-overlap)）
             "spectrum_fft_size": 8192,
             "spectrum_freq_scale": "log",         # log / linear
+            "spectrum_colormap": "inferno",       # 强度配色；保持项目原有方案为默认
             "spectrum_dyn_range_db": 60,
             "spectrum_freq_min_hz": 0,            # 声谱频率钳制（0=自动/全谱）
             "spectrum_freq_max_hz": 0,

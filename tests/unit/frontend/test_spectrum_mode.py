@@ -251,6 +251,65 @@ class TestSpectrumFreqRange:
         assert timeline.waveform_display.display_settings()["spectrum_freq_min_hz"] == 300
 
 
+class TestSpectrumColormap:
+    def test_default_preserves_existing_inferno(self, qapp):
+        display = WaveformDisplay()
+        assert display.display_settings()["spectrum_colormap"] == "inferno"
+        lut = display._spectrum_lut()
+        assert tuple(lut[255][:3]) == (252, 255, 164)
+
+    @pytest.mark.parametrize(
+        "name",
+        ("inferno", "magma", "viridis", "cividis", "blue_on_black", "grayscale", "turbo"),
+    )
+    def test_each_colormap_builds_opaque_lut(self, qapp, name):
+        display = WaveformDisplay()
+        display.set_spectrum_params(colormap=name)
+        lut = display._spectrum_lut()
+        assert lut.shape == (256, 4)
+        assert lut.dtype == np.uint8
+        assert lut[:, 3].min() == 255
+
+    def test_change_is_render_only_and_invalidates_lut(self, qapp, qtbot):
+        display = WaveformDisplay()
+        display.set_duration(2000)
+        display.set_display_mode("spectrum")
+        display.set_audio_data(_tone(2.0), SR, 1)
+        qtbot.waitUntil(lambda: display._spectrum_state == "ready", timeout=15000)
+        matrix_before = display._spectrum["matrix"]
+        inferno = display._spectrum_lut()
+
+        display.set_spectrum_params(colormap="blue_on_black")
+        blue = display._spectrum_lut()
+
+        assert display._spectrum["matrix"] is matrix_before
+        assert display._spectrum_state == "ready"
+        assert inferno is not blue
+        assert not np.array_equal(inferno, blue)
+
+    def test_invalid_name_keeps_current_choice(self, qapp):
+        display = WaveformDisplay()
+        display.set_spectrum_params(colormap="viridis")
+        display.set_spectrum_params(colormap="not-a-colormap")
+        assert display.display_settings()["spectrum_colormap"] == "viridis"
+
+    def test_timeline_and_dialog_roundtrip(self, qapp):
+        timeline = TimelineWidget()
+        timeline._apply_display_settings({"spectrum_colormap": "cividis"})
+        assert timeline.display_settings()["spectrum_colormap"] == "cividis"
+
+        from PyQt6.QtWidgets import QWidget
+        from strange_uta_game.frontend.editor.timing.waveform_advanced_dialog import (
+            WaveformAdvancedDialog,
+        )
+
+        parent = QWidget()
+        dialog = WaveformAdvancedDialog(
+            {"spectrum_colormap": "turbo"}, None, parent=parent
+        )
+        assert dialog._collect()["spectrum_colormap"] == "turbo"
+
+
 class TestSpectrumFreqRangeDialog:
     @staticmethod
     def _make_dialog(initial):
@@ -908,8 +967,8 @@ class TestSpectrumAxisGutter:
         display.resize(500, 200)
         assert display._spectrum_axis_width() == 0
         display.set_display_mode("spectrum")
-        assert display._spectrum_axis_width() == 40
-        assert display._plot_width() == 460
+        assert display._spectrum_axis_width() == 50
+        assert display._plot_width() == 450
 
     def test_x_to_time_accounts_for_axis(self, qapp):
         display = WaveformDisplay()
@@ -917,11 +976,29 @@ class TestSpectrumAxisGutter:
         display.set_duration(10_000)
         display.set_zoom(1.0)
         display.set_display_mode("spectrum")
-        # widget 坐标 = 轴宽(40) → 时间 0（轴区不参与时间映射）
-        assert display._x_to_time(40) == 0
-        assert display._x_to_time(40 + 230) == 5_000
+        # widget 坐标 = 轴宽(50) → 时间 0（轴区不参与时间映射）
+        assert display._x_to_time(50) == 0
+        assert display._x_to_time(50 + 225) == 5_000
         # 显式 width 仍是绘图区坐标语义（既有测试约定）
         assert display._x_to_time(0, width=500) == 0
+
+    def test_axis_colorbar_tracks_selected_colormap(self, qapp):
+        from PyQt6.QtGui import QImage, QPainter
+
+        display = WaveformDisplay()
+        display.set_display_mode("spectrum")
+        display.set_spectrum_params(colormap="blue_on_black", dyn_range_db=60)
+        image = QImage(50, 160, QImage.Format.Format_RGBA8888)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        try:
+            display._draw_freq_axis(painter, 50, 160)
+        finally:
+            painter.end()
+
+        # 色卡顶端是所选色带的最高强度白色，底端是蓝黑色带的黑色下沿。
+        assert min(image.pixelColor(5, 2).getRgb()[:3]) >= 245
+        assert max(image.pixelColor(5, 157).getRgb()[:3]) <= 10
 
     def test_hit_test_shifts_by_axis(self, qapp):
         display = WaveformDisplay()
@@ -932,9 +1009,10 @@ class TestSpectrumAxisGutter:
         display.set_time_tags([(2_000, "あ", 0, 0, 0, False, None)])
         display._render_static_layer(500, 200, 0.0, 10_000.0, 10_000.0)
         cy = display._handle_center_y(200)
-        plot_x = 2_000 / 10_000 * 460  # 绘图区坐标（plot_w = 500 - 40 轴）
+        axis = display._spectrum_axis_width()
+        plot_x = 2_000 / 10_000 * display._plot_width()
         # widget 坐标命中（= plot_x + 轴宽）
-        hit = display._hit_test_handle(plot_x + 40, cy)
+        hit = display._hit_test_handle(plot_x + axis, cy)
         assert hit is not None and hit[0] == (0, 0, 0, False)
 
 
@@ -966,6 +1044,24 @@ class TestAnalysisGranularity:
         assert display._spectrum_hop_for(2048, 0.75) == 512
         assert display._spectrum_hop_for(2048, 0.875) == 256
         assert display._spectrum_hop_for(2048, 0.9375) == 128
+
+    def test_fft_choices_cover_low_time_resolution_range(self, qapp):
+        """高级设置应允许从 64 点瞬态观察一直选到 32768 点频率精查。"""
+        from strange_uta_game.frontend.editor.timing.waveform_advanced_dialog import (
+            _FFT_CHOICES,
+        )
+
+        assert _FFT_CHOICES == (
+            64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
+        )
+        assert WaveformDisplay._SPECTRUM_FFT_CHOICES == _FFT_CHOICES
+
+    def test_unknown_fft_setting_falls_back_to_8192(self, qapp):
+        dialog = TestAdvancedDialog._make_dialog(
+            {"display_mode": "spectrum", "spectrum_fft_size": 12345}
+        )
+
+        assert dialog._collect()["spectrum_fft_size"] == 8192
 
     def test_peaks_include_rms_layer(self, qapp):
         """双层波形：peaks 为 (min, max, rms) 三元组，RMS 在 0~峰值之间。"""
@@ -1898,7 +1994,8 @@ class TestSpectrumThemeRender:
                 assert (np.abs(left - bg_rgb).max(axis=2) > 100).any(), (
                     f"dark={is_dark}: 频率刻度标签缺失"
                 )
-                axis_strip = rgb[:, 0:px(axis) - px(6)]
+                # 排除左缘强度色卡，仅检查频率文字区没有热图/tag 越界。
+                axis_strip = rgb[:, px(11):px(axis) - px(6)]
                 assert not (np.abs(axis_strip - bg_rgb).max(axis=2) > 150).any(), (
                     f"dark={is_dark}: 绘图内容越入频率轴区"
                 )
@@ -2092,6 +2189,7 @@ class TestTagSettingsLinkage:
                 "metronome_enabled": True,
                 "metronome_volume": 70,
                 "beats_per_bar": 3,
+                "spectrum_colormap": "cividis",
             },
         )
 
@@ -2104,4 +2202,5 @@ class TestTagSettingsLinkage:
         assert settings.values["timing.waveform_metronome_volume"] == 70
         # 拍号分子同链路落盘
         assert settings.values["timing.waveform_beats_per_bar"] == 3
+        assert settings.values["timing.spectrum_colormap"] == "cividis"
         assert settings.saved

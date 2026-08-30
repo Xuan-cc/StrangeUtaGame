@@ -50,12 +50,17 @@ from qfluentwidgets import (
     Slider,
 )
 
-from strange_uta_game.backend.infrastructure.audio.spectrum import first_sound_ms
+from strange_uta_game.backend.infrastructure.audio.spectrum import (
+    SPECTRUM_COLORMAPS,
+    first_sound_ms,
+)
 from strange_uta_game.frontend.fluent_widgets import FluentGroupBox, RangeSlider
 from strange_uta_game.frontend.window_sizing import fit_to_screen
 from strange_uta_game.frontend.workers import BpmDetectWorker
 
-_FFT_CHOICES = (512, 1024, 2048, 4096, 8192, 16384, 32768)
+# 低端档用于观察瞬态/辅音的时间变化；高端档用于分辨接近的频率。
+# 全部保持 2 的幂，兼顾 FFT 后端效率。
+_FFT_CHOICES = (64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768)
 # 拍号选项（N/4，BPM 恒为四分音符时值 → 分子即每小节拍数）
 _TIME_SIGNATURE_CHOICES = (2, 3, 4, 5, 6, 7, 8)
 # 窗口重叠（Sonic Visualiser 口径）：overlap = 1 - hop/fft。
@@ -65,6 +70,17 @@ _OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375, 0.96875, 0.984375)
 # 频率范围双柄滑块的值域（Hz，对数刻度）：覆盖 CD 频带；两柄都拉到端点 = 全谱
 _FREQ_RANGE_MIN_HZ = 30.0
 _FREQ_RANGE_MAX_HZ = 22050.0
+
+# ID 顺序与后端公开列表一致；文本留在 UI 层以便翻译。
+_COLORMAP_LABELS = {
+    "inferno": "项目默认（Inferno）",
+    "magma": "Magma（暖色）",
+    "viridis": "Viridis",
+    "cividis": "Cividis（色弱友好）",
+    "blue_on_black": "蓝黑",
+    "grayscale": "灰度",
+    "turbo": "Turbo（彩虹）",
+}
 
 
 class WaveformAdvancedDialog(QDialog):
@@ -269,6 +285,9 @@ class WaveformAdvancedDialog(QDialog):
         self.scale_combo = ComboBox(self._params_group)
         self.scale_combo.addItem(self.tr("对数"))
         self.scale_combo.addItem(self.tr("线性"))
+        self.colormap_combo = ComboBox(self._params_group)
+        for colormap in SPECTRUM_COLORMAPS:
+            self.colormap_combo.addItem(self.tr(_COLORMAP_LABELS[colormap]))
         self.dyn_slider = Slider(Qt.Orientation.Horizontal, self._params_group)
         self.dyn_slider.setRange(20, 120)
         self.dyn_caption = CaptionLabel("", self._params_group)
@@ -304,6 +323,7 @@ class WaveformAdvancedDialog(QDialog):
         self._lbl_fft = BodyLabel(self.tr("FFT 窗口"), self._params_group)
         self._lbl_overlap = BodyLabel(self.tr("窗口重叠"), self._params_group)
         self._lbl_scale = BodyLabel(self.tr("频率刻度"), self._params_group)
+        self._lbl_colormap = BodyLabel(self.tr("强度配色"), self._params_group)
         self._lbl_dyn = BodyLabel(self.tr("动态范围"), self._params_group)
         self._lbl_freq_range = BodyLabel(self.tr("频率范围"), self._params_group)
         self.overlap_hint = CaptionLabel("", self._params_group)
@@ -314,14 +334,16 @@ class WaveformAdvancedDialog(QDialog):
         params_grid.addWidget(self.overlap_combo, 1, 1)
         params_grid.addWidget(self._lbl_scale, 2, 0)
         params_grid.addWidget(self.scale_combo, 2, 1)
-        params_grid.addWidget(self._lbl_dyn, 3, 0)
-        params_grid.addWidget(self.freq_range_slider, 4, 1)
-        params_grid.addWidget(self.freq_range_caption, 4, 2)
-        params_grid.addWidget(self._lbl_freq_range, 4, 0)
+        params_grid.addWidget(self._lbl_colormap, 3, 0)
+        params_grid.addWidget(self.colormap_combo, 3, 1)
+        params_grid.addWidget(self._lbl_dyn, 4, 0)
+        params_grid.addWidget(self.freq_range_slider, 5, 1)
+        params_grid.addWidget(self.freq_range_caption, 5, 2)
+        params_grid.addWidget(self._lbl_freq_range, 5, 0)
         # 实际 overlap 提示占位（跨三列）
-        params_grid.addWidget(self.overlap_hint, 5, 0, 1, 3)
-        params_grid.addWidget(self.dyn_slider, 3, 1)
-        params_grid.addWidget(self.dyn_caption, 3, 2)
+        params_grid.addWidget(self.overlap_hint, 6, 0, 1, 3)
+        params_grid.addWidget(self.dyn_slider, 4, 1)
+        params_grid.addWidget(self.dyn_caption, 4, 2)
         params_grid.setColumnStretch(1, 1)
         self._params_group.contentLayout.addLayout(params_grid)
 
@@ -421,7 +443,11 @@ class WaveformAdvancedDialog(QDialog):
         )
         self.bpm_spin.setValue(float(init.get("grid_bpm", 120.0)))
         fft = init.get("spectrum_fft_size", 8192)
-        index = _FFT_CHOICES.index(fft) if fft in _FFT_CHOICES else 4
+        index = (
+            _FFT_CHOICES.index(fft)
+            if fft in _FFT_CHOICES
+            else _FFT_CHOICES.index(8192)
+        )
         self.fft_combo.setCurrentIndex(index)
         overlap = float(init.get("spectrum_overlap", 0.75))
         self.overlap_combo.setCurrentIndex(
@@ -429,6 +455,10 @@ class WaveformAdvancedDialog(QDialog):
         )
         self.scale_combo.setCurrentIndex(
             0 if init.get("spectrum_freq_scale", "log") == "log" else 1
+        )
+        colormap = init.get("spectrum_colormap", "inferno")
+        self.colormap_combo.setCurrentIndex(
+            SPECTRUM_COLORMAPS.index(colormap) if colormap in SPECTRUM_COLORMAPS else 0
         )
         self.dyn_slider.setValue(int(init.get("spectrum_dyn_range_db", 60)))
         self._set_freq_range_values(
@@ -466,6 +496,7 @@ class WaveformAdvancedDialog(QDialog):
         self.fft_combo.currentIndexChanged.connect(self._emit_applied)
         self.overlap_combo.currentIndexChanged.connect(self._emit_applied)
         self.scale_combo.currentIndexChanged.connect(self._emit_applied)
+        self.colormap_combo.currentIndexChanged.connect(self._emit_applied)
         self.beats_per_bar_combo.currentIndexChanged.connect(self._emit_applied)
         # 滑条：拖动中只刷新数字（避免高频写配置+重绘），
         # 松手或非拖动变更（点击轨道/键盘/滚轮）时立即应用
@@ -626,12 +657,15 @@ class WaveformAdvancedDialog(QDialog):
             switch.setOffText(self.tr("关"))
         self._lbl_fft.setText(self.tr("FFT 窗口"))
         self._lbl_scale.setText(self.tr("频率刻度"))
+        self._lbl_colormap.setText(self.tr("强度配色"))
         self._lbl_dyn.setText(self.tr("动态范围"))
         self._lbl_freq_range.setText(self.tr("频率范围"))
         self._update_freq_caption()
         self._lbl_height.setText(self.tr("显示高度"))
         self.scale_combo.setItemText(0, self.tr("对数"))
         self.scale_combo.setItemText(1, self.tr("线性"))
+        for index, colormap in enumerate(SPECTRUM_COLORMAPS):
+            self.colormap_combo.setItemText(index, self.tr(_COLORMAP_LABELS[colormap]))
 
     def refresh_overlap_hint(self, settings: dict) -> None:
         """预算降级时提示实际使用的重叠率。"""
@@ -722,6 +756,9 @@ class WaveformAdvancedDialog(QDialog):
             "spectrum_freq_scale": (
                 "log" if self.scale_combo.currentIndex() == 0 else "linear"
             ),
+            "spectrum_colormap": SPECTRUM_COLORMAPS[
+                max(0, self.colormap_combo.currentIndex())
+            ],
             "spectrum_dyn_range_db": int(self.dyn_slider.value()),
             "spectrum_freq_min_hz": freq_min_hz,
             "spectrum_freq_max_hz": freq_max_hz,

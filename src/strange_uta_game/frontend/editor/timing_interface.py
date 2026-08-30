@@ -963,6 +963,7 @@ class EditorInterface(QWidget):
                     settings.get("timing.spectrum_overlap", 0.75)
                 ),
                 "spectrum_freq_scale": settings.get("timing.spectrum_freq_scale", "log"),
+                "spectrum_colormap": settings.get("timing.spectrum_colormap", "inferno"),
                 "spectrum_dyn_range_db": int(settings.get("timing.spectrum_dyn_range_db", 60)),
                 "spectrum_freq_min_hz": int(
                     settings.get("timing.spectrum_freq_min_hz", 0)
@@ -5561,6 +5562,7 @@ class EditorInterface(QWidget):
         )
         s.set("timing.spectrum_fft_size", int(settings.get("spectrum_fft_size", 8192)))
         s.set("timing.spectrum_freq_scale", settings.get("spectrum_freq_scale", "log"))
+        s.set("timing.spectrum_colormap", settings.get("spectrum_colormap", "inferno"))
         s.set(
             "timing.spectrum_dyn_range_db",
             int(settings.get("spectrum_dyn_range_db", 60)),
