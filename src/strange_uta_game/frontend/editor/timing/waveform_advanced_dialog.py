@@ -49,6 +49,7 @@ from qfluentwidgets import (
     Slider,
 )
 
+from strange_uta_game.backend.infrastructure.audio.spectrum import first_sound_ms
 from strange_uta_game.frontend.fluent_widgets import FluentGroupBox
 from strange_uta_game.frontend.window_sizing import fit_to_screen
 from strange_uta_game.frontend.workers import BpmDetectWorker
@@ -144,10 +145,15 @@ class WaveformAdvancedDialog(QDialog):
         self.bpm_spin.setSingleStep(0.5)
         self.bpm_spin.setMinimumWidth(90)
         self.btn_detect_bpm = PushButton(self.tr("自动检测"), self._grid_group)
+        # 对齐首音：把「BPM 网格偏移」一键设到开头静音结束、首个有声信号
+        # 的位置（spectrum.first_sound_ms，整曲毫秒级，无需后台线程）
+        self.btn_align_first = PushButton(self.tr("对齐首音"), self._grid_group)
         self.btn_detect_bpm.setEnabled(audio_source is not None)
+        self.btn_align_first.setEnabled(audio_source is not None)
         # Enter 不被默认按钮吞掉：弹窗里按回车应提交输入框（editingFinished），
         # 而不是触发焦点所在/默认的「自动检测」
         self.btn_detect_bpm.setAutoDefault(False)
+        self.btn_align_first.setAutoDefault(False)
         self.bpm_status = CaptionLabel("", self._grid_group)
         self.bpm_status.setWordWrap(True)
         self.bpm_status.setSizePolicy(
@@ -159,6 +165,7 @@ class WaveformAdvancedDialog(QDialog):
         bpm_row_layout.addWidget(BodyLabel("BPM", bpm_row))
         bpm_row_layout.addWidget(self.bpm_spin)
         bpm_row_layout.addWidget(self.btn_detect_bpm)
+        bpm_row_layout.addWidget(self.btn_align_first)
         bpm_row_layout.addStretch(1)
 
         # 网格数值行（线宽 + 偏移并排，折叠纵向高度）：
@@ -462,6 +469,7 @@ class WaveformAdvancedDialog(QDialog):
         )
         self.met_volume_slider.sliderReleased.connect(self._emit_applied)
         self.btn_detect_bpm.clicked.connect(self._on_detect_bpm)
+        self.btn_align_first.clicked.connect(self._on_align_first_sound)
 
     def _on_tag_char_toggled(self, _checked: bool) -> None:
         """字符显示以注音显示为前提：字符关 → 注音开关禁用（与设置页联动一致）。"""
@@ -498,6 +506,7 @@ class WaveformAdvancedDialog(QDialog):
         self.radio_grid_time.setText(self.tr("时间网格"))
         self.radio_grid_bpm.setText(self.tr("BPM 网格"))
         self.btn_detect_bpm.setText(self.tr("自动检测"))
+        self.btn_align_first.setText(self.tr("对齐首音"))
         self.btn_close.setText(self.tr("关闭"))
         self._lbl_grid_width.setText(self.tr("网格线宽"))
         self._lbl_grid_offset.setText(self.tr("BPM 网格偏移"))
@@ -665,6 +674,7 @@ class WaveformAdvancedDialog(QDialog):
         self._audio_source = audio_source
         self._bpm_progress_pct = -1
         self.btn_detect_bpm.setEnabled(audio_source is not None)
+        self.btn_align_first.setEnabled(audio_source is not None)
         if audio_source is None:
             self.bpm_status.setText("")
 
@@ -702,6 +712,33 @@ class WaveformAdvancedDialog(QDialog):
 
     # ── BPM 自动检测（task_runner 自回收；槽按 sender 身份丢弃过期结果） ──
 
+    def _on_align_first_sound(self) -> None:
+        """把「BPM 网格偏移」一键对齐到开头静音结束、首个有声信号的位置。
+
+        首音通常就是第一拍（b=0），对齐后 BPM 网格相位与节拍器拍点直接
+        落在歌声起点。检测为纯 numpy 整曲毫秒级（first_sound_ms），无需
+        像 BPM 检测那样走后台线程。
+        """
+        if self._audio_source is None:
+            return
+        samples, sample_rate = self._audio_source
+        if not isinstance(samples, np.ndarray) or len(samples) == 0 or sample_rate <= 0:
+            self.bpm_status.setText(self.tr("无音频数据，无法对齐"))
+            return
+        ms = first_sound_ms(samples, int(sample_rate))
+        if ms is None:
+            self.bpm_status.setText(self.tr("未检测到有效声音，偏移未修改"))
+            return
+        # 与偏移输入框同一套范围语义（±600000ms）；程序写入须显式提交
+        #（editingFinished 只响应人工输入）
+        value = int(round(max(-600000, min(600000, ms))))
+        self._last_valid_grid_offset = value
+        self.grid_offset_edit.setText(str(value))
+        self._emit_applied()
+        self.bpm_status.setText(
+            self.tr("已对齐首音：{ms} ms（BPM 网格偏移）").format(ms=value)
+        )
+
     def _on_detect_bpm(self) -> None:
         if self._audio_source is None or self._bpm_running:
             return
@@ -733,6 +770,7 @@ class WaveformAdvancedDialog(QDialog):
         # 将永久禁用（P2-1）。
         self._bpm_running = False
         self.btn_detect_bpm.setEnabled(self._audio_source is not None)
+        self.btn_align_first.setEnabled(self._audio_source is not None)
         if worker is not None:
             worker.request_cancel()
             self.bpm_status.setText("")  # 清掉过期的「检测中…」
@@ -756,6 +794,7 @@ class WaveformAdvancedDialog(QDialog):
         self._bpm_running = False
         self._bpm_worker = None
         self.btn_detect_bpm.setEnabled(self._audio_source is not None)
+        self.btn_align_first.setEnabled(self._audio_source is not None)
         bpm = result.get("bpm")
         confidence = float(result.get("confidence", 0.0))
         if bpm is None or confidence < 0.05:
@@ -778,6 +817,7 @@ class WaveformAdvancedDialog(QDialog):
         self._bpm_running = False
         self._bpm_worker = None
         self.btn_detect_bpm.setEnabled(self._audio_source is not None)
+        self.btn_align_first.setEnabled(self._audio_source is not None)
         self.bpm_status.setText(f"{self.tr('检测失败')}：{message}")
 
     def mousePressEvent(self, event) -> None:

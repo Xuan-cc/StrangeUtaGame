@@ -1,17 +1,19 @@
 """节拍器（波形高级窗口「网格与节拍」）单测。
 
-覆盖四层：
+覆盖五层：
 
 1. 拍点数学 ``next_beat_after`` / 重音判定（与 BPM 网格绘制同口径）；
 2. 齿轮弹窗的开关/音量收集、回填、信号与联动禁用；
 3. ``WaveformDisplay``/``TimelineWidget`` 的设置透传与持久化信号；
-4. ``PlaybackMetronome`` 调度线程（线性走时假引擎 + 假播放器）与节拍音资源。
+4. ``PlaybackMetronome`` 调度线程（线性走时假引擎 + 假播放器）与节拍音资源；
+5. 首音检测（``spectrum.first_sound_ms`` 与「对齐首音」按钮）。
 """
 
 from __future__ import annotations
 
 import time
 
+import numpy as np
 import pytest
 
 from strange_uta_game.frontend.editor.timing.playback_metronome import (
@@ -635,6 +637,128 @@ class TestMetronomeSounds:
         player.play_beat()  # 冒烟：不抛即通过
         player.free()
         assert not player.is_loaded()
+
+
+# ── 首音检测（「对齐首音」按钮 + spectrum.first_sound_ms） ──────────────────
+
+
+class TestFirstSound:
+    SR = 44100
+
+    @staticmethod
+    def _tone(seconds: float, amp: float = 0.3, freq: float = 440.0):
+        t = np.arange(int(44100 * seconds)) / 44100
+        return (amp * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+    def test_leading_silence_detected(self):
+        from strange_uta_game.backend.infrastructure.audio.spectrum import (
+            first_sound_ms,
+        )
+
+        samples = np.concatenate([np.zeros(44100, np.float32), self._tone(1.0)])
+        ms = first_sound_ms(samples, 44100)
+        assert ms is not None
+        assert 990 <= ms <= 1005  # 窗口粒度 ≈2.9ms
+
+    def test_starts_loud_returns_near_zero(self):
+        from strange_uta_game.backend.infrastructure.audio.spectrum import (
+            first_sound_ms,
+        )
+
+        assert first_sound_ms(self._tone(1.0), 44100) <= 10
+
+    def test_all_silence_returns_none(self):
+        from strange_uta_game.backend.infrastructure.audio.spectrum import (
+            first_sound_ms,
+        )
+
+        assert first_sound_ms(np.zeros(44100 * 2, np.float32), 44100) is None
+
+    def test_faint_noise_below_floor_returns_none(self):
+        from strange_uta_game.backend.infrastructure.audio.spectrum import (
+            first_sound_ms,
+        )
+
+        rng = np.random.default_rng(7)
+        noise = (rng.standard_normal(44100) * 0.0005).astype(np.float32)
+        assert first_sound_ms(noise, 44100) is None
+
+    def test_too_short_returns_none(self):
+        from strange_uta_game.backend.infrastructure.audio.spectrum import (
+            first_sound_ms,
+        )
+
+        assert first_sound_ms(np.zeros(64, np.float32), 44100) is None
+
+    def test_quiet_vocal_onset_not_missed(self):
+        """开头人声弱起音（低电平）不因后段变响而被相对阈值漏检。"""
+        from strange_uta_game.backend.infrastructure.audio.spectrum import (
+            first_sound_ms,
+        )
+
+        samples = np.concatenate(
+            [
+                np.zeros(22050, np.float32),        # 0.5s 静音
+                self._tone(0.2, amp=0.02),          # 弱起音
+                self._tone(1.5, amp=0.5),           # 后段变响
+            ]
+        )
+        ms = first_sound_ms(samples, 44100)
+        assert ms is not None
+        assert 490 <= ms <= 510
+
+
+class TestAlignFirstSoundDialog:
+    @staticmethod
+    def _make_dialog(initial, audio_source=None):
+        from PyQt6.QtWidgets import QWidget
+
+        from strange_uta_game.frontend.editor.timing.waveform_advanced_dialog import (
+            WaveformAdvancedDialog,
+        )
+
+        parent = QWidget()
+        dialog = WaveformAdvancedDialog(initial, audio_source, parent=parent)
+        dialog._test_parent_ref = parent
+        return dialog
+
+    @staticmethod
+    def _audio_with_leading_silence(silence_s: float = 1.0):
+        sr = 44100
+        t = np.arange(sr) / sr
+        tone = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+        return np.concatenate([np.zeros(int(sr * silence_s), np.float32), tone]), sr
+
+    def test_button_follows_audio_source_availability(self, qapp):
+        dialog = self._make_dialog({})
+        assert not dialog.btn_align_first.isEnabled()
+        dialog.set_audio_source(self._audio_with_leading_silence())
+        assert dialog.btn_align_first.isEnabled()
+        dialog.set_audio_source(None)
+        assert not dialog.btn_align_first.isEnabled()
+
+    def test_click_sets_offset_and_applies(self, qapp):
+        dialog = self._make_dialog({"grid_offset_ms": 0},
+                                   audio_source=self._audio_with_leading_silence())
+        emitted = []
+        dialog.applied.connect(lambda d: emitted.append(dict(d)))
+        dialog._on_align_first_sound()
+
+        value = int(dialog.grid_offset_edit.text())
+        assert 990 <= value <= 1005
+        assert dialog._collect()["grid_offset_ms"] == value
+        assert len(emitted) == 1
+        assert emitted[0]["grid_offset_ms"] == value
+        assert "已对齐首音" in dialog.bpm_status.text()
+
+    def test_all_silence_keeps_offset_unchanged(self, qapp):
+        dialog = self._make_dialog(
+            {"grid_offset_ms": 123},
+            audio_source=(np.zeros(44100 * 2, np.float32), 44100),
+        )
+        dialog._on_align_first_sound()
+        assert dialog.grid_offset_edit.text() == "123"
+        assert "未检测到" in dialog.bpm_status.text()
 
 
 # ── 样本失效自愈（换项目/切歌等过渡路径） ────────────────────────────────────

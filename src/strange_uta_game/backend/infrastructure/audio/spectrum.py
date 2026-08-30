@@ -628,3 +628,40 @@ def detect_bpm(
         return {"bpm": None, "confidence": 0.0}
     confidence = float(max(0.0, min(1.0, band_mags[best] / peak_mag)))
     return {"bpm": round(float(bpms[best]), 1), "confidence": confidence}
+
+
+# 首音检测：逐窗 RMS 的窗口长度（128 采样 ≈ 3ms @44.1kHz，无重叠）——
+# 粒度即偏移的定位精度，远小于一拍的时长，无需再细化到采样级
+_FIRST_SOUND_WINDOW = 128
+# 绝对静音下限（RMS ≈ 0.002 即 -54dBFS）：兜底纯数字静音底噪
+_FIRST_SOUND_ABS_FLOOR = 0.002
+# 相对阈值比例：响亮参考（窗口 RMS 95 分位）的 3%——低到不至于漏掉
+# 开头的人声弱起音（呼吸声级），高到能压过现场录音的底噪起振
+_FIRST_SOUND_REL_RATIO = 0.03
+
+
+def first_sound_ms(samples: np.ndarray, sample_rate: int) -> Optional[float]:
+    """定位首个非静音位置（毫秒）——「BPM 网格偏移」一键对齐首音用。
+
+    逐窗 RMS 超过 ``max(绝对下限, 响亮参考的 3%)`` 即视为有声：
+    - 相对阈值压制现场录音/模拟底噪的起振误触发，绝对下限兜底纯数字
+      静音；比例取 3%，兼顾开头人声弱起音（呼吸声级）不被漏检；
+    - 参考取 95 分位而非峰值，单个爆音不会把阈值抬高到漏掉开头弱音。
+
+    返回首个超阈窗口起点的毫秒数；全曲静音（无窗口超阈）或音频过短
+    （不足一窗）返回 None。纯 numpy 向量化，整曲毫秒级完成，无需后台
+    线程（与 detect_bpm 的重量级管线不同）。
+    """
+    n = len(samples)
+    if sample_rate <= 0 or n < _FIRST_SOUND_WINDOW:
+        return None
+    data = np.asarray(samples, dtype=np.float32)
+    usable = (n // _FIRST_SOUND_WINDOW) * _FIRST_SOUND_WINDOW
+    frames = data[:usable].reshape(-1, _FIRST_SOUND_WINDOW)
+    rms = np.sqrt(np.mean(frames * frames, axis=1))
+    loud_ref = float(np.percentile(rms, 95))
+    threshold = max(_FIRST_SOUND_ABS_FLOOR, _FIRST_SOUND_REL_RATIO * loud_ref)
+    audible = rms > threshold
+    if not audible.any():
+        return None
+    return int(np.argmax(audible)) * _FIRST_SOUND_WINDOW / float(sample_rate) * 1000.0
