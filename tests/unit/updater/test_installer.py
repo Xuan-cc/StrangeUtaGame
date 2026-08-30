@@ -15,7 +15,7 @@ class TestLaunchPlanCommandArgs:
             asset_name="StrangeUtaGame-v0.4.0.zip",
             download_urls=[
                 ("github", "https://github.com/a/b.zip"),
-                ("ghproxy", "https://mirror.ghproxy.com/x.zip"),
+                ("gh-proxy", "https://gh-proxy.com/x.zip"),
             ],
             proxy_url="http://127.0.0.1:7890",
         )
@@ -49,7 +49,7 @@ class TestLaunchPlanCommandArgs:
             value = args[pos + 1]
             assert "|" in value
             sid, url = value.split("|", 1)
-            assert sid in ("github", "ghproxy", "fastgit")
+            assert sid in ("github", "gh-proxy")
             assert url.startswith("https://")
 
     def test_no_proxy_omits_flag(self):

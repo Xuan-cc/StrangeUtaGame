@@ -1,6 +1,6 @@
 """GitHub Release "latest" 抽象。
 
-提供 :func:`fetch_latest_release`：依次尝试三个源的 API（受 ``UpdaterSettings``
+提供 :func:`fetch_latest_release`：依次尝试各源候选 URL（受 ``UpdaterSettings``
 排序与代理影响），把 GitHub Release JSON 收敛为 :class:`LatestRelease` 数据。
 """
 
@@ -267,7 +267,7 @@ def override_asset_urls(
     """把 release 的资产下载 URL 替换为指定源的 URL。
 
     GitHub Release JSON 里的 ``browser_download_url`` 永远是 github.com 的，但
-    用户走 ``ghproxy`` / ``gh-proxy`` 等反代下载时需要把 URL 改写。
+    用户走 ``gh-proxy`` 等反代下载时需要把 URL 改写。
     """
     new_assets: List[ReleaseAsset] = []
     for a in release.assets:

@@ -44,9 +44,9 @@ class SourceOrderDialog(MessageBoxBase):
 
     .. code-block:: python
 
-        dlg = SourceOrderDialog(current=["github", "ghproxy", "gh-proxy"], parent=self)
+        dlg = SourceOrderDialog(current=["github", "gh-proxy"], parent=self)
         if dlg.exec():
-            new_order = dlg.order  # ["gh-proxy", "github", "ghproxy"] 之类
+            new_order = dlg.order  # ["gh-proxy", "github"] 之类
     """
 
     def __init__(self, current: List[str], parent: Optional[QWidget] = None):

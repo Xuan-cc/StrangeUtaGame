@@ -56,8 +56,8 @@ class TestUpdaterSettingsLoadSave:
         assert s2.enabled is False
         assert s2.check_on_startup is False
         assert s2.min_check_interval_hours == 24
-        # load 会经 normalize_order 补齐缺失源 → 末尾追加 ghproxy-net
-        assert s2.source_order == ["gh-proxy", "github", "ghproxy", "ghproxy-net"]
+        # load 会经 normalize_order 剔除已下架的 ghproxy、补齐缺失源
+        assert s2.source_order == ["gh-proxy", "github"]
         assert s2.proxy_mode == "manual"
         assert s2.proxy_manual_url == "http://127.0.0.1:7890"
         assert s2.skipped_version == "0.3.3"
@@ -86,7 +86,7 @@ class TestUpdaterSettingsLoadSave:
         s = UpdaterSettings.load(temp_app_settings)
         assert s.enabled is True
         assert s.min_check_interval_hours == 8
-        assert s.source_order == ["github", "ghproxy", "gh-proxy", "ghproxy-net"]
+        assert s.source_order == ["github", "gh-proxy"]
 
 
 class TestUpdaterSettingsToDict:

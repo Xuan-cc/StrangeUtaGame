@@ -709,7 +709,7 @@ def try_fetch_sha256(success_url: str, proxies: Optional[dict], log: logging.Log
     ``<64位hex>  文件名\\n``，coreutils ``sha256sum`` 兼容）。本函数：
 
     * 用 ``<成功的 zip URL> + ".sha256"`` 拼接 sha256 URL —— 因为 GitHub Release
-      所有资产都在同一目录下，镜像源（ghproxy / fastgit）也透传相同路径；
+      所有资产都在同一目录下，镜像源（gh-proxy 各节点）也透传相同路径；
     * 取首个连续 64 位十六进制子串作为摘要，对换行 / 行尾空格 / 大小写宽容；
     * 任何失败都返回 ``""``，由上游降级为"跳过校验"。
     """

@@ -8,8 +8,8 @@
   ``_internal/`` 内的内容。``config.json`` / ``dictionary.json`` /
   ``network_dictionary.json`` / ``singers.json`` 以及任何
   ``.config_redirect`` 指向的目录保持原样。
-* **多源接力** —— 默认顺序 ``github → ghproxy → gh-proxy → ghproxy-net``，
-  可由用户在设置中拖动排序；前一源失败后自动降级到下一源。
+* **多源接力** —— 默认顺序 ``github → gh-proxy``（gh-proxy 为单源多节点，
+  按节点前缀表接力），可由用户在设置中拖动排序；前一项失败后自动降级。
 * **代理友好** —— 主动检测 Windows 系统代理；亦可扫描常见本地代理端口；用户
   也可手动指定 ``http://127.0.0.1:port``。
 * **失败不影响主功能** —— 检查更新出错只记录到日志（不弹窗、不阻塞启动）。
@@ -20,7 +20,7 @@
 模块             职责
 ==============  ==========================================================
 ``version``     语义化版本号比较、tag 解析
-``sources``     三源 URL 模板及命名约定
+``sources``     更新源 URL 模板及命名约定
 ``proxy``       系统代理读取 + 常用端口扫描
 ``http_client`` 集成代理、按源接力的 HTTP 客户端（基于 ``requests``）
 ``manifest``    GitHub Release API 抽象（取 latest release）

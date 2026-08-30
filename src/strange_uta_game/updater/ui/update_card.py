@@ -3,7 +3,7 @@
 包含：
 
 * 启动时检查更新（开关）
-* 源排序（三个 ComboBox 表示位置 1/2/3 各使用哪个源）
+* 源排序（:class:`SourceOrderDialog` 拖拽调整各源尝试顺序）
 * "立即检查更新" 按钮（位于关于/语言卡组上方）
 
 还提供 :func:`refresh_about_version`：把硬编码的关于/语言卡片版本号替换为
@@ -145,18 +145,13 @@ class _SourceOrderCard(SettingCard):
 
     def set_order(self, order: List[SourceId]) -> None:
         """更新副标题文本展示当前顺序。"""
-        labels = [SOURCE_LABELS.get(sid, sid) for sid in order]
-        # 用 " → " 展示，且把 ghproxy 等简称化以减少宽度
+        # 用 " → " 展示，且把源 id 简称化以减少宽度
         short = []
         for sid in order:
             if sid == "github":
                 short.append("GitHub")
-            elif sid == "ghproxy":
-                short.append("GHProxy")
             elif sid == "gh-proxy":
                 short.append("GH-Proxy")
-            elif sid == "ghproxy-net":
-                short.append("GHProxy.net")
             else:
                 short.append(sid)
         self.setContent(" → ".join(short))

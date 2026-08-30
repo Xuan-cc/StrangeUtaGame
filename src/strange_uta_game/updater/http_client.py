@@ -7,7 +7,7 @@
 * :class:`SourceTrialRunner` 把"多个候选 URL 按顺序尝试"的逻辑收敛成一个
   迭代器，调用方只关心成功与最终错误。
 
-注意：``ghproxy`` / ``gh-proxy`` 等反代有时对部分端点不可用，需要靠
+注意：``gh-proxy`` 等反代的个别节点有时对部分端点不可用，需要靠
 ``SourceTrialRunner`` 在失败时降级到下一个 URL。
 """
 
