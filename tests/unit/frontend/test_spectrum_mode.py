@@ -211,6 +211,204 @@ class TestDisplayMode:
         assert lut[:floor, 3].min() == 255
 
 
+class TestDualSpectrumMode:
+    """双谱模式：波形 + 声谱上下并排，高度求和、声谱照常计算、tag 双 lane 同步。"""
+
+    def test_dual_mode_height_is_sum_of_lanes(self, qapp):
+        display = WaveformDisplay()
+        display.set_spectrum_params(
+            waveform_display_height=180,
+            spectrum_display_height=320,
+        )
+        display.set_display_mode("dual")
+        assert display.display_settings()["display_mode"] == "dual"
+        assert display.sizeHint().height() == 500
+        assert display.minimumHeight() == 500  # 两 lane 各按期望领取空间
+        # 切回单模式恢复各自高度
+        display.set_display_mode("spectrum")
+        assert display.sizeHint().height() == 320
+        display.set_display_mode("waveform")
+        assert display.sizeHint().height() == 180
+
+    def test_dual_lane_heights_follow_expected_ratio(self, qapp):
+        display = WaveformDisplay()
+        display.set_spectrum_params(
+            waveform_display_height=120,
+            spectrum_display_height=280,
+        )
+        display.set_display_mode("dual")
+        # 期望 120:280 → 实际 400 高按 3:7 分摊
+        assert display._dual_lane_heights(400) == (120, 280)
+        # 布局压缩到 200 时同比例收缩，且两 lane 均非零
+        wave_h, spec_h = display._dual_lane_heights(200)
+        assert wave_h + spec_h == 200
+        assert wave_h >= 1 and spec_h >= 1
+        assert abs(wave_h - 60) <= 1
+
+    def test_dual_mode_uses_frequency_axis_gutter(self, qapp):
+        display = WaveformDisplay()
+        display.resize(500, 240)
+        display.set_display_mode("dual")
+        assert display._spectrum_axis_width() == 50
+        assert display._plot_width() == 450
+
+    def test_dual_mode_starts_spectrum_compute_and_renders(self, qapp, qtbot):
+        display = WaveformDisplay()
+        display.set_duration(2000)
+        display.set_display_mode("dual")
+        display.set_audio_data(_tone(2.0), SR, 1)
+        assert display._spectrum_state == "computing"
+        qtbot.waitUntil(lambda: display._spectrum_state == "ready", timeout=15000)
+        display.resize(400, 300)
+
+        # 热图按声谱 lane 高度出图（下半 lane = 400×3:7 分摊中的 210）
+        wave_h, spec_h = display._dual_lane_heights(300)
+        view = display._compute_spectrum_view(350, spec_h)
+        assert view is not None
+        assert view.shape == (350, spec_h)
+        # 静态层：声谱热图 + 波形 + 分隔线一起渲染不报错
+        layer = display._render_static_layer(400, 300, 0.0, 2000.0, 2000.0)
+        assert not layer.isNull()
+
+    def test_dual_tag_handles_on_both_lanes(self, qapp):
+        """双谱：tag 把手在上下两条谱各有一份，两条都能命中（同一模型数据）。"""
+        display = WaveformDisplay()
+        display.resize(500, 400)
+        display.set_duration(10_000)
+        display.set_zoom(1.0)
+        display.set_spectrum_params(
+            waveform_display_height=120,
+            spectrum_display_height=280,
+        )
+        display.set_display_mode("dual")
+        display.set_time_tags([(4_000, "あ", 0, 0, 0, False, None)])
+        display._render_static_layer(500, 400, 0.0, 10_000.0, 10_000.0)
+
+        axis = display._spectrum_axis_width()
+        wave_h, spec_h = display._dual_lane_heights(400)
+        xs = [box[0] for box in display._hit_boxes]
+        cys = [box[3] for box in display._hit_boxes]
+        assert len(display._hit_boxes) == 2  # 两条 lane 各一个把手
+        assert set(cys) == {wave_h // 2, wave_h + spec_h // 2}
+        assert len(set(xs)) == 1  # 时间相同 → x 相同（同步）
+
+        handle = (0, 0, 0, False)
+        # 上（波形）lane 命中
+        hit = display._hit_test_handle(xs[0] + axis, wave_h // 2)
+        assert hit is not None and hit[0] == handle
+        # 下（声谱）lane 命中
+        hit = display._hit_test_handle(xs[0] + axis, wave_h + spec_h // 2)
+        assert hit is not None and hit[0] == handle
+        # 两个把手带之外的 y 不命中
+        assert display._hit_test_handle(xs[0] + axis, wave_h) is None
+
+    def test_dual_tags_rebuild_keeps_single_source(self, qapp):
+        """双谱两 lane 共享同一份 tag 数据：set_time_tags 后两 lane 同步更新。"""
+        display = WaveformDisplay()
+        display.resize(500, 400)
+        display.set_duration(10_000)
+        display.set_zoom(1.0)
+        display.set_display_mode("dual")
+        display.set_time_tags([
+            (2_000, "あ", 0, 0, 0, False, None),
+            (4_000, "い", 0, 1, 0, False, None),
+        ])
+        display._render_static_layer(500, 400, 0.0, 10_000.0, 10_000.0)
+        assert len(display._hit_boxes) == 4  # 2 tag × 2 lane
+
+    def test_shortcut_cycles_through_dual(self, qapp):
+        """快捷键三模式循环：dual 的下一站是 waveform（回到循环起点）。"""
+        from types import SimpleNamespace
+
+        from strange_uta_game.frontend.editor.timing_interface import EditorInterface
+
+        timeline = TimelineWidget()
+        assert timeline.display_mode() == "waveform"
+        timeline.set_display_mode("dual")
+        assert timeline.display_mode() == "dual"
+
+        ed = SimpleNamespace(timeline=timeline)
+        EditorInterface._toggle_waveform_spectrum(ed)
+        assert timeline.display_mode() == "waveform"
+        EditorInterface._toggle_waveform_spectrum(ed)
+        assert timeline.display_mode() == "spectrum"
+        EditorInterface._toggle_waveform_spectrum(ed)
+        assert timeline.display_mode() == "dual"
+
+    def test_timeline_apply_carries_dual_and_persists_signal(self, qapp):
+        timeline = TimelineWidget()
+        received = []
+        timeline.display_settings_changed.connect(lambda d: received.append(dict(d)))
+
+        timeline._apply_display_settings({
+            "display_mode": "dual",
+            "grid_mode": "time",
+            "grid_bpm": 120.0,
+            "spectrum_fft_size": 2048,
+            "display_height": 240,
+            "waveform_display_height": 200,
+            "spectrum_display_height": 300,
+        })
+
+        assert timeline.display_settings()["display_mode"] == "dual"
+        assert timeline.waveform_display.minimumHeight() == 500
+        assert len(received) == 1
+        assert received[0]["display_mode"] == "dual"
+        # 重复施加相同设置不再发信号
+        timeline._apply_display_settings({
+            "display_mode": "dual",
+            "grid_mode": "time",
+            "grid_bpm": 120.0,
+            "spectrum_fft_size": 2048,
+            "display_height": 240,
+            "waveform_display_height": 200,
+            "spectrum_display_height": 300,
+        })
+        assert len(received) == 1
+
+
+class TestPreviewSingleLineCompression:
+    """双谱专属的预览压缩：可见行数下限可放宽到 1，其余模式保持 3。"""
+
+    def _preview(self, qapp):
+        from strange_uta_game.frontend.editor.timing.karaoke_preview import (
+            KaraokePreview,
+        )
+
+        preview = KaraokePreview()
+        preview.resize(800, 300)
+        return preview
+
+    def test_default_floor_is_three_lines(self, qapp):
+        preview = self._preview(qapp)
+        # 隐藏控件不派发 resizeEvent，直接驱动重算（与 resizeEvent 同一路径）；
+        # 先下调 min 模拟 EditorInterface 的让位协商，否则 resize 被 400 固有
+        # min 钳住，高度永远到不了 3 行以下
+        preview.setMinimumHeight(100)
+        preview.resize(800, 120)  # 极矮视口也被 3 行下限兜住
+        preview._recompute_visible_lines()
+        assert preview._visible_lines == 3
+
+    def test_dual_floor_allows_single_line(self, qapp):
+        preview = self._preview(qapp)
+        preview.set_min_visible_lines(1)
+        preview.setMinimumHeight(40)
+        preview.resize(800, 60)
+        preview._recompute_visible_lines()
+        assert preview._visible_lines == 1
+        assert 40 <= preview.single_line_height() < 200
+
+    def test_min_lines_clamped_and_restorable(self, qapp):
+        preview = self._preview(qapp)
+        preview.set_min_visible_lines(0)  # 越界钳到 1
+        assert preview._min_visible_lines == 1
+        preview.set_min_visible_lines(9)  # 越界钳回 3
+        assert preview._min_visible_lines == 3
+        # 相同值重复设置不重算（幂等）
+        preview.set_min_visible_lines(3)
+        assert preview._min_visible_lines == 3
+
+
 class TestSpectrumFreqRange:
     """声谱频率钳制（显示期参数，不触发矩阵重算）。"""
 
@@ -735,6 +933,11 @@ class TestAdvancedDialog:
         assert dialog.fft_combo.isEnabled()
         assert dialog._waveform_settings.isHidden()
         assert not dialog._spectrum_settings.isHidden()
+        # 双谱页：双方设置面板同时显示、同时可调
+        dialog.mode_switcher.setCurrentItem("dual")
+        assert dialog.fft_combo.isEnabled()
+        assert not dialog._waveform_settings.isHidden()
+        assert not dialog._spectrum_settings.isHidden()
 
     def test_common_settings_stay_visible_for_both_modes(self, qapp):
         dialog = self._make_dialog({"display_mode": "waveform"})
@@ -749,7 +952,8 @@ class TestAdvancedDialog:
         assert not dialog._tag_settings.isHidden()
         assert not dialog.center_playhead_switch.isHidden()
 
-    def test_dual_spectrum_mode_is_reserved_placeholder(self, qapp):
+    def test_dual_spectrum_mode_selects_and_applies(self, qapp):
+        """双谱是真实模式：选中即写入 display_mode 并发出 applied（持久化链）。"""
         dialog = self._make_dialog({"display_mode": "waveform"})
         emitted = []
         dialog.applied.connect(lambda settings: emitted.append(settings))
@@ -758,11 +962,57 @@ class TestAdvancedDialog:
 
         assert dialog.mode_switcher.currentRouteKey() == "dual"
         assert not dialog._dual_settings.isHidden()
-        assert dialog._waveform_settings.isHidden()
-        assert dialog._spectrum_settings.isHidden()
-        assert "未来将在同一时间轴" in dialog.dual_placeholder.text()
-        assert dialog._collect()["display_mode"] == "waveform"
+        assert not dialog._waveform_settings.isHidden()
+        assert not dialog._spectrum_settings.isHidden()
+        assert dialog._collect()["display_mode"] == "dual"
+        assert len(emitted) == 1
+        assert emitted[0]["display_mode"] == "dual"
+
+    def test_dual_mode_loads_from_initial_and_syncs(self, qapp):
+        """初始快照携带 dual 时药丸直接选中双谱；外部同步同样接受。"""
+        dialog = self._make_dialog({"display_mode": "dual"})
+        assert dialog._active_display_mode == "dual"
+        assert dialog._collect()["display_mode"] == "dual"
+        # 快捷键等外部路径改回波形 → 药丸同步且不发 applied
+        emitted = []
+        dialog.applied.connect(lambda d: emitted.append(d))
+        dialog.sync_display_mode({"display_mode": "waveform"})
+        assert dialog._active_display_mode == "waveform"
         assert emitted == []
+
+    def test_dual_mode_height_caption_reports_combined_actual(self, qapp):
+        """双谱高度上限约束两 lane 之和：超出时声谱 caption 提示合计实际值。"""
+        dialog = self._make_dialog({"display_mode": "dual"})
+        dialog.waveform_height_slider.setValue(200)
+        dialog.spectrum_height_slider.setValue(200)
+        dialog.set_height_cap(300)
+        assert dialog.waveform_height_caption.text() == "200 px"
+        assert "300" in dialog.spectrum_height_caption.text()
+        # 未超上限时显示各自的期望值
+        dialog.set_height_cap(500)
+        assert dialog.spectrum_height_caption.text() == "200 px"
+
+    def test_height_labels_distinguished_in_dual_mode(self, qapp):
+        """双谱页两个高度滑条同屏——标签区分为「波形高度/声谱高度」；
+        单模式下沿用自己的「显示高度」。"""
+        dialog = self._make_dialog({"display_mode": "waveform"})
+        assert dialog._lbl_waveform_height.text() == "显示高度"
+        assert dialog._lbl_spectrum_height.text() == "显示高度"
+
+        dialog.mode_switcher.setCurrentItem("dual")
+        assert dialog._lbl_waveform_height.text() == "波形高度"
+        assert dialog._lbl_spectrum_height.text() == "声谱高度"
+
+        # 外部（快捷键/设置恢复）同步模式时标签跟随
+        dialog.sync_display_mode({"display_mode": "spectrum"})
+        assert dialog._lbl_waveform_height.text() == "显示高度"
+        assert dialog._lbl_spectrum_height.text() == "显示高度"
+
+        # 初始即 dual 的弹窗标签直接区分
+        dual_dialog = self._make_dialog({"display_mode": "dual"})
+        assert dual_dialog._lbl_waveform_height.text() == "波形高度"
+        assert dual_dialog._lbl_spectrum_height.text() == "声谱高度"
+        dual_dialog.deleteLater()
 
 
 class TestSettingsDefaults:
@@ -857,7 +1107,7 @@ class TestTimelineAudioSourcePush:
         dialog.deleteLater()
 
     def test_toggle_waveform_spectrum_action(self, qapp):
-        """快捷键动作：切到声谱再切回，走 display_settings 持久化链。"""
+        """快捷键动作：波形 → 声谱 → 双谱 → 波形 三模式循环，走 display_settings 持久化链。"""
         from types import SimpleNamespace
 
         from strange_uta_game.frontend.editor.timing_interface import EditorInterface
@@ -875,6 +1125,8 @@ class TestTimelineAudioSourcePush:
             lambda d: received.append(dict(d))
         )
         ed = SimpleNamespace(timeline=timeline)
+
+        # 波形 → 声谱
         EditorInterface._toggle_waveform_spectrum(ed)
         assert timeline.display_settings()["display_mode"] == "spectrum"
         assert dialog.mode_switcher.currentRouteKey() == "spectrum"
@@ -882,13 +1134,24 @@ class TestTimelineAudioSourcePush:
         assert timeline.waveform_display.minimumHeight() == 300
         assert dialog.spectrum_height_slider.value() == 300
         assert len(received) == 1
+
+        # 声谱 → 双谱（高度 = 两 lane 之和）
+        EditorInterface._toggle_waveform_spectrum(ed)
+        assert timeline.display_settings()["display_mode"] == "dual"
+        assert dialog.mode_switcher.currentRouteKey() == "dual"
+        assert not dialog._waveform_settings.isHidden()
+        assert not dialog._spectrum_settings.isHidden()
+        assert timeline.waveform_display.minimumHeight() == 480
+        assert len(received) == 2
+
+        # 双谱 → 波形（回到循环起点）
         EditorInterface._toggle_waveform_spectrum(ed)
         assert timeline.display_settings()["display_mode"] == "waveform"
         assert dialog.mode_switcher.currentRouteKey() == "waveform"
         assert not dialog._waveform_settings.isHidden()
         assert timeline.waveform_display.minimumHeight() == 180
         assert dialog.waveform_height_slider.value() == 180
-        assert len(received) == 2
+        assert len(received) == 3
         dialog.deleteLater()
 
 
@@ -1000,6 +1263,57 @@ class TestEditorLevelSpectrumHeight:
             editor.timeline.set_waveform_visible(False)
             qapp.processEvents()
             assert editor.preview.minimumHeight() == 400
+        finally:
+            editor.close()
+            editor.deleteLater()
+
+    def test_dual_mode_compresses_preview_to_single_line(self, monkeypatch, qapp):
+        """双谱模式独享深让位：预览可压到只剩 1 句；其余模式恢复 160/3 行。"""
+        import strange_uta_game.frontend.editor.timing_interface as timing_module
+
+        monkeypatch.setattr(
+            timing_module.EditorInterface, "_init_keysound", lambda self: None
+        )
+        editor = timing_module.EditorInterface()
+        editor.resize(*self._SIZE_SMALL)
+        editor.show()
+        qapp.processEvents()
+        editor.timeline._apply_display_settings({
+            "display_mode": "dual",
+            "grid_mode": "time",
+            "grid_bpm": 120.0,
+            "grid_line_width": 2,
+            "spectrum_fft_size": 2048,
+            "spectrum_overlap": 0.75,
+            "spectrum_freq_scale": "log",
+            "spectrum_dyn_range_db": 90,
+            "waveform_display_height": 160,
+            "spectrum_display_height": 160,
+        })
+        for _ in range(12):
+            qapp.processEvents()
+        try:
+            expected = max(40, editor.preview.single_line_height())
+            # 双谱：min = 单行行高，可见行数下限放宽到 1（仅该模式允许）
+            assert editor.preview.minimumHeight() == expected
+            assert editor.preview._min_visible_lines == 1
+            assert editor.preview.minimumHeight() < 160  # 比声谱让位更深
+
+            # 切回波形模式：恢复常规让位 160 / 3 行下限
+            editor.timeline._apply_display_settings({
+                "display_mode": "waveform",
+                "grid_mode": "time",
+                "grid_bpm": 120.0,
+                "grid_line_width": 2,
+                "spectrum_fft_size": 2048,
+                "spectrum_overlap": 0.75,
+                "spectrum_freq_scale": "log",
+                "spectrum_dyn_range_db": 90,
+                "display_height": 160,
+            })
+            qapp.processEvents()
+            assert editor.preview.minimumHeight() == 160
+            assert editor.preview._min_visible_lines == 3
         finally:
             editor.close()
             editor.deleteLater()

@@ -89,8 +89,22 @@ class WaveformDisplay(QWidget):
 
     def _handle_center_y(self, h: int) -> float:
         """tag 把手竖直中心：恒在显示区中央（波形与任意高度的声谱一致），
-        靠近 tag 竖线中部，方便点击。"""
+        靠近 tag 竖线中部，方便点击。双谱模式按 lane 各自居中（见
+        _draw_time_tags / _tag_lanes），不走本方法。"""
         return h / 2.0
+
+    def _tag_lanes(self, h: int) -> List[tuple]:
+        """tag 渲染的 lane 列表：(top, lane_h, is_spectrum)。
+
+        波形/声谱单模式 = 单 lane 全高；双谱 = 上波形 lane + 下声谱 lane，
+        两条 lane 读**同一份** `_time_tags` / `_warning_time_tags`，竖线与
+        把手各绘一份——数据单源、拖拽提交走同一模型链路，双谱两条谱上的
+        tag 标记天然保持同步。
+        """
+        if self._display_mode == "dual":
+            wave_h, spec_h = self._dual_lane_heights(h)
+            return [(0, wave_h, False), (wave_h, spec_h, True)]
+        return [(0, h, self._display_mode == "spectrum")]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -140,7 +154,9 @@ class WaveformDisplay(QWidget):
         self._preheat_cancel: Optional[Callable[[], None]] = None
 
         # 显示模式与高级设置（齿轮对话框 / timing.* 设置键）
-        self._display_mode = "waveform"   # "waveform" | "spectrum"（互斥）
+        # "waveform" | "spectrum" 互斥；"dual" = 双谱模式（波形图 + 声谱图
+        # 上下并排在同一时间轴，两条 lane 共用同一份 tag 数据，天然同步）
+        self._display_mode = "waveform"
         self._grid_mode = "time"         # "time" | "bpm"
         self._grid_bpm = 120.0
         # BPM 网格偏移（毫秒）：拍线相位对齐——歌曲节拍通常不从 0ms 开始，
@@ -606,18 +622,20 @@ class WaveformDisplay(QWidget):
         return tag_list[lo:hi]
 
     def _hit_test_handle(self, x: float, y: float):
-        """命中把手块：返回 (handle, ts, x_px) 或 None。仅在编辑开启且 y 在把手带内。
+        """命中把手块：返回 (handle, ts, x_px) 或 None。仅在编辑开启时有效。
 
-        x 为 widget 坐标，声谱模式下先扣除频率轴 gutter。
+        x 为 widget 坐标，声谱/双谱模式下先扣除频率轴 gutter；y 与各把手
+        所属 lane 的中心（_hit_boxes 里记录的 cy）比对——双谱模式下上下
+        两条谱上的把手都可命中，任一条上的拖拽都作用于同一份模型数据。
         """
         if not self._tag_edit_enabled:
-            return None
-        if abs(y - self._handle_center_y(self.height())) > self._HANDLE_HIT_Y_BAND:
             return None
         x = x - self._spectrum_axis_width()
         best = None
         best_dx = self._HANDLE_HALF_W + 1
-        for hx, handle, ts in self._hit_boxes:
+        for hx, handle, ts, cy in self._hit_boxes:
+            if abs(y - cy) > self._HANDLE_HIT_Y_BAND:
+                continue
             dx = abs(x - hx)
             if dx <= self._HANDLE_HALF_W and dx < best_dx:
                 best = (handle, ts, hx)
@@ -919,17 +937,17 @@ class WaveformDisplay(QWidget):
         return max(1, fft_size // divisors.get(overlap, 4))
 
     def set_display_mode(self, mode: str) -> None:
-        """波形图 / 声谱图互斥切换；声谱模式需要更高的显示区。
+        """波形图 / 声谱图互斥切换，双谱模式 = 两者上下并排。
 
-        切回波形模式时取消在途声谱计算（省 CPU），但保留已完成的缓存，
-        便于快速切回。
+        声谱/双谱模式需要更高的显示区并按需启动后台计算；切回波形模式时
+        取消在途声谱计算（省 CPU），但保留已完成的缓存，便于快速切回。
         """
-        if mode not in ("waveform", "spectrum") or mode == self._display_mode:
+        if mode not in ("waveform", "spectrum", "dual") or mode == self._display_mode:
             return
         self._display_mode = mode
         self._apply_display_height()
         self._spectrum_view_cache = None
-        if mode == "spectrum":
+        if mode in ("spectrum", "dual"):
             self._ensure_spectrum()
         else:
             self._cancel_spectrum_worker()
@@ -1159,11 +1177,26 @@ class WaveformDisplay(QWidget):
         self.updateGeometry()
 
     def _active_display_height(self) -> int:
-        return (
-            self._spectrum_display_height
-            if self._display_mode == "spectrum"
-            else self._waveform_display_height
-        )
+        if self._display_mode == "spectrum":
+            return self._spectrum_display_height
+        if self._display_mode == "dual":
+            # 双谱：上下两条 lane 各按期望高度领取空间
+            return self._waveform_display_height + self._spectrum_display_height
+        return self._waveform_display_height
+
+    def _dual_lane_heights(self, h: int) -> tuple:
+        """双谱模式上下 lane 的高度分配：按两种模式的期望高度比例分摊实际高度。
+
+        窗口空间不足被布局压缩时两 lane 同比例收缩，波形/声谱的相对占比
+        仍与用户设置的「显示高度」一致。
+        """
+        total_expected = self._waveform_display_height + self._spectrum_display_height
+        if total_expected <= 0 or h <= 2:
+            half = h // 2
+            return half, h - half
+        wave_h = int(round(h * self._waveform_display_height / total_expected))
+        wave_h = max(1, min(wave_h, h - 1))
+        return wave_h, h - wave_h
 
     def sizeHint(self):
         from PyQt6.QtCore import QSize
@@ -1186,7 +1219,7 @@ class WaveformDisplay(QWidget):
     def _ensure_spectrum(self) -> None:
         if not self._spectrum_active:
             return  # 隐藏/后台门禁：恢复可见前不启动任何计算
-        if self._display_mode != "spectrum":
+        if self._display_mode not in ("spectrum", "dual"):
             return
         if self._spectrum_worker is not None:
             return  # 已有任务在途
@@ -1557,8 +1590,8 @@ class WaveformDisplay(QWidget):
             painter.restore()
 
     def _spectrum_axis_width(self) -> int:
-        """声谱模式左侧的频率轴 gutter 宽度（tag/热图不进入，防相互覆盖）。"""
-        return _SPECTRUM_AXIS_W if self._display_mode == "spectrum" else 0
+        """声谱/双谱模式左侧的频率轴 gutter 宽度（tag/热图不进入，防相互覆盖）。"""
+        return _SPECTRUM_AXIS_W if self._display_mode in ("spectrum", "dual") else 0
 
     def _plot_width(self) -> int:
         """绘图区宽度（扣除频率轴 gutter）。"""
@@ -1589,6 +1622,9 @@ class WaveformDisplay(QWidget):
         # 频率轴 gutter：热图/网格/tag/播放头统一从轴区右侧开始（tag 不再
         # 覆盖频率刻度，频率刻度也不盖 tag——两者物理分离）。
         axis = self._spectrum_axis_width()
+        is_dual = self._display_mode == "dual"
+        # 双谱 lane 分配只算一次，热图/波形/频率轴/tag 共用同一组边界
+        dual_wave_h, dual_spec_h = self._dual_lane_heights(h) if is_dual else (0, h)
         painter.save()
         if axis:
             painter.translate(axis, 0)
@@ -1596,10 +1632,25 @@ class WaveformDisplay(QWidget):
             plot_w = w - axis
             # 频谱热图是不透明的整幅位图，必须垫在网格/标签之下；
             # 波形是描线，画在网格之上即可。
-            if self._display_mode == "spectrum":
+            if is_dual:
+                # 双谱：热图垫在下半声谱 lane（进度占位文字也钳在该 lane 内）
+                painter.save()
+                painter.translate(0, dual_wave_h)
+                self._draw_spectrum_image(painter, plot_w, dual_spec_h)
+                painter.restore()
+            elif self._display_mode == "spectrum":
                 self._draw_spectrum_image(painter, plot_w, h)
+            # 网格横跨整个绘图区——双谱两 lane 共用同一时间轴
             self._draw_time_grid(painter, plot_w, h, visible_start_ms, visible_end_ms)
-            if self._display_mode != "spectrum":
+            if is_dual:
+                painter.save()
+                painter.setClipRect(QRect(0, 0, plot_w, dual_wave_h))
+                self._draw_waveform(painter, plot_w, dual_wave_h)
+                painter.restore()
+                # lane 分隔线：1px 边框色，两 lane 边界可辨
+                painter.setPen(QPen(theme.border_primary, 1))
+                painter.drawLine(0, dual_wave_h, plot_w, dual_wave_h)
+            elif self._display_mode != "spectrum":
                 self._draw_waveform(painter, plot_w, h)
             self._draw_playback_range(
                 painter, plot_w, h, visible_start_ms, visible_duration_ms
@@ -1607,9 +1658,15 @@ class WaveformDisplay(QWidget):
             self._draw_time_tags(painter, plot_w, h, visible_start_ms, visible_end_ms)
         finally:
             painter.restore()
-        # 轴区：不透明背景 + 强度色卡 + 分隔线 + 频率刻度。
+        # 轴区：不透明背景 + 强度色卡 + 分隔线 + 频率刻度（双谱只标声谱 lane）。
         if axis:
-            self._draw_freq_axis(painter, axis, h)
+            if is_dual:
+                painter.save()
+                painter.translate(0, dual_wave_h)
+                self._draw_freq_axis(painter, axis, dual_spec_h)
+                painter.restore()
+            else:
+                self._draw_freq_axis(painter, axis, h)
         painter.end()
         return layer
 
@@ -2036,11 +2093,11 @@ class WaveformDisplay(QWidget):
                           fm, text: str, color, text_w: int) -> None:
         """带半透明背景底片绘制标签文字：在文字后铺一层接近不透明的背景色底，
         把文字从蓝色波形上分离出来，可读性显著优于细光晕，且仍透出少量波形。
-        声谱模式下底片更不透明——热力图颜色杂乱，需要更强的分离。
+        声谱/双谱模式下底片更不透明——热力图颜色杂乱，需要更强的分离。
         """
         top = label_y - fm.ascent()
         plate = QColor(theme.waveform_bg)
-        plate.setAlpha(245 if self._display_mode == "spectrum" else 225)
+        plate.setAlpha(245 if self._display_mode in ("spectrum", "dual") else 225)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(plate))
         painter.drawRoundedRect(QRect(x - 2, top - 1, text_w + 4, fm.height() + 1), 2, 2)
@@ -2049,7 +2106,7 @@ class WaveformDisplay(QWidget):
 
     def _draw_time_tags(self, painter: QPainter, w: int, h: int,
                         visible_start_ms: float, visible_end_ms: float):
-        self._hit_boxes = []
+        self._hit_boxes = []  # (x, handle, ts, cy)——cy 为把手所属 lane 的中心
         visible_duration = visible_end_ms - visible_start_ms
         if visible_duration <= 0:
             return
@@ -2059,7 +2116,6 @@ class WaveformDisplay(QWidget):
         painter.setFont(font)
         fm = painter.fontMetrics()
         label_y = fm.ascent() + 1  # 所有标签统一贴顶显示，竖线在其下方展开
-        # 把手贴近顶部标签轨道（声谱）或波形竖直中央（波形），与顶部标签分离
         label_dx = 2
         show_char = self._tag_char_enabled
         # 注音显示以字符显示为前提：字符关则注音也不显示
@@ -2068,78 +2124,91 @@ class WaveformDisplay(QWidget):
         normal_color = theme.accent_warning
         warn_color = theme.timetag_nonmonotonic
 
-        # 声谱模式：竖线从顶部轨道一直延伸进内容区（把手在轨道下沿），
-        # 并加高对比 halo——inferno 色带覆盖紫/红/橙/黄，语义色竖线单靠
-        # 颜色在部分区域不可辨；警告 tag 额外用虚线区分（两模式一致）。
-        is_spec = self._display_mode == "spectrum"
-        if is_spec:
-            line_top, line_bot = 0.0, 0.92
-            warn_top, warn_bot = 0.0, 0.96
-        else:
-            line_top, line_bot = 0.2, 0.8
-            warn_top, warn_bot = 0.1, 0.9
+        # 双谱两 lane 读同一份 tag 列表：竖线/把手逐 lane 绘制（同步的根源
+        # 就是单数据源 + 双份渲染）；顶部标签轨道整体只有一条，只画一份。
+        lanes = self._tag_lanes(h)
+        label_lane = lanes[0]
 
-        # ── pass 1：竖线（语义色不变，拖拽中的选中标签按 delta 平移）；收集可见标签 ──
-        # entries：(x, tag, is_warning, color)
-        entries: List[Tuple[int, TimeTag, bool, object]] = []
+        for lane_top, lane_h, lane_is_spec in lanes:
+            # 声谱 lane：竖线从顶部轨道一直延伸进内容区（把手在轨道下沿），
+            # 并加高对比 halo——inferno 色带覆盖紫/红/橙/黄，语义色竖线单靠
+            # 颜色在部分区域不可辨；警告 tag 额外用虚线区分（两类 lane 一致）。
+            if lane_is_spec:
+                line_top, line_bot = 0.0, 0.92
+                warn_top, warn_bot = 0.0, 0.96
+            else:
+                line_top, line_bot = 0.2, 0.8
+                warn_top, warn_bot = 0.1, 0.9
 
-        def _draw_line(tag: TimeTag, color, width_px: int, y_top: float, y_bot: float, is_warning: bool):
-            ts = self._draw_ts(tag)
-            if not (visible_start_ms <= ts <= visible_end_ms):
-                return
-            x = self._ts_to_x(ts, visible_start_ms, visible_duration, w)
-            if is_spec:
-                painter.setPen(QPen(theme.waveform_bg, width_px + 3))
-                painter.drawLine(x, int(h * y_top), x, int(h * y_bot))
-            pen = QPen(color, width_px)
-            if is_warning:
-                pen.setStyle(Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-            painter.drawLine(x, int(h * y_top), x, int(h * y_bot))
-            entries.append((x, tag, is_warning, color))
+            # ── pass 1：竖线（语义色不变，拖拽中的选中标签按 delta 平移）；收集可见标签 ──
+            # entries：(x, tag, is_warning, color)
+            entries: List[Tuple[int, TimeTag, bool, object]] = []
 
-        # A：只遍历可见窗内的标签（列表已按 ts 排序，二分定位），把每帧 O(N) 降到 O(可见数)
-        for tag in self._visible_slice(self._time_tags, visible_start_ms, visible_end_ms):
-            _draw_line(tag, normal_color, 2, line_top, line_bot, False)
-        for tag in self._visible_slice(self._warning_time_tags, visible_start_ms, visible_end_ms):
-            _draw_line(tag, warn_color, 3, warn_top, warn_bot, True)
+            def _draw_line(tag: TimeTag, color, width_px: int,
+                           y_top: float, y_bot: float, is_warning: bool,
+                           _top=lane_top, _lane_h=lane_h,
+                           _is_spec=lane_is_spec, _entries=entries):
+                ts = self._draw_ts(tag)
+                if not (visible_start_ms <= ts <= visible_end_ms):
+                    return
+                x = self._ts_to_x(ts, visible_start_ms, visible_duration, w)
+                if _is_spec:
+                    painter.setPen(QPen(theme.waveform_bg, width_px + 3))
+                    painter.drawLine(x, int(_top + _lane_h * y_top),
+                                     x, int(_top + _lane_h * y_bot))
+                pen = QPen(color, width_px)
+                if is_warning:
+                    pen.setStyle(Qt.PenStyle.DashLine)
+                painter.setPen(pen)
+                painter.drawLine(x, int(_top + _lane_h * y_top),
+                                 x, int(_top + _lane_h * y_bot))
+                _entries.append((x, tag, is_warning, color))
 
-        # ── pass 2：标签文字按优先级放置，避免重叠（先画，把手随后覆盖其上）──
-        # 优先级：选中的标签无条件显示；其余按 x 从左到右贪心，左侧优先占位。
-        labels = []  # (a, b, tag, color, text)
-        for x, tag, is_warning, color in entries:
-            text = ""
-            if show_char and tag.label:
-                text += tag.label
-            if show_ruby and tag.ruby:
-                text += self._format_ruby_label(tag.ruby)
-            if not text:
-                continue
-            a = x + label_dx
-            b = a + fm.horizontalAdvance(text)
-            labels.append((a, b, tag, color, text))
+            # A：只遍历可见窗内的标签（列表已按 ts 排序，二分定位），把每帧 O(N) 降到 O(可见数)
+            for tag in self._visible_slice(self._time_tags, visible_start_ms, visible_end_ms):
+                _draw_line(tag, normal_color, 2, line_top, line_bot, False)
+            for tag in self._visible_slice(self._warning_time_tags, visible_start_ms, visible_end_ms):
+                _draw_line(tag, warn_color, 3, warn_top, warn_bot, True)
 
-        for a, b, tag, color, text in self._resolve_label_layout(labels):
-            self._draw_label_plate(painter, a, label_y, fm, text, color, b - a)
+            # ── pass 2：标签文字按优先级放置，避免重叠（先画，把手随后覆盖其上）──
+            # 优先级：选中的标签无条件显示；其余按 x 从左到右贪心，左侧优先占位。
+            # 双谱两 lane 的 entries 完全一致，只在第一条 lane 画一份。
+            if (lane_top, lane_h, lane_is_spec) == label_lane:
+                labels = []  # (a, b, tag, color, text)
+                for x, tag, is_warning, color in entries:
+                    text = ""
+                    if show_char and tag.label:
+                        text += tag.label
+                    if show_ruby and tag.ruby:
+                        text += self._format_ruby_label(tag.ruby)
+                    if not text:
+                        continue
+                    a = x + label_dx
+                    b = a + fm.horizontalAdvance(text)
+                    labels.append((a, b, tag, color, text))
 
-        # ── pass 3：把手贴近顶部标签轨道（声谱）或波形竖直中央（波形）。仅编辑开启。
-        # 密度门控：相邻把手过近则跳过（不绘制 / 不可命中）──
-        if self._tag_edit_enabled:
-            sel_color = theme.accent_secondary
-            cy = int(self._handle_center_y(h))
-            last_x = None
-            for x, tag, is_warning, color in sorted(entries, key=lambda e: e[0]):
-                if last_x is not None and (x - last_x) < self._MIN_HANDLE_SPACING:
-                    continue
-                last_x = x
-                selected = tag.handle in self._selected_handles
-                half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
-                rect = QRect(x - half, cy - self._HANDLE_HEIGHT // 2, half * 2, self._HANDLE_HEIGHT)
-                # 实心色块（选中=蓝，未选中=标签语义色）+ 背景色描边，声谱模式描边加宽
-                painter.setPen(QPen(theme.waveform_bg, 2 if is_spec else 1))
-                painter.setBrush(QBrush(sel_color if selected else color))
-                painter.drawRect(rect)
-                self._hit_boxes.append((x, tag.handle, tag.ts))
+                for a, b, tag, color, text in self._resolve_label_layout(labels):
+                    self._draw_label_plate(painter, a, label_y, fm, text, color, b - a)
+
+            # ── pass 3：把手在所属 lane 竖直中央（波形谱/声谱 lane 各自居中）。
+            # 仅编辑开启。密度门控：相邻把手过近则跳过（不绘制 / 不可命中）──逐
+            # lane 独立判定，双谱两条谱互不影响。
+            if self._tag_edit_enabled:
+                sel_color = theme.accent_secondary
+                cy = int(lane_top + lane_h / 2)
+                last_x = None
+                for x, tag, is_warning, color in sorted(entries, key=lambda e: e[0]):
+                    if last_x is not None and (x - last_x) < self._MIN_HANDLE_SPACING:
+                        continue
+                    last_x = x
+                    selected = tag.handle in self._selected_handles
+                    half = self._HANDLE_SEL_HALF_W if selected else self._HANDLE_HALF_W
+                    rect = QRect(x - half, cy - self._HANDLE_HEIGHT // 2, half * 2, self._HANDLE_HEIGHT)
+                    # 实心色块（选中=蓝，未选中=标签语义色）+ 背景色描边，声谱 lane 描边加宽
+                    painter.setPen(QPen(theme.waveform_bg, 2 if lane_is_spec else 1))
+                    painter.setBrush(QBrush(sel_color if selected else color))
+                    painter.drawRect(rect)
+                    self._hit_boxes.append((x, tag.handle, tag.ts, cy))
 
     def _resolve_label_layout(self, labels):
         """标签防重叠优先级布局。
@@ -2874,14 +2943,13 @@ class TimelineWidget(QWidget):
     def set_display_mode(self, mode: str) -> None:
         self.waveform_display.set_display_mode(mode)
 
+    def display_mode(self) -> str:
+        """当前显示模式（waveform / spectrum / dual）；预览让位协商用。"""
+        return self.waveform_display._display_mode
+
     def set_waveform_rms_enabled(self, enabled: bool) -> None:
-        """双层波形开关：关闭后只画外层 min/max 峰值轮廓（旧行为）。"""
-        enabled = bool(enabled)
-        if enabled == self._waveform_rms_enabled:
-            return
-        self._waveform_rms_enabled = enabled
-        self._invalidate_static_layer()
-        self.update()
+        """双层波形开关：转发到显示区（TimelineWidget 自身无渲染状态）。"""
+        self.waveform_display.set_waveform_rms_enabled(enabled)
 
     def set_grid_mode(self, mode: str) -> None:
         self.waveform_display.set_grid_mode(mode)

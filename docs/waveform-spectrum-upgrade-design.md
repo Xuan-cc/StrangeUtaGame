@@ -79,7 +79,8 @@ thread.finished → deleteLater`）；UI 槽经 `TaskRelay`（owner 子对象，
 无遮罩不拦截主程序其他区域；以主窗口为定位锚点，由 `TimelineWidget` 持有
 强引用直到销毁（重复点击齿轮复用同一实例并刷新音源）。改动即时生效：
 
-1. **显示模式**（互斥单选）：波形图 / 声谱图。
+1. **显示模式**（药丸三选）：波形图 / 声谱图（互斥）/ 双谱模式（上下并排，
+   双方参数同页可调，见 §6）。
 2. **网格**（两种模式通用）：时间网格 / BPM 网格单选；BPM 数值输入（30.0~300.0，步进 0.1）
    + 「自动检测」按钮（无音频禁用；检测中显示进度百分比；成功填回数值并给置信度提示）。
 3. **频谱参数**（仅声谱图模式启用）：FFT 窗口（512/1024/2048/4096/8192，默认 2048≈21.5Hz 分辨率）、
@@ -206,3 +207,52 @@ Ctrl+滚轮锚点全部按 `_plot_width()` 换算——频率刻度与视口左�
 
 - 不引入新依赖：scipy 不用，全部 numpy（`numpy.fft` 已在 build.py hidden-import 中）。
 - 遵循现有模式：workers 全部 QObject + moveToThread；设置走 AppSettings `timing.*` 键。
+
+## 6. 双谱模式（display_mode = "dual"）
+
+同一时间轴上**上下并排**显示波形图 lane（上）与声谱图 lane（下），
+两条 lane 共用同一时间轴/滚动/缩放/播放头。持久化键仍为
+`timing.waveform_display_mode`（枚举扩展为 `waveform / spectrum / dual`）。
+
+### 6.1 布局与高度
+
+- 显示区 `minimumHeight` = `waveform_display_height + spectrum_display_height`
+  （两 lane 各按期望高度领取空间，240~800px）。
+- 空间不足被布局压缩时按两期望高度的**比例**分摊（`_dual_lane_heights`），
+  相对占比与用户设置一致。
+- 频率轴 gutter 与声谱模式同宽（50px），只沿下半声谱 lane 绘制；
+  lane 边界画 1px 分隔线。
+
+### 6.2 参数同时可调（齿轮弹窗）
+
+双谱页**同时显示**波形设置面板与声谱设置面板（`_update_params_enabled`
+对 dual 路由同时放行两页）：RMS 开关、波形高度、FFT/重叠/刻度/配色/
+动态范围/频率范围、声谱高度在同一页一起可调，各自独立生效与持久化。
+双谱下两个高度滑条标签区分为**「波形高度」「声谱高度」**（单模式沿用
+「显示高度」不变，`_update_height_labels` 随模式/重译切换）；高度上限
+提示在双谱下约束的是**两 lane 之和**（超出时显示「实际合计 N px」）。
+
+### 6.3 tag 标记同步
+
+`_time_tags` / `_warning_time_tags` 是唯一数据源：双谱渲染时
+`_draw_time_tags` 逐 lane 画一遍竖线与把手（`_tag_lanes` 返回两条 lane，
+把手在各 lane 竖直中央，密度门控逐 lane 独立）；顶部标签轨道整体只有
+一条，只画一份。拖拽提交走既有 `tags_drag_committed → 模型写回 →
+set_time_tags 重灌` 链路——任一条 lane 上的增/删/拖都同步反映到另一条。
+命中测试（`_hit_test_handle`）改为按 `_hit_boxes` 里各把手自带的 lane
+中心 y 比对，两条 lane 的把手都可命中。
+
+### 6.4 预览压缩（仅双谱允许单行）
+
+双谱时间轴占用约两倍纵向空间，`_apply_preview_spectrum_yield` 在 dual
+模式下把歌词预览的让位下限降到**单行行高**（`KaraokePreview.
+single_line_height()`），并把可见行数下限经 `set_min_visible_lines(1)`
+放宽到 1——预览可以压缩到只剩一句。其余模式恒为 160px / 3 行下限，
+隐藏时间轴时恢复固有 400px / 3 行。
+
+### 6.5 快捷键
+
+「切换波形/声谱/双谱」快捷键为**三模式循环**：波形图 → 声谱图 →
+双谱 → 波形图（`_DISPLAY_MODE_CYCLE`），走既有 `display_settings`
+持久化链，打开中的齿轮弹窗药丸经 `sync_display_mode` 同步。
+

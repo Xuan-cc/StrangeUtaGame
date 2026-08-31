@@ -327,6 +327,9 @@ class KaraokePreview(QWidget):
         self._global_offset_ms = 0
         self._duration_ms = 0  # 音频总时长（用于行尾非句尾时的wipe右边界）
         self._visible_lines = 7  # 视口内可见行数（决定行高）
+        # 可见行数下限：常规 3 行；双谱模式下时间轴占用翻倍，经
+        # set_min_visible_lines(1) 放宽到单行（EditorInterface 协商让位时切换）
+        self._min_visible_lines = 3
         self._scroll_center_line: float = 0.0  # 视口中央对应的行索引
         self._checkpoint_hitboxes: list = []  # [(QRect, line_idx, char_idx, cp_idx)]
         self._char_hitboxes: list = []  # [(QRect, line_idx, char_idx)]
@@ -1099,13 +1102,7 @@ class KaraokePreview(QWidget):
         self._cp_spacing = cp_spacing
         self._line_height_factor = line_height_factor
 
-        # 行高以当前行（放大后）字体大小为准，需容纳 ruby + ruby_spacing + cp + cp_spacing
-        total_height = self._fm_current.height() + self._fm_ruby.height() + ruby_spacing + cp_spacing + self._fm_checkpoint.height()
-        # factor<=0 时视为极紧凑（显示最多行），避免除以零
-        safe_factor = max(0.05, line_height_factor)
-        line_h = total_height * safe_factor
-        h = self.height() if self.height() > 0 else 600
-        self._visible_lines = max(3, min(15, int(h / line_h)))
+        self._recompute_visible_lines()
 
         # 字体/marker 字符变化后刷新 marker 字形顶端缓存
         self._recompute_marker_glyph_top()
@@ -1118,6 +1115,47 @@ class KaraokePreview(QWidget):
         self._mark_horizontal_layout_dirty()
         self._update_horizontal_scrollbar_range()
         self.update()
+
+    def _line_height_px(self) -> float:
+        """单行像素高度：当前行字体 + ruby + 节奏点标记 + 间距，乘行高系数。"""
+        total_height = (
+            self._fm_current.height()
+            + self._fm_ruby.height()
+            + self._ruby_spacing
+            + self._cp_spacing
+            + self._fm_checkpoint.height()
+        )
+        # factor<=0 时视为极紧凑（显示最多行），避免除以零
+        safe_factor = max(0.05, getattr(self, "_line_height_factor", 1.20))
+        return total_height * safe_factor
+
+    def _recompute_visible_lines(self) -> None:
+        """按当前高度重算可见行数（行高不变，行数跟随视口）。"""
+        line_h = self._line_height_px()
+        h = self.height() if self.height() > 0 else 600
+        self._visible_lines = max(
+            self._min_visible_lines, min(15, int(h / line_h))
+        )
+        self._update_scrollbar_range()
+        self._mark_horizontal_layout_dirty()
+        self._update_horizontal_scrollbar_range()
+        self.update()
+
+    def set_min_visible_lines(self, minimum: int) -> None:
+        """可见行数下限（1~3）：双谱模式放宽到 1 行，其余模式保持 3 行。
+
+        下限变化立即重算行数并刷新滚动条——高度协商（EditorInterface 的
+        预览让位）与行数计算共用这一入口。
+        """
+        minimum = max(1, min(3, int(minimum)))
+        if minimum == self._min_visible_lines:
+            return
+        self._min_visible_lines = minimum
+        self._recompute_visible_lines()
+
+    def single_line_height(self) -> int:
+        """单行显示所需的像素高度（双谱模式预览压缩到 1 句时的让位下限）。"""
+        return max(1, int(math.ceil(self._line_height_px())))
 
     def set_checkpoint_markers(self, markers: dict[str, str]):
         """设置 checkpoint 标记字符并刷新缓存。"""
@@ -1244,17 +1282,7 @@ class KaraokePreview(QWidget):
         """窗口大小变化时重新计算可见行数，保持行高不变。"""
         super().resizeEvent(event)
         if hasattr(self, '_fm_current') and hasattr(self, '_fm_ruby'):
-            total_height = (self._fm_current.height() + self._fm_ruby.height()
-                           + self._ruby_spacing + self._cp_spacing
-                           + self._fm_checkpoint.height())
-            safe_factor = max(0.05, getattr(self, '_line_height_factor', 1.20))
-            line_h = total_height * safe_factor
-            h = self.height() if self.height() > 0 else 600
-            self._visible_lines = max(3, min(15, int(h / line_h)))
-            self._update_scrollbar_range()
-            self._mark_horizontal_layout_dirty()
-            self._update_horizontal_scrollbar_range()
-            self.update()
+            self._recompute_visible_lines()
         self._update_scrollbar_geometry()
 
     # ---- 滚动 ----

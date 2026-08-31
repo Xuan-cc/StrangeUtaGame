@@ -133,7 +133,7 @@ class AppSettings:
             "waveform_center_playhead_enabled": False,
             # 波形区显示设置（齿轮对话框）：模式互斥 + 网格 + 频谱参数
             "waveform_visible": True,
-            "waveform_display_mode": "waveform",  # waveform / spectrum
+            "waveform_display_mode": "waveform",  # waveform / spectrum / dual
             "waveform_grid_mode": "time",         # time / bpm
             "waveform_grid_bpm": 120.0,
             "waveform_grid_offset_ms": 0,         # BPM 网格偏移（±600000ms，拍线相位对齐）

@@ -3,8 +3,9 @@
 面板结构（与「AI 打轴」「自动插入导唱符」等最新工具窗口一致的
 ``FluentGroupBox`` 分区设计，内容区带 ScrollArea、``fit_to_screen`` 限幅）：
 
-1. 显示模式：波形图 / 声谱图（互斥）与暂未开放的双谱模式占位。
-2. 模式设置：仅显示当前模式对应的波形图设置或声谱图设置。
+1. 显示模式：波形图 / 声谱图（互斥）与双谱模式（波形 + 声谱上下并排）。
+2. 模式设置：波形图页只显示波形设置，声谱图页只显示声谱设置；双谱页
+   **同时显示两个面板**——双方参数在该页一起可调，各自独立生效。
 3. 公共设置：网格与节拍、时间标签始终显示；网格支持时间网格 / BPM
    网格、BPM 手动输入 + 「自动检测」按钮
    （librosa 管线的 numpy 复刻，见 spectrum_core.detect_bpm；结果填回
@@ -135,7 +136,7 @@ class WaveformAdvancedDialog(QDialog):
         self.mode_switcher.addItem(_MODE_SPECTRUM, self.tr("声谱图"))
         self.mode_switcher.addItem(_MODE_DUAL, self.tr("双谱模式"))
         self.mode_hint = CaptionLabel(
-            self.tr("波形图适合观察整体响度；声谱图适合音高定位；双谱模式暂未开放"),
+            self.tr("波形图适合观察整体响度；声谱图适合音高定位；双谱模式上下并排显示两者"),
             self._mode_group,
         )
         self.mode_hint.setWordWrap(True)
@@ -382,17 +383,21 @@ class WaveformAdvancedDialog(QDialog):
         params_grid.setColumnStretch(1, 1)
         spectrum_settings_layout.addLayout(params_grid)
 
-        # 双谱模式目前仅作可进入的 UI 占位，不写入 display_mode，也不触发
-        # TimelineWidget 切换；未来实现时可直接替换此页并扩展持久化枚举。
+        # 双谱模式提示页：与波形/声谱两个设置面板**同时**显示——双谱页的
+        # 设计是双方数据一起可调，本页只补充双谱特有的行为说明。
         self._dual_settings = QWidget(self._mode_group)
         dual_settings_layout = QVBoxLayout(self._dual_settings)
         dual_settings_layout.setContentsMargins(0, 0, 0, 0)
-        self.dual_placeholder = BodyLabel(
-            self.tr("功能开发中，未来将在同一时间轴中同时显示波形图和声谱图。"),
+        self.dual_hint = CaptionLabel(
+            self.tr(
+                "双谱模式：波形图与声谱图上下并排，两个面板的参数同时可调；"
+                "时间标签在两条谱上保持同步。「波形高度」与「声谱高度」"
+                "分别对应上/下谱，总占用为两者之和。"
+            ),
             self._dual_settings,
         )
-        self.dual_placeholder.setWordWrap(True)
-        dual_settings_layout.addWidget(self.dual_placeholder)
+        self.dual_hint.setWordWrap(True)
+        dual_settings_layout.addWidget(self.dual_hint)
         self._mode_group.contentLayout.addWidget(self._waveform_settings)
         self._mode_group.contentLayout.addWidget(self._spectrum_settings)
         self._mode_group.contentLayout.addWidget(self._dual_settings)
@@ -488,10 +493,13 @@ class WaveformAdvancedDialog(QDialog):
 
     def _load_initial(self) -> None:
         init = self._initial
-        is_spectrum = init.get("display_mode") == "spectrum"
-        self._active_display_mode = _MODE_SPECTRUM if is_spectrum else _MODE_WAVEFORM
+        mode = init.get("display_mode", _MODE_WAVEFORM)
+        if mode not in (_MODE_WAVEFORM, _MODE_SPECTRUM, _MODE_DUAL):
+            mode = _MODE_WAVEFORM
+        self._active_display_mode = mode
         self.mode_switcher.setCurrentItem(self._active_display_mode)
         self._update_params_enabled()
+        self._update_height_labels()
         self.rms_switch.setChecked(bool(init.get("waveform_rms_enabled", True)))
         self.refresh_overlap_hint(init)
         is_bpm = init.get("grid_mode") == "bpm"
@@ -711,11 +719,15 @@ class WaveformAdvancedDialog(QDialog):
         self.rms_switch.setOffText(self.tr("关"))
         self._lbl_overlap.setText(self.tr("窗口重叠"))
         self.mode_hint.setText(
-            self.tr("波形图适合观察整体响度；声谱图适合音高定位；双谱模式暂未开放")
+            self.tr("波形图适合观察整体响度；声谱图适合音高定位；双谱模式上下并排显示两者")
         )
         self._mode_group.setTitle(self.tr("显示模式"))
-        self.dual_placeholder.setText(
-            self.tr("功能开发中，未来将在同一时间轴中同时显示波形图和声谱图。")
+        self.dual_hint.setText(
+            self.tr(
+                "双谱模式：波形图与声谱图上下并排，两个面板的参数同时可调；"
+                "时间标签在两条谱上保持同步。「波形高度」与「声谱高度」"
+                "分别对应上/下谱，总占用为两者之和。"
+            )
         )
         self._common_group.setTitle(self.tr("公共设置"))
         self.common_navigation.widget("grid").setText(self.tr("网格与节拍"))
@@ -745,8 +757,7 @@ class WaveformAdvancedDialog(QDialog):
         self._lbl_dyn.setText(self.tr("动态范围"))
         self._lbl_freq_range.setText(self.tr("频率范围"))
         self._update_freq_caption()
-        self._lbl_waveform_height.setText(self.tr("显示高度"))
-        self._lbl_spectrum_height.setText(self.tr("显示高度"))
+        self._update_height_labels()
         self.scale_combo.setItemText(0, self.tr("对数"))
         self.scale_combo.setItemText(1, self.tr("线性"))
         for index, colormap in enumerate(SPECTRUM_COLORMAPS):
@@ -776,6 +787,25 @@ class WaveformAdvancedDialog(QDialog):
         self.met_volume_caption.setText(f"{self.met_volume_slider.value()}%")
         self._update_freq_caption()
         active = self._active_display_mode
+        if active == _MODE_DUAL:
+            # 双谱：实际高度上限约束的是两条 lane 之和——超出时两 lane 被
+            # 同比例压缩，在声谱高度 caption 上提示合计实际值
+            total = (
+                self.waveform_height_slider.value()
+                + self.spectrum_height_slider.value()
+            )
+            self.waveform_height_caption.setText(
+                f"{self.waveform_height_slider.value()} px"
+            )
+            if total > self._actual_height_cap:
+                self.spectrum_height_caption.setText(
+                    self.tr("实际合计 {px} px").format(px=self._actual_height_cap)
+                )
+            else:
+                self.spectrum_height_caption.setText(
+                    f"{self.spectrum_height_slider.value()} px"
+                )
+            return
         for mode, slider, caption in (
             (_MODE_WAVEFORM, self.waveform_height_slider, self.waveform_height_caption),
             (_MODE_SPECTRUM, self.spectrum_height_slider, self.spectrum_height_caption),
@@ -790,18 +820,32 @@ class WaveformAdvancedDialog(QDialog):
 
     def _update_params_enabled(self) -> None:
         route = self.mode_switcher.currentRouteKey() or self._active_display_mode
-        self._waveform_settings.setVisible(route == _MODE_WAVEFORM)
-        self._spectrum_settings.setVisible(route == _MODE_SPECTRUM)
+        # 双谱页：波形 + 声谱两个面板同时显示且都可编辑（双方数据一起可调）
+        self._waveform_settings.setVisible(route in (_MODE_WAVEFORM, _MODE_DUAL))
+        self._spectrum_settings.setVisible(route in (_MODE_SPECTRUM, _MODE_DUAL))
         self._dual_settings.setVisible(route == _MODE_DUAL)
-        self._spectrum_settings.setEnabled(route == _MODE_SPECTRUM)
+        self._spectrum_settings.setEnabled(route in (_MODE_SPECTRUM, _MODE_DUAL))
+
+    def _update_height_labels(self) -> None:
+        """双谱页两个高度滑条同屏出现——标签区分为「波形高度/声谱高度」。
+
+        单模式下只显示一个滑条，沿用原「显示高度」文案不变。
+        """
+        is_dual = self._active_display_mode == _MODE_DUAL
+        self._lbl_waveform_height.setText(
+            self.tr("波形高度") if is_dual else self.tr("显示高度")
+        )
+        self._lbl_spectrum_height.setText(
+            self.tr("声谱高度") if is_dual else self.tr("显示高度")
+        )
 
     def _on_mode_selected(self, route: str) -> None:
         previous = self._active_display_mode
         self._update_params_enabled()
-        if route in (_MODE_WAVEFORM, _MODE_SPECTRUM):
+        if route in (_MODE_WAVEFORM, _MODE_SPECTRUM, _MODE_DUAL):
             self._active_display_mode = route
-        # 双谱页只是 UI 占位，不改变当前渲染模式或持久化设置。
         if self._active_display_mode != previous:
+            self._update_height_labels()
             self._update_slider_captions()
             self._emit_applied()
 
@@ -948,13 +992,14 @@ class WaveformAdvancedDialog(QDialog):
         ``TimelineWidget._apply_display_settings`` 回环。
         """
         mode = settings.get("display_mode", _MODE_WAVEFORM)
-        if mode not in (_MODE_WAVEFORM, _MODE_SPECTRUM):
+        if mode not in (_MODE_WAVEFORM, _MODE_SPECTRUM, _MODE_DUAL):
             mode = _MODE_WAVEFORM
         self._active_display_mode = mode
         self.mode_switcher.blockSignals(True)
         self.mode_switcher.setCurrentItem(mode)
         self.mode_switcher.blockSignals(False)
         self._update_params_enabled()
+        self._update_height_labels()
         self._update_slider_captions()
 
     # ── BPM 自动检测（task_runner 自回收；槽按 sender 身份丢弃过期结果） ──

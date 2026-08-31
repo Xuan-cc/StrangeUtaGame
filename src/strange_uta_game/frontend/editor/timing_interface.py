@@ -117,6 +117,13 @@ __all__ = [
     "CompleteTimestampDialog",
 ]
 
+# 「切换波形/声谱/双谱」快捷键的循环顺序：波形图 → 声谱图 → 双谱 → 波形图
+_DISPLAY_MODE_CYCLE = {
+    "waveform": "spectrum",
+    "spectrum": "dual",
+    "dual": "waveform",
+}
+
 
 # ──────────────────────────────────────────────
 # 编辑器主界面
@@ -5629,13 +5636,12 @@ class EditorInterface(QWidget):
         self._configure_metronome_from_settings()
 
     def _toggle_waveform_spectrum(self) -> None:
-        """快捷键：在波形图 / 声谱图之间切换，并走既有持久化链。"""
+        """快捷键：波形图 → 声谱图 → 双谱 → 波形图 三模式循环，走既有持久化链。"""
         if not hasattr(self, "timeline"):
             return
         settings = dict(self.timeline.display_settings())
-        settings["display_mode"] = (
-            "spectrum" if settings.get("display_mode") == "waveform" else "waveform"
-        )
+        current = settings.get("display_mode", "waveform")
+        settings["display_mode"] = _DISPLAY_MODE_CYCLE.get(current, "spectrum")
         self.timeline._apply_display_settings(settings)
 
     # ── 声谱高度协商 / 应用可见性 ──
@@ -5645,24 +5651,34 @@ class EditorInterface(QWidget):
     _SPECTRUM_PREVIEW_YIELD_H = 160
 
     def _apply_preview_spectrum_yield(self) -> None:
-        """声谱模式下让歌词预览可缩到低位（同步 minimumHeight），波形模式恢复。
+        """按显示模式让歌词预览可缩到低位（同步 minimumHeight），隐藏时恢复。
 
         只调 maximumHeight 无法突破 preview 既有的 minimumHeight=400——
         必须同步下调 min，父布局才能把空间分给时间轴（Qt 原生协商）。
         波形模式下若窗口空间不足（总 min > 窗口高）同样让位，防止顶层
         窗口被 min 撑大（P1：曾实测请求 713px 得到 855px）。
+
+        双谱模式独享更深的让位：时间轴上下两条 lane 占用约两倍纵向空间，
+        **仅该模式**允许把预览压缩到只剩 1 句高度（minimumHeight = 单行
+        行高，可见行数下限同步放宽到 1）；其余模式保持 160 / 3 行下限。
         """
-        if not hasattr(self, "timeline"):
+        if not hasattr(self, "timeline") or not hasattr(self, "preview"):
             return
         # 波形/声谱可见时预览恒让位到低位——显示高度经 minimumHeight 领取
         # 空间，预览的 400px 固有 min 会阻止空间分配并撑大窗口
-        if self.timeline.is_waveform_visible():
-            target = self._SPECTRUM_PREVIEW_YIELD_H
-            if self.preview.minimumHeight() != target:
-                self.preview.setMinimumHeight(target)
-        else:
+        if not self.timeline.is_waveform_visible():
+            self.preview.set_min_visible_lines(3)
             if self.preview.minimumHeight() != self._preview_default_min_h:
                 self.preview.setMinimumHeight(self._preview_default_min_h)
+            return
+        if self.timeline.display_mode() == "dual":
+            self.preview.set_min_visible_lines(1)
+            target = max(40, int(self.preview.single_line_height()))
+        else:
+            self.preview.set_min_visible_lines(3)
+            target = self._SPECTRUM_PREVIEW_YIELD_H
+        if self.preview.minimumHeight() != target:
+            self.preview.setMinimumHeight(target)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
