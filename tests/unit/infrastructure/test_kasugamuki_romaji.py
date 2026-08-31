@@ -22,8 +22,9 @@ def test_export_uses_editor_sentence_level_romaji_context_without_mutating_sourc
 
     result = sentence_to_kasugamuki_romaji(sentence)
 
-    # The sokuon and its following kana are one pronunciation unit.
-    assert result == "{待|ま>ma}{って|>tte}"
+    # Sokuon keeps its own block with its consonant beat; no invented merge
+    # with the following kana.
+    assert result == "{待|ま>ma}{っ|>t}{て|>te}"
     assert sentence.characters[0].ruby.parts[0].text == "ま"
     assert sentence.characters[1].ruby is None
     assert sentence.characters[2].ruby is None
@@ -60,7 +61,8 @@ def test_export_keeps_digraph_in_one_romaji_annotation():
     assert sentence_to_kasugamuki_romaji(sentence) == "{きゃ|>kya}"
 
 
-def test_sokuon_links_to_following_kana_and_romaji_uses_following_timestamp():
+def test_sokuon_keeps_own_block_and_own_timestamp():
+    """促音独立成块，用自身时间戳，不并入后续假名、不借用其时间戳。"""
     sentence = Sentence(
         singer_id="s1",
         characters=[
@@ -73,10 +75,13 @@ def test_sokuon_links_to_following_kana_and_romaji_uses_following_timestamp():
         ],
     )
 
-    assert sentence_to_kasugamuki_romaji(sentence) == "{って|>[00:00:20]tte}"
+    assert (
+        sentence_to_kasugamuki_romaji(sentence)
+        == "{っ|>[00:00:10]t}{て|>[00:00:20]te}"
+    )
 
 
-def test_katakana_sokuon_links_to_following_digraph():
+def test_katakana_sokuon_keeps_own_block_before_digraph():
     sentence = Sentence(
         singer_id="s1",
         characters=[
@@ -87,7 +92,10 @@ def test_katakana_sokuon_links_to_following_digraph():
         ],
     )
 
-    assert sentence_to_kasugamuki_romaji(sentence) == "{マ|>ma}{ッチャ|>ccha}"
+    assert (
+        sentence_to_kasugamuki_romaji(sentence)
+        == "{マ|>ma}{ッ|>c}{チャ|>cha}"
+    )
 
 
 def test_linked_word_is_wrapped_as_one_kasugamuki_block():

@@ -134,15 +134,12 @@ def _romaji_mora_at(flat: Sequence[Tuple[int, str]], index: int) -> str:
 def romanize_ruby_parts(
     parts: Iterable[str],
     particle_indices: Optional[Iterable[int]] = None,
-    *,
-    sokuon_standalone: bool = False,
 ) -> List[str]:
     """将假名 RubyPart 文本逐一转为赫本式罗马音，保持 part 数量不变。
 
-    sokuon_standalone（AI 打轴口径，FA-Kara sokuon_split）：促音独立
-    成拍、读作后字辅音（ま|っ|て -> ma/t/te），让促音拿到独立的
-    对齐区间。默认 False：促音辅音前置到后字（ma/空/tte），供导出/
-    显示等既有口径使用。
+    促音独立成拍、读后字辅音（FA-Kara sokuon_split 口径）：ま|っ|て ->
+    ma/t/te，促音与后字各自持有罗马音——编辑器转罗马音与 Kirakara 双注音
+    导出均保持每字符原有分块，AI 打轴也拿到独立对齐区间。
     """
     source = list(parts)
     result = ["" for _ in source]
@@ -171,16 +168,11 @@ def romanize_ruby_parts(
             prefix = _geminate_prefix(next_romaji)
             if prefix and index + 1 < len(flat):
                 next_part_idx, _ = flat[index + 1]
-                if sokuon_standalone:
-                    # AI 打轴口径（FA-Kara sokuon_split）：促音独立成拍、
-                    # 读后字辅音——ま|っ|て -> ma/t/te。促音 part 若只剩
-                    # 空 token，CTC 拿不到独立区间，时间轴会与后字重合
-                    result[part_idx] += prefix
-                    result[next_part_idx] += next_romaji
-                else:
-                    # 既有口径：促音与其后音拍构成一个发音单位，辅音
-                    # 前置到受影响的后续假名——こ・っ・ち -> ko/空/cchi
-                    result[next_part_idx] += prefix + next_romaji
+                # 促音独立成拍、读后字辅音——ま|っ|て -> ma/t/te。促音
+                # part 若只剩空 token，打轴/对齐拿不到独立区间，时间轴
+                # 会与后字重合
+                result[part_idx] += prefix
+                result[next_part_idx] += next_romaji
                 prev_vowel = _last_vowel(next_romaji)
                 index += 2
                 if index < len(flat):

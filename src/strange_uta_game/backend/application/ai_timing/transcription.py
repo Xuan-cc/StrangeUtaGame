@@ -176,9 +176,7 @@ def english_word_syllables(word: str) -> List[str]:
                 romanize_ruby_parts,
             )
 
-            roms = romanize_ruby_parts(
-                _katakana_mora(kana), sokuon_standalone=True
-            )
+            roms = romanize_ruby_parts(_katakana_mora(kana))
             result = [r for r in roms if r and r.strip()]
         except Exception:
             result = []

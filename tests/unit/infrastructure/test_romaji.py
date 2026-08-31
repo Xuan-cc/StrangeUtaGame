@@ -23,32 +23,21 @@ class TestBasicKana:
 
 
 class TestSokuon:
+    """促音独立成拍（FA-Kara sokuon_split 口径）：读后字辅音，不并入后字。"""
+
     def test_sokuon_gemination(self):
-        assert romanize_ruby_parts(["ま", "っ", "て"]) == ["ma", "", "tte"]
+        assert romanize_ruby_parts(["ま", "っ", "て"]) == ["ma", "t", "te"]
 
     def test_sokuon_before_cha(self):
-        assert romanize_ruby_parts(["こ", "っ", "ち"]) == ["ko", "", "cchi"]
+        assert romanize_ruby_parts(["こ", "っ", "ち"]) == ["ko", "c", "chi"]
 
     def test_sokuon_before_cha_digraph(self):
         assert romanize_ruby_parts(["ま", "っ", "ち", "ゃ"]) == [
-            "ma", "", "ccha", "",
+            "ma", "c", "cha", "",
         ]
 
     def test_sokuon_isolated(self):
         assert romanize_ruby_parts(["っ"]) == ["xtsu"]
-
-    def test_sokuon_standalone_for_alignment(self):
-        """AI 打轴口径（sokuon_standalone）：促音独立成拍读后字辅音，
-        不再与后字共享时间轴。"""
-        assert romanize_ruby_parts(
-            ["ま", "っ", "て"], sokuon_standalone=True
-        ) == ["ma", "t", "te"]
-        assert romanize_ruby_parts(
-            ["こ", "っ", "ち"], sokuon_standalone=True
-        ) == ["ko", "c", "chi"]
-        assert romanize_ruby_parts(
-            ["ま", "っ", "ち", "ゃ"], sokuon_standalone=True
-        ) == ["ma", "c", "cha", ""]
 
 
 class TestLongVowel:
@@ -107,4 +96,4 @@ class TestEdgeCases:
         assert romanize_ruby_parts(["キャ", "キュ", "キョ"]) == ["kya", "kyu", "kyo"]
 
     def test_katakana_sokuon(self):
-        assert romanize_ruby_parts(["マ", "ッ", "テ"]) == ["ma", "", "tte"]
+        assert romanize_ruby_parts(["マ", "ッ", "テ"]) == ["ma", "t", "te"]

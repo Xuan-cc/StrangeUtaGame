@@ -191,9 +191,7 @@ def _build_tokens_and_word_groups(
         # 假名按序列整体罗马字化；非假名单元在序列中占位透传
         readings = [u.reading or "" for u in line_units]
         if any(_contains_kana(r) for r in readings):
-            romanized = romanize_ruby_parts(
-                readings, sokuon_standalone=True
-            )
+            romanized = romanize_ruby_parts(readings)
         else:
             romanized = readings
         rom_by_id = {id(u): romanized[i] for i, u in enumerate(line_units)}

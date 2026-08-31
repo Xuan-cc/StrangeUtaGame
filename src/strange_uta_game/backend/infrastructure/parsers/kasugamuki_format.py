@@ -429,7 +429,9 @@ def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
     """一行 → 春日向双注音格式（假名 + 罗马音）。"""
     chars = sentence.characters
     # Use the exact same sentence-level path as 注音管理 -> 转罗马音.  Work on
-    # a copy because exporting must not modify the open project.
+    # a copy because exporting must not modify the open project.  促音独立
+    # 成拍（っ|>t、だ|>da），促音与后字各自持有罗马音与时间戳——导出
+    # 不合并分块、不改变任何原有连词状态。
     romanized_sentence = deepcopy(sentence)
     romanize_sentence_to_self_ruby(romanized_sentence)
     romaji_by_char = {
@@ -455,41 +457,16 @@ def sentence_to_kasugamuki_romaji(sentence: Sentence) -> str:
             i += 1
         elif _is_kana_text(char.char):
             if not any(romaji_by_char.get(i, [])):
-                # Romanization stores a sokuon's combined pronunciation on the
-                # affected following kana.  It is still one pronunciation unit,
-                # so keep the sokuon and that mora in the same export block.
-                if (
-                    char.char in ("っ", "ッ")
-                    and i + 1 < len(chars)
-                    and not chars[i + 1].ruby
-                    and _is_kana_text(chars[i + 1].char)
-                    and any(romaji_by_char.get(i + 1, []))
-                ):
-                    mora_end = i + 2
-                    while (
-                        mora_end < len(chars)
-                        and not chars[mora_end].ruby
-                        and _is_kana_text(chars[mora_end].char)
-                        and not any(romaji_by_char.get(mora_end, []))
-                    ):
-                        mora_end += 1
-                    segments.append(
-                        _self_kana_group_romaji(
-                            chars[i:mora_end],
-                            romaji_by_char.get(i + 1, []),
-                            romaji_char_index=1,
-                        )
-                    )
-                    i = mora_end
-                    continue
-
-                # Other consumed/unsupported kana has no annotation of its own.
+                # 无独立罗马音的假名（拗音小假名被前导拍吸收等）→ 原样输出，
+                # 不与相邻字符合并成块，保持原有连词状态。
                 segments.append(_char_plain(char))
                 i += 1
                 continue
             mora_end = i + 1
-            # The shared converter stores a cross-character digraph/sokuon on
-            # its leading part and leaves consumed following parts empty.
+            # The shared converter stores a cross-character digraph on its
+            # leading part and leaves the consumed small kana empty.  Sokuon
+            # is excluded too: it always keeps its own romaji beat and must
+            # never be absorbed into the preceding block.
             while (
                 mora_end < len(chars)
                 and not chars[mora_end].ruby
@@ -548,16 +525,9 @@ def _char_self_ruby_romaji(char: Character, romaji_list: List[str]) -> str:
     return f"{{{char.char}|>{romaji_tagged}}}{_format_sentence_end(char)}"
 
 
-def _self_kana_group_romaji(
-    group: List[Character],
-    romaji_list: List[str],
-    *,
-    romaji_char_index: int = 0,
-) -> str:
+def _self_kana_group_romaji(group: List[Character], romaji_list: List[str]) -> str:
     base = "".join(ch.char for ch in group)
-    romaji_tagged = _build_tagged_parts(
-        romaji_list, _get_ts_list(group[romaji_char_index])
-    )
+    romaji_tagged = _build_tagged_parts(romaji_list, _get_ts_list(group[0]))
     if not romaji_tagged:
         # 罗马音层全是停顿占位且未打轴 → 退化为普通字符组
         return "".join(_char_plain(ch) for ch in group)

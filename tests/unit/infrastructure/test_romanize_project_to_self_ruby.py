@@ -79,14 +79,14 @@ def test_wo_always_particle():
 
 
 def test_sokuon_cross_char_context():
-    # 待(ま) + っ(自注音) + て(自注音) → ma / t / te
+    # 待(ま) + っ(自注音) + て(自注音) → ma / t / te（促音独立成拍）
     sent = Sentence(singer_id="s1", characters=[
         _kanji_with_ruby("待", ["ま"]),
         Character(char="っ", check_count=1, singer_id="s1"),
         Character(char="て", check_count=1, singer_id="s1"),
     ])
     romanize_project_to_self_ruby(_project(sent))
-    assert _parts(sent) == [["ma"], [""], ["tte"]]
+    assert _parts(sent) == [["ma"], ["t"], ["te"]]
 
 
 def test_idempotent_second_run_no_change():
