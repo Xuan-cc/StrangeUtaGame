@@ -88,13 +88,14 @@ def _starts_with_vowel_or_y(text: str) -> bool:
     return lowered[0] in _VOWELS or lowered.startswith("y")
 
 
-def _geminate_prefix(next_romaji: str) -> str:
+def _geminate_prefix(next_romaji: str, *, for_alignment: bool = False) -> str:
     lowered = next_romaji.lower()
     if not lowered:
         return ""
     if lowered.startswith("ch"):
-        # Modern/common Hepburn-style spelling: っち/っちゃ → cchi/ccha.
-        return "c"
+        # Display spelling: っち/っちゃ → cchi/ccha (common Hepburn).
+        # FA-Kara alignment spelling maps the geminate to t (tchi/tcha).
+        return "t" if for_alignment else "c"
     first = lowered[0]
     if first in _VOWELS or first == "n":
         return ""
@@ -134,12 +135,18 @@ def _romaji_mora_at(flat: Sequence[Tuple[int, str]], index: int) -> str:
 def romanize_ruby_parts(
     parts: Iterable[str],
     particle_indices: Optional[Iterable[int]] = None,
+    *,
+    for_alignment: bool = False,
 ) -> List[str]:
     """将假名 RubyPart 文本逐一转为赫本式罗马音，保持 part 数量不变。
 
     促音独立成拍、读后字辅音（FA-Kara sokuon_split 口径）：ま|っ|て ->
     ma/t/te，促音与后字各自持有罗马音——编辑器转罗马音与 Kirakara 双注音
     导出均保持每字符原有分块，AI 打轴也拿到独立对齐区间。
+
+    for_alignment（AI 打轴 token 专用，FA-Kara 对齐拼写）：促音遇ち行
+    写作 t（tchi 而非 cchi）、无法连浊的促音回退弱辅音 h（tail_pron）
+    而非 xtsu。默认 False 维持显示/导出拼写。
     """
     source = list(parts)
     result = ["" for _ in source]
@@ -165,7 +172,7 @@ def romanize_ruby_parts(
 
         if hira == "っ":
             next_romaji = _romaji_mora_at(flat, index + 1)
-            prefix = _geminate_prefix(next_romaji)
+            prefix = _geminate_prefix(next_romaji, for_alignment=for_alignment)
             if prefix and index + 1 < len(flat):
                 next_part_idx, _ = flat[index + 1]
                 # 促音独立成拍、读后字辅音——ま|っ|て -> ma/t/te。促音
@@ -184,7 +191,9 @@ def romanize_ruby_parts(
                     if pair in _DIGRAPHS:
                         index += 1
             else:
-                result[part_idx] += "xtsu"
+                # 无法连浊（行尾/元音・拨音前）：显示口径回退 xtsu；
+                # AI 打轴口径用 FA-Kara 的 tail_pron 弱辅音 h
+                result[part_idx] += "h" if for_alignment else "xtsu"
                 index += 1
             continue
 

@@ -39,6 +39,19 @@ class TestSokuon:
     def test_sokuon_isolated(self):
         assert romanize_ruby_parts(["っ"]) == ["xtsu"]
 
+    def test_sokuon_alignment_spelling_matches_fakara(self):
+        """AI 打轴拼写（FA-Kara 口径）：促音遇ち行写作 t、孤立促音回退 h。"""
+        assert romanize_ruby_parts(
+            ["ま", "っ", "ち"], for_alignment=True
+        ) == ["ma", "t", "chi"]
+        assert romanize_ruby_parts(
+            ["ま", "っ", "ち", "ゃ"], for_alignment=True
+        ) == ["ma", "t", "cha", ""]
+        assert romanize_ruby_parts(["っ"], for_alignment=True) == ["h"]
+        # 显示/导出口径不受影响
+        assert romanize_ruby_parts(["ま", "っ", "ち"]) == ["ma", "c", "chi"]
+        assert romanize_ruby_parts(["っ"]) == ["xtsu"]
+
 
 class TestLongVowel:
     def test_long_vowel_repeats_previous(self):

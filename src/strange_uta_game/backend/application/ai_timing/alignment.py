@@ -191,7 +191,9 @@ def _build_tokens_and_word_groups(
         # 假名按序列整体罗马字化；非假名单元在序列中占位透传
         readings = [u.reading or "" for u in line_units]
         if any(_contains_kana(r) for r in readings):
-            romanized = romanize_ruby_parts(readings)
+            # for_alignment：FA-Kara 对齐拼写（促音遇ち行写作 t、孤立
+            # 促音回退 h），仅用于对齐 token，不影响显示/导出拼写
+            romanized = romanize_ruby_parts(readings, for_alignment=True)
         else:
             romanized = readings
         rom_by_id = {id(u): romanized[i] for i, u in enumerate(line_units)}
