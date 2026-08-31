@@ -246,6 +246,9 @@ jobs:
       - name: Extract release notes
         run: |
           python scripts/release.py extract-notes "${{ steps.ver.outputs.version }}" -o notes.md
+          # 反馈交流群信息固定置顶在正文第一行（后接空行，避免 HTML 块吞掉后续 Markdown）
+          { printf '%s\n\n' '<span style="color:#d64545"><b>Lin-K/SUG 反馈交流群 QQ 1108437280</b></span>'; cat notes.md; } > notes.tmp.md
+          mv notes.tmp.md notes.md
           echo "---- notes.md ----"
           cat notes.md
 
