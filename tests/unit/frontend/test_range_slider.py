@@ -7,7 +7,7 @@ from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication
 
-from strange_uta_game.frontend.fluent_widgets import RangeSlider
+from strange_uta_game.frontend.fluent_widgets import RangeSlider, WorkspaceSwitcher
 
 
 def _send_mouse(widget, event_type, x, y=11.0):
@@ -192,3 +192,35 @@ class TestRangeSliderThemeSync:
             setTheme(Theme.LIGHT, lazy=True)
         slider.setEnabled(False)
         slider.grab()  # 浅色 + 禁用路径绘制不抛
+
+
+class TestWorkspaceSwitcherThemeSync:
+    def test_repaints_switcher_and_items_on_theme_changed(self, qapp):
+        from strange_uta_game.frontend.theme import theme
+
+        switcher = WorkspaceSwitcher()
+        item = switcher.addItem("waveform", "波形图")
+        switcher.addItem("spectrum", "声谱图")
+        switcher.resize(240, 32)
+        switcher.show()
+        switcher.grab()
+
+        count = TestRangeSliderThemeSync._count_repaints
+        assert count(switcher, theme.changed.emit) >= 1
+        assert count(item, theme.changed.emit) >= 1
+
+    def test_repaints_on_fluent_theme_color_changed(self, qapp):
+        from PyQt6.QtGui import QColor
+        from qfluentwidgets.common.config import qconfig
+
+        switcher = WorkspaceSwitcher()
+        switcher.addItem("waveform", "波形图")
+        switcher.resize(140, 32)
+        switcher.show()
+        assert (
+            TestRangeSliderThemeSync._count_repaints(
+                switcher,
+                lambda: qconfig.themeColorChanged.emit(QColor("#FF6B6B")),
+            )
+            >= 1
+        )

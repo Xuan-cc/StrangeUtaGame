@@ -13,12 +13,24 @@
 from __future__ import annotations
 
 import math
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
-from PyQt6.QtCore import QPointF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter, QPen
+from PyQt6.QtCore import (
+    QAbstractAnimation,
+    QEasingCurve,
+    QPointF,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+    pyqtSignal,
+)
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen
 from PyQt6.QtWidgets import (
+    QAbstractButton,
     QApplication,
+    QButtonGroup,
     QDialog,
     QHBoxLayout,
     QLayout,
@@ -31,11 +43,221 @@ from qfluentwidgets import (
     PushButton,
     SimpleCardWidget,
     StrongBodyLabel,
+    FluentIconBase,
     isDarkTheme,
     themeColor,
 )
 
 from strange_uta_game.frontend.theme import theme
+
+
+class _WorkspaceSwitchItem(QAbstractButton):
+    """药丸分段切换器中的单个自绘文字项。"""
+
+    def __init__(
+        self,
+        text: str,
+        icon: Optional[FluentIconBase],
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._text = text
+        self._icon = icon
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+    def setText(self, text: str) -> None:
+        self._text = text
+        self.updateGeometry()
+        self.update()
+
+    def text(self) -> str:
+        return self._text
+
+    def sizeHint(self) -> QSize:
+        width = 36 + self.fontMetrics().horizontalAdvance(self._text)
+        if self._icon is not None:
+            width += 21
+        return QSize(max(96, width), 26)
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        checked = self.isChecked()
+        foreground = QColor("#FFFFFF") if checked else theme.text_secondary
+        if not checked and self.underMouse():
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(255, 255, 255, 24 if theme.is_dark else 160))
+            painter.drawRoundedRect(QRectF(self.rect()), self.height() / 2, self.height() / 2)
+            foreground = theme.text_primary
+
+        text_width = self.fontMetrics().horizontalAdvance(self._text)
+        content_width = text_width + (21 if self._icon is not None else 0)
+        x = (self.width() - content_width) / 2
+        if self._icon is not None:
+            rect = QRectF(x, (self.height() - 15) / 2, 15, 15).toRect()
+            self._icon.icon(color=foreground).paint(
+                painter, rect, Qt.AlignmentFlag.AlignCenter,
+                QIcon.Mode.Normal, QIcon.State.On,
+            )
+            x += 21
+
+        font = QFont(self.font())
+        if checked:
+            font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        painter.setPen(foreground)
+        painter.drawText(
+            QRectF(x, 0, text_width + 2, self.height()),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            self._text,
+        )
+
+
+class WorkspaceSwitcher(QWidget):
+    """与工作台同款的浅灰轨道 + 主色药丸分段切换器。"""
+
+    currentItemChanged = pyqtSignal(str)
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setFixedHeight(32)
+        self.setAccessibleName(self.tr("工作区切换"))
+        self._items: dict[str, _WorkspaceSwitchItem] = {}
+        self._current_key: Optional[str] = None
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
+        self._thumb_from = QRectF()
+        self._thumb_to = QRectF()
+        self._thumb_progress = 1.0
+        self._animation = QVariantAnimation(self)
+        self._animation.setDuration(180)
+        self._animation.setStartValue(0.0)
+        self._animation.setEndValue(1.0)
+        self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._animation.valueChanged.connect(self._on_animation_value)
+        # 所有颜色均从 SUG ThemeManager 实时读取；主题切换后主动重绘，
+        # 保证深色/浅色模式无需再次悬停或切换选项就立即更新。
+        theme.changed.connect(self._on_theme_changed)
+        try:
+            from qfluentwidgets.common.config import qconfig
+
+            qconfig.themeColorChanged.connect(self._on_theme_changed)
+        except Exception:
+            pass
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(3, 3, 3, 3)
+        layout.setSpacing(2)
+
+    def addItem(
+        self,
+        routeKey: str,
+        text: str,
+        onClick: Optional[Callable[[bool], None]] = None,
+        icon: Optional[FluentIconBase] = None,
+    ) -> _WorkspaceSwitchItem:
+        if routeKey in self._items:
+            return self._items[routeKey]
+        item = _WorkspaceSwitchItem(text, icon, self)
+        if onClick is not None:
+            item.clicked.connect(onClick)
+        item.clicked.connect(lambda _checked=False, key=routeKey: self.setCurrentItem(key))
+        self.layout().addWidget(item)
+        self._group.addButton(item)
+        self._items[routeKey] = item
+        if self._current_key is None:
+            self._apply_current(routeKey, animate=False)
+        return item
+
+    def setItemText(self, routeKey: str, text: str) -> None:
+        if routeKey in self._items:
+            self._items[routeKey].setText(text)
+
+    def setCurrentItem(self, routeKey: Optional[str]) -> None:
+        if routeKey is None or routeKey not in self._items or routeKey == self._current_key:
+            return
+        self._apply_current(routeKey, animate=self.isVisible())
+
+    def currentRouteKey(self) -> Optional[str]:
+        return self._current_key
+
+    def _apply_current(self, routeKey: str, *, animate: bool) -> None:
+        previous_key = self._current_key
+        self._current_key = routeKey
+        self._items[routeKey].setChecked(True)
+        target = QRectF(self._items[routeKey].geometry())
+        if animate and previous_key is not None:
+            self._thumb_from = self._current_thumb_rect()
+            self._thumb_to = target
+            self._animation.stop()
+            self._animation.start()
+        else:
+            self._animation.stop()
+            self._thumb_to = target
+            self._thumb_progress = 1.0
+        for item in self._items.values():
+            item.update()
+        self.update()
+        self.currentItemChanged.emit(routeKey)
+
+    def _current_thumb_rect(self) -> QRectF:
+        if self._thumb_progress >= 1.0 or not self._thumb_from.isValid():
+            return QRectF(self._thumb_to)
+        t = self._thumb_progress
+        a, b = self._thumb_from, self._thumb_to
+        return QRectF(
+            a.x() + (b.x() - a.x()) * t,
+            a.y() + (b.y() - a.y()) * t,
+            a.width() + (b.width() - a.width()) * t,
+            a.height() + (b.height() - a.height()) * t,
+        )
+
+    def _on_animation_value(self, value) -> None:
+        self._thumb_progress = float(value)
+        self.update()
+
+    def _on_theme_changed(self) -> None:
+        for item in self._items.values():
+            item.update()
+        self.update()
+
+    def _snap_thumb_to_current(self) -> None:
+        if self._animation.state() == QAbstractAnimation.State.Running or self._current_key is None:
+            return
+        target = QRectF(self._items[self._current_key].geometry())
+        if target != self._thumb_to or self._thumb_progress < 1.0:
+            self._thumb_to = target
+            self._thumb_progress = 1.0
+            self.update()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._snap_thumb_to_current()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._snap_thumb_to_current()
+
+    def paintEvent(self, _event) -> None:
+        self._snap_thumb_to_current()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        track = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        painter.setPen(theme.border_primary)
+        painter.setBrush(theme.bg_secondary)
+        painter.drawRoundedRect(track, self.height() / 2, self.height() / 2)
+        thumb = self._current_thumb_rect()
+        if thumb.isValid() and thumb.width() > 0:
+            radius = thumb.height() / 2
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 26))
+            painter.drawRoundedRect(thumb.adjusted(0, 1, 0, 1.5), radius, radius)
+            # SUG 的 Fluent 控件主题色由 main_window 统一设为 #FF6B6B；
+            # 这里跟随 themeColor()，不能误用时间轴专用的青色 accent_primary。
+            painter.setBrush(themeColor())
+            painter.drawRoundedRect(thumb, radius, radius)
 
 
 class FluentMessageBox(Dialog):

@@ -971,7 +971,18 @@ class EditorInterface(QWidget):
                 "spectrum_freq_max_hz": int(
                     settings.get("timing.spectrum_freq_max_hz", 0)
                 ),
-                "display_height": int(settings.get("timing.display_height", 120)),
+                "waveform_display_height": int(
+                    settings.get(
+                        "timing.waveform_display_height",
+                        settings.get("timing.display_height", 120),
+                    )
+                ),
+                "spectrum_display_height": int(
+                    settings.get(
+                        "timing.spectrum_display_height",
+                        settings.get("timing.display_height", 120),
+                    )
+                ),
                 "waveform_rms_enabled": bool(
                     settings.get("timing.waveform_rms_enabled", True)
                 ),
@@ -5575,7 +5586,14 @@ class EditorInterface(QWidget):
             "timing.spectrum_freq_max_hz",
             int(settings.get("spectrum_freq_max_hz", 0)),
         )
-        s.set("timing.display_height", int(settings.get("display_height", 120)))
+        s.set(
+            "timing.waveform_display_height",
+            int(settings.get("waveform_display_height", 120)),
+        )
+        s.set(
+            "timing.spectrum_display_height",
+            int(settings.get("spectrum_display_height", 120)),
+        )
         s.set(
             "timing.waveform_rms_enabled",
             bool(settings.get("waveform_rms_enabled", True)),

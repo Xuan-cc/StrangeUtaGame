@@ -159,9 +159,10 @@ class WaveformDisplay(QWidget):
         # 不触发声谱重算；f_min ≥ f_max 时按全范围渲染（resolve_freq_range）
         self._spectrum_freq_min_hz = 0
         self._spectrum_freq_max_hz = 0
-        # 显示高度（公共属性：波形与声谱共用，120~400px）
-        # 默认 120px = 旧版不可调时的波形窗口高度
-        self._display_height = 120
+        # 显示高度按模式独立保存（120~400px）；旧版公共 display_height
+        # 由加载/设置兼容层同时投影到两者。
+        self._waveform_display_height = 120
+        self._spectrum_display_height = 120
         # 声谱活动门禁：False 时任何路径（换音频/改参数/切模式）都不得重启计算
         self._spectrum_active = True
         # 双层波形（外层 min/max 峰值 + 内层 RMS 核心带）绘制开关，默认开
@@ -220,7 +221,7 @@ class WaveformDisplay(QWidget):
         self._suspension_timer.setInterval(6000)
         self._suspension_timer.timeout.connect(self._resume_auto_scroll)
 
-        # 显示高度为公共期望高度（波形/声谱一致，默认 120）
+        # 初始波形模式使用波形自己的期望高度。
         self._apply_display_height()
         self.setMouseTracking(True)
 
@@ -1040,6 +1041,8 @@ class WaveformDisplay(QWidget):
         freq_min_hz: Optional[int] = None,
         freq_max_hz: Optional[int] = None,
         colormap: Optional[str] = None,
+        waveform_display_height: Optional[int] = None,
+        spectrum_display_height: Optional[int] = None,
     ) -> None:
         """频谱参数；FFT 窗口/重叠变化触发后台重算，其余即时生效。
 
@@ -1082,12 +1085,24 @@ class WaveformDisplay(QWidget):
             if freq_max_hz != self._spectrum_freq_max_hz:
                 self._spectrum_freq_max_hz = freq_max_hz
                 changed = True
+        # 旧调用方只传 display_height 时保持兼容：同时更新两种模式。
         if display_height is not None:
-            display_height = int(max(120, min(400, display_height)))
-            if display_height != self._display_height:
-                self._display_height = display_height
-                self._apply_display_height()
+            if waveform_display_height is None:
+                waveform_display_height = display_height
+            if spectrum_display_height is None:
+                spectrum_display_height = display_height
+        if waveform_display_height is not None:
+            height = int(max(120, min(400, waveform_display_height)))
+            if height != self._waveform_display_height:
+                self._waveform_display_height = height
                 changed = True
+        if spectrum_display_height is not None:
+            height = int(max(120, min(400, spectrum_display_height)))
+            if height != self._spectrum_display_height:
+                self._spectrum_display_height = height
+                changed = True
+        if changed:
+            self._apply_display_height()
         if recompute:
             self._reset_spectrum_cache()
             self._ensure_spectrum()
@@ -1111,7 +1126,10 @@ class WaveformDisplay(QWidget):
             "spectrum_colormap": self._spectrum_colormap,
             "spectrum_freq_min_hz": self._spectrum_freq_min_hz,
             "spectrum_freq_max_hz": self._spectrum_freq_max_hz,
-            "display_height": self._display_height,
+            "waveform_display_height": self._waveform_display_height,
+            "spectrum_display_height": self._spectrum_display_height,
+            # 兼容旧调用方：返回当前模式正在使用的高度。
+            "display_height": self._active_display_height(),
             "waveform_rms_enabled": self._waveform_rms_enabled,
             "actual_spectrum_overlap": self._actual_overlap,
             # 时间标签行为（与设置页「波形时间标签」组共用 timing.* 键）
@@ -1137,13 +1155,20 @@ class WaveformDisplay(QWidget):
         会被忽略——必须用 minimumHeight 才能领到期望高度。预览同步让位到
         160（由 EditorInterface 管理），确保总 min 不超出常规窗口。
         """
-        self.setMinimumHeight(self._display_height)
+        self.setMinimumHeight(self._active_display_height())
         self.updateGeometry()
+
+    def _active_display_height(self) -> int:
+        return (
+            self._spectrum_display_height
+            if self._display_mode == "spectrum"
+            else self._waveform_display_height
+        )
 
     def sizeHint(self):
         from PyQt6.QtCore import QSize
 
-        return QSize(super().sizeHint().width(), int(self._display_height))
+        return QSize(super().sizeHint().width(), self._active_display_height())
 
     # ── 声谱后台计算（QThread + moveToThread，遵循 workers.py 约定） ──
 
@@ -2828,6 +2853,8 @@ class TimelineWidget(QWidget):
             freq_min_hz=settings.get("spectrum_freq_min_hz"),
             freq_max_hz=settings.get("spectrum_freq_max_hz"),
             colormap=settings.get("spectrum_colormap"),
+            waveform_display_height=settings.get("waveform_display_height"),
+            spectrum_display_height=settings.get("spectrum_display_height"),
         )
         after = wd.display_settings()
         if after != before:
@@ -2836,6 +2863,10 @@ class TimelineWidget(QWidget):
         dialog = getattr(self, "_advanced_dialog", None)
         if dialog is not None and hasattr(dialog, "refresh_overlap_hint"):
             dialog.refresh_overlap_hint(after)
+        # 快捷键或设置恢复也能改变显示模式；同步打开弹窗的药丸选中态与
+        # 模式专属内容，sync 内部阻断信号以避免 applied 回环。
+        if dialog is not None and hasattr(dialog, "sync_display_mode"):
+            dialog.sync_display_mode(after)
         # 设置页改了时间标签键时同步弹窗开关（弹窗自身改动值相同，为空操作）
         if dialog is not None and hasattr(dialog, "sync_tag_settings"):
             dialog.sync_tag_settings(after)
@@ -2871,10 +2902,13 @@ class TimelineWidget(QWidget):
         freq_min_hz: Optional[int] = None,
         freq_max_hz: Optional[int] = None,
         colormap: Optional[str] = None,
+        waveform_display_height: Optional[int] = None,
+        spectrum_display_height: Optional[int] = None,
     ) -> None:
         self.waveform_display.set_spectrum_params(
             fft_size, overlap, freq_scale, dyn_range_db, display_height,
             freq_min_hz, freq_max_hz, colormap,
+            waveform_display_height, spectrum_display_height,
         )
 
     def display_settings(self) -> dict:

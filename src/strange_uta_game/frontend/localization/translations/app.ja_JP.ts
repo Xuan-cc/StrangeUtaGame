@@ -2862,139 +2862,139 @@
 <context>
     <name>EditInterface</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="837" />
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="930" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="844" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="940" />
         <source>共 0 行 | 已完成 0 行 | 进度 0%</source>
         <translation>0 行 | 完了 0 行 | 進捗 0%</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="942" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="952" />
         <source>共 {total} 行 | 已完成 {done} 行 | 进度 {pct:.1f}%</source>
         <translation>{total} 行 | 完了 {done} 行 | 進捗 {pct:.1f}%</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="850" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="857" />
         <source>删除行</source>
         <translation>行を削除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="843" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="850" />
         <source>刷新</source>
         <translation>更新</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1125" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1135" />
         <source>剪贴板为空</source>
         <translation>クリップボードが空です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1102" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1112" />
         <source>否</source>
         <translation>いいえ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="853" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="860" />
         <source>复制行</source>
         <translation>行をコピー</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="869" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="876" />
         <source>字符数</source>
         <translation>文字数</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="870" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="877" />
         <source>已打轴</source>
         <translation>タグ済み</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="871" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="878" />
         <source>总Checkpoint</source>
         <translation>合計 Checkpoint</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="856" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="863" />
         <source>插入行</source>
         <translation>行を挿入</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="873" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="880" />
         <source>操作</source>
         <translation>操作</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="872" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="879" />
         <source>时间范围</source>
         <translation>時間範囲</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1101" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1111" />
         <source>是</source>
         <translation>はい</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1093" />
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1113" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1103" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1123" />
         <source>未选择行</source>
         <translation>行が選択されていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="833" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="840" />
         <source>查看和编辑所有歌词行的打轴数据</source>
         <translation>全歌詞行のタグデータを表示・編集</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="867" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="874" />
         <source>歌词文本</source>
         <translation>歌詞テキスト</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="847" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="854" />
         <source>添加行</source>
         <translation>行を追加</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="868" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="875" />
         <source>演唱者</source>
         <translation>歌手</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1100" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1110" />
         <source>确定要删除选中的 {n} 行吗？</source>
         <translation>選択した {n} 行を削除しますか？</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1099" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1109" />
         <source>确认删除</source>
         <translation>削除確認</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1030" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1040" />
         <source>编辑</source>
         <translation>編集</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="866" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="873" />
         <source>行号</source>
         <translation>行番号</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="829" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="836" />
         <source>行编辑视图</source>
         <translation>行編集ビュー</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1125" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1135" />
         <source>请先复制行</source>
         <translation>先に行をコピーしてください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1093" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1103" />
         <source>请先选择要删除的行</source>
         <translation>先に削除する行を選択してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1113" />
+        <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="1123" />
         <source>请先选择要复制的行</source>
         <translation>先にコピーする行を選択してください</translation>
     </message>
@@ -3002,105 +3002,105 @@
 <context>
     <name>EditorInterface</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7359" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7570" />
         <source>
 ...另 {n} 处</source>
         <translation>
 ...他 {n} 件</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3592" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3750" />
         <source>
 ...另 {n} 行</source>
         <translation>
 ...他{n}行</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8316" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8531" />
         <source> | 字 {n}/{total} | 「{ch}」 {tags}</source>
         <translation> | 文字 {n}/{total} | 「{ch}」 {tags}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8319" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8534" />
         <source> | 字 {n}/{total} | 「{ch}」 未打轴</source>
         <translation> | 文字 {n}/{total} | 「{ch}」 未タグ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2285" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2443" />
         <source>AI 打轴初始化失败</source>
         <translation>AIタイミングの初期化に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1194" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1344" />
         <source>Alt+→ 切换字内节奏点</source>
         <translation>Alt+→ 文字内のリズム点を切替</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6347" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6558" />
         <source>F3连词暂不允许多行选择</source>
         <translation>F3 連結は現在複数行の選択をサポートしていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8570" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8999" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8785" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9214" />
         <source>LLM 注音失败，已回退本地引擎</source>
         <translation>LLM ルビ解析に失敗しました。ローカルエンジンへフォールバック</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1810" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2007" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1968" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2165" />
         <source>StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)</source>
         <translation>StrangeUtaGame プロジェクト (*.sug);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9044" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9259" />
         <source>{label}失败</source>
         <translation>{label}に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9029" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9244" />
         <source>{label}完成</source>
         <translation>{label}完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3394" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3552" />
         <source>{n} 个导唱待办均无时间戳锚点或间隔无效，已全部跳过。</source>
         <translation>{n} 件のガイド符 TODO はタイムスタンプの基準がない、または間隔が無効なため、すべてスキップしました。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3431" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3589" />
         <source>{n} 处因缺时间戳/间隔无效被跳过。</source>
         <translation>{n} 件はタイムスタンプ不足／間隔無効のためスキップしました。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4342" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4500" />
         <source>{scope} 没有需要删除的时间戳</source>
         <translation>{scope} に削除すべきタイムスタンプがありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4332" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4490" />
         <source>{scope} 的时间戳已删除</source>
         <translation>{scope} のタイムスタンプを削除しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4098" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4256" />
         <source>{start} - {end} 行，共 {total} 字</source>
         <translation>{start} - {end} 行、合計 {total} 文字</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8676" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8891" />
         <source>「全部重新分析」会覆盖现有注音。
 「仅分析未注音字符」会保留已有的人工/字典注音。</source>
         <translation>「すべて再解析」は既存ルビを上書きします。
 「ルビ未付与のみ解析」は既存の手動/辞書ルビを保持します。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8680" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8895" />
         <source>仅分析未注音字符</source>
         <translation>ルビ未付与のみ解析</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3598" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3756" />
         <source>仅有 {done}/{total} 行完成打轴，继续可能导致生成结果不准确。
 
 是否仍要继续？</source>
@@ -3109,27 +3109,27 @@
 それでも続行しますか？</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7362" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7573" />
         <source>仍有导唱待办未处理</source>
         <translation>ガイド符の未処理項目があります</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3601" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3759" />
         <source>仍要继续</source>
         <translation>それでも続行</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8050" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8265" />
         <source>从不滚动</source>
         <translation>スクロールしない</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1270" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1423" />
         <source>从项目读取到全局偏移: {offset}ms，已同步到设置</source>
         <translation>プロジェクトから全体オフセットを読み込み: {offset}ms、設定へ同期しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2716" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2874" />
         <source>以下位置为末字/句尾/行尾，不能设置连词，已自动跳过：
 
 </source>
@@ -3138,95 +3138,95 @@
 </translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3946" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4032" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4104" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4190" />
         <source>作用范围：{label}</source>
         <translation>適用範囲：{label}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1959" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2117" />
         <source>保存</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1911" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1940" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2069" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2098" />
         <source>保存失败</source>
         <translation>保存に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1889" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2047" />
         <source>保存完成</source>
         <translation>保存完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1957" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2115" />
         <source>保存当前项目</source>
         <translation>現在のプロジェクトを保存</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1893" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1929" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2051" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2087" />
         <source>保存成功</source>
         <translation>保存しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1809" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1967" />
         <source>保存项目</source>
         <translation>プロジェクトを保存</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2633" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2791" />
         <source>修改所选字符暂不允许多行选择</source>
         <translation>選択文字の変更は現在複数行選択に未対応です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1175" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1325" />
         <source>停止</source>
         <translation>停止</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8680" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8895" />
         <source>全部重新分析</source>
         <translation>すべて再解析</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9297" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9512" />
         <source>共处理 {n} 行</source>
         <translation>{n} 行を処理しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3550" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3708" />
         <source>共处理 {total} 个符号（后补偿 {post} 个，前补偿 {pre} 个）</source>
         <translation>{total} 個の記号を処理（後補正 {post} 個、前補正 {pre} 個）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2070" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2830" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8528" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8750" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9227" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2228" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2988" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8743" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8965" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9442" />
         <source>准备中...</source>
         <translation>準備中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1181" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1331" />
         <source>减节奏点</source>
         <translation>リズム点 -</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1178" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1328" />
         <source>减速</source>
         <translation>減速</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3549" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3707" />
         <source>分离完成</source>
         <translation>分離完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="248" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="517" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="255" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="631" />
         <source>切换歌词预览滚动模式：
 自动滚动 — 操作后挂起 6 秒自动恢复
 始终滚动 — 始终跟随播放位置
@@ -3237,938 +3237,938 @@
 スクロールしない — 自動スクロールを完全無効化</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4174" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4233" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4332" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4391" />
         <source>删除</source>
         <translation>削除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2904" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4196" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4262" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4331" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3062" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4354" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4420" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4489" />
         <source>删除完成</source>
         <translation>削除完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4172" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4330" />
         <source>删除所有时间戳</source>
         <translation>すべてのタイムスタンプを削除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4231" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4389" />
         <source>删除所有时间戳（保留行首）</source>
         <translation>すべてのタイムスタンプを削除（行頭を保持）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2918" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3076" />
         <source>删除注音失败</source>
         <translation>ルビ削除に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1177" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1327" />
         <source>前进</source>
         <translation>進む</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1180" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1330" />
         <source>加节奏点</source>
         <translation>リズム点 +</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5065" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5225" />
         <source>加载失败</source>
         <translation>読み込みに失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4981" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5139" />
         <source>加载完成</source>
         <translation>読み込み完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1179" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1329" />
         <source>加速</source>
         <translation>加速</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1959" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3602" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4175" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4234" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7368" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8680" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2117" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3760" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4333" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4392" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7579" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8895" />
         <source>取消</source>
         <translation>キャンセル</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5208" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5368" />
         <source>取消播放区间终点</source>
         <translation>再生区間の終了位置を解除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5185" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5345" />
         <source>取消播放区间起点</source>
         <translation>再生区間の開始位置を解除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6421" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6458" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6632" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6669" />
         <source>取消连词</source>
         <translation>連結解除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1182" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1332" />
         <source>句尾</source>
         <translation>句末</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8314" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8529" />
         <source>句尾{m:02d}:{s:02d}.{ms:03d}</source>
         <translation>句末 {m:02d}:{s:02d}.{ms:03d}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2006" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2164" />
         <source>另存为</source>
         <translation>名前を付けて保存</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1176" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1326" />
         <source>后退</source>
         <translation>戻る</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3435" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3593" />
         <source>填充完成</source>
         <translation>挿入完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3827" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3985" />
         <source>处理 {positions} 处，新增 {chars} 个字符，替换 {replaced} 处已有导唱，清理 {todos} 个待办，跳过 {skipped} 处。</source>
         <translation>{positions}箇所を処理し、{chars}文字を追加、既存ガイド{replaced}箇所を置換、保留{todos}件を解除、{skipped}箇所をスキップしました。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8048" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8263" />
         <source>始终滚动</source>
         <translation>常時スクロール</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7397" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7457" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7608" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7668" />
         <source>导出失败</source>
         <translation>書き出しに失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7447" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7658" />
         <source>导出成功</source>
         <translation>書き出しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="305" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="542" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="312" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="656" />
         <source>就绪</source>
         <translation>準備完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3487" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3645" />
         <source>已为 {n} 个字符补全时间戳</source>
         <translation>{n} 文字のタイムスタンプを補完しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3007" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3165" />
         <source>已为 {n} 行设置演唱者</source>
         <translation>{n} 行に歌手を設定しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3165" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3214" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3323" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3372" />
         <source>已为选中字符设置演唱者</source>
         <translation>選択文字に歌手を設定しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2131" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2289" />
         <source>已从 {n} 个SUG文件拼接生成新项目，共 {lines} 行歌词。</source>
         <translation>{n}個のSUGファイルから新規プロジェクトを生成、計{lines}行の歌詞。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="302" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5303" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="309" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5475" />
         <source>已停止</source>
         <translation>停止しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9030" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9245" />
         <source>已分析所选范围的注音</source>
         <translation>選択範囲のルビを解析しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2905" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3063" />
         <source>已删除 {n} 个注音（类型: {labels}）</source>
         <translation>ルビ {n} 件を削除しました（タイプ: {labels}）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4197" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4355" />
         <source>已删除所有时间戳</source>
         <translation>すべてのタイムスタンプを削除しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4263" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4421" />
         <source>已删除所有时间戳（保留行首）</source>
         <translation>すべてのタイムスタンプを削除しました（行頭を保持）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="304" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8009" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="311" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8220" />
         <source>已到达锁定终点</source>
         <translation>固定した再生終了位置に到達しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3429" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3587" />
         <source>已填充 {filled} 处导唱。</source>
         <translation>{filled} 件のガイド符を挿入しました。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1622" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1780" />
         <source>已复制</source>
         <translation>コピーしました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1623" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1781" />
         <source>已复制 {n} 个字符</source>
         <translation>{n} 文字をコピーしました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6460" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6671" />
         <source>已将第 {line} 句 第 {s}-{e} 字连为一个词</source>
         <translation>{line} 行目 {s}-{e} 文字目を 1 つの語として連結しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4892" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5050" />
         <source>已将第 {line} 行第 {start}~{end} 字的演唱者更改</source>
         <translation>{line} 行目 {start}~{end} 文字目の歌手を変更しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5763" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5974" />
         <source>已应用「{char}」的注音</source>
         <translation>「{char}」にルビを適用しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1269" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1422" />
         <source>已应用项目全局偏移</source>
         <translation>プロジェクト全体オフセットを適用しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3897" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3982" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4055" />
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4140" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4298" />
         <source>已成功偏移 {delta:+d} ms</source>
         <translation>{delta:+d} ms オフセットしました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6424" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6635" />
         <source>已断开「{a}」与「{b}」</source>
         <translation>「{a}」と「{b}」を切断しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6462" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6673" />
         <source>已断开第 {line} 句 第 {s}-{e} 字的连词</source>
         <translation>{line} 行目 {s}-{e} 文字目の連結を解除しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6389" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6600" />
         <source>已是最后一个字符</source>
         <translation>すでに最終文字です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="301" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5283" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="308" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5451" />
         <source>已暂停</source>
         <translation>一時停止しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3713" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3871" />
         <source>已生成 {n} 处间奏指引</source>
         <translation>{n}箇所の間奏ガイドを生成しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9296" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9511" />
         <source>已转为罗马字注音</source>
         <translation>ローマ字ルビに変換しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6423" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6634" />
         <source>已连接「{a}」与「{b}」</source>
         <translation>「{a}」と「{b}」を連結しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8617" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8832" />
         <source>已重新分析注音</source>
         <translation>ルビを再解析しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8607" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8822" />
         <source>已重新分析注音，并自动删除了 {n} 个注音</source>
         <translation>ルビを再解析し、{n} 件のルビを自動削除しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="546" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8324" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="660" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8539" />
         <source>当前行: -</source>
         <translation>現在の行: -</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1958" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2116" />
         <source>当前项目有未保存的更改，是否保存？</source>
         <translation>現在のプロジェクトに未保存の変更があります。保存しますか？</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4207" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4273" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4365" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4431" />
         <source>当前项目没有需要删除的时间戳</source>
         <translation>現在のプロジェクトに削除すべきタイムスタンプがありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8430" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8645" />
         <source>待添加导唱符：{n}</source>
         <translation>ガイド符の追加待ち：{n}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7427" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7638" />
         <source>快捷导出</source>
         <translation>クイック書き出し</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3900" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4058" />
         <source>所有原始时间戳已整体偏移 {delta:+d} ms</source>
         <translation>すべての元タイムスタンプを {delta:+d} ms オフセットしました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3786" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3944" />
         <source>所选候选均已失效或参数不可执行，请重新扫描。</source>
         <translation>選択した候補は無効または実行できません。再スキャンしてください。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4090" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4248" />
         <source>所选字符</source>
         <translation>選択文字</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4143" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4301" />
         <source>所选字符原始时间戳已偏移 {delta:+d} ms</source>
         <translation>選択文字の元タイムスタンプを {delta:+d} ms オフセットしました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3155" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3203" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3313" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3361" />
         <source>所选字符的演唱者未发生变化</source>
         <translation>選択文字の歌手に変更はありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2868" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3026" />
         <source>所选类型范围内没有需要删除的注音</source>
         <translation>選択タイプ範囲内に削除すべきルビはありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2996" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3154" />
         <source>所选行的演唱者未发生变化</source>
         <translation>選択行の歌手に変更はありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="502" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="616" />
         <source>打轴 (Space)</source>
         <translation>タグ (Space)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="294" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1120" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="301" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1270" />
         <source>打轴 ({key})</source>
         <translation>タグ ({key})</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3597" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3755" />
         <source>打轴尚未完毕</source>
         <translation>タグ付けがまだ完了していません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2572" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2730" />
         <source>批量编辑暂不允许多行选择</source>
         <translation>一括編集は現在複数行選択に未対応です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5641" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5852" />
         <source>拖动时间标签</source>
         <translation>タイムタグをドラッグ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2148" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2306" />
         <source>拼接失败</source>
         <translation>結合に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2109" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2130" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2267" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2288" />
         <source>拼接完成</source>
         <translation>結合完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8816" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9031" />
         <source>拼音注音失败</source>
         <translation>ピンイン注音に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1174" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1324" />
         <source>播放</source>
         <translation>再生</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="300" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5263" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="307" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5423" />
         <source>播放中</source>
         <translation>再生中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="303" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8018" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="310" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8229" />
         <source>播放完毕</source>
         <translation>再生完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8282" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8497" />
         <source>操作失败</source>
         <translation>操作に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1959" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2117" />
         <source>放弃</source>
         <translation>破棄</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2867" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2995" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3154" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3202" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9263" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3025" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3153" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3312" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3360" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9478" />
         <source>无变化</source>
         <translation>変更なし</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3909" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3995" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4152" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4067" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4153" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4310" />
         <source>无可调整的时间戳</source>
         <translation>調整可能なタイムスタンプはありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4206" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4272" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4341" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4364" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4430" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4499" />
         <source>无时间戳</source>
         <translation>タイムスタンプなし</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2176" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2188" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2334" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2346" />
         <source>无法使用 AI 打轴</source>
         <translation>AIタイミングを使用できません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2286" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2444" />
         <source>无法读取应用设置，请重试或检查配置目录权限</source>
         <translation>アプリ設定を読み取れません。再試行するか設定ディレクトリの権限を確認してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6388" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6599" />
         <source>无法连词</source>
         <translation>連結できません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5226" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5386" />
         <source>无法锁定播放区间</source>
         <translation>再生区間を固定できません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2949" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3026" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3107" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3184" />
         <source>无演唱者</source>
         <translation>歌手なし</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3675" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3833" />
         <source>无符合条件的间隙</source>
         <translation>条件に合う間隔が見つかりません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3560" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3718" />
         <source>无需处理</source>
         <translation>処理不要</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3496" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3654" />
         <source>无需补全</source>
         <translation>補完不要</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1784" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1993" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3448" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3509" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3609" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3725" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3848" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3915" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4001" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4160" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4219" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4285" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7375" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9333" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1942" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2151" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3606" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3667" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3767" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3883" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4006" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4073" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4159" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4318" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4377" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4443" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7586" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9548" />
         <source>无项目</source>
         <translation>プロジェクトなし</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2571" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2632" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6346" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2729" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2790" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6557" />
         <source>暂不允许多行</source>
         <translation>現在複数行に未対応</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3393" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3551" />
         <source>未填充导唱</source>
         <translation>ガイド符は挿入されませんでした</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3676" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3834" />
         <source>未找到满足最小间隔时间的 is_sentence_end 字符</source>
         <translation>最小間隔時間を満たす is_sentence_end 文字が見つかりません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3785" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3943" />
         <source>未插入导唱</source>
         <translation>ガイド符は挿入されませんでした</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7398" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7609" />
         <source>未知的导出格式: {fmt}</source>
         <translation>未知の書き出し形式: {fmt}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7458" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7669" />
         <source>未知错误</source>
         <translation>不明なエラー</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4014" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4298" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9147" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4172" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4456" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9362" />
         <source>未选中字符</source>
         <translation>未選択（文字）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3928" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9082" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4086" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9297" />
         <source>未选中行</source>
         <translation>未選択（行）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3532" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3690" />
         <source>未选择符号分组</source>
         <translation>記号グループが選択されていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3471" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3629" />
         <source>未选择适用范围</source>
         <translation>適用範囲が選択されていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3635" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3793" />
         <source>格式为空</source>
         <translation>フォーマットが空です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5100" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5260" />
         <source>模式：打轴</source>
         <translation>モード：タグ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="499" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5111" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="613" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5271" />
         <source>模式：编辑</source>
         <translation>モード：編集</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1861" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2019" />
         <source>正在保存</source>
         <translation>保存中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8528" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8955" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8743" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9170" />
         <source>正在分析注音</source>
         <translation>ルビを解析中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8955" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9170" />
         <source>正在初始化…</source>
         <translation>初期化中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2830" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2988" />
         <source>正在删除注音</source>
         <translation>ルビを削除中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4919" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5077" />
         <source>正在加载音频</source>
         <translation>音声を読み込み中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2070" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2228" />
         <source>正在拼接SUG</source>
         <translation>SUG結合中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8750" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8965" />
         <source>正在拼音注音</source>
         <translation>ピンイン注音中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8639" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8854" />
         <source>正在等待 LLM 返回…（整首歌词一次性发送，请稍候）</source>
         <translation>LLM の応答を待機中…（歌詞全体を一括送信中、しばらくお待ちください）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9055" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9270" />
         <source>正在等待 LLM 返回…（本批内容一次性发送，请稍候）</source>
         <translation>LLMの応答を待っています…（このバッチは一括送信されます。しばらくお待ちください）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4919" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5077" />
         <source>正在读取音频文件...</source>
         <translation>音声ファイルを読み込み中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9227" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9442" />
         <source>正在转换罗马字注音</source>
         <translation>ローマ字ルビに変換中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9264" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9479" />
         <source>没有可转为罗马字的注音或单假名</source>
         <translation>ローマ字に変換できるルビや単独の仮名がありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3349" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3507" />
         <source>没有导唱待办</source>
         <translation>ガイド符 TODO がありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3561" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3719" />
         <source>没有找到符合条件的符号时间戳</source>
         <translation>条件に合う記号タイムスタンプが見つかりません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3497" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3655" />
         <source>没有找到需要补全时间戳的字符</source>
         <translation>タイムスタンプ補完が必要な文字が見つかりません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8629" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8844" />
         <source>注音分析失败</source>
         <translation>ルビ解析に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8606" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8616" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8821" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8831" />
         <source>注音分析完成</source>
         <translation>ルビ解析完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2783" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9198" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2941" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9413" />
         <source>注音分析进行中</source>
         <translation>ルビ解析中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5762" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5973" />
         <source>注音已更新</source>
         <translation>ルビを更新しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="246" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="509" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="253" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="623" />
         <source>清除当前行时间戳</source>
         <translation>現在の行のタイムスタンプをクリア</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4891" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5049" />
         <source>演唱者已更新</source>
         <translation>歌手を更新しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3712" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3870" />
         <source>生成完成</source>
         <translation>生成完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3960" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4118" />
         <source>目标行已失效</source>
         <translation>対象行が無効になりました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4173" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4331" />
         <source>确定要删除所有时间戳吗？此操作可撤销。</source>
         <translation>すべてのタイムスタンプを削除しますか？この操作は元に戻せます。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4232" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4390" />
         <source>确定要删除所有时间戳（保留行首）吗？此操作可撤销。</source>
         <translation>すべてのタイムスタンプを削除（行頭を保持）しますか？この操作は元に戻せます。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4094" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7356" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4252" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7567" />
         <source>第 {line} 行 第 {char} 字</source>
         <translation>{line} 行目 {char} 文字目</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4095" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4253" />
         <source>第 {line} 行 第 {s}-{e} 字</source>
         <translation>{line} 行目 {s}-{e} 文字目</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3587" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3745" />
         <source>第 {line} 行「{text}」</source>
         <translation>第{line}行「{text}」</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3985" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4143" />
         <source>第 {line} 行原始时间戳已整体偏移 {delta:+d} ms</source>
         <translation>{line} 行目の元タイムスタンプを {delta:+d} ms オフセットしました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3941" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4099" />
         <source>第 {n} 行</source>
         <translation>{n} 行目</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5227" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5387" />
         <source>终点必须晚于起点</source>
         <translation>終了位置は開始位置より後に設定してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7367" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7578" />
         <source>继续导出</source>
         <translation>書き出しを続行</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8726" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8941" />
         <source>缺少依赖</source>
         <translation>依存関係が不足しています</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9309" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9524" />
         <source>罗马字转换失败</source>
         <translation>ローマ字変換に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8672" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8887" />
         <source>自动分析全部注音</source>
         <translation>全ルビを自動解析</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3826" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3984" />
         <source>自动导唱完成</source>
         <translation>自動ガイド完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3804" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3962" />
         <source>自动插入导唱符（{n} 处）</source>
         <translation>ガイド符を自動挿入（{n}箇所）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="514" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8051" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="628" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8266" />
         <source>自动滚动</source>
         <translation>自動スクロール</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3695" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3853" />
         <source>自动生成间奏指引（{n} 处）</source>
         <translation>間奏ガイドを自動生成（{n}箇所）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8321" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8536" />
         <source>行 {idx}/{total}: {preview}{char_info}</source>
         <translation>行 {idx}/{total}: {preview}{char_info}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="549" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8412" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="663" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8627" />
         <source>行: 0/0 | 进度: 0%</source>
         <translation>行: 0/0 | 進捗: 0%</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8422" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8637" />
         <source>行: {total} | 已打轴: {timed}/{total_again} ({pct}%)</source>
         <translation>行: {total} | タグ済: {timed}/{total_again} ({pct}%)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3486" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3644" />
         <source>补全完成</source>
         <translation>補完完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3006" />
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3164" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3213" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3322" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3371" />
         <source>设置完成</source>
         <translation>設定完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1785" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1994" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3449" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3510" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3610" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3726" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3849" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3916" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4002" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4161" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4220" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4286" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7376" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9334" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1943" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2152" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3607" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3668" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3768" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3884" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4007" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4074" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4160" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4319" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4378" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4444" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7587" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9549" />
         <source>请先创建或打开项目</source>
         <translation>先にプロジェクトを作成または開いてください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2177" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2335" />
         <source>请先加载或创建包含歌词正文的工程</source>
         <translation>先に歌詞本文を含むプロジェクトを読み込みまたは作成してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2189" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2347" />
         <source>请先加载音频，AI 打轴需要人声/音频素材</source>
         <translation>先にオーディオを読み込んでください。AIタイミングにはボーカル/オーディオ素材が必要です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9083" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9298" />
         <source>请先在歌词中选择要分析的行</source>
         <translation>先に歌詞内で解析する行を選択してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3929" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4087" />
         <source>请先选中要调整的歌词行</source>
         <translation>先に調整する歌詞行を選択してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9148" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9363" />
         <source>请先选择要分析的字符</source>
         <translation>先に解析する文字を選択してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4299" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4457" />
         <source>请先选择要删除时间戳的字符</source>
         <translation>先にタイムスタンプを削除する文字を選択してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4015" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4173" />
         <source>请先选择要调整的字符</source>
         <translation>先に調整する文字を選択してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2784" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9199" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2942" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="9414" />
         <source>请等待当前注音分析完成后再试</source>
         <translation>現在のルビ解析が完了してから再試行してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3533" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3691" />
         <source>请至少选择一个符号分组</source>
         <translation>記号グループを最低 1 つ選択してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3472" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3630" />
         <source>请至少选择一种字符类型</source>
         <translation>文字タイプを最低 1 種類選択してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3636" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3794" />
         <source>请输入间奏指引格式字符串</source>
         <translation>間奏ガイドのフォーマット文字列を入力してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8673" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8888" />
         <source>请选择分析范围：</source>
         <translation>解析範囲を選択：</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3899" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3984" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4057" />
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4142" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4300" />
         <source>调整完成</source>
         <translation>調整完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7363" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="7574" />
         <source>还剩 {n} 个标记点未添加导唱符。</source>
         <translation>ガイド符が未追加のマーカーが {n} 件残っています。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6421" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6458" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6632" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="6669" />
         <source>连词</source>
         <translation>連結</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4109" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="4267" />
         <source>选区已失效</source>
         <translation>選択範囲が無効になりました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3433" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3591" />
         <source>部分时间戳越界已自动设为0ms。</source>
         <translation>一部のタイムスタンプが範囲外のため、自動で 0ms に設定しました。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2715" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2873" />
         <source>部分连词设置未应用</source>
         <translation>一部の連結設定が適用されませんでした</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5221" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5381" />
         <source>锁定播放区间终点</source>
         <translation>再生区間の終了位置を固定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5198" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5358" />
         <source>锁定播放区间起点</source>
         <translation>再生区間の開始位置を固定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5044" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="5202" />
         <source>音频已加载</source>
         <translation>音声を読み込みました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3350" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3508" />
         <source>项目中没有导唱待办标记。</source>
         <translation>プロジェクトにガイド符 TODO マークがありません。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2950" />
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3027" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3108" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="3185" />
         <source>项目中没有演唱者，请先添加演唱者</source>
         <translation>プロジェクトに歌手がいません。先に歌手を追加してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8668" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8883" />
         <source>（保留现有节奏点不动）</source>
         <translation>（既存のリズム点を保持します）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8666" />
+        <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8881" />
         <source>（分析后会重算节奏点）</source>
         <translation>（解析後にリズム点を再計算します）</translation>
     </message>
@@ -4877,12 +4877,12 @@
         <translation>StrangeUtaGame プロジェクト (*.sug);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1187" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1185" />
         <source>{format} 格式检测</source>
         <translation>{format} 形式検出</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1189" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1187" />
         <source>「保留原有注音」使用文件中的注音与逐字时间轴。
 「全部重新分析」清除原有注音，使用自动分析；文件时间戳将按音节位置复用，无法对齐的会被忽略。
 「仅分析未注音字符」保留已有注音，补充缺失的。</source>
@@ -4891,17 +4891,17 @@
 「ルビ未付与のみ解析」は既存ルビを残し、不足分のみ補完します。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="590" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="588" />
         <source>上次关联的媒体文件不存在：{name}</source>
         <translation>前回関連付けたメディアファイルが存在しません：{name}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1198" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1196" />
         <source>仅分析未注音字符</source>
         <translation>ルビ未付与のみ解析</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1129" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1127" />
         <source>从剪贴板加载了 SUG 项目（保存时需选择路径）</source>
         <translation>クリップボードから SUG プロジェクトを読み込みました（保存時にパスを指定してください）</translation>
     </message>
@@ -4916,30 +4916,30 @@
         <translation>現在のプロジェクトを保存</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1196" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1194" />
         <source>保留原有注音</source>
         <translation>既存ルビを保持</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1197" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1195" />
         <source>全部重新分析</source>
         <translation>すべて再解析</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="803" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="801" />
         <source>剪贴板中没有文本内容</source>
         <translation>クリップボードにテキストがありません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="803" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="801" />
         <source>剪贴板为空</source>
         <translation>クリップボードが空です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="716" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1077" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1084" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1138" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="714" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1075" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1082" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1136" />
         <source>加载失败</source>
         <translation>読み込みに失敗しました</translation>
     </message>
@@ -4955,13 +4955,13 @@
         <translation>キャンセル</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="589" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="587" />
         <source>媒体文件未找到</source>
         <translation>メディアファイルが見つかりません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="778" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1062" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="776" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1060" />
         <source>已加载 {n} 行歌词</source>
         <translation>歌詞 {n} 行を読み込みました</translation>
     </message>
@@ -4971,7 +4971,7 @@
         <translation>現在のプロジェクトに未保存の変更があります。保存しますか？</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="648" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="646" />
         <source>打开失败</source>
         <translation>開けませんでした</translation>
     </message>
@@ -4991,9 +4991,9 @@
         <translation>ファイルが見つかりません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="833" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="884" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="999" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="831" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="882" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="997" />
         <source>无法加载</source>
         <translation>読み込めません</translation>
     </message>
@@ -5003,7 +5003,7 @@
         <translation>動画ファイルを読み込めません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1166" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1164" />
         <source>春日向/KRL</source>
         <translation>春日向/KRL</translation>
     </message>
@@ -5018,33 +5018,33 @@
         <translation>FFmpeg が検出されません。「設定 → 情報/言語 → ツール設定」で FFmpeg パスを指定してください。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1156" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1154" />
         <source>检测到 Nicokara 格式歌词（已包含注音）。</source>
         <translation>Nicokara 形式の歌詞を検出（ルビ含む）。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1164" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1162" />
         <source>检测到含卡拉OK时间轴/注音的 ASS 字幕。</source>
         <translation>カラオケタイムライン／ルビを含む ASS 字幕を検出。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1167" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1165" />
         <source>检测到春日向/KRL 格式歌词（已包含注音）。</source>
         <translation>春日向/KRL 形式の歌詞を検出（ルビ含む）。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1170" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1168" />
         <source>检测到自带注音的歌词文件。</source>
         <translation>ルビ付きの歌詞ファイルを検出。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1169" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1167" />
         <source>歌词</source>
         <translation>歌詞</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="777" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1061" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="775" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1059" />
         <source>歌词已加载</source>
         <translation>歌詞を読み込みました</translation>
     </message>
@@ -5054,8 +5054,8 @@
         <translation>歌詞ファイル (*.lrc *.txt *.kra *.krl *.srt *.ass);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="756" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1037" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="754" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1035" />
         <source>歌词文件未解析出有效内容</source>
         <translation>歌詞ファイルから有効な内容を解析できませんでした</translation>
     </message>
@@ -5075,12 +5075,12 @@
         <translation>FFmpeg 環境を確認中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="854" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="852" />
         <source>正在解析内容...</source>
         <translation>内容を解析中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="953" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="951" />
         <source>正在解析歌词</source>
         <translation>歌詞を解析中</translation>
     </message>
@@ -5090,7 +5090,7 @@
         <translation>プロジェクトデータを解析中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="927" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="925" />
         <source>正在读取文件...</source>
         <translation>ファイルを読み込み中...</translation>
     </message>
@@ -5100,25 +5100,25 @@
         <translation>動画処理に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1139" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1137" />
         <source>解析 SUG 项目失败: {err}</source>
         <translation>SUG プロジェクトの解析に失敗: {err}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="687" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="685" />
         <source>解析完成</source>
         <translation>解析完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="756" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1036" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="754" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1034" />
         <source>解析结果为空</source>
         <translation>解析結果が空です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="833" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="885" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="999" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="831" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="883" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="997" />
         <source>请先创建或打开一个项目</source>
         <translation>先にプロジェクトを作成または開いてください</translation>
     </message>
@@ -5143,7 +5143,7 @@
         <translation>音声を読み込みました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1128" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/file_loader.py" line="1126" />
         <source>项目已加载</source>
         <translation>プロジェクトを読み込みました</translation>
     </message>
@@ -5292,38 +5292,38 @@
 <context>
     <name>HomeInterface</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="571" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="573" />
         <source>LLM 注音失败，已回退本地引擎</source>
         <translation>LLM ルビ解析に失敗しました。ローカルエンジンへフォールバック</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="604" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="606" />
         <source>StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)</source>
         <translation>StrangeUtaGame プロジェクト (*.sug);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="358" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="360" />
         <source>保存项目</source>
         <translation>プロジェクトを保存</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="588" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="590" />
         <source>创建失败</source>
         <translation>作成に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="327" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="329" />
         <source>创建项目</source>
         <translation>プロジェクトを作成</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="975" />
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="1053" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="977" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="1055" />
         <source>加载完成</source>
         <translation>読み込み完了</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="277" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="279" />
         <source>在此粘贴歌词文本...
 支持格式：
 - 普通文本（每行一句）
@@ -5344,175 +5344,175 @@
 ファイルをインポートするとこの領域に自動で挿入され、プロジェクト作成時に解析されます</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="665" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="667" />
         <source>导入失败</source>
         <translation>インポートに失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="215" />
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="652" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="217" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="654" />
         <source>导入成功</source>
         <translation>インポートしました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="294" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="296" />
         <source>导入歌词文件</source>
         <translation>歌詞ファイルをインポート</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="984" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="986" />
         <source>已从视频中提取音频: {name}</source>
         <translation>動画から音声を抽出しました: {name}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="203" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="205" />
         <source>已导入 {n} 个歌词文件，共 {lines} 行</source>
         <translation>歌詞ファイル {n} 個、合計 {lines} 行をインポートしました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="653" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="655" />
         <source>已导入文件内容，共 {lines} 行</source>
         <translation>ファイル内容をインポートしました、合計 {lines} 行</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="1066" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="1068" />
         <source>打开失败</source>
         <translation>開けませんでした</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="347" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="349" />
         <source>打开已有的 .sug 项目文件</source>
         <translation>既存の .sug プロジェクトを開く</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="343" />
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="351" />
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="602" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="345" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="353" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="604" />
         <source>打开项目</source>
         <translation>プロジェクトを開く</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="369" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="371" />
         <source>提示：项目文件不包含音频，请确保音频文件可访问</source>
         <translation>ヒント：プロジェクトファイルに音声は含まれません。音声ファイルへアクセス可能か確認してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="269" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="271" />
         <source>新建项目</source>
         <translation>新規プロジェクト</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="924" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="926" />
         <source>无法读取视频文件</source>
         <translation>動画ファイルを読み込めません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="925" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="927" />
         <source>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</source>
         <translation>FFmpeg が検出されません。「設定 → 情報/言語 → ツール設定」で FFmpeg パスを指定してください。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="242" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="244" />
         <source>歌词打轴工具</source>
         <translation>歌詞タイミングツール</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="382" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="384" />
         <source>歌词文件 (*.lrc *.txt *.kra *.krl *.ass *.srt);;所有文件 (*.*)</source>
         <translation>歌詞ファイル (*.lrc *.txt *.kra *.krl *.ass *.srt);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="423" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="425" />
         <source>歌词文本不能为空</source>
         <translation>歌詞テキストは空にできません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="273" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="275" />
         <source>歌词文本（支持粘贴或导入 LRC/ASS/SRT/TXT）</source>
         <translation>歌詞テキスト（貼り付けまたは LRC/ASS/SRT/TXT インポート対応）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="1017" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="1019" />
         <source>正在加载项目</source>
         <translation>プロジェクトを読み込み中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="933" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="935" />
         <source>正在处理视频</source>
         <translation>動画を処理中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="933" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="935" />
         <source>正在检查 FFmpeg 环境...</source>
         <translation>FFmpeg 環境を確認中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="1017" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="1019" />
         <source>正在解析项目数据...</source>
         <translation>プロジェクトデータを解析中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="299" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="301" />
         <source>清空</source>
         <translation>クリア</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="315" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="317" />
         <source>点击右侧按钮选择音频文件...</source>
         <translation>右側のボタンで音声ファイルを選択...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="997" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="999" />
         <source>视频处理失败</source>
         <translation>動画処理に失敗しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="422" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="424" />
         <source>请输入歌词</source>
         <translation>歌詞を入力してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="380" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="382" />
         <source>选择歌词文件</source>
         <translation>歌詞ファイルを選択</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="319" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="321" />
         <source>选择音频</source>
         <translation>音声を選択</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="403" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="405" />
         <source>选择音频或视频文件</source>
         <translation>音声または動画ファイルを選択</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="405" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="407" />
         <source>音频/视频文件 (*.mp3 *.wav *.flac *.ogg *.mp4 *.mkv *.m4a *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts *.3gp *.vob *.mts *.m2ts *.rm *.rmvb *.asf *.f4v *.ogv *.m4b *.aac *.wma *.opus *.ape *.ac3 *.dts);;所有文件 (*.*)</source>
         <translation>音声/動画ファイル (*.mp3 *.wav *.flac *.ogg *.mp4 *.mkv *.m4a *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts *.3gp *.vob *.mts *.m2ts *.rm *.rmvb *.asf *.f4v *.ogv *.m4b *.aac *.wma *.opus *.ape *.ac3 *.dts);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="210" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="212" />
         <source>音频: {name}{suffix}</source>
         <translation>音声: {name}{suffix}</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="983" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="985" />
         <source>音频提取成功</source>
         <translation>音声を抽出しました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="308" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="310" />
         <source>音频文件（打轴需要，可后续添加）</source>
         <translation>音声ファイル（タグ付けに必要、後から追加可）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="209" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="211" />
         <source>（已使用第一个音频文件）</source>
         <translation>（最初の音声ファイルを使用）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="216" />
+        <location filename="src/strange_uta_game/frontend/home/home_interface.py" line="218" />
         <source>；</source>
         <translation>；</translation>
     </message>
@@ -5687,80 +5687,80 @@
 <context>
     <name>KaraokePreview</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1805" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1854" />
         <source>减少节奏点</source>
         <translation>リズム点を減らす</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1730" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1738" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1779" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1787" />
         <source>删除字符</source>
         <translation>文字を削除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1746" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1795" />
         <source>删除当前时间戳并回滚</source>
         <translation>現在のタイムスタンプを削除して戻す</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1778" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1827" />
         <source>删除本行</source>
         <translation>この行を削除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1771" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1820" />
         <source>合并上一行</source>
         <translation>前の行と結合</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1754" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1803" />
         <source>在此前插入空格</source>
         <translation>前にスペースを挿入</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1784" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1833" />
         <source>在此前插入空行</source>
         <translation>前に空行を挿入</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1762" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1811" />
         <source>在此后插入空格</source>
         <translation>後にスペースを挿入</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1790" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1839" />
         <source>在此后插入空行</source>
         <translation>後に空行を挿入</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1797" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1846" />
         <source>增加节奏点</source>
         <translation>リズム点を追加</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1821" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1870" />
         <source>标记/取消导唱待办</source>
         <translation>ガイド符 TODO の設定/解除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1813" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1862" />
         <source>设置/取消句尾</source>
         <translation>句末の設定/解除</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1832" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1854" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1881" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1903" />
         <source>设置演唱者</source>
         <translation>歌手を設定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="2611" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="2663" />
         <source>请拖入sug项目或者歌词文件或ctrl+v粘贴剪贴板上的歌词文件</source>
         <translation>sug プロジェクトか歌詞ファイルをドラッグ、または Ctrl+V でクリップボードの歌詞を貼り付けてください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1834" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1856" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1883" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1905" />
         <source>默认演唱者</source>
         <translation>デフォルト歌手</translation>
     </message>
@@ -5939,7 +5939,7 @@ Checkpoint数：文字ごと 1 項目（例：2,2,1）。総和が本行リズ�
 <context>
     <name>LyricParseWorker</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/workers.py" line="580" />
+        <location filename="src/strange_uta_game/frontend/workers.py" line="576" />
         <source>正在读取文件...</source>
         <translation>ファイルを読み込み中...</translation>
     </message>
@@ -7443,7 +7443,7 @@ OFF にすると .cache 占有が小さく、切替も即時ですが、音割�
 <context>
     <name>RubySubsetAnalyzeWorker</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/workers.py" line="428" />
+        <location filename="src/strange_uta_game/frontend/workers.py" line="424" />
         <source>注音分析</source>
         <translation>ルビ解析</translation>
     </message>
@@ -9693,33 +9693,33 @@ KS側の設定が優先されます。</translation>
 <context>
     <name>TimelineWidget</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2024" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2117" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2452" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2545" />
         <source>关</source>
         <translation>OFF</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2023" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2116" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2451" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2544" />
         <source>开</source>
         <translation>ON</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2031" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2091" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2238" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2459" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2519" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2668" />
         <source>未加载音频</source>
         <translation>音声未読み込み</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2026" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2106" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2454" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2534" />
         <source>波形图高级设置</source>
         <translation>波形の詳細設定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2020" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2118" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2448" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="2546" />
         <source>波形显示</source>
         <translation>波形表示</translation>
     </message>
@@ -10314,7 +10314,7 @@ KS側の設定が優先されます。</translation>
         <translation>プロキシ無効</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="496" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="491" />
         <source>即将退出当前应用，由 Updater 完成替换并自动重启…</source>
         <translation>現在のアプリを終了し、Updater が置換と自動再起動を行います…</translation>
     </message>
@@ -10364,12 +10364,12 @@ KS側の設定が優先されます。</translation>
         <translation>プロキシ無効 —— アプリは直接ネットワークへアクセスします。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="318" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="313" />
         <source>已是最新版本</source>
         <translation>最新バージョンです</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="393" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="388" />
         <source>已跳过此版本</source>
         <translation>このバージョンをスキップ済み</translation>
     </message>
@@ -10379,7 +10379,7 @@ KS側の設定が優先されます。</translation>
         <translation>起動後にバックグラウンドで GitHub Release を軽量チェック、新バージョン検出時に通知</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="196" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="191" />
         <source>应用更新</source>
         <translation>アプリ更新</translation>
     </message>
@@ -10389,7 +10389,7 @@ KS側の設定が優先されます。</translation>
         <translation>現在 v{local}　|　{date} 公開</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="319" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="314" />
         <source>当前版本 v{version} 已是最新</source>
         <translation>現在 v{version} は最新です</translation>
     </message>
@@ -10405,7 +10405,7 @@ KS側の設定が優先されます。</translation>
         <translation>デフォルトへ戻す</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="473" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="468" />
         <source>您可以稍后在设置中重新检查更新</source>
         <translation>後で設定から更新を再確認できます</translation>
     </message>
@@ -10443,7 +10443,7 @@ KS側の設定が優先されます。</translation>
 項目をドラッグ、または選択後に右の ↑/↓ ボタンで調整できます。</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="484" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="479" />
         <source>无法启动 Updater</source>
         <translation>Updater を起動できません</translation>
     </message>
@@ -10453,17 +10453,17 @@ KS側の設定が優先されます。</translation>
         <translation>更新内容：</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="411" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="406" />
         <source>更新器未就绪</source>
         <translation>アップデータが準備できていません</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="472" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="467" />
         <source>更新已取消</source>
         <translation>更新がキャンセルされました</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="495" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="490" />
         <source>更新已启动</source>
         <translation>更新を開始しました</translation>
     </message>
@@ -10483,7 +10483,7 @@ KS側の設定が優先されます。</translation>
         <translation>プロキシ未有効</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="394" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="389" />
         <source>未来不再为 v{version} 提示。重新检测可重新启用。</source>
         <translation>今後 v{version} の通知を表示しません。再検出で再有効化できます。</translation>
     </message>
@@ -10503,19 +10503,19 @@ KS側の設定が優先されます。</translation>
         <translation>日付不明</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="309" />
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="485" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="304" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="480" />
         <source>未知错误</source>
         <translation>不明なエラー</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="296" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="291" />
         <source>检查中...</source>
         <translation>確認中...</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="175" />
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="305" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="170" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="300" />
         <source>检查更新</source>
         <translation>更新を確認</translation>
     </message>
@@ -10547,7 +10547,7 @@ KS側の設定が優先されます。</translation>
         <translation>ソース試行記録：</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="283" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="278" />
         <source>版本 v{ver}  |  由 RhythmicaLyrics 启发</source>
         <translation>バージョン v{ver}  |  RhythmicaLyrics に着想</translation>
     </message>
@@ -10562,7 +10562,7 @@ KS側の設定が優先されます。</translation>
         <translation>後で</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="172" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="167" />
         <source>立即从所选源拉取最新发布信息（不受启动检查间隔限制）</source>
         <translation>選択ソースから最新リリース情報を即時取得（起動間隔の制限を受けない）</translation>
     </message>
@@ -10572,7 +10572,7 @@ KS側の設定が優先されます。</translation>
         <translation>今すぐ更新</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="171" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="166" />
         <source>立即检查更新</source>
         <translation>今すぐ更新確認</translation>
     </message>
@@ -10587,7 +10587,7 @@ KS側の設定が優先されます。</translation>
         <translation>順序を編集</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="412" />
+        <location filename="src/strange_uta_game/updater/ui/update_card.py" line="407" />
         <source>缺少 Updater.exe。请到 GitHub Release 手动下载最新版本。</source>
         <translation>Updater.exe がありません。GitHub Release から最新版を手動でダウンロードしてください。</translation>
     </message>
@@ -10684,231 +10684,319 @@ KS側の設定が優先されます。</translation>
 <context>
     <name>WaveformAdvancedDialog</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="133" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="425" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="189" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="699" />
         <source>BPM 网格</source>
         <translation>BPM グリッド</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="184" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="429" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="243" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="704" />
         <source>BPM 网格偏移</source>
         <translation>BPM グリッドオフセット</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="237" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="456" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="358" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="742" />
         <source>FFT 窗口</source>
         <translation>FFT ウィンドウサイズ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="276" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="446" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="418" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="732" />
         <source>与设置页「打轴 → 波形时间标签」共用，两处修改即时同步</source>
         <translation>設定「タグ → 波形タイムタグ」と共通の設定で、どちらで変更しても即時同期されます</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="681" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="1055" />
         <source>中</source>
         <translation>中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="681" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="1055" />
         <source>低</source>
         <translation>低</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="121" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="323" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="432" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="455" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="661" />
+        <source>全谱</source>
+        <translation>全帯域</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="430" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="720" />
+        <source>公共设置</source>
+        <translation>共通設定</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="157" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="196" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="442" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="483" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="711" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="730" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="741" />
         <source>关</source>
         <translation>OFF</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="297" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="427" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="457" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="702" />
         <source>关闭</source>
         <translation>閉じる</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="240" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="458" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="391" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="718" />
+        <source>功能开发中，未来将在同一时间轴中同时显示波形图和声谱图。</source>
+        <translation>開発中です。今後、同じタイムラインに波形とスペクトログラムを同時表示します。</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="362" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="745" />
         <source>动态范围</source>
         <translation>ダイナミックレンジ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="118" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="430" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="154" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="709" />
         <source>双层波形（RMS）</source>
         <translation>二層波形（RMS）</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="469" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="136" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="697" />
+        <source>双谱模式</source>
+        <translation>デュアル表示</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="761" />
         <source>因内存预算，实际使用 {p}% 重叠</source>
         <translation>メモリ予算のため、実際のオーバーラップは {p}% です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="204" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="440" />
-        <source>声谱参数</source>
-        <translation>スペクトラム設定</translation>
-    </message>
-    <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="102" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="423" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="135" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="696" />
         <source>声谱图</source>
         <translation>スペクトログラム</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="487" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="786" />
         <source>实际 {px} px</source>
         <translation>実効 {px} px</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="212" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="460" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="319" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="750" />
         <source>对数</source>
         <translation>対数</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="120" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="322" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="431" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="454" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="208" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="701" />
+        <source>对齐首音</source>
+        <translation>最初の音に合わせる</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="986" />
+        <source>已对齐首音：{ms} ms（BPM 网格偏移）</source>
+        <translation>最初の音に合わせました：{ms} ms（BPM グリッドオフセット）</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="156" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="195" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="441" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="482" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="710" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="729" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="740" />
         <source>开</source>
         <translation>ON</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="266" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="442" />
-        <source>播放头居中模式</source>
-        <translation>再生ヘッド中央固定モード</translation>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="361" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="744" />
+        <source>强度配色</source>
+        <translation>強度配色</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="258" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="439" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="270" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="705" />
+        <source>拍号</source>
+        <translation>拍子</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="438" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="724" />
+        <source>播放头居中</source>
+        <translation>再生ヘッドを中央に固定</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="973" />
+        <source>无音频数据，无法对齐</source>
+        <translation>音声データがないため位置合わせできません</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="436" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="722" />
         <source>时间标签</source>
         <translation>タイムタグ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="132" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="424" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="188" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="698" />
         <source>时间网格</source>
         <translation>時間グリッド</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="97" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="437" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="132" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="716" />
         <source>显示模式</source>
         <translation>表示モード</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="228" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="459" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="173" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="348" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="748" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="749" />
         <source>显示高度</source>
         <translation>表示高さ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="674" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="977" />
+        <source>未检测到有效声音，偏移未修改</source>
+        <translation>有効な音を検出できなかったため、オフセットは変更されませんでした</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="1048" />
         <source>未能识别 BPM，请手动输入</source>
         <translation>BPM を検出できませんでした。手動で入力してください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="625" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="663" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="997" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="1036" />
         <source>检测中…</source>
         <translation>検出中…</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="684" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="1058" />
         <source>检测到</source>
         <translation>検出</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="693" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="1068" />
         <source>检测失败</source>
         <translation>検出に失敗</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="101" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="422" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="134" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="695" />
         <source>波形图</source>
         <translation>波形</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="107" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="435" />
-        <source>波形图适合观察整体响度；声谱图按频率展示能量分布，适合音高定位</source>
-        <translation>波形は全体の音量把握に適し、スペクトログラムは周波数ごとのエネルギー分布を示すため音高の位置確認に適します</translation>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="138" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="714" />
+        <source>波形图适合观察整体响度；声谱图适合音高定位；双谱模式暂未开放</source>
+        <translation>波形は全体の音量把握に、スペクトログラムは音高の位置確認に適しています。デュアル表示は今後対応予定です</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="80" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="421" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="115" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="694" />
         <source>波形图高级设置</source>
         <translation>波形の詳細設定</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="262" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="441" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="408" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="723" />
         <source>波形时间标签拖拽</source>
         <translation>波形タイムタグのドラッグ編集</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="270" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="443" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="412" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="725" />
         <source>波形标签显示字符</source>
         <translation>波形タグに文字を表示</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="274" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="444" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="416" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="726" />
         <source>波形标签显示注音</source>
         <translation>波形タグにふりがなを表示</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="238" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="433" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="359" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="712" />
         <source>窗口重叠</source>
         <translation>窓のオーバーラップ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="213" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="461" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="320" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="751" />
         <source>线性</source>
         <translation>線形</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="128" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="438" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="435" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="721" />
         <source>网格与节拍</source>
         <translation>グリッドとテンポ</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="167" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="428" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="238" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="703" />
         <source>网格线宽</source>
         <translation>グリッド線幅</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="684" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="1058" />
         <source>置信度</source>
         <translation>信頼度：</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="143" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="426" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="666" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="667" />
+        <source>自动</source>
+        <translation>自動</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="205" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="700" />
         <source>自动检测</source>
         <translation>自動検出</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="239" />
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="457" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="193" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="727" />
+        <source>节拍器</source>
+        <translation>メトロノーム</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="292" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="707" />
+        <source>节拍器播放时按上述 BPM 与偏移打拍；重音与网格小节线按拍号循环</source>
+        <translation>メトロノームは上記の BPM とオフセットに従い、アクセントと小節線は拍子に合わせて繰り返します</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="285" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="728" />
+        <source>节拍器音量</source>
+        <translation>メトロノーム音量</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="360" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="743" />
         <source>频率刻度</source>
         <translation>周波数スケール</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="680" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="363" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="746" />
+        <source>频率范围</source>
+        <translation>周波数範囲</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/editor/timing/waveform_advanced_dialog.py" line="1054" />
         <source>高</source>
         <translation>高</translation>
     </message>
@@ -10916,22 +11004,22 @@ KS側の設定が優先されます。</translation>
 <context>
     <name>WaveformDisplay</name>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="1242" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="1411" />
         <source>声谱计算中</source>
         <translation>スペクトログラム計算中</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="1240" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="1409" />
         <source>声谱计算失败</source>
         <translation>スペクトログラムの計算に失敗</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="1323" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="1518" />
         <source>请加载音频文件</source>
         <translation>音声ファイルを読み込んでください</translation>
     </message>
     <message>
-        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="1059" />
+        <location filename="src/strange_uta_game/frontend/editor/timing/timeline_widget.py" line="1223" />
         <source>音频过长：超出声谱内存预算，请降低窗口重叠率或缩短音频</source>
         <translation>音声が長すぎます：スペクトログラムのメモリ予算を超えています。窓のオーバーラップ率を下げるか、音声を短くしてください</translation>
     </message>
@@ -11048,6 +11136,14 @@ KS側の設定が優先されます。</translation>
         <location filename="src/strange_uta_game/frontend/winrt_japanese_guide.py" line="131" />
         <source>需要安装日语注音组件</source>
         <translation>日本語ルビコンポーネントのインストールが必要</translation>
+    </message>
+</context>
+<context>
+    <name>WorkspaceSwitcher</name>
+    <message>
+        <location filename="src/strange_uta_game/frontend/fluent_widgets.py" line="127" />
+        <source>工作区切换</source>
+        <translation>ワークスペース切り替え</translation>
     </message>
 </context>
 <context>

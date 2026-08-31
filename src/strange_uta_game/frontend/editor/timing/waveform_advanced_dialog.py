@@ -3,13 +3,15 @@
 面板结构（与「AI 打轴」「自动插入导唱符」等最新工具窗口一致的
 ``FluentGroupBox`` 分区设计，内容区带 ScrollArea、``fit_to_screen`` 限幅）：
 
-1. 显示模式：波形图 / 声谱图（互斥），附两种模式用途说明。
-2. 网格与节拍：时间网格 / BPM 网格；BPM 手动输入 + 「自动检测」按钮
+1. 显示模式：波形图 / 声谱图（互斥）与暂未开放的双谱模式占位。
+2. 模式设置：仅显示当前模式对应的波形图设置或声谱图设置。
+3. 公共设置：网格与节拍、时间标签始终显示；网格支持时间网格 / BPM
+   网格、BPM 手动输入 + 「自动检测」按钮
    （librosa 管线的 numpy 复刻，见 spectrum_core.detect_bpm；结果填回
    输入框供确认，并给出置信度）；节拍器开关 + 音量（播放期间按
    BPM/偏移触发节拍音，见 playback_metronome.PlaybackMetronome）。
-3. 声谱参数：FFT 窗口、频率刻度、动态范围、频谱高度（仅声谱模式启用）。
-4. 时间标签：标签拖拽 / 播放头居中 / 标签显示字符 / 标签显示注音
+   声谱图设置包含 FFT 窗口、频率刻度与动态范围。
+   时间标签包含标签拖拽 / 播放头居中 / 标签显示字符 / 标签显示注音
    （与设置页「打轴 → 波形时间标签」组共用同一组 timing.* 键，两处联动）。
 
 行为要点：
@@ -47,6 +49,7 @@ from qfluentwidgets import (
     PushButton,
     RadioButton,
     ScrollArea,
+    SegmentedWidget,
     Slider,
 )
 
@@ -54,7 +57,11 @@ from strange_uta_game.backend.infrastructure.audio.spectrum import (
     SPECTRUM_COLORMAPS,
     first_sound_ms,
 )
-from strange_uta_game.frontend.fluent_widgets import FluentGroupBox, RangeSlider
+from strange_uta_game.frontend.fluent_widgets import (
+    FluentGroupBox,
+    RangeSlider,
+    WorkspaceSwitcher,
+)
 from strange_uta_game.frontend.window_sizing import fit_to_screen
 from strange_uta_game.frontend.workers import BpmDetectWorker
 
@@ -70,6 +77,9 @@ _OVERLAP_CHOICES = (0.5, 0.75, 0.875, 0.9375, 0.96875, 0.984375)
 # 频率范围双柄滑块的值域（Hz，对数刻度）：覆盖 CD 频带；两柄都拉到端点 = 全谱
 _FREQ_RANGE_MIN_HZ = 30.0
 _FREQ_RANGE_MAX_HZ = 22050.0
+_MODE_WAVEFORM = "waveform"
+_MODE_SPECTRUM = "spectrum"
+_MODE_DUAL = "dual"
 
 # ID 顺序与后端公开列表一致；文本留在 UI 层以便翻译。
 _COLORMAP_LABELS = {
@@ -120,24 +130,25 @@ class WaveformAdvancedDialog(QDialog):
 
         # ── Panel 1：显示模式 ──
         self._mode_group = FluentGroupBox(self.tr("显示模式"), content)
-        mode_row = QWidget(self._mode_group)
-        mode_row_layout = QHBoxLayout(mode_row)
-        mode_row_layout.setContentsMargins(0, 0, 0, 0)
-        self.radio_waveform = RadioButton(self.tr("波形图"), mode_row)
-        self.radio_spectrum = RadioButton(self.tr("声谱图"), mode_row)
-        mode_row_layout.addWidget(self.radio_waveform)
-        mode_row_layout.addWidget(self.radio_spectrum)
-        mode_row_layout.addStretch(1)
+        self.mode_switcher = WorkspaceSwitcher(self._mode_group)
+        self.mode_switcher.addItem(_MODE_WAVEFORM, self.tr("波形图"))
+        self.mode_switcher.addItem(_MODE_SPECTRUM, self.tr("声谱图"))
+        self.mode_switcher.addItem(_MODE_DUAL, self.tr("双谱模式"))
         self.mode_hint = CaptionLabel(
-            self.tr("波形图适合观察整体响度；声谱图按频率展示能量分布，适合音高定位"),
+            self.tr("波形图适合观察整体响度；声谱图适合音高定位；双谱模式暂未开放"),
             self._mode_group,
         )
         self.mode_hint.setWordWrap(True)
-        self._mode_group.contentLayout.addWidget(mode_row)
+        self._mode_group.contentLayout.addWidget(self.mode_switcher)
         self._mode_group.contentLayout.addWidget(self.mode_hint)
 
+        # ── 模式设置：直接放在「显示模式」卡片内，切换时互斥显示 ──
+        self._waveform_settings = QWidget(self._mode_group)
+        waveform_settings_layout = QVBoxLayout(self._waveform_settings)
+        waveform_settings_layout.setContentsMargins(0, 0, 0, 0)
+
         # 双层波形开关（默认开）：外层峰值 + 内层 RMS；关闭回退纯峰值
-        rms_row = QWidget(self._mode_group)
+        rms_row = QWidget(self._waveform_settings)
         rms_row_layout = QHBoxLayout(rms_row)
         rms_row_layout.setContentsMargins(0, 0, 0, 0)
         self._lbl_rms = BodyLabel(self.tr("双层波形（RMS）"), rms_row)
@@ -145,13 +156,33 @@ class WaveformAdvancedDialog(QDialog):
         self.rms_switch.setOnText(self.tr("开"))
         self.rms_switch.setOffText(self.tr("关"))
         rms_row_layout.addWidget(self._lbl_rms)
-        rms_row_layout.addWidget(self.rms_switch)
         rms_row_layout.addStretch(1)
-        self._mode_group.contentLayout.addWidget(rms_row)
+        rms_row_layout.addWidget(self.rms_switch)
+        waveform_settings_layout.addWidget(rms_row)
 
-        # ── Panel 2：网格与节拍 ──
-        self._grid_group = FluentGroupBox(self.tr("网格与节拍"), content)
-        grid_row = QWidget(self._grid_group)
+        self.waveform_height_slider = Slider(
+            Qt.Orientation.Horizontal, self._waveform_settings
+        )
+        self.waveform_height_slider.setRange(120, 400)
+        self.waveform_height_caption = CaptionLabel("", self._waveform_settings)
+        self.waveform_height_caption.setMinimumWidth(56)
+        waveform_height_row = QWidget(self._waveform_settings)
+        waveform_height_layout = QHBoxLayout(waveform_height_row)
+        waveform_height_layout.setContentsMargins(0, 0, 0, 0)
+        self._lbl_waveform_height = BodyLabel(
+            self.tr("显示高度"), waveform_height_row
+        )
+        waveform_height_layout.addWidget(self._lbl_waveform_height)
+        waveform_height_layout.addWidget(self.waveform_height_slider)
+        waveform_height_layout.addWidget(self.waveform_height_caption)
+        waveform_settings_layout.addWidget(waveform_height_row)
+
+        # ── 公共设置：网格与节拍 ──
+        self._grid_settings = QWidget(content)
+        grid_settings_layout = QVBoxLayout(self._grid_settings)
+        grid_settings_layout.setContentsMargins(0, 0, 0, 0)
+        grid_settings_layout.setSpacing(8)
+        grid_row = QWidget(self._grid_settings)
         grid_row_layout = QHBoxLayout(grid_row)
         grid_row_layout.setContentsMargins(0, 0, 0, 0)
         self.radio_grid_time = RadioButton(self.tr("时间网格"), grid_row)
@@ -159,28 +190,34 @@ class WaveformAdvancedDialog(QDialog):
         grid_row_layout.addWidget(self.radio_grid_time)
         grid_row_layout.addWidget(self.radio_grid_bpm)
         grid_row_layout.addStretch(1)
+        self._lbl_metronome = BodyLabel(self.tr("节拍器"), grid_row)
+        self.metronome_switch = SwitchButton(grid_row)
+        self.metronome_switch.setOnText(self.tr("开"))
+        self.metronome_switch.setOffText(self.tr("关"))
+        grid_row_layout.addWidget(self._lbl_metronome)
+        grid_row_layout.addWidget(self.metronome_switch)
 
-        self.bpm_spin = DoubleSpinBox(self._grid_group)
+        self.bpm_spin = DoubleSpinBox(self._grid_settings)
         self.bpm_spin.setRange(10.0, 600.0)
         self.bpm_spin.setDecimals(1)
         self.bpm_spin.setSingleStep(0.5)
         self.bpm_spin.setMinimumWidth(90)
-        self.btn_detect_bpm = PushButton(self.tr("自动检测"), self._grid_group)
+        self.btn_detect_bpm = PushButton(self.tr("自动检测"), self._grid_settings)
         # 对齐首音：把「BPM 网格偏移」一键设到开头静音结束、首个有声信号
         # 的位置（spectrum.first_sound_ms，整曲毫秒级，无需后台线程）
-        self.btn_align_first = PushButton(self.tr("对齐首音"), self._grid_group)
+        self.btn_align_first = PushButton(self.tr("对齐首音"), self._grid_settings)
         self.btn_detect_bpm.setEnabled(audio_source is not None)
         self.btn_align_first.setEnabled(audio_source is not None)
         # Enter 不被默认按钮吞掉：弹窗里按回车应提交输入框（editingFinished），
         # 而不是触发焦点所在/默认的「自动检测」
         self.btn_detect_bpm.setAutoDefault(False)
         self.btn_align_first.setAutoDefault(False)
-        self.bpm_status = CaptionLabel("", self._grid_group)
+        self.bpm_status = CaptionLabel("", self._grid_settings)
         self.bpm_status.setWordWrap(True)
         self.bpm_status.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum
         )
-        bpm_row = QWidget(self._grid_group)
+        bpm_row = QWidget(self._grid_settings)
         bpm_row_layout = QHBoxLayout(bpm_row)
         bpm_row_layout.setContentsMargins(0, 0, 0, 0)
         bpm_row_layout.addWidget(BodyLabel("BPM", bpm_row))
@@ -195,7 +232,7 @@ class WaveformAdvancedDialog(QDialog):
         #   失焦/回车提交；空串/非法/越界恢复上次有效值；0 = 不绘制网格
         # - 偏移（毫秒）：拍线相位对齐——节拍通常不从 0ms 开始，正值网格
         #   后移（延迟）、负值前移；与线宽同一套严格提交语义
-        num_row = QWidget(self._grid_group)
+        num_row = QWidget(self._grid_settings)
         num_row_layout = QHBoxLayout(num_row)
         num_row_layout.setContentsMargins(0, 0, 0, 0)
         self._lbl_grid_width = BodyLabel(self.tr("网格线宽"), num_row)
@@ -221,37 +258,28 @@ class WaveformAdvancedDialog(QDialog):
         self._last_valid_grid_width = 2
         self._last_valid_grid_offset = 0
 
-        # 节拍行（拍号 + 节拍器开关并排）：
+        # 拍号独占一行；节拍器开关已放在本页右上边缘。
         # - 拍号（N/4）：小节线/小节号与节拍器重音共用的循环周期；BPM 为
         #   四分音符时值，分子即每小节拍数
-        # - 节拍器：播放期间按上方 BPM 与「BPM 网格偏移」触发节拍音（仅
-        #   播放中响；seek 重新对齐；变速下拍点仍在正确时间轴时刻）
-        self.beats_per_bar_combo = ComboBox(self._grid_group)
+        self.beats_per_bar_combo = ComboBox(self._grid_settings)
         for numerator in _TIME_SIGNATURE_CHOICES:
             self.beats_per_bar_combo.addItem(f"{numerator}/4")
-        ts_met_row = QWidget(self._grid_group)
+        ts_met_row = QWidget(self._grid_settings)
         ts_met_row_layout = QHBoxLayout(ts_met_row)
         ts_met_row_layout.setContentsMargins(0, 0, 0, 0)
         self._lbl_beats_per_bar = BodyLabel(self.tr("拍号"), ts_met_row)
-        self._lbl_metronome = BodyLabel(self.tr("节拍器"), ts_met_row)
-        self.metronome_switch = SwitchButton(ts_met_row)
-        self.metronome_switch.setOnText(self.tr("开"))
-        self.metronome_switch.setOffText(self.tr("关"))
         ts_met_row_layout.addWidget(self._lbl_beats_per_bar)
         ts_met_row_layout.addWidget(self.beats_per_bar_combo)
-        ts_met_row_layout.addSpacing(16)
-        ts_met_row_layout.addWidget(self._lbl_metronome)
-        ts_met_row_layout.addWidget(self.metronome_switch)
         ts_met_row_layout.addStretch(1)
 
         # 节拍器音量（0~100%）：结构同「显示高度」行；开关关闭时联动禁用
         # （同 tag_char→tag_ruby 的禁用模式）；拖动中只刷新数字，松手/点击
         # 轨道时应用（与其他滑条一致）
-        self.met_volume_slider = Slider(Qt.Orientation.Horizontal, self._grid_group)
+        self.met_volume_slider = Slider(Qt.Orientation.Horizontal, self._grid_settings)
         self.met_volume_slider.setRange(0, 100)
-        self.met_volume_caption = CaptionLabel("", self._grid_group)
+        self.met_volume_caption = CaptionLabel("", self._grid_settings)
         self.met_volume_caption.setMinimumWidth(56)
-        met_volume_row = QWidget(self._grid_group)
+        met_volume_row = QWidget(self._grid_settings)
         met_volume_row_layout = QHBoxLayout(met_volume_row)
         met_volume_row_layout.setContentsMargins(0, 0, 0, 0)
         self._lbl_met_volume = BodyLabel(self.tr("节拍器音量"), met_volume_row)
@@ -262,71 +290,78 @@ class WaveformAdvancedDialog(QDialog):
         # 拍号与节拍器共用一条说明（折叠两条 caption 为一条）
         self.ts_met_hint = CaptionLabel(
             self.tr("节拍器播放时按上述 BPM 与偏移打拍；重音与网格小节线按拍号循环"),
-            self._grid_group,
+            self._grid_settings,
         )
         self.ts_met_hint.setWordWrap(True)
 
-        self._grid_group.contentLayout.addWidget(grid_row)
-        self._grid_group.contentLayout.addWidget(bpm_row)
-        self._grid_group.contentLayout.addWidget(num_row)
-        self._grid_group.contentLayout.addWidget(ts_met_row)
-        self._grid_group.contentLayout.addWidget(met_volume_row)
-        self._grid_group.contentLayout.addWidget(self.ts_met_hint)
-        self._grid_group.contentLayout.addWidget(self.bpm_status)
+        for row in (
+            grid_row,
+            bpm_row,
+            num_row,
+            ts_met_row,
+            met_volume_row,
+            self.ts_met_hint,
+            self.bpm_status,
+        ):
+            grid_settings_layout.addWidget(row)
 
-        # ── Panel 3：声谱参数 ──
-        self._params_group = FluentGroupBox(self.tr("声谱参数"), content)
-        self.fft_combo = ComboBox(self._params_group)
+        # ── 模式设置：声谱图（同样直接嵌入显示模式卡片） ──
+        self._spectrum_settings = QWidget(self._mode_group)
+        spectrum_settings_layout = QVBoxLayout(self._spectrum_settings)
+        spectrum_settings_layout.setContentsMargins(0, 0, 0, 0)
+        self.fft_combo = ComboBox(self._spectrum_settings)
         for value in _FFT_CHOICES:
             self.fft_combo.addItem(str(value))
-        self.overlap_combo = ComboBox(self._params_group)
+        self.overlap_combo = ComboBox(self._spectrum_settings)
         for overlap in _OVERLAP_CHOICES:
             self.overlap_combo.addItem(f"{overlap * 100:g}%")
-        self.scale_combo = ComboBox(self._params_group)
+        self.scale_combo = ComboBox(self._spectrum_settings)
         self.scale_combo.addItem(self.tr("对数"))
         self.scale_combo.addItem(self.tr("线性"))
-        self.colormap_combo = ComboBox(self._params_group)
+        self.colormap_combo = ComboBox(self._spectrum_settings)
         for colormap in SPECTRUM_COLORMAPS:
             self.colormap_combo.addItem(self.tr(_COLORMAP_LABELS[colormap]))
-        self.dyn_slider = Slider(Qt.Orientation.Horizontal, self._params_group)
+        self.dyn_slider = Slider(Qt.Orientation.Horizontal, self._spectrum_settings)
         self.dyn_slider.setRange(20, 120)
-        self.dyn_caption = CaptionLabel("", self._params_group)
+        self.dyn_caption = CaptionLabel("", self._spectrum_settings)
         self.dyn_caption.setMinimumWidth(56)
 
         # 频率范围（双柄对数滑块）：两柄都拉到端点 = 全谱（收集为 0/0）。
         # 仅影响渲染期行映射与频率轴，不触发声谱重算
-        self.freq_range_slider = RangeSlider(self._params_group)
+        self.freq_range_slider = RangeSlider(self._spectrum_settings)
         self.freq_range_slider.set_range(
             math.log(_FREQ_RANGE_MIN_HZ), math.log(_FREQ_RANGE_MAX_HZ)
         )
-        self.freq_range_caption = CaptionLabel("", self._params_group)
+        self.freq_range_caption = CaptionLabel("", self._spectrum_settings)
         self.freq_range_caption.setMinimumWidth(72)
 
-        # 显示高度（波形/声谱公共属性）放在「网格与节拍」Panel：
-        # 对两种模式同时生效
-        self.height_slider = Slider(Qt.Orientation.Horizontal, self._grid_group)
-        self.height_slider.setRange(120, 400)
-        self.height_caption = CaptionLabel("", self._grid_group)
-        self.height_caption.setMinimumWidth(56)
-        height_row = QWidget(self._grid_group)
-        height_row_layout = QHBoxLayout(height_row)
-        height_row_layout.setContentsMargins(0, 0, 0, 0)
-        self._lbl_height = BodyLabel(self.tr("显示高度"), height_row)
-        height_row_layout.addWidget(self._lbl_height)
-        height_row_layout.addWidget(self.height_slider)
-        height_row_layout.addWidget(self.height_caption)
-        self._grid_group.contentLayout.addWidget(height_row)
+        self.spectrum_height_slider = Slider(
+            Qt.Orientation.Horizontal, self._spectrum_settings
+        )
+        self.spectrum_height_slider.setRange(120, 400)
+        self.spectrum_height_caption = CaptionLabel("", self._spectrum_settings)
+        self.spectrum_height_caption.setMinimumWidth(56)
+        spectrum_height_row = QWidget(self._spectrum_settings)
+        spectrum_height_layout = QHBoxLayout(spectrum_height_row)
+        spectrum_height_layout.setContentsMargins(0, 0, 0, 0)
+        self._lbl_spectrum_height = BodyLabel(
+            self.tr("显示高度"), spectrum_height_row
+        )
+        spectrum_height_layout.addWidget(self._lbl_spectrum_height)
+        spectrum_height_layout.addWidget(self.spectrum_height_slider)
+        spectrum_height_layout.addWidget(self.spectrum_height_caption)
+        spectrum_settings_layout.addWidget(spectrum_height_row)
 
         params_grid = QGridLayout()
         params_grid.setContentsMargins(0, 0, 0, 0)
         params_grid.setHorizontalSpacing(10)
-        self._lbl_fft = BodyLabel(self.tr("FFT 窗口"), self._params_group)
-        self._lbl_overlap = BodyLabel(self.tr("窗口重叠"), self._params_group)
-        self._lbl_scale = BodyLabel(self.tr("频率刻度"), self._params_group)
-        self._lbl_colormap = BodyLabel(self.tr("强度配色"), self._params_group)
-        self._lbl_dyn = BodyLabel(self.tr("动态范围"), self._params_group)
-        self._lbl_freq_range = BodyLabel(self.tr("频率范围"), self._params_group)
-        self.overlap_hint = CaptionLabel("", self._params_group)
+        self._lbl_fft = BodyLabel(self.tr("FFT 窗口"), self._spectrum_settings)
+        self._lbl_overlap = BodyLabel(self.tr("窗口重叠"), self._spectrum_settings)
+        self._lbl_scale = BodyLabel(self.tr("频率刻度"), self._spectrum_settings)
+        self._lbl_colormap = BodyLabel(self.tr("强度配色"), self._spectrum_settings)
+        self._lbl_dyn = BodyLabel(self.tr("动态范围"), self._spectrum_settings)
+        self._lbl_freq_range = BodyLabel(self.tr("频率范围"), self._spectrum_settings)
+        self.overlap_hint = CaptionLabel("", self._spectrum_settings)
         self.overlap_hint.setWordWrap(True)
         params_grid.addWidget(self._lbl_fft, 0, 0)
         params_grid.addWidget(self.fft_combo, 0, 1)
@@ -345,18 +380,32 @@ class WaveformAdvancedDialog(QDialog):
         params_grid.addWidget(self.dyn_slider, 4, 1)
         params_grid.addWidget(self.dyn_caption, 4, 2)
         params_grid.setColumnStretch(1, 1)
-        self._params_group.contentLayout.addLayout(params_grid)
+        spectrum_settings_layout.addLayout(params_grid)
 
-        # ── Panel 4：时间标签（与设置页「打轴 → 波形时间标签」组联动） ──
-        self._tag_group = FluentGroupBox(self.tr("时间标签"), content)
+        # 双谱模式目前仅作可进入的 UI 占位，不写入 display_mode，也不触发
+        # TimelineWidget 切换；未来实现时可直接替换此页并扩展持久化枚举。
+        self._dual_settings = QWidget(self._mode_group)
+        dual_settings_layout = QVBoxLayout(self._dual_settings)
+        dual_settings_layout.setContentsMargins(0, 0, 0, 0)
+        self.dual_placeholder = BodyLabel(
+            self.tr("功能开发中，未来将在同一时间轴中同时显示波形图和声谱图。"),
+            self._dual_settings,
+        )
+        self.dual_placeholder.setWordWrap(True)
+        dual_settings_layout.addWidget(self.dual_placeholder)
+        self._mode_group.contentLayout.addWidget(self._waveform_settings)
+        self._mode_group.contentLayout.addWidget(self._spectrum_settings)
+        self._mode_group.contentLayout.addWidget(self._dual_settings)
+
+        # ── 公共设置：时间标签（与设置页「打轴 → 波形时间标签」组联动） ──
+        self._tag_settings = QWidget(content)
+        tag_settings_layout = QVBoxLayout(self._tag_settings)
+        tag_settings_layout.setContentsMargins(0, 0, 0, 0)
+        tag_settings_layout.setSpacing(8)
         (
             self._lbl_tag_edit,
             self.tag_edit_switch,
         ) = self._make_tag_switch_row(self.tr("波形时间标签拖拽"))
-        (
-            self._lbl_center_playhead,
-            self.center_playhead_switch,
-        ) = self._make_tag_switch_row(self.tr("播放头居中模式"))
         (
             self._lbl_tag_char,
             self.tag_char_switch,
@@ -367,22 +416,40 @@ class WaveformAdvancedDialog(QDialog):
         ) = self._make_tag_switch_row(self.tr("波形标签显示注音"))
         self.tag_link_hint = CaptionLabel(
             self.tr("与设置页「打轴 → 波形时间标签」共用，两处修改即时同步"),
-            self._tag_group,
+            self._tag_settings,
         )
         self.tag_link_hint.setWordWrap(True)
         for row in (
             self._lbl_tag_edit.parentWidget(),
-            self._lbl_center_playhead.parentWidget(),
             self._lbl_tag_char.parentWidget(),
             self._lbl_tag_ruby.parentWidget(),
         ):
-            self._tag_group.contentLayout.addWidget(row)
-        self._tag_group.contentLayout.addWidget(self.tag_link_hint)
+            tag_settings_layout.addWidget(row)
+        tag_settings_layout.addWidget(self.tag_link_hint)
+
+        self._common_group = FluentGroupBox(self.tr("公共设置"), content)
+        common_nav_row = QWidget(self._common_group)
+        common_nav_layout = QHBoxLayout(common_nav_row)
+        common_nav_layout.setContentsMargins(0, 0, 0, 0)
+        self.common_navigation = SegmentedWidget(common_nav_row)
+        self.common_navigation.addItem("grid", self.tr("网格与节拍"))
+        self.common_navigation.addItem("tags", self.tr("时间标签"))
+        self._lbl_center_playhead = BodyLabel(
+            self.tr("播放头居中"), common_nav_row
+        )
+        self.center_playhead_switch = SwitchButton(common_nav_row)
+        self.center_playhead_switch.setOnText(self.tr("开"))
+        self.center_playhead_switch.setOffText(self.tr("关"))
+        common_nav_layout.addWidget(self.common_navigation)
+        common_nav_layout.addStretch(1)
+        common_nav_layout.addWidget(self._lbl_center_playhead)
+        common_nav_layout.addWidget(self.center_playhead_switch)
+        self._common_group.contentLayout.addWidget(common_nav_row)
+        self._common_group.contentLayout.addWidget(self._grid_settings)
+        self._common_group.contentLayout.addWidget(self._tag_settings)
 
         content_layout.addWidget(self._mode_group)
-        content_layout.addWidget(self._grid_group)
-        content_layout.addWidget(self._params_group)
-        content_layout.addWidget(self._tag_group)
+        content_layout.addWidget(self._common_group)
         content_layout.addStretch(1)
         scroll.setWidget(content)
 
@@ -407,7 +474,7 @@ class WaveformAdvancedDialog(QDialog):
 
     def _make_tag_switch_row(self, label_text: str) -> tuple:
         """时间标签面板的「标签 + 开关」行（结构与双层波形行一致）。"""
-        row = QWidget(self._tag_group)
+        row = QWidget(self._tag_settings)
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         label = BodyLabel(label_text, row)
@@ -415,15 +482,16 @@ class WaveformAdvancedDialog(QDialog):
         switch.setOnText(self.tr("开"))
         switch.setOffText(self.tr("关"))
         row_layout.addWidget(label)
-        row_layout.addWidget(switch)
         row_layout.addStretch(1)
+        row_layout.addWidget(switch)
         return label, switch
 
     def _load_initial(self) -> None:
         init = self._initial
         is_spectrum = init.get("display_mode") == "spectrum"
-        self.radio_spectrum.setChecked(is_spectrum)
-        self.radio_waveform.setChecked(not is_spectrum)
+        self._active_display_mode = _MODE_SPECTRUM if is_spectrum else _MODE_WAVEFORM
+        self.mode_switcher.setCurrentItem(self._active_display_mode)
+        self._update_params_enabled()
         self.rms_switch.setChecked(bool(init.get("waveform_rms_enabled", True)))
         self.refresh_overlap_hint(init)
         is_bpm = init.get("grid_mode") == "bpm"
@@ -465,7 +533,13 @@ class WaveformAdvancedDialog(QDialog):
             int(init.get("spectrum_freq_min_hz", 0) or 0),
             int(init.get("spectrum_freq_max_hz", 0) or 0),
         )
-        self.height_slider.setValue(int(init.get("display_height", 120)))
+        legacy_height = int(init.get("display_height", 120))
+        self.waveform_height_slider.setValue(
+            int(init.get("waveform_display_height", legacy_height))
+        )
+        self.spectrum_height_slider.setValue(
+            int(init.get("spectrum_display_height", legacy_height))
+        )
         self.tag_edit_switch.setChecked(bool(init.get("tag_edit_enabled", True)))
         self.center_playhead_switch.setChecked(
             bool(init.get("center_playhead_enabled", False))
@@ -476,14 +550,16 @@ class WaveformAdvancedDialog(QDialog):
         self.met_volume_slider.setValue(
             max(0, min(100, int(init.get("metronome_volume", 100))))
         )
+        self.common_navigation.setCurrentItem("grid")
+        self._update_common_page("grid")
         self._update_slider_captions()
         self._update_params_enabled()
         self._sync_tag_ruby_enabled()
         self._sync_met_volume_enabled()
 
     def _connect_signals(self) -> None:
-        self.radio_spectrum.toggled.connect(self._on_mode_toggled)
-        self.radio_waveform.toggled.connect(self._on_mode_toggled)
+        self.mode_switcher.currentItemChanged.connect(self._on_mode_selected)
+        self.common_navigation.currentItemChanged.connect(self._update_common_page)
         self.radio_grid_time.toggled.connect(self._on_grid_toggled)
         self.rms_switch.checkedChanged.connect(lambda _v: self._emit_applied())
         self.radio_grid_bpm.toggled.connect(self._on_grid_toggled)
@@ -503,11 +579,15 @@ class WaveformAdvancedDialog(QDialog):
         self.dyn_slider.valueChanged.connect(
             lambda v: self._on_slider_value_changed(self.dyn_slider, v)
         )
-        self.height_slider.valueChanged.connect(
-            lambda v: self._on_slider_value_changed(self.height_slider, v)
+        self.waveform_height_slider.valueChanged.connect(
+            lambda v: self._on_slider_value_changed(self.waveform_height_slider, v)
+        )
+        self.spectrum_height_slider.valueChanged.connect(
+            lambda v: self._on_slider_value_changed(self.spectrum_height_slider, v)
         )
         self.dyn_slider.sliderReleased.connect(self._emit_applied)
-        self.height_slider.sliderReleased.connect(self._emit_applied)
+        self.waveform_height_slider.sliderReleased.connect(self._emit_applied)
+        self.spectrum_height_slider.sliderReleased.connect(self._emit_applied)
         # 频率范围双柄滑块：拖动中只刷新数字，松手应用（与其他滑条一致）
         self.freq_range_slider.rangeChanged.connect(self._on_freq_range_changed)
         self.freq_range_slider.rangeCommitted.connect(self._on_freq_range_committed)
@@ -612,8 +692,9 @@ class WaveformAdvancedDialog(QDialog):
 
     def _retranslate(self) -> None:
         self.setWindowTitle(self.tr("波形图高级设置"))
-        self.radio_waveform.setText(self.tr("波形图"))
-        self.radio_spectrum.setText(self.tr("声谱图"))
+        self.mode_switcher.setItemText(_MODE_WAVEFORM, self.tr("波形图"))
+        self.mode_switcher.setItemText(_MODE_SPECTRUM, self.tr("声谱图"))
+        self.mode_switcher.setItemText(_MODE_DUAL, self.tr("双谱模式"))
         self.radio_grid_time.setText(self.tr("时间网格"))
         self.radio_grid_bpm.setText(self.tr("BPM 网格"))
         self.btn_detect_bpm.setText(self.tr("自动检测"))
@@ -630,14 +711,17 @@ class WaveformAdvancedDialog(QDialog):
         self.rms_switch.setOffText(self.tr("关"))
         self._lbl_overlap.setText(self.tr("窗口重叠"))
         self.mode_hint.setText(
-            self.tr("波形图适合观察整体响度；声谱图按频率展示能量分布，适合音高定位")
+            self.tr("波形图适合观察整体响度；声谱图适合音高定位；双谱模式暂未开放")
         )
         self._mode_group.setTitle(self.tr("显示模式"))
-        self._grid_group.setTitle(self.tr("网格与节拍"))
-        self._tag_group.setTitle(self.tr("时间标签"))
-        self._params_group.setTitle(self.tr("声谱参数"))
+        self.dual_placeholder.setText(
+            self.tr("功能开发中，未来将在同一时间轴中同时显示波形图和声谱图。")
+        )
+        self._common_group.setTitle(self.tr("公共设置"))
+        self.common_navigation.widget("grid").setText(self.tr("网格与节拍"))
+        self.common_navigation.widget("tags").setText(self.tr("时间标签"))
         self._lbl_tag_edit.setText(self.tr("波形时间标签拖拽"))
-        self._lbl_center_playhead.setText(self.tr("播放头居中模式"))
+        self._lbl_center_playhead.setText(self.tr("播放头居中"))
         self._lbl_tag_char.setText(self.tr("波形标签显示字符"))
         self._lbl_tag_ruby.setText(self.tr("波形标签显示注音"))
         self._lbl_metronome.setText(self.tr("节拍器"))
@@ -661,7 +745,8 @@ class WaveformAdvancedDialog(QDialog):
         self._lbl_dyn.setText(self.tr("动态范围"))
         self._lbl_freq_range.setText(self.tr("频率范围"))
         self._update_freq_caption()
-        self._lbl_height.setText(self.tr("显示高度"))
+        self._lbl_waveform_height.setText(self.tr("显示高度"))
+        self._lbl_spectrum_height.setText(self.tr("显示高度"))
         self.scale_combo.setItemText(0, self.tr("对数"))
         self.scale_combo.setItemText(1, self.tr("线性"))
         for index, colormap in enumerate(SPECTRUM_COLORMAPS):
@@ -690,23 +775,39 @@ class WaveformAdvancedDialog(QDialog):
         self.dyn_caption.setText(f"{self.dyn_slider.value()} dB")
         self.met_volume_caption.setText(f"{self.met_volume_slider.value()}%")
         self._update_freq_caption()
-        value = self.height_slider.value()
-        if value > self._actual_height_cap:
-            self.height_caption.setText(
-                self.tr("实际 {px} px").format(px=self._actual_height_cap)
-            )
-        else:
-            self.height_caption.setText(f"{value} px")
+        active = self._active_display_mode
+        for mode, slider, caption in (
+            (_MODE_WAVEFORM, self.waveform_height_slider, self.waveform_height_caption),
+            (_MODE_SPECTRUM, self.spectrum_height_slider, self.spectrum_height_caption),
+        ):
+            value = slider.value()
+            if mode == active and value > self._actual_height_cap:
+                caption.setText(
+                    self.tr("实际 {px} px").format(px=self._actual_height_cap)
+                )
+            else:
+                caption.setText(f"{value} px")
 
     def _update_params_enabled(self) -> None:
-        self._params_group.setEnabled(self.radio_spectrum.isChecked())
+        route = self.mode_switcher.currentRouteKey() or self._active_display_mode
+        self._waveform_settings.setVisible(route == _MODE_WAVEFORM)
+        self._spectrum_settings.setVisible(route == _MODE_SPECTRUM)
+        self._dual_settings.setVisible(route == _MODE_DUAL)
+        self._spectrum_settings.setEnabled(route == _MODE_SPECTRUM)
 
-    def _on_mode_toggled(self, checked: bool) -> None:
+    def _on_mode_selected(self, route: str) -> None:
+        previous = self._active_display_mode
         self._update_params_enabled()
-        # 同组两个 RadioButton 都连 toggled：一次切换先后触发「旧按钮
-        # 取消 + 新按钮选中」，只在选中时提交（否则 applied 发两次）。
-        if checked:
+        if route in (_MODE_WAVEFORM, _MODE_SPECTRUM):
+            self._active_display_mode = route
+        # 双谱页只是 UI 占位，不改变当前渲染模式或持久化设置。
+        if self._active_display_mode != previous:
+            self._update_slider_captions()
             self._emit_applied()
+
+    def _update_common_page(self, route: str) -> None:
+        self._grid_settings.setVisible(route == "grid")
+        self._tag_settings.setVisible(route == "tags")
 
     def _on_grid_toggled(self, checked: bool) -> None:
         if checked:
@@ -741,7 +842,7 @@ class WaveformAdvancedDialog(QDialog):
     def _collect(self) -> dict:
         freq_min_hz, freq_max_hz = self._freq_range_values()
         return {
-            "display_mode": "spectrum" if self.radio_spectrum.isChecked() else "waveform",
+            "display_mode": self._active_display_mode,
             "grid_mode": "bpm" if self.radio_grid_bpm.isChecked() else "time",
             "grid_bpm": float(self.bpm_spin.value()),
             "grid_offset_ms": self._last_valid_grid_offset,
@@ -762,7 +863,14 @@ class WaveformAdvancedDialog(QDialog):
             "spectrum_dyn_range_db": int(self.dyn_slider.value()),
             "spectrum_freq_min_hz": freq_min_hz,
             "spectrum_freq_max_hz": freq_max_hz,
-            "display_height": int(self.height_slider.value()),
+            "waveform_display_height": int(self.waveform_height_slider.value()),
+            "spectrum_display_height": int(self.spectrum_height_slider.value()),
+            # 旧消费方兼容：当前模式对应的高度。
+            "display_height": int(
+                self.spectrum_height_slider.value()
+                if self._active_display_mode == _MODE_SPECTRUM
+                else self.waveform_height_slider.value()
+            ),
             "waveform_rms_enabled": bool(self.rms_switch.isChecked()),
             "tag_edit_enabled": bool(self.tag_edit_switch.isChecked()),
             "center_playhead_enabled": bool(self.center_playhead_switch.isChecked()),
@@ -832,6 +940,22 @@ class WaveformAdvancedDialog(QDialog):
             switch.setChecked(value)
             switch.blockSignals(False)
         self._sync_tag_ruby_enabled()
+
+    def sync_display_mode(self, settings: dict) -> None:
+        """外部快捷键/设置恢复改变显示模式时同步药丸与卡片内容。
+
+        切换器信号在同步期间被阻断，避免再次发出 ``applied`` 并形成
+        ``TimelineWidget._apply_display_settings`` 回环。
+        """
+        mode = settings.get("display_mode", _MODE_WAVEFORM)
+        if mode not in (_MODE_WAVEFORM, _MODE_SPECTRUM):
+            mode = _MODE_WAVEFORM
+        self._active_display_mode = mode
+        self.mode_switcher.blockSignals(True)
+        self.mode_switcher.setCurrentItem(mode)
+        self.mode_switcher.blockSignals(False)
+        self._update_params_enabled()
+        self._update_slider_captions()
 
     # ── BPM 自动检测（task_runner 自回收；槽按 sender 身份丢弃过期结果） ──
 

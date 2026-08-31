@@ -20,9 +20,8 @@ def _tone(seconds: float = 2.0, freq: float = 440.0) -> np.ndarray:
 
 
 class TestDisplayMode:
-    def test_default_display_height_is_common(self, qapp):
-        """显示高度是波形/声谱公共属性：期望经 sizeHint 表达（默认 120 =
-        旧版不可调时的波形窗口高度）。
+    def test_default_display_heights_are_mode_specific(self, qapp):
+        """波形/声谱高度分别保存，默认值均为 120。
 
         minimumHeight 恒为硬下限 80——空间不足时布局压缩显示区，
         而不是把顶层窗口撑出屏幕（P1：曾实测请求 713px 窗口被撑到 855px）。
@@ -34,7 +33,7 @@ class TestDisplayMode:
         display.set_display_mode("spectrum")
         assert display.sizeHint().height() == 120
 
-    def test_display_height_adjustable_both_modes(self, qapp):
+    def test_legacy_display_height_adjusts_both_modes(self, qapp):
         display = WaveformDisplay()
         display.set_spectrum_params(display_height=300)
         assert display.sizeHint().height() == 300
@@ -42,7 +41,19 @@ class TestDisplayMode:
         display.set_display_mode("spectrum")
         assert display.sizeHint().height() == 300
         display.set_display_mode("waveform")
-        assert display.sizeHint().height() == 300  # 公共属性，切换模式不重置
+        assert display.sizeHint().height() == 300
+
+    def test_display_heights_are_independent(self, qapp):
+        display = WaveformDisplay()
+        display.set_spectrum_params(
+            waveform_display_height=180,
+            spectrum_display_height=320,
+        )
+        assert display.sizeHint().height() == 180
+        display.set_display_mode("spectrum")
+        assert display.sizeHint().height() == 320
+        display.set_display_mode("waveform")
+        assert display.sizeHint().height() == 180
 
     def test_invalid_mode_is_ignored(self, qapp):
         display = WaveformDisplay()
@@ -144,7 +155,8 @@ class TestDisplayMode:
         display.set_spectrum_params(display_height=380)
         assert display.minimumHeight() == 380  # 领取空间
         assert display.sizeHint().height() == 380  # 期望保留
-        assert display._display_height == 380
+        assert display._waveform_display_height == 380
+        assert display._spectrum_display_height == 380
 
     def test_tag_handle_centered_both_modes(self, qapp):
         """把手恒在显示区中央（Tag 竖线中部，方便点击）——任意模式/高度一致。"""
@@ -508,7 +520,7 @@ class TestAdvancedDialog:
         }
         dialog = self._make_dialog(initial)
 
-        assert dialog.radio_spectrum.isChecked()
+        assert dialog.mode_switcher.currentRouteKey() == "spectrum"
         assert dialog.radio_grid_bpm.isChecked()
         collected = dialog._collect()
         assert collected["display_mode"] == "spectrum"
@@ -559,13 +571,13 @@ class TestAdvancedDialog:
         dialog._cancel_bpm_worker()  # 清理第二个任务
 
     def test_mode_switch_emits_applied_once(self, qapp):
-        """P3-1：toggled 双触发（旧按钮取消+新按钮选中）只提交一次。"""
+        """药丸分段切换每次只提交一次真实渲染模式。"""
         dialog = self._make_dialog({"display_mode": "waveform"})
         received = []
         dialog.applied.connect(lambda d: received.append(d["display_mode"]))
-        dialog.radio_spectrum.setChecked(True)
+        dialog.mode_switcher.setCurrentItem("spectrum")
         assert received == ["spectrum"]
-        dialog.radio_waveform.setChecked(True)
+        dialog.mode_switcher.setCurrentItem("waveform")
         assert received == ["spectrum", "waveform"]
 
     def test_grid_switch_emits_applied_once(self, qapp):
@@ -589,13 +601,13 @@ class TestAdvancedDialog:
         received = []
         dialog.applied.connect(lambda d: received.append(d))
         dialog.set_height_cap(240)
-        assert dialog.height_slider.value() == 120  # 期望（默认）不变
-        assert dialog.height_slider.maximum() == 400  # 期望域固定
+        assert dialog.spectrum_height_slider.value() == 120  # 期望（默认）不变
+        assert dialog.spectrum_height_slider.maximum() == 400  # 期望域固定
         assert received == []  # 不因 cap 触发持久化
-        dialog.height_slider.setValue(320)
+        dialog.spectrum_height_slider.setValue(320)
         dialog.set_height_cap(200)  # 窗口变小：仅提示实际显示高度
-        assert dialog.height_slider.value() == 320  # 期望不被覆盖
-        assert "200" in dialog.height_caption.text()
+        assert dialog.spectrum_height_slider.value() == 320  # 期望不被覆盖
+        assert "200" in dialog.spectrum_height_caption.text()
 
     def test_audio_source_switch_a_to_b_no_crash(self, qapp):
         """P1：音源 tuple 含 ndarray——A 歌切 B 歌不得触发元素比较异常。"""
@@ -665,21 +677,23 @@ class TestAdvancedDialog:
     def test_retranslate_covers_all_static_labels(self, qapp):
         """P2：语言切换重译必须覆盖全部 GroupBox 标题与参数标签。"""
         dialog = self._make_dialog({"display_mode": "spectrum"})
-        for widget in (dialog._mode_group, dialog._grid_group, dialog._params_group):
+        for widget in (dialog._mode_group, dialog._common_group):
             widget.setTitle("XX")
         for label in (dialog._lbl_fft, dialog._lbl_scale,
-                      dialog._lbl_dyn, dialog._lbl_height):
+                      dialog._lbl_dyn, dialog._lbl_waveform_height,
+                      dialog._lbl_spectrum_height):
             label.setText("XX")
 
         dialog._retranslate()
 
         assert dialog._mode_group.title() == "显示模式"
-        assert dialog._grid_group.title() == "网格与节拍"
-        assert dialog._params_group.title() == "声谱参数"
+        assert dialog._common_group.title() == "公共设置"
+        assert dialog.common_navigation.items["grid"].text() == "网格与节拍"
         assert dialog._lbl_fft.text() == "FFT 窗口"
         assert dialog._lbl_scale.text() == "频率刻度"
         assert dialog._lbl_dyn.text() == "动态范围"
-        assert dialog._lbl_height.text() == "显示高度"
+        assert dialog._lbl_waveform_height.text() == "显示高度"
+        assert dialog._lbl_spectrum_height.text() == "显示高度"
 
     def test_audio_source_switch_cancels_and_disables(self, qapp):
         """切歌：取消在途检测、旧结果不更新 UI、按钮随新音源重置。"""
@@ -715,8 +729,40 @@ class TestAdvancedDialog:
     def test_params_enabled_only_in_spectrum_mode(self, qapp):
         dialog = self._make_dialog({"display_mode": "waveform"})
         assert not dialog.fft_combo.isEnabled()
-        dialog.radio_spectrum.setChecked(True)
+        assert not dialog._waveform_settings.isHidden()
+        assert dialog._spectrum_settings.isHidden()
+        dialog.mode_switcher.setCurrentItem("spectrum")
         assert dialog.fft_combo.isEnabled()
+        assert dialog._waveform_settings.isHidden()
+        assert not dialog._spectrum_settings.isHidden()
+
+    def test_common_settings_stay_visible_for_both_modes(self, qapp):
+        dialog = self._make_dialog({"display_mode": "waveform"})
+        assert not dialog._common_group.isHidden()
+        assert not dialog._grid_settings.isHidden()
+        assert dialog._tag_settings.isHidden()
+
+        dialog.mode_switcher.setCurrentItem("spectrum")
+        assert not dialog._common_group.isHidden()
+        dialog.common_navigation.setCurrentItem("tags")
+        assert dialog._grid_settings.isHidden()
+        assert not dialog._tag_settings.isHidden()
+        assert not dialog.center_playhead_switch.isHidden()
+
+    def test_dual_spectrum_mode_is_reserved_placeholder(self, qapp):
+        dialog = self._make_dialog({"display_mode": "waveform"})
+        emitted = []
+        dialog.applied.connect(lambda settings: emitted.append(settings))
+
+        dialog.mode_switcher.setCurrentItem("dual")
+
+        assert dialog.mode_switcher.currentRouteKey() == "dual"
+        assert not dialog._dual_settings.isHidden()
+        assert dialog._waveform_settings.isHidden()
+        assert dialog._spectrum_settings.isHidden()
+        assert "未来将在同一时间轴" in dialog.dual_placeholder.text()
+        assert dialog._collect()["display_mode"] == "waveform"
+        assert emitted == []
 
 
 class TestSettingsDefaults:
@@ -733,12 +779,36 @@ class TestSettingsDefaults:
             "spectrum_freq_scale": "log",
             "spectrum_dyn_range_db": 60,
             "display_height": 120,
+            "waveform_display_height": 120,
+            "spectrum_display_height": 120,
             "waveform_metronome_enabled": False,
             "waveform_metronome_volume": 100,
             "waveform_beats_per_bar": 4,
         }
         for key, value in expected.items():
             assert timing.get(key) == value, key
+
+    def test_legacy_display_height_migrates_to_both_modes(self):
+        from strange_uta_game.frontend.settings.app_settings import AppSettings
+
+        settings = {"timing": {"display_height": 236}}
+        AppSettings._migrate_display_heights(settings)
+        assert settings["timing"]["waveform_display_height"] == 236
+        assert settings["timing"]["spectrum_display_height"] == 236
+
+    def test_explicit_mode_heights_win_over_legacy_value(self):
+        from strange_uta_game.frontend.settings.app_settings import AppSettings
+
+        settings = {
+            "timing": {
+                "display_height": 236,
+                "waveform_display_height": 180,
+                "spectrum_display_height": 320,
+            }
+        }
+        AppSettings._migrate_display_heights(settings)
+        assert settings["timing"]["waveform_display_height"] == 180
+        assert settings["timing"]["spectrum_display_height"] == 320
 
 
 class TestOwnerDestructionCrashSafety:
@@ -793,6 +863,13 @@ class TestTimelineAudioSourcePush:
         from strange_uta_game.frontend.editor.timing_interface import EditorInterface
 
         timeline = TimelineWidget()
+        timeline._apply_display_settings({
+            **timeline.display_settings(),
+            "waveform_display_height": 180,
+            "spectrum_display_height": 300,
+        })
+        timeline._on_waveform_settings_clicked()
+        dialog = timeline._advanced_dialog
         received = []
         timeline.display_settings_changed.connect(
             lambda d: received.append(dict(d))
@@ -800,10 +877,19 @@ class TestTimelineAudioSourcePush:
         ed = SimpleNamespace(timeline=timeline)
         EditorInterface._toggle_waveform_spectrum(ed)
         assert timeline.display_settings()["display_mode"] == "spectrum"
+        assert dialog.mode_switcher.currentRouteKey() == "spectrum"
+        assert not dialog._spectrum_settings.isHidden()
+        assert timeline.waveform_display.minimumHeight() == 300
+        assert dialog.spectrum_height_slider.value() == 300
         assert len(received) == 1
         EditorInterface._toggle_waveform_spectrum(ed)
         assert timeline.display_settings()["display_mode"] == "waveform"
+        assert dialog.mode_switcher.currentRouteKey() == "waveform"
+        assert not dialog._waveform_settings.isHidden()
+        assert timeline.waveform_display.minimumHeight() == 180
+        assert dialog.waveform_height_slider.value() == 180
         assert len(received) == 2
+        dialog.deleteLater()
 
 
 class TestEditorLevelSpectrumHeight:
@@ -957,6 +1043,8 @@ class TestBpmGridLineWidth:
         assert timing.get("waveform_grid_line_width") == 2
         assert timing.get("spectrum_overlap") == 0.75
         assert timing.get("display_height") == 120
+        assert timing.get("waveform_display_height") == 120
+        assert timing.get("spectrum_display_height") == 120
 
 
 class TestSpectrumAxisGutter:
@@ -1137,11 +1225,15 @@ class TestAnalysisGranularity:
         collected = dialog._collect()
         assert collected["spectrum_overlap"] == 0.875
         assert collected["display_height"] == 260
+        assert collected["waveform_display_height"] == 260
+        assert collected["spectrum_display_height"] == 260
         dialog.overlap_combo.setCurrentIndex(3)  # 93.75%
-        dialog.height_slider.setValue(300)
+        dialog.spectrum_height_slider.setValue(300)
         collected = dialog._collect()
         assert collected["spectrum_overlap"] == 0.9375
         assert collected["display_height"] == 300
+        assert collected["waveform_display_height"] == 260
+        assert collected["spectrum_display_height"] == 300
 
     def test_enter_not_swallowed_by_default_button(self, qapp):
         """Enter 焦点修复：弹窗按钮不抢 Enter（autoDefault 关闭）。"""
@@ -1180,7 +1272,10 @@ class TestAnalysisGranularity:
         # eventFilter 走真实事件循环；直接调槽验证链路
         dialog.set_height_cap(timeline.waveform_display.height())
         assert dialog._actual_height_cap == 260
-        assert "260" in dialog.height_caption.text() or dialog.height_slider.value() <= 260
+        assert (
+            "260" in dialog.spectrum_height_caption.text()
+            or dialog.spectrum_height_slider.value() <= 260
+        )
         dialog.deleteLater()
 
 class TestWaveformCollapseLayout:
@@ -1303,9 +1398,10 @@ class TestSliderTrackClick:
         )
         received = []
         dialog.applied.connect(lambda d: received.append(d))
-        dialog.height_slider.setValue(300)
+        dialog.spectrum_height_slider.setValue(300)
         assert len(received) == 1
         assert received[0]["display_height"] == 300
+        assert received[0]["spectrum_display_height"] == 300
 
     def test_drag_does_not_apply_until_release(self, qapp):
         """拖动中（isSliderDown=True）不应用；松手后应用一次。"""
@@ -2078,16 +2174,24 @@ class TestTagSettingsLinkage:
         assert dialog.tag_char_switch.isChecked() is True
         assert dialog.tag_ruby_switch.isChecked() is True
 
-    def test_tag_panel_is_after_spectrum_params_panel(self, qapp):
-        """「时间标签」面板排在「声谱参数」之后（显示模式 → 网格 → 声谱 → 标签）。"""
+    def test_mode_settings_precede_common_settings(self, qapp):
+        """模式专属设置在上，网格与时间标签归入其后的公共设置区。"""
         dialog = TestAdvancedDialog._make_dialog({})
-        layout = dialog._tag_group.parentWidget().layout()
-        assert layout.indexOf(dialog._tag_group) > layout.indexOf(
-            dialog._params_group
+        layout = dialog._common_group.parentWidget().layout()
+        mode_layout = dialog._mode_group.contentLayout
+        assert mode_layout.indexOf(dialog._waveform_settings) > mode_layout.indexOf(
+            dialog.mode_hint
         )
-        assert layout.indexOf(dialog._params_group) > layout.indexOf(
-            dialog._grid_group
+        assert mode_layout.indexOf(dialog._spectrum_settings) > mode_layout.indexOf(
+            dialog._waveform_settings
         )
+        assert mode_layout.indexOf(dialog._dual_settings) > mode_layout.indexOf(
+            dialog._spectrum_settings
+        )
+        assert layout.indexOf(dialog._common_group) > layout.indexOf(dialog._mode_group)
+        common_layout = dialog._common_group.contentLayout
+        assert common_layout.indexOf(dialog._grid_settings) >= 0
+        assert common_layout.indexOf(dialog._tag_settings) >= 0
 
     def test_dialog_char_off_disables_ruby_switch(self, qapp):
         dialog = TestAdvancedDialog._make_dialog({"tag_char_enabled": False})

@@ -145,7 +145,9 @@ class AppSettings:
             "spectrum_dyn_range_db": 60,
             "spectrum_freq_min_hz": 0,            # 声谱频率钳制（0=自动/全谱）
             "spectrum_freq_max_hz": 0,
-            "display_height": 120,                # 显示高度（波形/声谱公共；默认=旧版固定高度）
+            "display_height": 120,                # 旧版共用高度（兼容迁移）
+            "waveform_display_height": 120,       # 波形图显示高度
+            "spectrum_display_height": 120,       # 声谱图显示高度
             "waveform_rms_enabled": True,         # 双层波形（峰值+RMS）
             "disable_click_jump": False,
             "disable_click_recenter": False,
@@ -603,6 +605,7 @@ class AppSettings:
             except Exception:
                 loaded = {}
             if isinstance(loaded, dict):
+                self._migrate_display_heights(loaded)
                 self._deep_merge(self._settings, deepcopy(loaded))
             try:
                 provider_dictionary_version = int(
@@ -789,6 +792,7 @@ class AppSettings:
                     with open(self._config_path, "r", encoding="utf-8") as f:
                         loaded = json.load(f)
                 # 以默认值为基础，用户配置覆盖
+                self._migrate_display_heights(loaded)
                 self._deep_merge(defaults, loaded)
             except Exception as e:
                 print(f"加载设置失败: {e}")
@@ -826,6 +830,16 @@ class AppSettings:
                 self._deep_merge(base[key], value)
             else:
                 base[key] = value
+
+    @staticmethod
+    def _migrate_display_heights(settings: Dict[str, Any]) -> None:
+        """旧版共用显示高度迁移为波形/声谱两个独立值。"""
+        timing = settings.get("timing")
+        if not isinstance(timing, dict) or "display_height" not in timing:
+            return
+        legacy = timing.get("display_height", 120)
+        timing.setdefault("waveform_display_height", legacy)
+        timing.setdefault("spectrum_display_height", legacy)
 
     def save(self) -> None:
         """持久化当前设置。
@@ -875,6 +889,7 @@ class AppSettings:
             except Exception:
                 loaded = {}
             if isinstance(loaded, dict):
+                self._migrate_display_heights(loaded)
                 self._deep_merge(self._settings, deepcopy(loaded))
             self._dirty_paths.clear()
             return
