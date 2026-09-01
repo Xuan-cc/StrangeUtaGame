@@ -615,6 +615,18 @@ class WaveformAdvancedDialog(QDialog):
         self.btn_detect_bpm.clicked.connect(self._on_detect_bpm)
         self.btn_align_first.clicked.connect(self._on_align_first_sound)
 
+    def sync_display_heights(self, settings: dict) -> None:
+        """底边拖拽提交后同步两个高度滑条，不触发 applied 回环。"""
+        controls = (
+            (self.waveform_height_slider, "waveform_display_height"),
+            (self.spectrum_height_slider, "spectrum_display_height"),
+        )
+        for slider, key in controls:
+            slider.blockSignals(True)
+            slider.setValue(int(settings.get(key, slider.value())))
+            slider.blockSignals(False)
+        self._update_slider_captions()
+
     def _on_tag_char_toggled(self, _checked: bool) -> None:
         """字符显示以注音显示为前提：字符关 → 注音开关禁用（与设置页联动一致）。"""
         self._sync_tag_ruby_enabled()

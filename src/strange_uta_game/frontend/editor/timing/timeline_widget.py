@@ -47,6 +47,10 @@ from strange_uta_game.frontend.workers import SpectrogramWorker
 # 选中态、命中测试、拖拽提交都以此为身份，跨 set_time_tags 重排存活。
 TagHandle = Tuple[int, int, int, bool]
 
+# 波形/声谱高级设置与底部拖拽手柄共用同一组高度边界。
+_MIN_DISPLAY_HEIGHT = 120
+_MAX_DISPLAY_HEIGHT = 400
+
 # 声谱模式左侧频率轴 gutter 宽度（px）：容纳强度色卡和频率刻度；
 # tag/热图/播放头从轴区右侧开始，两者物理分离互不覆盖。
 _SPECTRUM_AXIS_W = 50
@@ -1110,12 +1114,22 @@ class WaveformDisplay(QWidget):
             if spectrum_display_height is None:
                 spectrum_display_height = display_height
         if waveform_display_height is not None:
-            height = int(max(120, min(400, waveform_display_height)))
+            height = int(
+                max(
+                    _MIN_DISPLAY_HEIGHT,
+                    min(_MAX_DISPLAY_HEIGHT, waveform_display_height),
+                )
+            )
             if height != self._waveform_display_height:
                 self._waveform_display_height = height
                 changed = True
         if spectrum_display_height is not None:
-            height = int(max(120, min(400, spectrum_display_height)))
+            height = int(
+                max(
+                    _MIN_DISPLAY_HEIGHT,
+                    min(_MAX_DISPLAY_HEIGHT, spectrum_display_height),
+                )
+            )
             if height != self._spectrum_display_height:
                 self._spectrum_display_height = height
                 changed = True
@@ -2476,6 +2490,76 @@ class WaveformDisplay(QWidget):
 # 时间轴控件（包含波形显示 + 缩放控制 + 滚动条）
 # ──────────────────────────────────────────────
 
+class _TimelineHeightHandle(QWidget):
+    """时间轴底部的纵向拖拽手柄。"""
+
+    drag_started = pyqtSignal()
+    drag_moved = pyqtSignal(int)
+    drag_finished = pyqtSignal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._press_global_y: Optional[int] = None
+        self._hovered = False
+        self.setFixedHeight(8)
+        self.setCursor(Qt.CursorShape.SizeVerCursor)
+
+    def enterEvent(self, event) -> None:
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        active = self._hovered or self._press_global_y is not None
+        color = theme.accent_primary if active else theme.border_primary
+        line_h = 3 if active else 1
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(
+            QRectF(8, (self.height() - line_h) / 2, max(0, self.width() - 16), line_h),
+            line_h / 2,
+            line_h / 2,
+        )
+
+    def mousePressEvent(self, event: Optional[QMouseEvent]) -> None:
+        if event is None or event.button() != Qt.MouseButton.LeftButton:
+            super().mousePressEvent(event)
+            return
+        self._press_global_y = int(round(event.globalPosition().y()))
+        self.drag_started.emit()
+        self.update()
+        event.accept()
+
+    def mouseMoveEvent(self, event: Optional[QMouseEvent]) -> None:
+        if event is None or self._press_global_y is None:
+            super().mouseMoveEvent(event)
+            return
+        delta = int(round(event.globalPosition().y())) - self._press_global_y
+        self.drag_moved.emit(delta)
+        event.accept()
+
+    def mouseReleaseEvent(self, event: Optional[QMouseEvent]) -> None:
+        if (
+            event is None
+            or event.button() != Qt.MouseButton.LeftButton
+            or self._press_global_y is None
+        ):
+            super().mouseReleaseEvent(event)
+            return
+        delta = int(round(event.globalPosition().y())) - self._press_global_y
+        self._press_global_y = None
+        self.drag_finished.emit(delta)
+        self.update()
+        event.accept()
+
+
 class TimelineWidget(QWidget):
     """时间轴 - 显示音频波形 + 时间网格 + 时间标签 + 播放位置"""
 
@@ -2507,6 +2591,8 @@ class TimelineWidget(QWidget):
         # 声谱活动性合成：波形开关请求 × 应用/窗口可见性
         self._spectrum_requested = True
         self._app_visible = True
+        self._resize_start_height = 0
+        self._resize_start_settings: Optional[dict] = None
         self._init_ui()
 
     def changeEvent(self, event):
@@ -2618,6 +2704,16 @@ class TimelineWidget(QWidget):
 
         layout.addWidget(self._bottom_bar)
 
+        # 波形打开时可直接拖动底边改变显示高度。高度仍写回高级设置使用的
+        # waveform/spectrum 两个键，因此下次启动和设置弹窗都保持一致。
+        self._height_handle = _TimelineHeightHandle(self)
+        self._height_handle.drag_started.connect(self._begin_height_drag)
+        self._height_handle.drag_moved.connect(self._move_height_drag)
+        self._height_handle.drag_finished.connect(self._finish_height_drag)
+        # 作为底边覆盖层而非布局项，不额外抬高窗口最小高度；命中带向内
+        # 覆盖 8px，视觉线仍落在时间轴与预览的实际交界处。
+        self._position_height_handle()
+
     def sizeHint(self):
         """高度提示: 波形可见 = 显示区 minimumHeight + 底栏; 隐藏 = 仅底栏.
 
@@ -2643,6 +2739,22 @@ class TimelineWidget(QWidget):
     def actual_spectrum_display_height(self) -> int:
         """当前实际显示的声谱区高度（弹窗提示用，区别于期望高度）。"""
         return self.waveform_display.height()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._position_height_handle()
+
+    def _position_height_handle(self) -> None:
+        handle = getattr(self, "_height_handle", None)
+        if handle is None:
+            return
+        handle.setGeometry(
+            0,
+            max(0, self.height() - handle.height()),
+            self.width(),
+            handle.height(),
+        )
+        handle.raise_()
 
     def bottom_bar_height(self) -> int:
         """底部控制栏（缩放/滚动/齿轮/开关）的当前高度。"""
@@ -2824,6 +2936,7 @@ class TimelineWidget(QWidget):
             return  # 相同状态的重复设置直接返回(不发信号)
         self._waveform_visible = checked
         self.waveform_display.setVisible(checked)
+        self._height_handle.setVisible(checked)
         # 不直接下发 set_spectrum_active——那会绕过 _app_visible 后台门禁
         #(应用后台时切开关会重启声谱 worker). 统一走 _sync_spectrum_activity.
         self._sync_spectrum_activity()
@@ -2843,6 +2956,68 @@ class TimelineWidget(QWidget):
         # 只改开关状态, 由 checkedChanged -> _on_waveform_visibility_changed
         # -> _apply_waveform_visibility 统一处理(信号只发一次)
         self.switch_waveform.setChecked(visible)
+
+    # ---- 底边拖拽调整显示高度 ----
+
+    def _begin_height_drag(self) -> None:
+        self._resize_start_settings = dict(self.display_settings())
+        mode = self._resize_start_settings.get("display_mode", "waveform")
+        if mode == "dual":
+            self._resize_start_height = (
+                int(self._resize_start_settings["waveform_display_height"])
+                + int(self._resize_start_settings["spectrum_display_height"])
+            )
+        else:
+            self._resize_start_height = int(
+                self._resize_start_settings["display_height"]
+            )
+
+    def _move_height_drag(self, delta: int) -> None:
+        if self._resize_start_settings is None:
+            return
+        self._set_dragged_display_height(self._resize_start_height + int(delta))
+
+    def _finish_height_drag(self, delta: int) -> None:
+        before = self._resize_start_settings
+        if before is None:
+            return
+        self._set_dragged_display_height(self._resize_start_height + int(delta))
+        self._resize_start_settings = None
+        after = self.display_settings()
+        if after == before:
+            return
+        # 拖动中只重排布局；松手时才一次性持久化，避免每个像素都写配置。
+        self.display_settings_changed.emit(dict(after))
+        dialog = getattr(self, "_advanced_dialog", None)
+        if dialog is not None and hasattr(dialog, "sync_display_heights"):
+            dialog.sync_display_heights(after)
+
+    def _set_dragged_display_height(self, requested: int) -> None:
+        """应用拖拽目标高度；双谱按原比例分配并同时满足两栏边界。"""
+        start = self._resize_start_settings
+        if start is None:
+            return
+        mode = start.get("display_mode", "waveform")
+        if mode == "dual":
+            total = max(
+                _MIN_DISPLAY_HEIGHT * 2,
+                min(_MAX_DISPLAY_HEIGHT * 2, int(requested)),
+            )
+            start_wave = int(start["waveform_display_height"])
+            start_spec = int(start["spectrum_display_height"])
+            start_total = max(1, start_wave + start_spec)
+            wave = int(round(total * start_wave / start_total))
+            wave_low = max(_MIN_DISPLAY_HEIGHT, total - _MAX_DISPLAY_HEIGHT)
+            wave_high = min(_MAX_DISPLAY_HEIGHT, total - _MIN_DISPLAY_HEIGHT)
+            wave = max(wave_low, min(wave_high, wave))
+            self.set_spectrum_params(
+                waveform_display_height=wave,
+                spectrum_display_height=total - wave,
+            )
+        elif mode == "spectrum":
+            self.set_spectrum_params(spectrum_display_height=requested)
+        else:
+            self.set_spectrum_params(waveform_display_height=requested)
 
     # ---- 显示模式 / 高级设置（齿轮对话框） ----
 

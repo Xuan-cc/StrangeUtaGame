@@ -1649,6 +1649,62 @@ class TestSignalSingleEmit:
         assert len(signals) == 2
 
 
+class TestTimelineHeightDrag:
+    """时间轴底边拖动与高级设置共用高度状态。"""
+
+    def test_single_mode_updates_live_but_emits_only_on_release(self, qapp):
+        timeline = TimelineWidget()
+        received = []
+        timeline.display_settings_changed.connect(lambda d: received.append(dict(d)))
+
+        timeline._begin_height_drag()
+        timeline._move_height_drag(80)
+        assert timeline.display_settings()["waveform_display_height"] == 200
+        assert received == []
+
+        timeline._finish_height_drag(80)
+        assert len(received) == 1
+        assert received[0]["waveform_display_height"] == 200
+
+    def test_single_mode_clamps_to_advanced_setting_range(self, qapp):
+        timeline = TimelineWidget()
+        timeline._begin_height_drag()
+        timeline._finish_height_drag(999)
+        assert timeline.display_settings()["waveform_display_height"] == 400
+
+        timeline._begin_height_drag()
+        timeline._finish_height_drag(-999)
+        assert timeline.display_settings()["waveform_display_height"] == 120
+
+    def test_dual_mode_preserves_ratio_and_both_lane_bounds(self, qapp):
+        timeline = TimelineWidget()
+        timeline._apply_display_settings({
+            "display_mode": "dual",
+            "waveform_display_height": 120,
+            "spectrum_display_height": 240,
+        })
+
+        timeline._begin_height_drag()
+        timeline._finish_height_drag(180)
+        settings = timeline.display_settings()
+        assert settings["waveform_display_height"] == 180
+        assert settings["spectrum_display_height"] == 360
+
+        timeline._begin_height_drag()
+        timeline._finish_height_drag(-999)
+        settings = timeline.display_settings()
+        assert settings["waveform_display_height"] == 120
+        assert settings["spectrum_display_height"] == 120
+
+    def test_handle_only_visible_with_waveform_window(self, qapp):
+        timeline = TimelineWidget()
+        timeline.show()
+        qapp.processEvents()
+        assert timeline._height_handle.isVisible()
+        timeline.set_waveform_visible(False)
+        assert not timeline._height_handle.isVisible()
+
+
 class TestVisiblePeaksBoundaryMapping:
     """居中播放时边界映射正确（通过真实路径：set_audio_data → 同步预热）。"""
 
