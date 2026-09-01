@@ -47,7 +47,7 @@ def test_space_without_rhythm_consumes_no_wipe_time(qapp, monkeypatch):
     preview = preview_module.KaraokePreview()
     preview.set_project(_project_from([sentence]))
 
-    wt = preview._sentence_cache[0]["char_wipe_times"]
+    wt = preview._sentence_cache[(0, "cur")]["char_wipe_times"]
 
     # 空格：零时长窗口，瞬时跨过，不占走字时间
     assert wt[1][0] == wt[1][1] == 2000
@@ -103,7 +103,10 @@ def test_position_and_focus_changes_do_not_invalidate_render_cache(qapp, monkeyp
     preview.set_project(_project_with_linked_word())
 
     assert preview._sentence_cache
-    cached_entry = preview._sentence_cache[0]
+    cached_entries = {
+        font_key: preview._sentence_cache[(0, font_key)]
+        for font_key in ("cur", "ctx")
+    }
     global_version = preview._global_version
 
     preview.set_current_position(0, 1)
@@ -112,7 +115,8 @@ def test_position_and_focus_changes_do_not_invalidate_render_cache(qapp, monkeyp
     preview.request_repaint()
 
     assert preview._global_version == global_version
-    assert preview._sentence_cache[0] is cached_entry
+    for font_key, cached_entry in cached_entries.items():
+        assert preview._sentence_cache[(0, font_key)] is cached_entry
 
     preview._update_display()
 
@@ -568,7 +572,7 @@ def test_alt_wheel_scrolls_horizontally_without_using_vertical_scroll(
 
 def test_prewarm_targets_current_line_and_visible_window(qapp, monkeypatch):
     """双路预热：打开只预热 current_line 附近一屏；滚动停稳预热新可视窗口；
-    版本未失效的行重复 settle 直接复用缓存，不重复渲染。"""
+    每行保留 cur/ctx 两种状态，版本未失效时直接复用。"""
     monkeypatch.setattr(preview_module, "theme", _DummyTheme())
     preview = preview_module.KaraokePreview()
     preview.resize(800, 560)
@@ -578,20 +582,40 @@ def test_prewarm_targets_current_line_and_visible_window(qapp, monkeypatch):
 
     # 打开：仅 current_line 附近一屏有缓存，绝不全量
     cached_after_open = len(preview._sentence_cache)
-    assert 0 < cached_after_open < total
+    assert 0 < cached_after_open < total * 2
 
     # 滚动到远处行，防抖触发（_on_viewport_settled）后新可视窗口被预热
     preview._scroll_center_line = 40.0
     preview._on_viewport_settled()
-    assert 40 in preview._sentence_cache
+    assert (40, "cur") in preview._sentence_cache
+    assert (40, "ctx") in preview._sentence_cache
     assert len(preview._sentence_cache) > cached_after_open
 
-    # 版本校验：重复 settle 不重复渲染（缓存条目对象被原样复用）
-    marker = preview._sentence_cache[40]
-    preview._on_viewport_settled()
-    assert preview._sentence_cache[40] is marker
+    # 两种字号排版同时存在，且并非同一份布局结果
+    markers = {
+        font_key: preview._sentence_cache[(40, font_key)]
+        for font_key in ("cur", "ctx")
+    }
+    assert markers["cur"] is not markers["ctx"]
 
-    # 编辑使版本失效（含相邻依赖行）→ settle 后按新版本重渲
+    # 消费端交替取当前行/上下文行时只选择对应条目，不覆盖另一种状态
+    sentence = preview._project.sentences[40]
+    assert preview._get_sentence_render_data(
+        40, sentence, preview._fm_current, "cur"
+    ) is markers["cur"]
+    assert preview._get_sentence_render_data(
+        40, sentence, preview._fm_context, "ctx"
+    ) is markers["ctx"]
+    assert preview._sentence_cache[(40, "cur")] is markers["cur"]
+    assert preview._sentence_cache[(40, "ctx")] is markers["ctx"]
+
+    # 版本校验：重复 settle 不重复渲染（两种缓存条目均原样复用）
+    preview._on_viewport_settled()
+    for font_key, marker in markers.items():
+        assert preview._sentence_cache[(40, font_key)] is marker
+
+    # 编辑使版本失效（含相邻依赖行）→ settle 后两种状态均按新版本重渲
     preview._invalidate_line_and_dependents(40)
     preview._on_viewport_settled()
-    assert preview._sentence_cache[40] is not marker
+    for font_key, marker in markers.items():
+        assert preview._sentence_cache[(40, font_key)] is not marker

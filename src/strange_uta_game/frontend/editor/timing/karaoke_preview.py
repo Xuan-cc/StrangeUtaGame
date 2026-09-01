@@ -419,7 +419,9 @@ class KaraokePreview(QWidget):
 
         # 逐句渲染数据缓存（避免每帧重复计算）
         # 每行有自己的版本号，只有数据改变的行才重新计算
-        self._sentence_cache: dict = {}
+        # 同一行的当前行/上下文行字号不同，必须各自保留一份排版结果；两条
+        # 预热路径共同填充这里，绘制时再按现场视觉状态选择对应条目。
+        self._sentence_cache: dict[tuple[int, str], dict] = {}
         self._line_versions: dict = {}  # line_idx -> version
         self._global_version: int = 0  # 全局版本号，用于字体变化等全局刷新
         self._is_playing: bool = False
@@ -947,14 +949,11 @@ class KaraokePreview(QWidget):
         half = self._visible_lines / 2 + 1
         first = max(0, int(self._scroll_center_line - half))
         last = min(n - 1, int(self._scroll_center_line + half) + 1)
-        effective_current = self._effective_current_line()
         for idx in range(first, last + 1):
             sentence = self._project.sentences[idx]
             if not sentence.characters:
                 continue
-            fk = "cur" if idx == effective_current else "ctx"
-            fm = self._fm_current if fk == "cur" else self._fm_context
-            self._get_sentence_render_data(idx, sentence, fm, fk)
+            self._prewarm_sentence_states(idx, sentence)
 
     def showEvent(self, a0):
         super().showEvent(a0)
@@ -975,7 +974,8 @@ class KaraokePreview(QWidget):
         """按 L, L+1, L-1, L+2, L-2, ... 的就近扩散顺序预热 _sentence_cache。
 
         - 每次最多预热 budget 句，避免阻塞 paint
-        - 已缓存/版本匹配的行直接跳过，不重复计算
+        - 每行同时预热 ``cur`` / ``ctx`` 两种排版状态
+        - 两种状态均已缓存且版本匹配的行直接跳过，不重复计算
         - 行号边界：center 被 clamp 到 [0, n-1]，扩散候选再次越界检查；
           两端都越界后早退，避免无意义空转
         """
@@ -1009,20 +1009,34 @@ class KaraokePreview(QWidget):
                 if idx < 0 or idx >= n:
                     continue
                 any_valid = True
-                entry = self._sentence_cache.get(idx)
-                is_current_line = idx == self._current_line_idx
-                fk = "cur" if is_current_line else "ctx"
-                line_version = self._line_versions.get(idx, 0)
-                if entry and entry["v"] == line_version and entry["gv"] == self._global_version and entry["fk"] == fk:
+                sentence = sentences[idx]
+                if not sentence.characters:
                     continue
-                main_fm = self._fm_current if is_current_line else self._fm_context
-                self._get_sentence_render_data(idx, sentences[idx], main_fm, fk)
+                if not self._prewarm_sentence_states(idx, sentence):
+                    continue
                 warmed += 1
                 if warmed >= budget:
                     return
             # 两端都越界（向前到 0、向后到 n-1 之外）→ 无需继续扩散
             if offset > 0 and not any_valid:
                 return
+
+    def _prewarm_sentence_states(self, idx: int, sentence) -> bool:
+        """补齐一行的当前行/上下文行排版缓存，返回是否实际计算过。"""
+        rendered = False
+        for font_key, fm in (("cur", self._fm_current), ("ctx", self._fm_context)):
+            cache_key = (idx, font_key)
+            entry = self._sentence_cache.get(cache_key)
+            line_version = self._line_versions.get(idx, 0)
+            if (
+                entry
+                and entry["v"] == line_version
+                and entry["gv"] == self._global_version
+            ):
+                continue
+            self._get_sentence_render_data(idx, sentence, fm, font_key)
+            rendered = True
+        return rendered
 
     def set_global_offset(self, offset_ms: int):
         """设置全局偏移量（毫秒），更新所有字符的时间戳"""
@@ -1270,7 +1284,8 @@ class KaraokePreview(QWidget):
 
     def _invalidate_all_lines(self):
         """使所有行的缓存失效（用于全局数据改变时）"""
-        line_indices = set(self._line_versions.keys()) | set(self._sentence_cache.keys())
+        cached_line_indices = {line_idx for line_idx, _font_key in self._sentence_cache}
+        line_indices = set(self._line_versions.keys()) | cached_line_indices
         for line_idx in line_indices:
             self._line_versions[line_idx] = self._line_versions.get(line_idx, 0) + 1
         self._mark_horizontal_layout_dirty()
@@ -2029,8 +2044,9 @@ class KaraokePreview(QWidget):
           - 全局版本号用于字体变化等全局刷新
         """
         line_version = self._line_versions.get(idx, 0)
-        entry = self._sentence_cache.get(idx)
-        if entry and entry["v"] == line_version and entry["gv"] == self._global_version and entry["fk"] == font_key:
+        cache_key = (idx, font_key)
+        entry = self._sentence_cache.get(cache_key)
+        if entry and entry["v"] == line_version and entry["gv"] == self._global_version:
             return entry
 
         _perf_start = time.perf_counter() if perf_enabled() else None
@@ -2480,7 +2496,7 @@ class KaraokePreview(QWidget):
             "group_ruby_ink": group_ruby_ink,
             "group_ruby_wipe": group_ruby_wipe,
         }
-        self._sentence_cache[idx] = entry
+        self._sentence_cache[cache_key] = entry
         if _perf_start is not None:
             log_elapsed(
                 "preview.render_data",
