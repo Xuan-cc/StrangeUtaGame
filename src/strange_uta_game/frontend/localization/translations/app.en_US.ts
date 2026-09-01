@@ -8656,6 +8656,16 @@ This overwrites your current settings (user dict and singer presets are unaffect
         <translation>Play/Pause</translation>
     </message>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="241" />
+        <source>从头播放</source>
+        <translation>Play from Beginning</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="272" />
+        <source>停止并从头播放</source>
+        <translation>Stop and play from the beginning</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="338" />
         <source>播放控制</source>
         <translation>Playback</translation>

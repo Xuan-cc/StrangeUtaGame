@@ -33,6 +33,7 @@ class ShortcutSubInterface(SubSettingInterface):
         # ── 播放控制 ──
         ("play_pause", FIF.PLAY, "播放/暂停", "切换播放和暂停", "A:short", "A:short", "both", None, None, False),
         ("stop", FIF.PAUSE, "停止", "停止播放", "S:short", "S:short", "both", None, None, False),
+        ("restart_playback", FIF.SYNC, "从头播放", "停止并从头播放", "SHIFT+S:short", "SHIFT+S:short", "both", None, None, False),
         ("speed_down", FIF.SPEED_OFF, "减速", "降低播放速度", "Q:short", "Q:short", "both", None, None, False),
         ("speed_up", FIF.SPEED_HIGH, "加速", "提高播放速度", "W:short", "W:short", "both", None, None, False),
         ("speed_reset", FIF.SPEED_MEDIUM, "恢复默认速度", "将播放速度恢复为设置中的默认速度；双击速度条也可恢复", "E:short", "E:short", "both", None, None, False),
@@ -237,7 +238,7 @@ class ShortcutSubInterface(SubSettingInterface):
         本方法返回值无意义、调用一次即可。"""
         tr = self.tr
         # title（按 _SHORTCUT_ACTIONS 顺序，缺译时按 source 显示）
-        tr("播放/暂停"); tr("停止"); tr("减速"); tr("加速"); tr("恢复默认速度")
+        tr("播放/暂停"); tr("停止"); tr("从头播放"); tr("减速"); tr("加速"); tr("恢复默认速度")
         tr("音量增大"); tr("音量减小"); tr("恢复默认音量"); tr("上一行"); tr("下一行")
         tr("上一字符"); tr("下一字符")
         tr("切换字内节奏点（反向）"); tr("时间戳+步长"); tr("时间戳-步长")
@@ -268,7 +269,7 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("撤销"); tr("重做"); tr("保存"); tr("复制字符")
         tr("粘贴"); tr("插入换行"); tr("合并上一行"); tr("删除字符")
         # content
-        tr("切换播放和暂停"); tr("停止播放")
+        tr("切换播放和暂停"); tr("停止播放"); tr("停止并从头播放")
         tr("降低播放速度"); tr("提高播放速度")
         tr("将播放速度恢复为设置中的默认速度；双击速度条也可恢复")
         tr("增大播放音量"); tr("减小播放音量")

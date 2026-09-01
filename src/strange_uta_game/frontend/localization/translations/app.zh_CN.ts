@@ -8657,6 +8657,16 @@ KS 来源的配置将优先覆盖同名设置。</translation>
         <translation>播放/暂停</translation>
     </message>
     <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="241" />
+        <source>从头播放</source>
+        <translation>从头播放</translation>
+    </message>
+    <message>
+        <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="272" />
+        <source>停止并从头播放</source>
+        <translation>停止并从头播放</translation>
+    </message>
+    <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="338" />
         <source>播放控制</source>
         <translation>播放控制</translation>

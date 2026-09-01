@@ -206,3 +206,30 @@ def test_preload_fallback_uses_current_mode_defaults():
     assert EditorInterface._default_key_action(
         fallback, Qt.Key.Key_Space, playing=True
     ) == "tag_now_extra"
+
+
+def test_restart_playback_shortcut_stops_before_playing():
+    """「从头播放」复用停止和播放路径，且顺序不能颠倒。"""
+    calls = []
+    editor = SimpleNamespace(
+        _on_stop=lambda: calls.append("stop"),
+        _on_play=lambda: calls.append("play"),
+    )
+
+    EditorInterface._execute_action(editor, "restart_playback", 0)
+
+    assert calls == ["stop", "play"]
+
+
+def test_restart_playback_default_is_shift_s_in_both_modes():
+    """「从头播放」在播放与编辑模式中都默认为 Shift+S。"""
+    shipped = _shipped_shortcuts()
+    for mode in ("timing_mode", "edit_mode"):
+        assert shipped[mode]["restart_playback"] == "SHIFT+S:short"
+
+        # 旧用户配置不含新动作时，也应从设置页默认值回退补全。
+        old_config = json.loads(json.dumps(shipped))
+        old_config[mode].pop("restart_playback")
+        short, _, actions, _ = _build(_DictSettings(old_config), mode)
+        assert short["SHIFT+S"] == "restart_playback"
+        assert actions["restart_playback"] == "SHIFT+S:short"

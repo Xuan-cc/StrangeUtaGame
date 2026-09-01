@@ -308,6 +308,7 @@ class AppSettings:
             "timing_mode": {
                 "play_pause": "A:short",
                 "stop": "S:short",
+                "restart_playback": "SHIFT+S:short",
                 "speed_down": "Q:short",
                 "speed_up": "W:short",
                 "speed_reset": "E:short",
@@ -386,6 +387,7 @@ class AppSettings:
             "edit_mode": {
                 "play_pause": "A:short",
                 "stop": "S:short",
+                "restart_playback": "SHIFT+S:short",
                 "speed_down": "Q:short",
                 "speed_up": "W:short",
                 "speed_reset": "E:short",

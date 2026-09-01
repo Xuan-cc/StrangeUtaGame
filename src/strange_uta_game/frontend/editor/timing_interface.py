@@ -1027,6 +1027,7 @@ class EditorInterface(QWidget):
             "tag_now_extra",
             "play_pause",
             "stop",
+            "restart_playback",
             "seek_back",
             "seek_forward",
             "lock_playback_start",
@@ -1103,6 +1104,7 @@ class EditorInterface(QWidget):
             "tag_now_extra": "SPACE:short",
             "play_pause": "A:short",
             "stop": "S:short",
+            "restart_playback": "SHIFT+S:short",
             "seek_back": "Z:short",
             "seek_forward": "X:short",
             "lock_playback_start": "[:short",
@@ -7397,6 +7399,9 @@ class EditorInterface(QWidget):
                 self._on_play()
         elif action == "stop":
             self._on_stop()
+        elif action == "restart_playback":
+            self._on_stop()
+            self._on_play()
         elif action == "seek_back":
             if self._timing_service and self._timing_service.is_playing():
                 cur = self._timing_service.get_position_ms()

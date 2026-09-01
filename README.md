@@ -393,6 +393,11 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
   <td>停止并回到行首</td>
 </tr>
 <tr>
+  <td>从头播放 · Play from Beginning</td>
+  <td align="center"><kbd>Shift</kbd>+<kbd>S</kbd></td>
+  <td>停止、回到开头并立即播放</td>
+</tr>
+<tr>
   <td>后退 / 前进 · Seek back / forward</td>
   <td align="center"><kbd>Z</kbd> &nbsp; <kbd>X</kbd></td>
   <td>默认后退 2000 ms / 前进 3000 ms</td>
