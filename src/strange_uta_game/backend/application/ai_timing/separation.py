@@ -13,13 +13,141 @@ import json
 import subprocess
 from collections import deque
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 ProgressFn = Callable[[str, int, str], None]
 CancelFn = Callable[[], bool]
 
 SEPARATION_MODEL = "UVR-MDX-NET-Inst_HQ_3.onnx"
 VOCAL_STEM = "人声"
+
+# ── 分离模型预下载（缺文件时用镜像补，避免 audio-separator 直连 GitHub）──
+#
+# audio-separator 的下载判据是「文件已存在就永不下载、也不校验」——因此
+# 我们预先用 SUG 的多源接力（官方直连 + gh-proxy 镜像 + 代理）把下面这些
+# 文件拉进 audio-separator 的 model_file_dir（即模型根 model_root），它检测
+# 到存在即跳过，全程不碰 GitHub。URL 与 audio-separator 0.47.0 实际访问的
+# 完全一致（域名/路径镜像）。
+SEPARATION_MODEL_URL = (
+    "https://github.com/TRvlvr/model_repo/releases/download/"
+    "all_public_uvr_models/UVR-MDX-NET-Inst_HQ_3.onnx"
+)
+# audio-separator 依次寻找的元数据/模型清单小文件（application_data 仓库 raw）。
+# 注意 mdx/vr 两张 model_data 来自同一 repo 的不同子路径，但 audio-separator
+# 会把它们各自另存为 mdx_model_data.json / vr_model_data.json。
+SEPARATION_MODEL_FILES: "list[tuple[str, str]]" = [
+    (SEPARATION_MODEL, SEPARATION_MODEL_URL),
+    (
+        "download_checks.json",
+        "https://raw.githubusercontent.com/TRvlvr/application_data/main/"
+        "filelists/download_checks.json",
+    ),
+    (
+        "mdx_model_data.json",
+        "https://raw.githubusercontent.com/TRvlvr/application_data/main/"
+        "mdx_model_data/model_data_new.json",
+    ),
+    (
+        "vr_model_data.json",
+        "https://raw.githubusercontent.com/TRvlvr/application_data/main/"
+        "vr_model_data/model_data_new.json",
+    ),
+]
+
+
+def _download_missing_model_files(
+    model_root,
+    *,
+    proxy: str = "",
+    progress: Optional[Callable[[str, int, str], None]] = None,
+    cancel: Optional[CancelFn] = None,
+) -> List[str]:
+    """把 model_file_dir 里缺失的分离模型文件补齐（镜像/代理接力）。
+
+    只下载缺失项；已存在（audio-separator 判定会跳过下载）不重拉。返回
+    本次实际下载的文件名列表。失败抛 AiTimingError（中文、可操作）。
+    即使本函数抛错，调用方也应让 audio-separator 自行官方下载兜底。
+    """
+    import os
+    import shutil
+
+    root = Path(model_root)
+    target = root  # 分离模型直接落在模型根（与 audio-separator model_file_dir 一致）
+    target.mkdir(parents=True, exist_ok=True)
+
+    from strange_uta_game.backend.application.ai_timing.runtime import (
+        AiRuntimeError,
+        _download_attempts,
+    )
+
+    downloaded: List[str] = []
+    progress = progress or (lambda _s, _p, _m: None)
+    cancel = cancel or (lambda: False)
+
+    for name, url in SEPARATION_MODEL_FILES:
+        if cancel():
+            raise AiRuntimeError("已取消")
+        dest = target / name
+        if dest.is_file():
+            continue  # 已存在：audio-separator 也不会重下
+        attempts = _download_attempts(url, proxy)
+        errors: List[str] = []
+        ok = False
+        # 原子写入：先写同目录 .part 再改名（与模型下载/AiCache 一致），
+        # 避免半成品被 audio-separator 当完整文件
+        import uuid as _uuid
+
+        part = target / f".{name}.{_uuid.uuid4().hex}.part"
+        import requests
+
+        try:
+            for cand_url, cand_proxies in attempts:
+                if cancel():
+                    raise AiRuntimeError("已取消")
+                try:
+                    with requests.get(
+                        cand_url,
+                        stream=True,
+                        timeout=(30, 60),
+                        proxies=cand_proxies,
+                    ) as resp:
+                        resp.raise_for_status()
+                        with part.open("wb") as fh:
+                            for chunk in resp.iter_content(chunk_size=1024 * 256):
+                                if cancel():
+                                    raise AiRuntimeError("已取消")
+                                if chunk:
+                                    fh.write(chunk)
+                    total = part.stat().st_size
+                    if total <= 0:
+                        raise RuntimeError("下载内容为空")
+                    shutil.move(str(part), str(dest))
+                    ok = True
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"{cand_url}: {exc}")
+        finally:
+            try:
+                part.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if not ok:
+            # 留给 audio-separator 官方下载兜底：不硬抛阻断分离主流程，
+            # 但记录日志。onnx 缺失时下一轮仍会尝试补齐。
+            from strange_uta_game.backend.application.ai_timing.ailog import ailog
+
+            ailog(
+                "separation",
+                f"分离模型预下载失败（{name}）：" + "；".join(errors[-3:]),
+            )
+            continue
+        downloaded.append(name)
+        progress(
+            "separation",
+            0,
+            _tr("已补齐分离模型文件 {name}").format(name=name),
+        )
+    return downloaded
 
 
 def _tr(s: str) -> str:
@@ -113,7 +241,7 @@ def ensure_separation_model(model_root) -> str:
     root = Path(model_root) if model_root else None
     if root is None or not root.is_dir():
         return ""
-    notes = []
+    notes: List[str] = []
     hashes = set()
     for name in _MODEL_DATA_JSONS:
         table = root / name
@@ -146,7 +274,7 @@ def ensure_separation_model(model_root) -> str:
                     "将在下次分离时重新下载"
                 )
             )
-    joined = "；".join(notes)
+    joined = "；".join(n for n in notes if n)
     if joined:
         from strange_uta_game.backend.application.ai_timing.ailog import ailog
 
@@ -230,7 +358,8 @@ class StandaloneVocalSeparator:
             零参 callable（惰性读取：安装/修复完成后路径才写入设置，
             同一次弹窗会话内 prober 必须能立即反映新值）。空 = 当前
             解释器，仅在主环境恰好装有 audio-separator 时可用。
-        model_root: 统一模型根（分离模型与对齐模型同源）。
+        model_root: 统一模型根（分离模型与对齐模型同源，audio-separator 的
+            model_file_dir 即此根）。
         proxy: 传给分离子进程的网络代理 URL；模型首次使用需从
             GitHub 下载，代理设置必须随之注入子进程环境。
         embedded: 嵌入式运行（工作台宿主）。FFmpeg 解析来源不变
@@ -257,6 +386,16 @@ class StandaloneVocalSeparator:
 
     def identity(self) -> dict:
         return {"model": SEPARATION_MODEL, "stem": VOCAL_STEM, "params": {}}
+
+    def _download_missing_model_files(
+        self,
+        progress: Optional[Callable[[str, int, str], None]] = None,
+        cancel: Optional[CancelFn] = None,
+    ) -> List[str]:
+        """补齐 model_file_dir 里缺失的分离模型文件（走 self._proxy 镜像接力）。"""
+        return _download_missing_model_files(
+            self._model_root, proxy=self._proxy, progress=progress, cancel=cancel
+        )
 
     def available(self) -> bool:
         python = self._python_exe()
@@ -313,6 +452,14 @@ class StandaloneVocalSeparator:
             "separation",
             f"人声分离开始：source={source.name} python={python}",
         )
+        # 模型预下载（镜像接力，缺失才补）：audio-separator「文件在即跳过」
+        # —— 我们用 SUG 多源（官方 + gh-proxy + 代理）先把模型文件拉齐，
+        # 避免 audio-separator 直连 GitHub。best-effort：失败不阻断，交给
+        # audio-separator 自身官方下载兜底。
+        try:
+            self._download_missing_model_files()
+        except Exception as exc:  # noqa: BLE001
+            ailog("separation", f"分离模型预下载异常（继续走 audio-separator）：{exc}")
         # 模型体检自愈：残缺下载在子进程查表处必败且永不自愈
         note = ensure_separation_model(self._model_root)
         if note:
@@ -565,8 +712,11 @@ __all__ = [
     "StandaloneVocalSeparator",
     "host_first_separation",
     "SEPARATION_MODEL",
+    "SEPARATION_MODEL_URL",
+    "SEPARATION_MODEL_FILES",
     "VOCAL_STEM",
     "ffmpeg_missing_message",
     "resolve_ffmpeg_exe",
     "ensure_separation_model",
+    "_download_missing_model_files",
 ]

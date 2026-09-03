@@ -239,6 +239,49 @@ class TestModelDownloadService:
         with pytest.raises(ModelRegistryError, match="没有可下载的文件"):
             service.download("NextFire/empty", "wav2vec2")
 
+    def test_set_endpoint_forwards_to_supporting_transport(self):
+        """ModelDownloadService.set_endpoint 把端点转发给支持动态换端点的
+        transport（弹窗内改镜像后热更新，修复此前形同虚设的问题）。"""
+        calls = []
+
+        class _Supporting:
+            def set_endpoint(self, endpoint):
+                calls.append(endpoint)
+
+        service = ModelDownloadService(ModelRegistry(Path("x")), _Supporting())
+        service.set_endpoint("https://hf-mirror.com")
+        assert calls == ["https://hf-mirror.com"]
+
+    def test_set_endpoint_noop_for_non_supporting_transport(self):
+        """transport 无 set_endpoint（旧/自定义）时静默跳过，不崩。"""
+        service = ModelDownloadService(ModelRegistry(Path("x")), _FakeTransport())
+        service.set_endpoint("https://hf-mirror.com")  # 不应抛
+
+
+class TestHfHubTransportEndpoint:
+    def test_default_endpoint_is_official(self):
+        from strange_uta_game.backend.application.ai_timing.models import (
+            HfHubTransport,
+        )
+
+        t = HfHubTransport(endpoint="")
+        assert t._endpoint == "https://huggingface.co"
+
+    def test_set_endpoint_switches_and_defaults(self):
+        from strange_uta_game.backend.application.ai_timing.models import (
+            HfHubTransport,
+        )
+
+        t = HfHubTransport(endpoint="")
+        t.set_endpoint("https://hf-mirror.com")
+        assert t._endpoint == "https://hf-mirror.com"
+        # 空串回落官方源；末尾斜杠被去除（与构造行为一致）
+        t.set_endpoint("https://example.org/")
+        assert t._endpoint == "https://example.org"
+        t.set_endpoint("")
+        assert t._endpoint == "https://huggingface.co"
+
+
 
 class TestRuntimeProbe:
     def test_probe_current_interpreter(self):

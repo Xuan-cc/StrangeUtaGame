@@ -802,3 +802,85 @@ class TestDefaultWidthFits:
                 overflow.append((need, have))
         assert overflow == [], f"内容超出视口: {overflow}"
         dialog.close()
+
+
+class TestDownloadMirrorApplied:
+    """下载镜像：改设置必须同步到 download_service 的 transport 端点。
+
+    回归：镜像此前形同虚设——transport 在弹窗构造时按当时设置固化 endpoint，
+    dialog 内改镜像只写配置、从不更新已建的 transport，下载仍走官方源。
+    """
+
+    class _SpyTransport:
+        def __init__(self):
+            self.endpoints = []
+
+        def list_files(self, repo_id, revision):
+            return []
+
+        def download_file(self, *a, **k):
+            raise RuntimeError("测试不执行下载")
+
+        def set_endpoint(self, endpoint):
+            self.endpoints.append(endpoint)
+
+    def _make(self, qapp, tmp_path, snapshot, transport):
+        from strange_uta_game.backend.application.ai_timing.models import (
+            ModelDownloadService,
+        )
+        from strange_uta_game.backend.application.ai_timing.runtime import (
+            AiRuntimeManager,
+        )
+        from strange_uta_game.frontend.editor.ai_timing_dialog import AiTimingDialog
+
+        registry = ModelRegistry(tmp_path / "models")
+        service = _FakeService(snapshot)
+        dialog = AiTimingDialog(
+            project=_project(),
+            audio_path=str(tmp_path / "song.flac"),
+            service=service,
+            settings=AiTimingSettings(),
+            registry=registry,
+            runtime=AiRuntimeManager(),
+            download_service=ModelDownloadService(registry, transport),
+            on_applied=lambda *a: None,
+            parent=None,
+        )
+        return dialog
+
+    def test_persist_applies_selected_preset(self, qapp, tmp_path):
+        snap = _ready_snapshot()
+        transport = self._SpyTransport()
+        dialog = self._make(qapp, tmp_path, snap, transport)
+        TestPathChangeAppliesImmediately._wait_initial_refresh(qapp, dialog)
+        # 初始构造用空设置 → 官方源（不应记录任何 set_endpoint 副作用之外的
+        # 值；_sync_mirror_ui 在构造期不触发 persist，故此时为空）
+        # 选 hf-mirror.com 预设 → persist 时端点必须同步
+        dialog.combo_mirror.setCurrentIndex(1)
+        dialog._persist_settings()
+        assert dialog._settings.download_mirror == "https://hf-mirror.com"
+        assert transport.endpoints[-1] == "https://hf-mirror.com"
+
+    def test_custom_url_applied_and_custom_edit_shown(self, qapp, tmp_path):
+        snap = _ready_snapshot()
+        transport = self._SpyTransport()
+        dialog = self._make(qapp, tmp_path, snap, transport)
+        TestPathChangeAppliesImmediately._wait_initial_refresh(qapp, dialog)
+        dialog.combo_mirror.setCurrentIndex(2)  # 自定义
+        assert dialog.edit_mirror.isVisible()  # 自定义时输入框展开
+        dialog.edit_mirror.setText("https://custom.example.org")
+        dialog._persist_settings()
+        assert dialog._settings.download_mirror == "https://custom.example.org"
+        assert transport.endpoints[-1] == "https://custom.example.org"
+
+    def test_reset_returns_to_official(self, qapp, tmp_path):
+        snap = _ready_snapshot()
+        transport = self._SpyTransport()
+        dialog = self._make(qapp, tmp_path, snap, transport)
+        TestPathChangeAppliesImmediately._wait_initial_refresh(qapp, dialog)
+        dialog.combo_mirror.setCurrentIndex(1)
+        dialog._persist_settings()
+        dialog._on_reset_settings()
+        assert dialog._settings.download_mirror == ""
+        assert dialog.combo_mirror.currentIndex() == 0
+

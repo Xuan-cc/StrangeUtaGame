@@ -403,13 +403,29 @@ class AiTimingDialog(QDialog):
         self._box_adv.contentLayout.addWidget(self.model_desc)
         mirror_row = QHBoxLayout()
         mirror_row.addWidget(BodyLabel(self.tr("下载镜像:"), content))
-        self.edit_mirror = LineEdit(content)
-        self.edit_mirror.setText(self._settings.download_mirror)
-        self.edit_mirror.setPlaceholderText(
-            self.tr("留空使用官方源，如 https://hf-mirror.com")
+        self.combo_mirror = ComboBox(content)
+        # 预设项 userData 存镜像端点 URL；「自定义 URL…」用 __custom__ 占位，
+        # 选中时下方展开 edit_mirror 输入框（下载镜像此前形同虚设：自由
+        # 文本框只写回设置，从不更新已建的 HfHubTransport 端点）
+        self.combo_mirror.addItem(
+            self.tr("官方（huggingface.co）"), userData=""
         )
-        mirror_row.addWidget(self.edit_mirror, 1)
+        self.combo_mirror.addItem(
+            self.tr("hf-mirror.com"), userData="https://hf-mirror.com"
+        )
+        self.combo_mirror.addItem(self.tr("自定义 URL…"), userData="__custom__")
+        mirror_row.addWidget(self.combo_mirror, 1)
         self._box_adv.contentLayout.addLayout(mirror_row)
+        self.edit_mirror = LineEdit(content)
+        self.edit_mirror.setPlaceholderText(
+            self.tr("输入镜像端点，如 https://hf-mirror.com")
+        )
+        self._box_adv.contentLayout.addWidget(self.edit_mirror)
+        # 先按当前设置同步选中，再连信号——避免初始 setCurrentIndex 触发
+        # 持久化（构造期写设置既多余又可能落到旧值上）
+        self._sync_mirror_ui()
+        self.combo_mirror.currentIndexChanged.connect(self._on_mirror_combo_changed)
+        self.edit_mirror.editingFinished.connect(self._on_mirror_custom_edited)
 
         # ── 存储位置（§3.2）：统一行样式——名称 + 省略路径 + 浏览 + 更改… ──
         self._box_store = FluentGroupBox(self.tr("存储位置"), content)
@@ -725,12 +741,58 @@ class AiTimingDialog(QDialog):
         self._settings.device = ("auto", "cpu", "cuda", "mps")[
             self.combo_device.currentIndex()
         ]
-        self._settings.download_mirror = self.edit_mirror.text().strip()
+        self._settings.download_mirror = self._mirror_value()
+        # 下载端点必须同步到已建的 transport，否则镜像形同虚设：transport
+        # 在弹窗构造时按当时设置固化 endpoint，改设置不改 transport 下载仍
+        # 走旧源（曾长期是纯摆设——填了只存配置不生效）
+        try:
+            self._download_service.set_endpoint(self._settings.download_mirror)
+        except Exception:
+            pass
         if self._save_settings is not None:
             try:
                 self._save_settings(self._settings)
             except Exception:
                 pass
+
+    # ── 下载镜像（预设 / 自定义）──
+
+    def _sync_mirror_ui(self) -> None:
+        """按当前 settings.download_mirror 同步 combo 选择与自定义输入框。"""
+        value = (self._settings.download_mirror or "").strip()
+        if not value:
+            self.combo_mirror.setCurrentIndex(0)
+            self.edit_mirror.clear()
+        elif value == "https://hf-mirror.com":
+            self.combo_mirror.setCurrentIndex(1)
+            self.edit_mirror.clear()
+        else:
+            # 其它端点（自定义）：选中自定义项并回填输入框
+            self.combo_mirror.setCurrentIndex(2)
+            self.edit_mirror.setText(value)
+        self._update_mirror_edit_visibility()
+
+    def _update_mirror_edit_visibility(self) -> None:
+        self.edit_mirror.setVisible(
+            self.combo_mirror.currentData() == "__custom__"
+        )
+
+    def _mirror_value(self) -> str:
+        """读当前镜像选择 → 端点 URL（空串 = 官方源）。"""
+        data = self.combo_mirror.currentData()
+        if data == "__custom__":
+            return self.edit_mirror.text().strip()
+        return str(data or "")
+
+    def _on_mirror_combo_changed(self, *_args) -> None:
+        # 弹层（RoundMenu）关闭栈内同步触发；切换仅改可见性 + 持久化，
+        # 不启动线程，直接同步处理安全（与模型下拉的延迟无关）
+        self._update_mirror_edit_visibility()
+        self._persist_settings()
+
+    def _on_mirror_custom_edited(self) -> None:
+        # 自定义 URL 输入结束（回车 / 失焦）→ 持久化并同步端点
+        self._persist_settings()
 
     MODEL_DESCRIPTIONS = {
         0: (
@@ -1408,7 +1470,8 @@ class AiTimingDialog(QDialog):
         self._settings.download_mirror = ""
         self.combo_model.setCurrentIndex(0)
         self.combo_device.setCurrentIndex(0)
-        self.edit_mirror.clear()
+        self.combo_mirror.setCurrentIndex(0)
+        self._update_mirror_edit_visibility()
         self._persist_settings()
         self.refresh()
 

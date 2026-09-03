@@ -240,3 +240,6 @@ docs/superpowers/
 # AI 会话产物（计划文件/探针输出，不入库）
 .zcode/
 .test_sessions/
+
+# AI 模型文件（需额外下载，不入库）
+ai_models/
