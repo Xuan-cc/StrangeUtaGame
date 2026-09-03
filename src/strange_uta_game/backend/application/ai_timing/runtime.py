@@ -387,8 +387,14 @@ def _github_mirror_candidates(
     镜像顺序跟随「设置 → 网络与代理」的更新源排序（用户把 gh-proxy 拖到
     第一位时 AI 打轴下载也镜像优先）。非 GitHub URL（如 torch wheel 的
     ``download-r2.pytorch.org``）返回空列表——gh-proxy 只代理 GitHub。
+
+    支持 ``github.com``（release 直链）与 ``raw.githubusercontent.com``
+    （raw 文件）两种 host：gh-proxy 前缀对两者都以「前缀 + 完整原始 URL」
+    的整体包装方式工作（audio-separator 的分离模型与元数据即来自这两者）。
     """
-    if not url.startswith("https://github.com/"):
+    is_github = url.startswith("https://github.com/")
+    is_raw = url.startswith("https://raw.githubusercontent.com/")
+    if not (is_github or is_raw):
         return []
     try:
         from strange_uta_game.updater.sources import (

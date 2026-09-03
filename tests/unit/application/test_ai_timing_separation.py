@@ -566,3 +566,78 @@ class TestHostFirstSeparation:
         assert follows is False and prober() is True
         out = executor(Path("s.flac"), lambda *a: None, lambda: False)
         assert out == Path("C:/builtin_vocal.wav")
+
+
+class TestSeparationModelPredownload:
+    """_download_missing_model_files：缺文件时镜像补齐到模型根，存在则跳过。
+
+    复现 audio-separator「文件在即跳过」判据——我们预先用多源（官方 +
+    gh-proxy + 代理）拉齐，避免其直连 GitHub。requests.get 被 mock。
+    """
+
+    @staticmethod
+    def _fake_resp(body: bytes = b"AA" * 1000):
+        class _R:
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size=1024):
+                for i in range(0, len(body), chunk_size):
+                    yield body[i : i + chunk_size]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        return _R()
+
+    def test_downloads_all_missing_to_root(self, tmp_path, monkeypatch):
+        import requests
+
+        monkeypatch.setattr(requests, "get", lambda *a, **k: self._fake_resp())
+        models = tmp_path / "models"
+        dl = sep_mod._download_missing_model_files(models, proxy="")
+        assert len(dl) == 4
+        for name, _ in sep_mod.SEPARATION_MODEL_FILES:
+            assert (models / name).is_file()  # 直接落在模型根
+        assert not [p for p in models.iterdir() if ".part" in p.name]
+
+    def test_existing_files_skipped_no_network(self, tmp_path, monkeypatch):
+        import requests
+
+        models = tmp_path / "models"
+        models.mkdir(parents=True, exist_ok=True)
+        for name, _ in sep_mod.SEPARATION_MODEL_FILES:
+            (models / name).write_bytes(b"present")
+        calls = []
+        monkeypatch.setattr(
+            requests, "get", lambda *a, **k: calls.append(a) or self._fake_resp()
+        )
+        dl = sep_mod._download_missing_model_files(models, proxy="")
+        assert dl == []
+        assert calls == []
+
+    def test_raw_url_gets_gh_proxy_mirror_candidates(self):
+        from strange_uta_game.backend.application.ai_timing.runtime import (
+            _github_mirror_candidates,
+        )
+
+        raw = (
+            "https://raw.githubusercontent.com/TRvlvr/application_data/main/"
+            "mdx_model_data/model_data_new.json"
+        )
+        cands = _github_mirror_candidates(raw)
+        assert cands
+        assert all("gh-proxy" in u and "raw.githubusercontent.com" in u for u in cands)
+
+    def test_github_release_url_gets_gh_proxy_mirror_candidates(self):
+        from strange_uta_game.backend.application.ai_timing.runtime import (
+            _github_mirror_candidates,
+        )
+
+        cands = _github_mirror_candidates(sep_mod.SEPARATION_MODEL_URL)
+        assert cands
+        assert all("gh-proxy" in u and "github.com/TRvlvr" in u for u in cands)
+

@@ -323,6 +323,14 @@ class HfHubTransport(ModelDownloadTransport):
         self._hf_cache_root = hf_cache_root
         self._proxies = {"http": proxy, "https": proxy} if proxy else None
 
+    def set_endpoint(self, endpoint: str = "") -> None:
+        """动态更换下载端点（镜像热更新；空串 = 官方源）。
+
+        transport 在弹窗构造时按当时设置创建；用户在弹窗内改「下载镜像」
+        后必须调用本方法，否则下载仍走旧端点（此前该设置形同虚设）。
+        """
+        self._endpoint = (endpoint or "https://huggingface.co").rstrip("/")
+
     def _proxies_kwargs(self) -> dict:
         return {"proxies": self._proxies} if self._proxies else {}
 
@@ -430,6 +438,19 @@ class ModelDownloadService:
     def __init__(self, registry: ModelRegistry, transport: ModelDownloadTransport):
         self._registry = registry
         self._transport = transport
+
+    def set_endpoint(self, endpoint: str = "") -> None:
+        """把下载端点同步到 transport（弹窗内改镜像后调用）。
+
+        transport 支持 ``set_endpoint``（HfHubTransport）时动态更换；不
+        支持（自定义 transport）时静默跳过，仍按其自身默认端点下载。
+        """
+        setter = getattr(self._transport, "set_endpoint", None)
+        if callable(setter):
+            try:
+                setter(endpoint)
+            except Exception:  # pragma: no cover - 防御自定义 transport
+                pass
 
     def download(
         self,

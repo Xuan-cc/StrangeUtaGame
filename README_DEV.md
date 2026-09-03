@@ -113,6 +113,7 @@ StrangeUtaGame/
 ├── requirements.txt                # 生产依赖（锁定版本）
 ├── requirements-winrt.txt          # main 变体注音依赖（WinRT）
 ├── requirements-variants.txt       # noWinIME / mac 变体注音依赖（sudachi）
+├── requirements-ai.txt             # AI 打轴运行依赖（PyTorch/Transformers/分离等）
 ├── requirements-dev.txt            # 开发依赖
 ├── pyproject.toml                  # 工具配置（ruff/black/mypy/pytest；不承载安装依赖）
 ├── RELEASING.md                    # 发布流程说明
@@ -182,9 +183,40 @@ pip install -r requirements-winrt.txt
 # 安装开发依赖
 pip install -r requirements-dev.txt
 
+# （可选）需要使用 AI 打轴功能时，把 AI 运行依赖装进当前解释器：
+# 装完后打开 AI 打轴弹窗会检测到当前解释器已具备全部依赖并直接复用，
+# 不必再经「安装 / 修复」新建隔离 venv。
+#   - CPU / macOS：直接装本文件即可；
+#   - Windows + NVIDIA GPU（CUDA）：见 requirements-ai.txt 文末注释。
+# 详见下方「AI 打轴运行环境」。
+pip install -r requirements-ai.txt
+
 # 运行应用
 python main.py
 ```
+
+### AI 打轴运行环境
+
+AI 打轴（forced alignment + 人声分离）的重型依赖（PyTorch / Transformers /
+audio-separator 等）**不在** `requirements.txt` 中，以免污染主程序环境并与其
+锁定的 `numpy==2.4.4` 冲突。对普通用户，这些依赖由「AI 打轴」弹窗里的
+「对齐环境 → 安装 / 修复」在**隔离 venv**（`ai_runtime/`）中自动安装。
+
+作为**源码部署**者，如果你希望 AI 打轴**直接复用自己的 Python 环境**（而不
+另建隔离 venv），可执行：
+
+```bash
+pip install -r requirements-ai.txt
+```
+
+装完后，打开 AI 打轴弹窗时，检测（probe）会发现当前解释器已具备全部 AI
+依赖并**直接复用**它，不会把你引去新建隔离 venv。清单内容、可选 CUDA 追加
+方式与 `runtime.py` 的同步关系见 [requirements-ai.txt](requirements-ai.txt)。
+
+> 注：程序只在 `runtime_python` 设置**为空**时以当前解释器（`sys.executable`）
+> 作为默认探测/执行目标。若你此前点过「安装 / 修复」，该设置会被写成本地
+> 隔离 venv 的路径；想切回复用当前解释器，清空设置中 `ai_timing.runtime_python`
+> 即可。
 
 ### 开发工具
 

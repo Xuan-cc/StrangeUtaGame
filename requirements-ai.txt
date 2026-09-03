@@ -1,0 +1,38 @@
+# StrangeUtaGame —— AI 打轴运行环境依赖
+#
+# AI 打轴（强制对齐 + 人声分离）的重型依赖不随 requirements.txt 安装（那里
+# 只装主程序；往主环境塞这套会与 numpy==2.4.4 等锁定依赖冲突）。
+#
+# 这份清单面向「以源码部署、想复用自己的 Python 环境」的开发者：
+#   pip install -r requirements.txt -r requirements-ai.txt
+# 装进当前解释器后，打开 AI 打轴弹窗时 probe 会检测到该解释器已具备全部
+# 依赖，从而直接复用它——不必再走「安装 / 修复」新建隔离 venv。
+#
+# 内容与 backend/application/ai_timing/runtime.py 的 RUNTIME_REQUIREMENTS
+# 保持一致（改动需两处同步）：
+#   - 纯 CPU / macOS / 无独显机器：本文件即为完整依赖；
+#   - Windows NVIDIA（需 CUDA）：见文末注释追加 PyTorch CUDA 索引。
+#
+# 若你想隔离管理而非污染主环境，仍可在 UI「对齐环境 → 安装 / 修复」让程序
+# 新建独立 venv（内部使用同一份依赖集），或自行 python -m venv 后装本文件。
+
+# —— AI 对齐 / 人声分离核心 ——
+# 注意：Windows 上 PyPI 的 torch 默认是 CPU-only wheel；GPU 推理需显式走
+# PyTorch CUDA 索引并钉版本，见文末。librosa 钉 0.10.2.post1：audio-separator
+# 0.44.x 使用其 get_duration(filename=) 旧 API，0.11 起已移除。
+torch
+torchaudio
+transformers==5.15.0
+soundfile
+huggingface_hub
+audio-separator[cpu]
+librosa==0.10.2.post1
+
+# ---------------------------------------------------------------------------
+# Windows + NVIDIA GPU（CUDA）可选追加
+# ---------------------------------------------------------------------------
+# 上面的 torch/torchaudio 在 Windows 上装到的是 CPU 版。若要 CUDA 推理，改用：
+#   pip install torch==2.11.0+cu128 torchaudio==2.11.0+cu128 \
+#       --extra-index-url https://download.pytorch.org/whl/cu128
+# 之后再执行上方其余行的安装（transformers/soundfile/... 来自 PyPI）。
+# RTX 50 系（Blackwell）需要 cu128 及以上；NVIDIA 驱动须 ≥ 570.65。
