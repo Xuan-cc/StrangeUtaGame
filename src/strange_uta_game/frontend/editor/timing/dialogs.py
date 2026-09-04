@@ -1406,6 +1406,7 @@ class SetSingerByLineDialog(QDialog):
     """
 
     apply_requested = pyqtSignal(dict)  # {line_idx: singer_id}
+    preview_line_requested = pyqtSignal(int)  # line_idx
 
     def __init__(self, sentences: list[Sentence], singers: list[Singer], parent=None,
                  focus_line_idx: int = -1):
@@ -1583,11 +1584,14 @@ class SetSingerByLineDialog(QDialog):
             pos = event.pos()
             row = self.table.rowAt(pos.y())
             if row >= 0:
+                column = self.table.columnAt(pos.x())
                 modifiers = QApplication.keyboardModifiers()
                 if modifiers & Qt.KeyboardModifier.ShiftModifier:
                     self._select_range(row)
                 else:
                     self._toggle_row(row)
+                if column == 2:
+                    self.preview_line_requested.emit(row)
                 return True
         return super().eventFilter(obj, event)
 

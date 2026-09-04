@@ -3182,7 +3182,33 @@ class EditorInterface(QWidget):
             focus_line_idx=self._current_line_idx,
         )
         dlg.apply_requested.connect(self._on_apply_singer_by_line)
+        dlg.preview_line_requested.connect(self._on_preview_singer_line)
         dlg.exec()
+
+    def _on_preview_singer_line(self, line_idx: int) -> None:
+        """从按行设置演唱者对话框试听指定歌词行。"""
+        if (
+            not self._project
+            or not self._timing_service
+            or not 0 <= line_idx < len(self._project.sentences)
+        ):
+            return
+
+        sentence = self._project.sentences[line_idx]
+        start_ms = sentence.global_timing_start_ms
+        if start_ms is None:
+            return
+
+        # 先同步编辑位置，确保暂停状态下预览也立即居中到目标行；随后统一走
+        # seek/play 入口，让音频、进度条、波形与播放状态保持一致。
+        self._current_line_idx = line_idx
+        self.preview.set_current_position(line_idx, 0)
+        if sentence.characters:
+            self.preview.set_focus_position(line_idx, 0)
+        self._update_line_info()
+        self._on_seek(start_ms)
+        if not self._timing_service.is_playing():
+            self._on_play()
 
     def _on_apply_singer_by_line(self, result_map: dict):
         """处理按行设置演唱者的应用请求"""
