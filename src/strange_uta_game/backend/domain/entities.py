@@ -150,6 +150,72 @@ class Singer:
 
 
 @dataclass
+class AxisGroup:
+    """轴分组 — 分色分轴计划中的一组。
+
+    嵌入式宿主「进入下一步」流程与 standalone 按组拆分导出使用：同一
+    SUG 项目可按演唱者（分色）拆成多个轴文件，一个 AxisGroup 描述进入
+    一个轴的演唱者集合。
+
+    约束：
+        - 组内 singer_ids 引用 Project.singers 中的演唱者；
+        - **singer_ids 为空 = 全部演唱者**（沿用过滤器「不勾选则导出全部」
+          口径；由导出页/对话框产生，消费侧把空集解释为不筛选）；
+        - 一个演唱者可同时属于多个组（其文本同时进入多个轴）；
+        - 不强求覆盖全部演唱者 — 未入组的演唱者文本不进入任何轴；
+        - 多组时必须且只能有一个主分组（``is_primary``，由 Project 归一
+          化保证）：主分组的导出文件携带完整标签信息（@Title 等 +
+          非歌手 custom 标签），其余组只带本组实际演唱者的 @Emoji 标签；
+        - 组内内容口径与 Nicokara 导出的演唱者过滤一致：行内任一字符
+          属于组内演唱者则保留整行（空行无条件保留），行内组外字符剔除。
+
+    Example:
+        >>> group = AxisGroup(name="轴1", singer_ids=["uuid-a", "uuid-b"])
+        >>> group.name
+        '轴1'
+    """
+
+    name: str = ""
+    singer_ids: List[str] = field(default_factory=list)
+    is_primary: bool = False
+
+    def __post_init__(self) -> None:
+        self.name = str(self.name or "").strip()
+        # 去重但保持顺序（重复 ID 无意义且会让宿主侧分组统计翻倍）
+        seen = set()
+        self.singer_ids = [
+            sid for sid in self.singer_ids
+            if sid and not (sid in seen or seen.add(sid))
+        ]
+
+    def contains_singer(self, singer_id: str) -> bool:
+        """该演唱者是否属于本组。"""
+        return singer_id in self.singer_ids
+
+    def to_dict(self) -> dict:
+        """转换为字典（用于 .sug 序列化）。"""
+        return {
+            "name": self.name,
+            "singer_ids": list(self.singer_ids),
+            "is_primary": self.is_primary,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "AxisGroup":
+        """从字典创建（容忍缺字段/非法类型，坏条目回退默认值）。"""
+        if not isinstance(data, dict):
+            return cls()
+        raw_ids = data.get("singer_ids") or []
+        if not isinstance(raw_ids, list):
+            raw_ids = []
+        return cls(
+            name=str(data.get("name", "") or ""),
+            singer_ids=[str(sid) for sid in raw_ids if sid],
+            is_primary=bool(data.get("is_primary", False)),
+        )
+
+
+@dataclass
 class Sentence:
     """句子 — 一行歌词
 

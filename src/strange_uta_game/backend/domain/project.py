@@ -9,7 +9,7 @@ from uuid import uuid4
 from datetime import datetime
 
 from .models import Character, DomainError, ValidationError
-from .entities import Singer, Sentence
+from .entities import Singer, AxisGroup, Sentence
 
 
 @dataclass
@@ -82,6 +82,8 @@ class Project:
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
     audio_duration_ms: int = 0
     global_offset_ms: Optional[int] = None
+    # 分色分轴计划（嵌入式「进入下一步」用）。空列表 = 未分轴（单轴）。
+    axis_groups: List[AxisGroup] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -103,6 +105,8 @@ class Project:
         default_singers = [s for s in self.singers if s.is_default]
         if len(default_singers) > 1:
             raise ValidationError("只能有一个默认演唱者")
+
+        self._normalize_axis_groups()
 
     # ── 兼容别名 ──
 
@@ -161,6 +165,20 @@ class Project:
                         ch.singer_id = sentence.singer_id
 
         self.singers = [s for s in self.singers if s.id != singer_id]
+        # 演唱者被删除后，轴分组里的引用同步清理。注意区分两种"空组"：
+        # - 本来就空（= 全部演唱者口径）→ 保留原样；
+        # - 显式勾选被清空 → 整组丢弃（不能悄悄升级成"全部"）。
+        cleaned: List[AxisGroup] = []
+        for group in self.axis_groups:
+            had_singers = bool(group.singer_ids)
+            group.singer_ids = [
+                sid for sid in group.singer_ids if sid != singer_id
+            ]
+            if had_singers and not group.singer_ids:
+                continue
+            cleaned.append(group)
+        self.axis_groups = cleaned
+        self._normalize_axis_groups()
         self._update_timestamp()
 
     def get_singer(self, singer_id: str) -> Optional[Singer]:
@@ -211,6 +229,55 @@ class Project:
 
         self.singers = new_list
         self._update_timestamp()
+
+    # ==================== 轴分组管理 ====================
+
+    def set_axis_groups(self, groups: List[AxisGroup]) -> None:
+        """整体替换轴分组计划（嵌入式「进入下一步」/ 导出页轴分组的写回入口）。
+
+        只做引用有效性过滤：丢弃不在 ``singers`` 中的 singer_id；随后归一
+        化主分组（见 :meth:`_normalize_axis_groups`）。空列表 = 清除分轴
+        （回到单轴）。
+        """
+        known_ids = {s.id for s in self.singers}
+        for group in groups:
+            group.singer_ids = [
+                sid for sid in group.singer_ids if sid in known_ids
+            ]
+        self.axis_groups = list(groups)
+        self._normalize_axis_groups()
+        self._update_timestamp()
+
+    def _normalize_axis_groups(self) -> None:
+        """主分组归一化：多组时必须且只能有一个 ``is_primary``。
+
+        无主分组时提升首组；多主分组时只保留第一个，其余降级。空分组
+        列表不需要主分组（= 单轴）。
+        """
+        if not self.axis_groups:
+            return
+        primary_seen = False
+        for group in self.axis_groups:
+            if group.is_primary and not primary_seen:
+                primary_seen = True
+            else:
+                group.is_primary = False
+        if not primary_seen:
+            self.axis_groups[0].is_primary = True
+
+    def primary_axis_group(self) -> Optional[AxisGroup]:
+        """主分组；无分组返回 None（= 单轴）。"""
+        for group in self.axis_groups:
+            if group.is_primary:
+                return group
+        return self.axis_groups[0] if self.axis_groups else None
+
+    def assigned_axis_singer_ids(self) -> set:
+        """所有轴分组引用到的演唱者 ID 并集（判断"未入组"用）。"""
+        assigned: set = set()
+        for group in self.axis_groups:
+            assigned.update(group.singer_ids)
+        return assigned
 
     # ==================== 句子管理 ====================
 

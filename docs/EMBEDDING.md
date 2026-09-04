@@ -54,12 +54,74 @@ class MainWindow(MSFluentWindow):
 | `trigger_save() -> bool` | 宿主把自己顶层的 Ctrl+S 转发到这里；返回是否成功发起异步保存 |
 | `has_unsaved_changes() -> bool` | 宿主 closeEvent 用，判断是否有脏数据 |
 | `flush_unsaved()` | 宿主销毁 widget 前调用，把脏数据兜底写到崩溃恢复临时文件 |
-| `export_to_next_payload() -> dict \| None` | 获取项目、角色、Nicokara 标签和媒体路径的隔离快照，供宿主送往下一模块 |
+| `export_to_next_payload() -> dict \| None` | 获取项目、角色、Nicokara 标签和媒体路径的隔离快照，供宿主送往下一模块；含 `axis_plan` 分色分轴计划（§2.1） |
 | `on_host_visibility_changed(visible: bool)` | 宿主切入/切出整个 SUG 控件时调用；切出时只要音频仍在播放就立即暂停（不受“离开打轴界面时暂停”设置约束），并从音频实际状态同步快捷键模式；同时转发给前后台节流器——宿主隐藏 SUG 区域而宿主窗口仍可见时，只有这条显式通知能让非音频服务（UI 轮询/主题轮询等）降频 |
 
 embedded 实例还公开 `export_to_next_requested` 信号。SUG 的导出页仅在
-embedded 模式显示“进入下一步”按钮；点击后发出该信号，宿主收到后调用
-`export_to_next_payload()`。standalone 模式不创建这个按钮，原导出流程不变。
+embedded 模式显示“进入下一步”按钮；点击后直接发出该信号（分组编辑在
+「导出字幕分组」小窗完成，见 §2.1），宿主收到后调用
+`export_to_next_payload()`。standalone 模式不创建这个按钮，原导出流程
+不变。
+
+### 2.1 分色分轴计划（axis_plan）
+
+同一 SUG 项目可按演唱者（分色）拆成宿主侧的多个轴文件。编辑入口是导出页
+的**「导出字幕分组」小窗**（Nicokara / Kirakara 格式显示，由原「演唱者过
+滤」升级而来）：默认只显示分组摘要（每组一行胶囊卡片：主分组星标 + 组名
++ 成员色点；未分组 / 未入组单独提示），点「修改分组...」弹出大对话框编
+辑。对话框约束：竖排卡片横向排列，向右追加/删除分组（至少保留 1 组），
+每组独立勾选演唱者、组名必填且不得重复；必须且只能有一个「主分组」。
+**组内不勾选任何演唱者 = 该轴包含全部演唱者**（沿用过滤器「不勾选则导
+出全部」的口径；payload 中物化为当前全部歌手 id）。确认后写回
+`project.axis_groups` 并标脏。
+
+小窗与对话框的自绘部分（胶囊行底色/主分组徽标/成员色点/幽灵「添加分组」
+按钮）全部纳入 SUG 主题单例管理：色值取自 `theme`，切主题时整行/整卡重
+建或重涂；演唱者原色做 `theme.ensure_contrast` 对比度校正（浅色主题下亮
+色自动加深），保证深浅两套下可读。
+
+embedded「进入下一步」**不再自动弹窗**：分组编辑统一在小窗完成，按钮点
+击直接发 `export_to_next_requested` 信号，宿主随后的
+`export_to_next_payload()` 读取当前 `project.axis_groups`（空 = 单轴）。
+
+standalone「导出」按组拆分（embedded 宿主不经过此路径，仅供理解语义）：
+
+- 存在 **1 个以上**分组且格式支持演唱者过滤（Nicokara / Kirakara）时，
+  按组导出多个文件，文件名追加 `_分组名`；单个分组 = 按该组过滤的普通
+  导出（不加后缀）。其他格式忽略轴分组。
+- 每组文件的 @Emoji 标签按**本组实际使用的演唱者**解析触发词
+  （【演唱者名】或裸名），只保留能对应上的行。
+- **主分组**的文件携带完整标签信息（@Title/@Artist/@Album/@TaggingBy +
+  非 @Emoji 的 custom 行）；非主分组只带本组 @Emoji；计时字段
+  （@Offset/@HeadOffset/@SilencemSec）所有文件保留。
+
+`export_to_next_payload()` 返回值中的 `axis_plan` 为纯 dict 快照：
+
+```python
+{
+    "mode": "single" | "split",   # split = axis_groups 非空
+    "groups": [
+        {
+            "name": "轴1",
+            "singer_ids": ["uuid-a", "uuid-b"],
+            "is_primary": True,    # 有且仅有一个主分组
+            "singers": [  # 冗余快照（宿主免反查 project）
+                {"id": "...", "name": "初音ミク", "color": "#FF6B6B",
+                 "color_mode": "solid", "split_colors": [...]},
+            ],
+        },
+    ],
+    "unassigned": ["uuid-c"],  # 未进入任何组的启用演唱者 ID
+}
+```
+
+**每组的内容口径**（与 Nicokara 导出的演唱者过滤一致，见
+`nicokara_exporter.py`）：行内任一字符属于组内演唱者则保留整行（空行无
+条件保留），行内组外字符剔除。同一演唱者可同时属于多组；未入组演唱者
+的文本不进入任何轴。
+
+分组随 `.sug` 持久化（`axis_groups` 键，仅非空时写入；旧文件缺省 = 单
+轴）。宿主从磁盘加载 `.sug` 时可读到同一份数据，与 payload 快照同源。
 
 异步保存完成后发出 `project_save_finished(str)`，失败时发出
 `project_save_failed(str)`。宿主需要“保存后继续”的流程时，应等待对应信号，

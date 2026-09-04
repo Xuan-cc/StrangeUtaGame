@@ -19,6 +19,7 @@ from strange_uta_game.backend.domain import (
     Project,
     ProjectMetadata,
     Singer,
+    AxisGroup,
     Sentence,
     Character,
     Ruby,
@@ -436,6 +437,9 @@ class SugProjectParser:
         # 仅当global_offset_ms有值时才写入（兼容性考虑）
         if project.global_offset_ms is not None:
             result["global_offset_ms"] = project.global_offset_ms
+        # 轴分组：仅在已配置时写入（旧版 SUG 无此键，读取侧按缺省空处理）
+        if project.axis_groups:
+            result["axis_groups"] = [g.to_dict() for g in project.axis_groups]
         if nicokara_tags:
             result["nicokara_tags"] = nicokara_tags
         if media_path:
@@ -546,6 +550,11 @@ class SugProjectParser:
         global_offset_raw = data.get("global_offset_ms")
         global_offset_ms = int(global_offset_raw) if global_offset_raw is not None else None
 
+        # 轴分组（可选字段；旧版 .sug 缺省为空 = 未分轴）
+        axis_groups = [
+            AxisGroup.from_dict(g) for g in data.get("axis_groups", []) or []
+        ]
+
         project = Project(
             id=data.get("id") or str(uuid4()),
             singers=singers,
@@ -553,6 +562,7 @@ class SugProjectParser:
             metadata=metadata,
             audio_duration_ms=int(data.get("audio_duration_ms", 0)),
             global_offset_ms=global_offset_ms,
+            axis_groups=axis_groups,
         )
 
         return project

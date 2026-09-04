@@ -1,7 +1,7 @@
 """导出界面。
 
 提供多格式导出功能，支持 LRC/KRA/TXT/ASS/Nicokara。
-Nicokara 格式支持演唱者过滤和演唱者标签插入。
+Nicokara 格式支持导出字幕分组（按演唱者分色拆分多轴）和演唱者标签插入。
 """
 
 from PyQt6.QtWidgets import (
@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
+    QFrame,
     QFileDialog,
     QListWidget,
     QListWidgetItem,
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import (
     QTextEdit,
 )
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
+from PyQt6.QtGui import QColor
 from qfluentwidgets import (
     PushButton,
     PrimaryPushButton,
@@ -27,18 +29,21 @@ from qfluentwidgets import (
     ScrollArea,
     SimpleCardWidget,
     CheckBox,
-    setCustomStyleSheet,
     TitleLabel,
     SubtitleLabel,
-    BodyLabel,
     CaptionLabel,
+    StrongBodyLabel,
+    themeColor,
+    setCustomStyleSheet,
 )
 
-from typing import Optional, Set, Dict, cast
+from typing import Optional, Dict
 from pathlib import Path
+from copy import deepcopy
+import html
 import re
 
-from strange_uta_game.backend.domain import Project
+from strange_uta_game.backend.domain import Project, AxisGroup
 from strange_uta_game.backend.application.export_service import (
     ExportService,
     sanitize_export_basename,
@@ -164,10 +169,10 @@ class ExportInterface(QWidget):
                     self.format_list.setCurrentRow(saved["fmt_row"])
                 except Exception:
                     pass
-            # 重新填充演唱者列表（_init_ui 不负责，仅在 set_store 时被调）
+            # 重新填充导出字幕分组摘要（_init_ui 不负责，仅在 set_store 时被调）
             if hasattr(self, "_store") and self._store is not None:
                 try:
-                    self._refresh_singer_checkboxes()
+                    self._refresh_axis_group_summary()
                 except Exception:
                     pass
         super().changeEvent(event)
@@ -284,24 +289,41 @@ class ExportInterface(QWidget):
         self.btn_tags.hide()
         self._settings_layout.addWidget(self.btn_tags)
 
-        # 演唱者选择区域（Nicokara / Kirakara 格式显示）
-        self._singer_group = FluentGroupBox(self.tr("演唱者过滤"))
+        # 导出字幕分组（Nicokara / Kirakara 格式显示）——原「演唱者过滤」升级：
+        # 默认小窗显示分组行（每组一行胶囊卡片），点「修改分组...」弹出大对话框编辑。
+        self._singer_group = FluentGroupBox(self.tr("导出字幕分组"))
         singer_group_layout = self._singer_group.contentLayout
-        singer_group_layout.setSpacing(6)
+        singer_group_layout.setSpacing(8)
 
-        singer_hint = CaptionLabel(self.tr("勾选要导出的演唱者（不勾选则导出全部）"))
-        singer_group_layout.addWidget(singer_hint)
+        # 分组摘要的纯文本载体（语义口径，供测试与读屏），视觉呈现由下方
+        # 分组行承担，故保持隐藏、不进布局。
+        self._axis_summary_label = CaptionLabel("", self._singer_group)
+        self._axis_summary_label.setWordWrap(True)
+        self._axis_summary_label.hide()
 
-        self._singer_checkboxes: list[CheckBox] = []
-        self._singer_checkbox_widget = QWidget()
-        self._singer_checkbox_container = QVBoxLayout(self._singer_checkbox_widget)
-        self._singer_checkbox_container.setContentsMargins(0, 0, 0, 0)
-        self._singer_checkbox_container.setSpacing(6)
-        self._singer_checkbox_container.setSizeConstraint(
-            QLayout.SizeConstraint.SetMinAndMaxSize
+        # 分组行容器：每组一行（主分组徽标 + 组名 + 成员色点名单），
+        # 行内容在 _refresh_axis_group_summary 里整行重建
+        self._axis_chips_widget = QWidget()
+        self._axis_chips_widget.setObjectName("axisChips")
+        self._axis_chips_widget.setStyleSheet(
+            "QWidget#axisChips { background: transparent; }"
         )
-        self._singer_checkbox_widget.setAutoFillBackground(False)
-        singer_group_layout.addWidget(self._singer_checkbox_widget)
+        self._axis_chips_layout = QVBoxLayout(self._axis_chips_widget)
+        self._axis_chips_layout.setContentsMargins(0, 0, 0, 0)
+        self._axis_chips_layout.setSpacing(6)
+        singer_group_layout.addWidget(self._axis_chips_widget)
+
+        self._btn_axis_groups = PushButton(self.tr("修改分组..."), self)
+        self._btn_axis_groups.setIcon(FIF.EDIT)
+        self._btn_axis_groups.setToolTip(
+            self.tr(
+                "打开导出字幕分组编辑器：按组勾选演唱者（分色）、命名分组、"
+                "指定主分组。存在 1 个以上分组时，导出将按组拆分为多个文件"
+                "（文件名追加 _分组名）；主分组的文件携带完整标签信息"
+            )
+        )
+        self._btn_axis_groups.clicked.connect(self._on_axis_groups)
+        singer_group_layout.addWidget(self._btn_axis_groups)
 
         self._chk_insert_singer_tags = CheckBox(self.tr("插入【演唱者名】标签"))
         self._chk_insert_singer_tags.setToolTip(
@@ -353,8 +375,14 @@ class ExportInterface(QWidget):
             )
             self.btn_export_to_next.setIcon(FIF.RIGHT_ARROW)
             self.btn_export_to_next.setMinimumHeight(45)
+            self.btn_export_to_next.setToolTip(
+                self.tr(
+                    "把项目送往宿主的下一步；已配置导出字幕分组时，"
+                    "宿主按分组拆分多个轴"
+                )
+            )
             self.btn_export_to_next.clicked.connect(
-                self.export_to_next_requested.emit
+                self._on_export_to_next
             )
             self._export_button_row.addWidget(self.btn_export_to_next, 1)
         right_layout.addLayout(self._export_button_row)
@@ -407,6 +435,10 @@ class ExportInterface(QWidget):
                 background-color: {hover};
             }}
         """)
+
+        # 主题变化时分组行整行重建（底色/徽标色现取现用，深浅两套外观一致）
+        if hasattr(self, "_axis_chips_layout"):
+            self._refresh_axis_group_summary()
 
     @staticmethod
     def _strip_extension_hint(name: str) -> str:
@@ -500,7 +532,7 @@ class ExportInterface(QWidget):
                     self.tr("每一行开头都插入演唱者名称标签（需先启用「插入【演唱者名】标签」）")
                 )
             if has_singer_options:
-                self._refresh_singer_checkboxes()
+                self._refresh_axis_group_summary()
             self._update_settings_geometry()
 
     def _update_settings_geometry(self) -> None:
@@ -536,7 +568,7 @@ class ExportInterface(QWidget):
                 self._sync_default_filename()
                 # 切换项目才清除用户上次的浏览选择
                 self._sync_default_output_dir(reset_user_choice=True)
-                self._refresh_singer_checkboxes()
+                self._refresh_axis_group_summary()
             elif change_type == "audio":
                 # 音频变更即刻反映到默认文件名（无需等待"创建项目"）
                 self._sync_default_filename()
@@ -544,7 +576,7 @@ class ExportInterface(QWidget):
             elif change_type == "singers":
                 if self._store and self._store.project:
                     self._project = self._store.project
-                self._refresh_singer_checkboxes()
+                self._refresh_axis_group_summary()
             elif change_type == "settings":
                 self._sync_default_format()
                 self._sync_default_output_dir()
@@ -606,20 +638,14 @@ class ExportInterface(QWidget):
             default_name = ""
         self.line_filename.setText(default_name)
 
-    def _refresh_singer_checkboxes(self):
-        """刷新演唱者 checkbox 列表"""
-        # 清除现有 checkbox
-        while self._singer_checkbox_container.count():
-            item = self._singer_checkbox_container.takeAt(0)
-            if item is not None:
-                widget = item.widget()
-                if widget is not None:
-                    cast(QWidget, widget).deleteLater()
-        self._singer_checkboxes.clear()
+    def _get_used_singers(self) -> list:
+        """导出过滤器 / 轴分组的候选演唱者：项目中实际使用且启用的演唱者。
 
+        口径与过滤器勾选框列表一致：行级与 per-char 演唱者都计入，
+        未知演唱者（含 "?"）归一到默认演唱者，禁用的演唱者剔除。
+        """
         if not self._project:
-            self._update_settings_geometry()
-            return
+            return []
 
         used_singer_ids = set()
         known_singer_ids = {s.id for s in self._project.singers}
@@ -652,35 +678,243 @@ class ExportInterface(QWidget):
                     elif singer_id in ("?", "未知") and default_singer_id:
                         used_singer_ids.add(default_singer_id)
 
-        for singer in self._project.singers:
-            if singer.id not in used_singer_ids:
-                continue
-            if not singer.enabled:
-                continue
-            chk = CheckBox(f"{singer.name}")
-            chk.setProperty("singer_id", singer.id)
-            # 用 setCustomStyleSheet 追加（而非 setStyleSheet 替换）演唱者专属
-            # 文字色，保留 qfluentwidgets CheckBox 自管理的勾选框 QSS，使其在
-            # 主题切换时仍被正常接管、不退化。
-            _singer_qss = f"CheckBox {{ color: {singer.color}; font-weight: bold; }}"
-            setCustomStyleSheet(chk, _singer_qss, _singer_qss)
-            self._singer_checkbox_container.addWidget(chk)
-            self._singer_checkboxes.append(chk)
+        return [
+            s
+            for s in self._project.singers
+            if s.id in used_singer_ids and s.enabled
+        ]
+
+    def _refresh_axis_group_summary(self):
+        """刷新「导出字幕分组」小窗。
+
+        - 隐藏的 ``_axis_summary_label`` 承载纯文本摘要（语义口径）：
+          未配置分组显示「未分组」；已配置逐组列出 组名（演唱者），主分组
+          带「主·」前缀；未入组的演唱者单独提示；
+        - 可视呈现由 :meth:`_render_axis_group_rows` 重建的分组行承担：
+          每组一行胶囊卡片（主分组徽标 + 组名 + 成员色点名单）。
+        """
+        if not hasattr(self, "_axis_summary_label"):
+            return
+
+        used_singers = self._get_used_singers()
+        used = {s.id: s.name for s in used_singers}
+        groups = (
+            list(getattr(self._project, "axis_groups", None) or [])
+            if self._project
+            else []
+        )
+
+        if not groups:
+            text = self.tr("未分组：导出全部演唱者")
+        else:
+            parts = []
+            for group in groups:
+                if group.singer_ids:
+                    names = "、".join(
+                        used.get(sid, self.tr("未知"))
+                        for sid in group.singer_ids
+                    )
+                else:
+                    # 空 = 全部演唱者（过滤器「不勾选则导出全部」口径）
+                    names = self.tr("全部")
+                prefix = "主·" if group.is_primary else ""
+                parts.append(f"{prefix}{group.name}（{names}）")
+            text = self.tr("共 {n} 组：{parts}").format(
+                n=len(groups), parts=" ｜ ".join(parts)
+            )
+            assigned = set()
+            for group in groups:
+                # 空组（= 全部）覆盖所有使用中的演唱者
+                assigned.update(group.singer_ids or used.keys())
+            unassigned = [name for sid, name in used.items() if sid not in assigned]
+            if unassigned:
+                text += "\n" + self.tr("未入组（不进入任何轴）：{names}").format(
+                    names="、".join(unassigned)
+                )
+        self._axis_summary_label.setText(text)
+        self._render_axis_group_rows(used_singers, groups, used)
         self._update_settings_geometry()
 
-    def _get_selected_singer_ids(self) -> Optional[Set[str]]:
-        """获取勾选的演唱者 ID 集合，如果没有勾选任何则返回 None（表示全部）"""
-        selected = set()
-        for chk in self._singer_checkboxes:
-            if chk.isChecked():
-                selected.add(chk.property("singer_id"))
-        return selected if selected else None
+    def _render_axis_group_rows(
+        self, used_singers: list, groups: list, used: Dict[str, str]
+    ) -> None:
+        """重建分组行：每组一行胶囊卡片，未入组提示行紧随其后。
+
+        行的底色、主分组徽标颜色与成员色点都从当前主题现取；主题切换时
+        :meth:`_update_theme_style` 会整行重建，深浅两套外观保持一致。
+        """
+        layout = self._axis_chips_layout
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+        if not groups:
+            empty = CaptionLabel(self.tr("未分组：导出全部演唱者"))
+            empty.setWordWrap(True)
+            self._add_axis_row(layout, empty)
+            return
+
+        colors = {s.id: getattr(s, "color", "#888888") for s in used_singers}
+        for group in groups:
+            self._add_axis_row(
+                layout, self._make_axis_group_row(group, used, colors)
+            )
+
+        # 未入组提示（有分组时才有意义；空组 = 全部，覆盖所有演唱者）
+        assigned: set = set()
+        for group in groups:
+            assigned.update(group.singer_ids or used.keys())
+        unassigned = [name for sid, name in used.items() if sid not in assigned]
+        if unassigned:
+            warn = CaptionLabel(
+                self.tr("未入组（不进入任何轴）：{names}").format(
+                    names="、".join(unassigned)
+                )
+            )
+            warn.setWordWrap(True)
+            accent = _theme.accent_warning.name()
+            setCustomStyleSheet(
+                warn,
+                f"CaptionLabel {{ color: {accent}; }}",
+                f"CaptionLabel {{ color: {accent}; }}",
+            )
+            self._add_axis_row(layout, warn)
+
+    @staticmethod
+    def _add_axis_row(layout: QVBoxLayout, widget: QWidget) -> None:
+        """把分组行加入布局并清除「未显示过」的隐藏标记。
+
+        顶层创建的 widget 自带 hidden 标记，``addWidget`` 挂进容器后该标记
+        的清除依赖延迟事件，在这里的实际布局链中不会生效——布局会把 hidden
+        控件从 sizeHint 中剔除，导致卡片高度塌陷裁掉内容。须在挂入布局
+        （取得父控件）**之后**置可见：先 setVisible 会把无父控件当顶层
+        窗口直接弹出。
+        """
+        layout.addWidget(widget)
+        widget.setVisible(True)
+
+    def _make_axis_group_row(
+        self, group, used: Dict[str, str], colors: Dict[str, str]
+    ) -> QFrame:
+        """构造单组胶囊行：[主徽标] 组名  ●成员A ●成员B（或「全部」）。"""
+        row = QFrame()
+        row.setObjectName("axisGroupRow")
+        # 色值统一取自 ThemeManager：深色沿用灰阶填充做层级，浅色用白底 +
+        # 描边（灰底在浅色界面里显脏）
+        if _theme.is_dark:
+            row_bg = _theme.bg_hover
+            row.setStyleSheet(
+                f"QFrame#axisGroupRow {{ background: {row_bg.name()};"
+                f" border-radius: 6px; }}"
+            )
+        else:
+            row_bg = _theme.bg_primary
+            row.setStyleSheet(
+                f"QFrame#axisGroupRow {{ background: {row_bg.name()};"
+                f" border: 1px solid {_theme.border_primary.name()};"
+                f" border-radius: 6px; }}"
+            )
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(10, 5, 10, 5)
+        row_layout.setSpacing(8)
+
+        if group.is_primary:
+            # 原生 QLabel：纯自定义外观（主题色底星标徽标），不走 fluent
+            # 注册，避免主题重刷覆盖掉徽标配色（行本身随分组行重建刷新）
+            badge = QLabel("★", row)
+            badge.setFixedSize(18, 18)
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setToolTip(self.tr("主分组"))
+            badge.setStyleSheet(
+                f"background: {themeColor().name()}; color: #FFFFFF;"
+                " border-radius: 4px; font-size: 11px;"
+            )
+            row_layout.addWidget(badge)
+
+        row_layout.addWidget(StrongBodyLabel(group.name, row))
+
+        members = CaptionLabel(row)
+        if group.singer_ids:
+            chips = []
+            for sid in group.singer_ids:
+                name = html.escape(used.get(sid, self.tr("未知")))
+                # 色点与对话框勾选框同口径：原始演唱者色对行底色做对比度
+                # 校正（保留色相），否则浅色主题下亮色（黄等）几乎不可读
+                raw = QColor(colors.get(sid, "#888888"))
+                dot_color = _theme.ensure_contrast(raw, row_bg).name()
+                chips.append(f'<span style="color:{dot_color};">●</span>{name}')
+            members.setText("&nbsp;&nbsp;".join(chips))
+        else:
+            # 空 = 全部演唱者（过滤器「不勾选则导出全部」口径）
+            members.setText(self.tr("全部"))
+        row_layout.addWidget(members, 1)
+        return row
 
     def _get_singer_map(self) -> Dict[str, str]:
         """获取 singer_id → 显示名 的映射"""
         if not self._project:
             return {}
         return {s.id: s.name for s in self._project.singers}
+
+    # @Emoji / @EmojiN= 行（触发词 = 等号后第一个逗号前的字段，如 【演唱者名】）
+    _EMOJI_LINE_RE = re.compile(r"^@Emoji\d*=", re.IGNORECASE)
+
+    @classmethod
+    def _emoji_trigger(cls, line: str) -> Optional[str]:
+        """解析 @Emoji 行的触发词；非 @Emoji 行返回 None。"""
+        text = line.strip()
+        if not cls._EMOJI_LINE_RE.match(text):
+            return None
+        rest = text[text.index("=") + 1:]
+        comma = rest.find(",")
+        return (rest if comma < 0 else rest[:comma]).strip()
+
+    def _build_axis_tag_data(self, group: AxisGroup, is_primary: bool) -> dict:
+        """按轴分组构造 Nicokara 标签快照（tag_data）。
+
+        - **所有组**：custom 中的 @Emoji 行按「本组实际使用的演唱者」解析
+          触发词——只保留触发词（【演唱者名】或裸名）能对应到本组演唱者
+          的行，其余 @Emoji 行剔除（其他轴的颜色标签对本轴无效）。
+          **组内未勾选演唱者 = 全部演唱者**（保留全部能对上号的 @Emoji）。
+        - **主分组**：携带完整标签信息（@Title/@Artist/@Album/@TaggingBy +
+          非 @Emoji 的 custom 行原样保留）。
+        - **非主分组**：剔除信息性标签（title/artist/album/tagging_by）与
+          非 @Emoji 的 custom 行，只留本组 @Emoji；计时字段
+          （offset/head_offset/silence_ms）保持原样——缺了会破坏时间轴。
+        """
+        tags = deepcopy(AppSettings().get("nicokara_tags") or {})
+        if not self._project:
+            return tags
+
+        name_by_id = {s.id: s.name for s in self._project.singers}
+        # 空 = 全部：触发词集合取全体演唱者
+        group_singer_ids = group.singer_ids or list(name_by_id.keys())
+        triggers = set()
+        for sid in group_singer_ids:
+            singer_name = name_by_id.get(sid)
+            if singer_name:
+                triggers.add(f"【{singer_name}】")
+                triggers.add(singer_name)
+
+        kept: list = []
+        for line in tags.get("custom", []) or []:
+            if not line:
+                continue
+            trigger = self._emoji_trigger(line)
+            if trigger is not None:
+                if trigger in triggers:
+                    kept.append(line)
+            elif is_primary:
+                kept.append(line)
+        tags["custom"] = kept
+
+        if not is_primary:
+            for key in ("title", "artist", "album", "tagging_by"):
+                tags.pop(key, None)
+        return tags
 
     def _on_browse(self):
         # 优先用导出专用目录（默认导出目录 > 项目/音频/歌词），回退到 last_export_dir
@@ -709,9 +943,10 @@ class ExportInterface(QWidget):
     def _on_emoji_config(self):
         """打开分色标签设置助手对话框。
 
-        演唱者列表以当前过滤器勾选结果为准（无勾选则使用全部演唱者）。
-        已有 @Emoji 标签优先读取，无匹配项回退到默认参数。
-        配置确认后自动写入 nicokara_tags.custom 并记忆首行参数。
+        演唱者列表取项目中启用的全部演唱者（原「以过滤器勾选为准」随
+        演唱者过滤升级为导出字幕分组而移除）。已有 @Emoji 标签优先读取，
+        无匹配项回退到默认参数。配置确认后自动写入 nicokara_tags.custom
+        并记忆首行参数。
         """
         from strange_uta_game.frontend.export.emoji_tag_dialog import (
             EmojiTagDialog,
@@ -730,14 +965,11 @@ class ExportInterface(QWidget):
             )
             return
 
-        # 以过滤器勾选结果为准；无勾选则取全部演唱者
-        selected_ids = self._get_selected_singer_ids()
         singer_list: list[tuple[str, str]] = []
         for singer in self._project.singers:
             if not singer.enabled:
                 continue
-            if selected_ids is None or singer.id in selected_ids:
-                singer_list.append((singer.id, singer.name))
+            singer_list.append((singer.id, singer.name))
 
         if not singer_list:
             InfoBar.warning(
@@ -771,6 +1003,84 @@ class ExportInterface(QWidget):
         if dialog.exec() == EmojiTagDialog.DialogCode.Accepted:  # apply_emoji_tags_to_settings 在 _on_accept 内部调用
             if self._store:
                 self._store.mark_dirty()
+
+    def _open_axis_group_dialog(self) -> Optional[list]:
+        """打开导出字幕分组对话框；确认返回分组列表，取消/校验失败返回 None。
+
+        初始状态：项目已保存过分组则恢复编辑；否则给出一张空分组卡片。
+        """
+        if not self._project:
+            InfoBar.warning(
+                title=self.tr("无项目"),
+                content=self.tr("请先创建或打开项目"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return None
+
+        used_singers = self._get_used_singers()
+        if not used_singers:
+            InfoBar.warning(
+                title=self.tr("无演唱者"),
+                content=self.tr("项目中没有可用的演唱者"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return None
+
+        from strange_uta_game.frontend.export.axis_group_dialog import (
+            AxisGroupDialog,
+        )
+
+        initial = list(getattr(self._project, "axis_groups", None) or [])
+        if not initial:
+            initial = [AxisGroup(name="", singer_ids=[])]
+        dialog = AxisGroupDialog(
+            [(s.id, s.name, s.color) for s in used_singers],
+            initial_groups=initial,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.get_axis_groups()
+
+    def _on_axis_groups(self):
+        """「修改分组...」：编辑并写回项目的导出字幕分组，刷新小窗摘要。"""
+        groups = self._open_axis_group_dialog()
+        if groups is None:
+            return
+        self._project.set_axis_groups(groups)
+        store = getattr(self, "_store", None)
+        if store is not None:
+            store.mark_dirty()
+        self._refresh_axis_group_summary()
+
+    def _on_export_to_next(self):
+        """嵌入式「进入下一步」：直接发信号。
+
+        分组编辑统一在导出页「导出字幕分组」小窗完成；本方法不再弹窗、
+        也不改写分组——宿主随后的 ``export_to_next_payload()`` 读取当前
+        ``project.axis_groups``（空 = 单轴）。
+        """
+        if not self._project:
+            InfoBar.warning(
+                title=self.tr("无项目"),
+                content=self.tr("请先创建或打开项目"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self,
+            )
+            return
+
+        self.export_to_next_requested.emit()
 
     def _on_export(self):
         if not self._project:
@@ -893,6 +1203,103 @@ class ExportInterface(QWidget):
         base_name = sanitize_export_basename(requested_base_name)
         if base_name != requested_base_name:
             self.line_filename.setText(base_name)
+
+        # 轴分组拆分导出：仅对支持演唱者过滤的格式（Nicokara / Kirakara）
+        # 生效。存在 1 个以上分组时按组导出多个文件，文件名追加「_分组名」；
+        # 单个分组 = 按该组过滤的正常导出（不加后缀）。
+        name_lower = name.lower()
+        has_singer_options = (
+            "nicokara" in name_lower or name_lower == "kirakara"
+        )
+        axis_groups = (
+            list(getattr(self._project, "axis_groups", None) or [])
+            if has_singer_options
+            else []
+        )
+
+        if axis_groups:
+            primary = self._project.primary_axis_group()
+            multi = len(axis_groups) > 1
+            export_jobs = []
+            for idx, group in enumerate(axis_groups):
+                gname = sanitize_export_basename(group.name or f"轴{idx + 1}")
+                filename = base_name + (f"_{gname}" if multi else "") + ext
+                export_jobs.append((filename, group, group is primary))
+
+            # 覆盖确认：合并为一次弹出——先收集全部已存在的目标文件再
+            # 统一询问，取消则整体中止（逐一弹窗会在多组时连弹多次）。
+            existing_files = [
+                filename
+                for filename, _group, _is_primary in export_jobs
+                if (Path(output_dir) / filename).exists()
+            ]
+            if existing_files:
+                preview = "\n".join(existing_files[:10])
+                if len(existing_files) > 10:
+                    preview += "\n" + self.tr("...另 {n} 个文件").format(
+                        n=len(existing_files) - 10
+                    )
+                if not message_question(
+                    self,
+                    self.tr("文件已存在"),
+                    self.tr("以下文件已存在：\n{files}").format(files=preview)
+                    + "\n\n"
+                    + self.tr("是否覆盖这些文件？"),
+                    yes_text=self.tr("覆盖"),
+                    no_text=self.tr("取消"),
+                ):
+                    return
+
+            exported_files: list[str] = []
+            failed_files: list[str] = []
+            for filename, group, is_primary in export_jobs:
+                filepath = str(Path(output_dir) / filename)
+                result = self._export_service.export(
+                    self._project,
+                    name,
+                    filepath,
+                    offset_ms=self._get_export_offset(),
+                    singer_ids=set(group.singer_ids) or None,
+                    insert_singer_tags=self._chk_insert_singer_tags.isChecked(),
+                    insert_singer_each_line=self._chk_insert_singer_each_line.isChecked(),
+                    singer_map=self._get_singer_map(),
+                    export_romaji=self._chk_export_romaji.isChecked(),
+                    software_compensation_ms=self._get_software_compensation(),
+                    tag_data=self._build_axis_tag_data(group, is_primary),
+                )
+                if result.success:
+                    exported_files.append(result.file_path or filepath)
+                else:
+                    failed_files.append(
+                        f"{filename}: {result.error_message or self.tr('未知错误')}"
+                    )
+
+            if exported_files:
+                # 将本次使用的格式持久化为默认导出格式
+                settings = AppSettings()
+                settings.set("export.default_format", name)
+                settings.save()
+                InfoBar.success(
+                    title=self.tr("导出成功"),
+                    content="\n".join(exported_files),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                    parent=self,
+                )
+            if failed_files:
+                InfoBar.error(
+                    title=self.tr("导出失败"),
+                    content="\n".join(failed_files),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=8000,
+                    parent=self,
+                )
+            return
+
         filename = base_name + ext
         filepath = str(Path(output_dir) / filename)
 
@@ -909,12 +1316,13 @@ class ExportInterface(QWidget):
             ):
                 return
 
+        # 未配置字幕分组 = 导出全部演唱者（分组过滤在 axis_groups 分支处理）
         result = self._export_service.export(
             self._project,
             name,
             filepath,
             offset_ms=self._get_export_offset(),
-            singer_ids=self._get_selected_singer_ids(),
+            singer_ids=None,
             insert_singer_tags=self._chk_insert_singer_tags.isChecked(),
             insert_singer_each_line=self._chk_insert_singer_each_line.isChecked(),
             singer_map=self._get_singer_map(),

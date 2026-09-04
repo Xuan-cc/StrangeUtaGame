@@ -39,6 +39,103 @@ from strange_uta_game.frontend.window_sizing import (
 )
 
 
+def _build_axis_plan(project: object) -> "dict[str, object]":
+    """从 ``project.axis_groups`` 派生宿主侧 ``axis_plan`` 快照。
+
+    纯 dict / 纯值类型，不引用任何 domain 对象 —— 构建完成即与后续编辑
+    隔离（与 ``export_to_next_payload`` 其余键同一契约）。project 允许是
+    任意带 ``singers`` / ``axis_groups`` 属性的对象，方便宿主与契约测试
+    用简易对象模拟。
+
+    结构::
+
+        {
+            "mode": "single" | "split",   # split = axis_groups 非空
+            "groups": [
+                {
+                    "name": "轴1",
+                    "singer_ids": [...],
+                    "is_primary": True,    # 有且仅有一个主分组（标签信息随主分组导出）
+                    "singers": [  # 冗余快照（id/name/color/color_mode/split_colors）
+                        {"id": "...", "name": "初音ミク", "color": "#FF6B6B",
+                         "color_mode": "solid", "split_colors": [...]},
+                    ],
+                },
+            ],
+            "unassigned": [...],  # 未进入任何组的启用演唱者 ID
+        }
+
+    每组的内容口径与 Nicokara 导出的演唱者过滤一致：行内任一字符属于组内
+    演唱者则保留整行（空行无条件保留），行内组外字符剔除（详见
+    docs/EMBEDDING.md §2.1）。组内 singer_ids 为空 = 全部演唱者，payload
+    中物化为当前全部启用歌手 id。
+    """
+    groups_raw = list(getattr(project, "axis_groups", None) or [])
+    singers = list(getattr(project, "singers", None) or [])
+    by_id = {}
+    for s in singers:
+        sid = getattr(s, "id", None)
+        if sid is not None:
+            by_id[sid] = s
+
+    groups: list = []
+    primary_assigned = False
+    for g in groups_raw:
+        raw_ids = getattr(g, "singer_ids", None) or []
+        if raw_ids:
+            singer_ids = [sid for sid in raw_ids if sid in by_id]
+        else:
+            # 空 = 全部演唱者（过滤器「不勾选则导出全部」口径）：物化为
+            # 当前全部启用歌手，随构建反映最新名单
+            singer_ids = [
+                sid
+                for sid, s in by_id.items()
+                if getattr(s, "enabled", True)
+            ]
+        # 主分组归一化（防御手写数据）：第一个标记为主分组者生效，其后
+        # 一律降级；无人标记时首组为主分组
+        is_primary = bool(getattr(g, "is_primary", False)) and not primary_assigned
+        primary_assigned = primary_assigned or is_primary
+        groups.append(
+            {
+                "name": str(getattr(g, "name", "") or ""),
+                "singer_ids": singer_ids,
+                "is_primary": is_primary,
+                "singers": [
+                    {
+                        "id": sid,
+                        "name": str(getattr(by_id[sid], "name", "") or ""),
+                        "color": str(getattr(by_id[sid], "color", "") or ""),
+                        "color_mode": str(
+                            getattr(by_id[sid], "color_mode", "solid") or "solid"
+                        ),
+                        "split_colors": list(
+                            getattr(by_id[sid], "split_colors", None) or []
+                        ),
+                    }
+                    for sid in singer_ids
+                ],
+            }
+        )
+    if groups and not primary_assigned:
+        groups[0]["is_primary"] = True
+
+    assigned = set()
+    for group in groups:
+        assigned.update(group["singer_ids"])
+    unassigned = [
+        sid
+        for sid in by_id
+        if sid not in assigned and getattr(by_id[sid], "enabled", True)
+    ]
+
+    return {
+        "mode": "split" if groups else "single",
+        "groups": groups,
+        "unassigned": unassigned,
+    }
+
+
 class MainWindow(MSFluentWindow):
     """主窗口 - MSFluentWindow 侧边栏导航架构。
 
@@ -1763,6 +1860,10 @@ class MainWindow(MSFluentWindow):
         项目对象和 Nicokara 标签均深拷贝，避免宿主后续处理意外修改
         SUG 当前编辑状态。媒体路径同时包含原始素材与当前播放音频，宿主可
         优先使用原始素材，并在其缺失时回退到音频。
+
+        ``axis_plan`` 为分色分轴计划（纯 dict 快照）：导出页「进入下一步」
+        在过滤器启用时经轴分组对话框写回 ``project.axis_groups``，本方法
+        派生成宿主可直接消费的结构；空分组列表 = 单轴（mode=single）。
         """
         project = self._store.project if self._store is not None else None
         if project is None:
@@ -1805,6 +1906,10 @@ class MainWindow(MSFluentWindow):
             "media_path": media_path,
             "media_kind": media_kind,
             "audio_path": self._store.audio_path,
+            # 分色分轴计划（嵌入「进入下一步」经轴分组对话框写回
+            # project.axis_groups；空 = 单轴）。.sug 落盘后宿主也可从
+            # 文件读到同一份数据，这里冗余一份纯 dict 快照便于即时消费。
+            "axis_plan": _build_axis_plan(project),
         }
 
     def import_lyrics_from_text(self, content: str) -> bool:

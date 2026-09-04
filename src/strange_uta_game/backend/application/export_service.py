@@ -4,7 +4,7 @@
 """
 
 import re
-from typing import Optional, Callable, List, Set, Dict
+from typing import Any, Optional, Callable, List, Set, Dict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -117,6 +117,7 @@ class ExportService:
         singer_map: Optional[Dict[str, str]] = None,
         export_romaji: bool = True,
         software_compensation_ms: int = 0,
+        tag_data: Optional[Dict[str, Any]] = None,
     ) -> ExportResult:
         """导出项目
 
@@ -132,6 +133,9 @@ class ExportService:
             singer_map: singer_id → 演唱者显示名的映射
             export_romaji: Kirakara 是否输出罗马音层
             software_compensation_ms: 软件导出补偿（毫秒），导出时给时间戳加上此值
+            tag_data: Nicokara 元数据标签快照（结构同 AppSettings 的
+                      ``nicokara_tags``）。轴分组拆分导出时传入按组过滤后的
+                      标签；None = 导出器自行回退读取 AppSettings（原行为）。
 
         Returns:
             导出结果
@@ -192,6 +196,7 @@ class ExportService:
                     insert_singer_tags=insert_singer_tags,
                     insert_singer_each_line=insert_singer_each_line,
                     singer_map=singer_map,
+                    tag_data=tag_data,
                 )
             elif isinstance(exporter, NicokaraExporter):
                 exporter.export(

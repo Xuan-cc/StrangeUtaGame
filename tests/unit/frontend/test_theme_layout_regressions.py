@@ -6,7 +6,7 @@ from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
 
 
 def test_export_settings_scroll_without_hiding_actions(qapp):
-    """设置内容滚动，导出按钮留在固定操作区，歌手列表不再嵌套滚动。"""
+    """设置内容滚动，导出按钮留在固定操作区；字幕分组小窗保持紧凑。"""
     from strange_uta_game.frontend.export.export_interface import ExportInterface
 
     page = ExportInterface(embedded=True)
@@ -70,9 +70,12 @@ def test_export_settings_scroll_without_hiding_actions(qapp):
     page.resize(900, 360)
     qapp.processEvents()
 
-    assert len(page._singer_checkboxes) == len(singers)
-    assert page._singer_checkbox_container.count() == len(singers)
-    assert page._settings_scroll.verticalScrollBar().maximum() > 0
+    # 演唱者过滤已升级为「导出字幕分组」小窗：无论多少演唱者都是
+    # 摘要 + 修改按钮，不再展开成逐人勾选的长列表。
+    assert page._singer_group.title().startswith("导出字幕分组")
+    assert page._axis_summary_label.text().startswith("未分组")
+    assert page._btn_axis_groups.isVisible()
+    assert not hasattr(page, "_singer_checkboxes")
     assert page.btn_export.isVisible()
     assert page.btn_export_to_next.isVisible()
 
