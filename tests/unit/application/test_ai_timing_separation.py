@@ -69,6 +69,13 @@ def _separator(
     tmp_path, monkeypatch, lines, *, proxy="", returncode=0, embedded=False
 ):
     monkeypatch.setattr(StandaloneVocalSeparator, "available", lambda self: True)
+    # 子进程协议单测不得访问真实网络；预下载行为由
+    # TestSeparationModelPredownload 单独覆盖。
+    monkeypatch.setattr(
+        StandaloneVocalSeparator,
+        "_download_missing_model_files",
+        lambda self, progress=None, cancel=None: [],
+    )
     python = tmp_path / "python.exe"
     python.write_bytes(b"")
     vocal = tmp_path / "song_人声.wav"
@@ -287,6 +294,7 @@ class TestStandaloneSeparator:
         proc.stdout = stdout
         monkeypatch.setattr(sep_mod.subprocess, "Popen", lambda *a, **k: proc)
         sep = StandaloneVocalSeparator(str(python), tmp_path / "models")
+        monkeypatch.setattr(sep, "_download_missing_model_files", lambda **k: [])
         t0 = time.monotonic()
 
         with pytest.raises(RuntimeError, match="已取消"):
@@ -316,6 +324,7 @@ class TestStandaloneSeparator:
         proc.stdout = stdout
         monkeypatch.setattr(sep_mod.subprocess, "Popen", lambda *a, **k: proc)
         sep = StandaloneVocalSeparator(str(python), tmp_path / "models")
+        monkeypatch.setattr(sep, "_download_missing_model_files", lambda **k: [])
         state = {"clicked": False}
 
         def progress(stage, pct, msg):
@@ -363,13 +372,53 @@ class TestStandaloneSeparator:
             encoding="utf-8",
         )
         messages = []
+        predownload = []
+
+        def _download(*, progress=None, cancel=None):
+            # 镜像预下载开始前，体检必须已经删除残缺模型；否则它会因
+            # 文件存在而跳过，后续子进程重新退回 GitHub 直连。
+            predownload.append((model.exists(), progress, cancel))
+            return []
+
+        monkeypatch.setattr(sep, "_download_missing_model_files", _download)
+
+        def cancel():
+            return False
+
         sep.separate(
             tmp_path / "song.flac",
             lambda s, p, m: messages.append(m),
-            lambda: False,
+            cancel,
         )
+        assert predownload and predownload[0][0] is False
+        assert callable(predownload[0][1])
+        assert predownload[0][2] is cancel
         assert any("重新下载" in m for m in messages)
         assert not model.exists()
+
+    def test_cancel_during_predownload_stops_before_spawn(
+        self, tmp_path, monkeypatch
+    ):
+        """预下载收到取消后不得继续启动 audio-separator 子进程。"""
+        sep, _, _, _ = _separator(tmp_path, monkeypatch, [])
+        spawned = []
+
+        def _cancelled_download(*, progress=None, cancel=None):
+            assert callable(progress) and callable(cancel)
+            raise RuntimeError("已取消")
+
+        monkeypatch.setattr(sep, "_download_missing_model_files", _cancelled_download)
+        monkeypatch.setattr(
+            sep_mod.subprocess,
+            "Popen",
+            lambda *a, **k: spawned.append((a, k)),
+        )
+
+        with pytest.raises(RuntimeError, match="已取消"):
+            sep.separate(
+                tmp_path / "song.flac", lambda *a: None, lambda: True
+            )
+        assert spawned == []
 
 
 class TestSeparationModelPreflight:
@@ -640,4 +689,3 @@ class TestSeparationModelPredownload:
         cands = _github_mirror_candidates(sep_mod.SEPARATION_MODEL_URL)
         assert cands
         assert all("gh-proxy" in u and "github.com/TRvlvr" in u for u in cands)
-

@@ -452,15 +452,25 @@ class StandaloneVocalSeparator:
             "separation",
             f"人声分离开始：source={source.name} python={python}",
         )
+        # 先体检再预下载：残缺模型若等到预下载之后才删除，预下载会因
+        # 「文件存在」跳过它，随后 audio-separator 仍会直连 GitHub 重下，
+        # 使镜像自愈失效。
+        note = ensure_separation_model(self._model_root)
+        if note:
+            progress("separation", 8, note)
+
         # 模型预下载（镜像接力，缺失才补）：audio-separator「文件在即跳过」
         # —— 我们用 SUG 多源（官方 + gh-proxy + 代理）先把模型文件拉齐，
         # 避免 audio-separator 直连 GitHub。best-effort：失败不阻断，交给
-        # audio-separator 自身官方下载兜底。
+        # audio-separator 自身官方下载兜底。进度与取消沿用本次分离任务，
+        # 大文件下载期间也必须能响应用户取消。
         try:
-            self._download_missing_model_files()
+            self._download_missing_model_files(progress=progress, cancel=cancel)
         except Exception as exc:  # noqa: BLE001
+            if cancel():
+                raise RuntimeError(_tr("已取消")) from exc
             ailog("separation", f"分离模型预下载异常（继续走 audio-separator）：{exc}")
-        # 模型体检自愈：残缺下载在子进程查表处必败且永不自愈
+        # 校验本次新下载的模型，避免异常镜像内容进入子进程。
         note = ensure_separation_model(self._model_root)
         if note:
             progress("separation", 8, note)

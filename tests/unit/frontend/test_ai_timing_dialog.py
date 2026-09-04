@@ -867,7 +867,9 @@ class TestDownloadMirrorApplied:
         dialog = self._make(qapp, tmp_path, snap, transport)
         TestPathChangeAppliesImmediately._wait_initial_refresh(qapp, dialog)
         dialog.combo_mirror.setCurrentIndex(2)  # 自定义
-        assert dialog.edit_mirror.isVisible()  # 自定义时输入框展开
+        # dialog 本身未 show，isVisible() 会因祖先隐藏而恒为 False；这里要
+        # 验证控件自身没有被 setVisible(False)。
+        assert not dialog.edit_mirror.isHidden()  # 自定义时输入框展开
         dialog.edit_mirror.setText("https://custom.example.org")
         dialog._persist_settings()
         assert dialog._settings.download_mirror == "https://custom.example.org"
@@ -883,4 +885,3 @@ class TestDownloadMirrorApplied:
         dialog._on_reset_settings()
         assert dialog._settings.download_mirror == ""
         assert dialog.combo_mirror.currentIndex() == 0
-
