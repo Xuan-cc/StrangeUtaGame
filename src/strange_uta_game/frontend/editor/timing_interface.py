@@ -22,7 +22,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
-from PyQt6.QtCore import QEvent, QRect, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QMimeData, QRect, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QKeyEvent
 from PyQt6.QtWidgets import (
     QApplication,
@@ -123,6 +123,11 @@ _DISPLAY_MODE_CYCLE = {
     "spectrum": "dual",
     "dual": "waveform",
 }
+
+# SUG 内部富文本剪贴板格式。系统剪贴板的 text/plain 保留全文本编辑器
+# 内联格式，项目内粘贴则优先根据该自定义 MIME 精确识别，避免单字等
+# 未命中启发式时把 ``[mm:ss.cc]`` 当成歌词露出来。
+_SUG_INLINE_CLIPBOARD_MIME = "application/x-strange-uta-game-inline-lyrics"
 
 
 # ──────────────────────────────────────────────
@@ -1552,6 +1557,17 @@ class EditorInterface(QWidget):
             return
 
         text = clipboard.text()
+        mime = clipboard.mimeData()
+
+        # 本编辑器复制的字符优先读取自定义富文本载荷，不依赖 text/plain
+        # 的启发式判断，因此单字时间戳也不会被当作普通歌词插入。
+        if mime is not None and mime.hasFormat(_SUG_INLINE_CLIPBOARD_MIME):
+            inline_text = bytes(mime.data(_SUG_INLINE_CLIPBOARD_MIME)).decode(
+                "utf-8", errors="replace"
+            )
+            if inline_text:
+                self._paste_inline_format(inline_text)
+                return
 
         # 内联时间戳格式优先（来自全文本编辑器的复制内容）
         if text and self._INLINE_TS_DETECT_RE.search(text):
@@ -1697,10 +1713,10 @@ class EditorInterface(QWidget):
         self._execute_structural_edit("粘贴内联格式", _mutate_inline)
 
     def _on_copy_chars(self):
-        """复制选中字符为内联时间戳格式（Ctrl+C）。
+        """复制选中字符（Ctrl+C）。
 
-        编码为内联格式字符串写入系统剪贴板，Ctrl+V 时可经
-        _INLINE_TS_DETECT_RE 识别并通过 _paste_inline_format 无损还原。
+        系统剪贴板的普通文本采用全文本编辑器内联格式；同一内容也写入
+        SUG 自定义 MIME，确保 Ctrl+V 时可被精确识别并无损还原。
         跨行复制时各行用 \\n 分隔，保留行边界信息。
         """
         from PyQt6.QtWidgets import QApplication
@@ -1783,7 +1799,10 @@ class EditorInterface(QWidget):
 
         clipboard = QApplication.clipboard()
         if clipboard:
-            clipboard.setText(inline_text)
+            mime = QMimeData()
+            mime.setText(inline_text)
+            mime.setData(_SUG_INLINE_CLIPBOARD_MIME, inline_text.encode("utf-8"))
+            clipboard.setMimeData(mime)
 
         InfoBar.success(
             title=self.tr("已复制"),
