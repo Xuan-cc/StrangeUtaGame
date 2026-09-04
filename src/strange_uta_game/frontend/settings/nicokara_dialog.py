@@ -89,7 +89,8 @@ class NicokaraTagsDialog(QDialog):
             lbl.setFont(ui_font(10))
             lbl.setMinimumWidth(150)
             spin = SpinBox()
-            spin.setRange(-99999, 99999)
+            # ±1 小时（ms）；QSpinBox 上限为 int32，3_600_000 远在其内
+            spin.setRange(-3_600_000, 3_600_000)
             spin.setSuffix(" ms")
             spin.setFont(ui_font(10))
             setattr(self, edit_attr, spin)
