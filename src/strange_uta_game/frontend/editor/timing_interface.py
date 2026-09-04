@@ -2731,8 +2731,6 @@ class EditorInterface(QWidget):
 
     def _on_bulk_change(self):
         """Ctrl+H — 打开批量変更对话框，自动填充当前焦点字符的连词或划选区域"""
-        from strange_uta_game.frontend.editor.timing import BulkChangeDialog
-
         if self.preview.is_multi_line_selection():
             InfoBar.warning(
                 title=self.tr("暂不允许多行"),
@@ -2781,18 +2779,37 @@ class EditorInterface(QWidget):
                     if any(readings):
                         initial_reading = ",".join(readings)
 
+        self._open_bulk_change_dialog(
+            initial_word=initial_word,
+            initial_reading=initial_reading,
+        )
+
+    def _open_bulk_change_dialog(
+        self, initial_word: str = "", initial_reading: str = "", initial_state=None
+    ) -> None:
+        """Open bulk mode and route its mode switch back to selected-char mode."""
+        from strange_uta_game.frontend.editor.timing import BulkChangeDialog
+
         dialog = BulkChangeDialog(
             self._project,
             self,
             initial_word=initial_word,
             initial_reading=initial_reading,
+            initial_state=initial_state,
         )
         dialog.exec()
+        if dialog.switch_to_normal_requested():
+            state = dialog.get_switch_state()
+            if initial_state and "normal_range" in initial_state:
+                state["normal_range"] = initial_state["normal_range"]
+            self._on_modify_char(state)
 
-    def _on_modify_char(self):
+    def _on_modify_char(self, initial_state=None):
         """打开修改所选字符对话框"""
         if not self._project:
             return
+        if not isinstance(initial_state, dict):
+            initial_state = None
 
         if self.preview.is_multi_line_selection():
             InfoBar.warning(
@@ -2806,23 +2823,27 @@ class EditorInterface(QWidget):
             )
             return
 
-        # Determine selection range
-        line_idx = self.preview._current_line_idx
-        sel_line = self.preview._focus_line_idx
-        sel_start = self.preview._focus_char_idx
-        sel_end = self.preview._focus_char_range_end
-
-        if sel_line >= 0 and sel_start >= 0:
-            # Use drag selection
-            use_line = sel_line
-            start_idx = min(sel_start, sel_end)
-            end_idx = max(sel_start, sel_end)
+        forced_range = initial_state.get("normal_range") if initial_state else None
+        if forced_range:
+            use_line, start_idx, end_idx = forced_range
         else:
-            # Use single char selection
-            use_line = line_idx
-            char_idx = self.preview._current_char_idx
-            start_idx = char_idx
-            end_idx = char_idx
+            # Determine selection range
+            line_idx = self.preview._current_line_idx
+            sel_line = self.preview._focus_line_idx
+            sel_start = self.preview._focus_char_idx
+            sel_end = self.preview._focus_char_range_end
+
+            if sel_line >= 0 and sel_start >= 0:
+                # Use drag selection
+                use_line = sel_line
+                start_idx = min(sel_start, sel_end)
+                end_idx = max(sel_start, sel_end)
+            else:
+                # Use single char selection
+                use_line = line_idx
+                char_idx = self.preview._current_char_idx
+                start_idx = char_idx
+                end_idx = char_idx
 
         if use_line < 0 or use_line >= len(self._project.sentences):
             return
@@ -2833,8 +2854,18 @@ class EditorInterface(QWidget):
         # 快照 before：ModifyCharacterDialog 会原地修改 project.sentences
         before_sentences = deepcopy(self._project.sentences)
 
-        dialog = ModifyCharacterDialog(sentence, start_idx, end_idx, self)
+        dialog = ModifyCharacterDialog(
+            sentence, start_idx, end_idx, self, initial_state=initial_state
+        )
         dialog.exec()
+
+        if dialog.switch_to_bulk_requested():
+            state = dialog.get_switch_state()
+            state["normal_range"] = (use_line, start_idx, end_idx)
+            self._open_bulk_change_dialog(
+                initial_word=state["search_word"], initial_state=state
+            )
+            return
 
         if dialog.was_modified():
             # 将本次修改登记为一次 SentenceSnapshotCommand（支持撤销/重做）
@@ -6010,6 +6041,17 @@ class EditorInterface(QWidget):
 
         dialog = CharEditDialog(sentence, char_idx, self)
         dialog.exec()
+        if dialog.switch_to_bulk_requested():
+            state = dialog.get_switch_state()
+            state["normal_range"] = (
+                line_idx,
+                dialog._word_start,
+                dialog._word_end - 1,
+            )
+            self._open_bulk_change_dialog(
+                initial_word=state["search_word"], initial_state=state
+            )
+            return
         if not dialog.was_modified():
             return
 

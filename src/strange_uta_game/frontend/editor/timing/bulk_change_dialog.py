@@ -56,6 +56,7 @@ class BulkChangeDialog(QDialog):
         parent=None,
         initial_word: str = "",
         initial_reading: str = "",
+        initial_state: Optional[dict] = None,
     ):
         super().__init__(parent)
         self._project = project
@@ -68,6 +69,7 @@ class BulkChangeDialog(QDialog):
         self._suppress_new_chars_signal = False
         # 执行后的失败项汇总：(sentence_index, abs_char_idx, char, reason)
         self._linked_failures: List[Tuple[int, int, str, str]] = []
+        self._switch_to_normal = False
 
         from strange_uta_game.frontend.editor.timing.dialogs import (
             CHAR_DIALOG_SIZE,
@@ -95,6 +97,9 @@ class BulkChangeDialog(QDialog):
         search_row.addWidget(lbl_search)
         search_row.addWidget(self.edit_word, stretch=1)
         search_row.addWidget(self.lbl_match)
+        self.btn_switch_normal = PushButton(self.tr("切换为普通"), self)
+        self.btn_switch_normal.clicked.connect(self._on_switch_to_normal)
+        search_row.addWidget(self.btn_switch_normal)
         layout.addLayout(search_row)
 
         # 新字符行
@@ -178,6 +183,26 @@ class BulkChangeDialog(QDialog):
         # 首次填充：按初始搜索词首匹配
         self._refresh_match_count()
         self._refill_from_first_match(initial_reading)
+        if initial_state:
+            from strange_uta_game.frontend.editor.timing.dialogs import (
+                apply_char_dialog_state,
+            )
+            apply_char_dialog_state(self, initial_state)
+            self._rows_user_edited = True
+            self._new_chars_user_edited = True
+
+    def _on_switch_to_normal(self) -> None:
+        self._switch_to_normal = True
+        self.reject()
+
+    def switch_to_normal_requested(self) -> bool:
+        return self._switch_to_normal
+
+    def get_switch_state(self) -> dict:
+        from strange_uta_game.frontend.editor.timing.dialogs import (
+            collect_char_dialog_state,
+        )
+        return collect_char_dialog_state(self, self.edit_word.text().strip())
 
     def _on_query_dict_candidates(self):
         """查询候补字典：以搜索词为 word，选中条目后按其格式填充并执行+关闭两窗口。"""

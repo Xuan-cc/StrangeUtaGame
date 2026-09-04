@@ -206,6 +206,42 @@ def style_quick_link_button(btn: PushButton) -> None:
     )
 
 
+def collect_char_dialog_state(dialog, search_word: str = "") -> dict:
+    """Collect the editable fields shared by the normal and bulk dialogs."""
+    return {
+        "search_word": search_word,
+        "new_text": dialog.edit_new_chars.text(),
+        "rows": [
+            (edit_ruby.text(), edit_check.text(), check_linked.isChecked())
+            for _, edit_ruby, edit_check, check_linked in dialog._char_rows
+        ],
+        "split_mode": _radio_split_mode(dialog._radio_direct, dialog._radio_by_char),
+        "register": dialog.chk_register.isChecked(),
+    }
+
+
+def apply_char_dialog_state(dialog, state: dict | None) -> None:
+    """Restore fields when switching between normal and bulk modes."""
+    if not state:
+        return
+    dialog.edit_new_chars.setText(state.get("new_text", dialog.edit_new_chars.text()))
+    for row, values in zip(dialog._char_rows, state.get("rows", [])):
+        _, edit_ruby, edit_check, check_linked = row
+        ruby_text, check_text, linked = values
+        edit_ruby.setText(ruby_text)
+        edit_check.setText(check_text)
+        check_linked.setChecked(bool(linked))
+    mode = state.get("split_mode")
+    if mode == "direct":
+        dialog._radio_direct.setChecked(True)
+    elif mode == "char":
+        dialog._radio_by_char.setChecked(True)
+    elif mode == "mora":
+        dialog._radio_by_mora.setChecked(True)
+    dialog.chk_register.setChecked(bool(state.get("register", False)))
+    dialog._update_preview()
+
+
 def parse_ruby_text(
     raw: str, check_count: int = 1, mode: str | None = None
 ) -> Ruby | None:
@@ -252,12 +288,15 @@ class ModifyCharacterDialog(QDialog):
         提交时若有违规项则跳过该项的 linked_to_next 并在 failures 列表返回。
     """
 
-    def __init__(self, sentence, start_idx, end_idx, parent=None):
+    def __init__(
+        self, sentence, start_idx, end_idx, parent=None, initial_state=None
+    ):
         super().__init__(parent)
         self._sentence = sentence
         self._start_idx = start_idx
         self._end_idx = end_idx
         self._modified = False
+        self._switch_to_bulk = False
         self._linked_failures: list[tuple[int, str, str]] = []
         # (pos, char, reason) 列表，执行后由调用方读取弹窗汇总
         self._char_rows: list[tuple[QLabel, QLineEdit, QLineEdit, QCheckBox]] = []
@@ -277,7 +316,15 @@ class ModifyCharacterDialog(QDialog):
         lbl_current.setFont(char_dialog_font(FONT_VALUE_DISPLAY, bold=True))
         lbl_cur_label = BodyLabel(self.tr("当前选中字符:"))
         lbl_cur_label.setFont(char_dialog_font(FONT_FIELD_LABEL))
-        top_form.addRow(lbl_cur_label, lbl_current)
+        current_row = QWidget(self)
+        current_row_layout = QHBoxLayout(current_row)
+        current_row_layout.setContentsMargins(0, 0, 0, 0)
+        current_row_layout.addWidget(lbl_current)
+        current_row_layout.addStretch()
+        self.btn_switch_bulk = PushButton(self.tr("转为批量"), self)
+        self.btn_switch_bulk.clicked.connect(self._on_switch_to_bulk)
+        current_row_layout.addWidget(self.btn_switch_bulk)
+        top_form.addRow(lbl_cur_label, current_row)
         self.edit_new_chars = LineEdit(self)
         self.edit_new_chars.setText(current_text)
         self.edit_new_chars.setPlaceholderText(self.tr("输入新字符"))
@@ -344,6 +391,7 @@ class ModifyCharacterDialog(QDialog):
         # 初始预览
         self._update_preview()
         self._update_toggle_linked_enabled()
+        apply_char_dialog_state(self, initial_state)
 
         # Buttons
         btn_layout = QHBoxLayout()
@@ -359,6 +407,18 @@ class ModifyCharacterDialog(QDialog):
         btn_close.clicked.connect(self.reject)
         btn_layout.addWidget(btn_close)
         layout.addLayout(btn_layout)
+
+    def _on_switch_to_bulk(self) -> None:
+        self._switch_to_bulk = True
+        self.reject()
+
+    def switch_to_bulk_requested(self) -> bool:
+        return self._switch_to_bulk
+
+    def get_switch_state(self) -> dict:
+        chars = self._sentence.characters[self._start_idx : self._end_idx + 1]
+        word = "".join(c.char for c in chars)
+        return collect_char_dialog_state(self, word)
 
     def _on_query_dict_candidates(self):
         """查询候补字典：选中条目后按其格式填充并执行（关闭两窗口）。"""
@@ -980,11 +1040,14 @@ class CharEditDialog(QDialog):
     - 确定/取消按钮
     """
 
-    def __init__(self, sentence: "Sentence", char_idx: int, parent=None):
+    def __init__(
+        self, sentence: "Sentence", char_idx: int, parent=None, initial_state=None
+    ):
         super().__init__(parent)
         self._sentence = sentence
         self._char_idx = char_idx
         self._modified = False
+        self._switch_to_bulk = False
         self._char_rows: list[tuple[QLabel, QLineEdit, QLineEdit, QCheckBox]] = []
 
         self.setWindowTitle(self.tr("编辑字符"))
@@ -1011,7 +1074,15 @@ class CharEditDialog(QDialog):
         lbl_current.setFont(char_dialog_font(FONT_VALUE_DISPLAY, bold=True))
         lbl_cur_label = BodyLabel(self.tr("当前字符:"))
         lbl_cur_label.setFont(char_dialog_font(FONT_FIELD_LABEL))
-        top_form.addRow(lbl_cur_label, lbl_current)
+        current_row = QWidget(self)
+        current_row_layout = QHBoxLayout(current_row)
+        current_row_layout.setContentsMargins(0, 0, 0, 0)
+        current_row_layout.addWidget(lbl_current)
+        current_row_layout.addStretch()
+        self.btn_switch_bulk = PushButton(self.tr("转为批量"), self)
+        self.btn_switch_bulk.clicked.connect(self._on_switch_to_bulk)
+        current_row_layout.addWidget(self.btn_switch_bulk)
+        top_form.addRow(lbl_cur_label, current_row)
         # 新字符输入框只包含字符本身，不包含 " + "
         self.edit_new_chars = LineEdit(self)
         self.edit_new_chars.setText("".join(
@@ -1085,6 +1156,7 @@ class CharEditDialog(QDialog):
         # 初始预览
         self._update_preview()
         self._update_toggle_linked_enabled()
+        apply_char_dialog_state(self, initial_state)
 
         # 按钮
         btn_layout = QHBoxLayout()
@@ -1100,6 +1172,22 @@ class CharEditDialog(QDialog):
         btn_layout.addWidget(btn_query)
         btn_layout.addWidget(btn_cancel)
         layout.addLayout(btn_layout)
+
+    def _on_switch_to_bulk(self) -> None:
+        self._switch_to_bulk = True
+        self.reject()
+
+    def switch_to_bulk_requested(self) -> bool:
+        return self._switch_to_bulk
+
+    def get_switch_state(self) -> dict:
+        # ``display`` uses " + " only as a visual linked-word separator.  The
+        # bulk search must receive the actual contiguous characters.
+        word = "".join(
+            self._sentence.characters[i].char
+            for i in range(self._word_start, self._word_end)
+        )
+        return collect_char_dialog_state(self, word)
 
     def _on_query_dict_candidates(self):
         """查询候补字典：选中条目后按其格式填充并执行（关闭两窗口）。"""
