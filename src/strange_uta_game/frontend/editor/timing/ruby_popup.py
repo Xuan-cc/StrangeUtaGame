@@ -136,7 +136,8 @@ class RubyEditPopup(QDialog):
     def _apply(self) -> None:
         if self._finished or self._cancelled:
             return
-        ruby_text = self.edit_ruby.text().strip()
+        # 头尾空格是实义注音字符（与中间空格一致），不做 strip。
+        ruby_text = self.edit_ruby.text()
         ruby_changed = ruby_text != self._original_ruby
         split_mode = self._split_mode
         mode_changed = split_mode != "direct" and "," in ruby_text

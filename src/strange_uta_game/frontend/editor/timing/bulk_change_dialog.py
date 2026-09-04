@@ -426,7 +426,8 @@ class BulkChangeDialog(QDialog):
             # 无匹配：用搜索词 + fallback reading
             new_text = word
             if fallback_reading:
-                parts = [p.strip() for p in fallback_reading.split(",")]
+                # 逐段保留头尾空格（实义注音字符），不做 strip。
+                parts = fallback_reading.split(",")
                 ruby_list = [parts[i] if i < len(parts) else "" for i in range(w_len)]
             else:
                 ruby_list = ["" for _ in range(w_len)]

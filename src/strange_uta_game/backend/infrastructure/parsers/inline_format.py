@@ -214,10 +214,12 @@ def split_ruby_segments(
 
     Returns:
         分段文本列表；输入为空白时返回 ``[]``（表示无注音）。
+        头尾空格与中间空格同为实义字符（导出文件中空格读音有意义），
+        只参与空白判断，不做剥离。
     """
-    text = ruby_text.strip()
-    if not text:
+    if not ruby_text.strip():
         return []
+    text = ruby_text
 
     if mode == "direct":
         pause = get_ruby_pause_char()

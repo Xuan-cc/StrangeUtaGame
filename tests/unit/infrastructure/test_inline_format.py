@@ -152,6 +152,18 @@ class TestSplitRubySegments:
         assert split_ruby_segments("", 2, "direct") == []
         assert split_ruby_segments("  ", 2, "mora") == []
 
+    def test_leading_trailing_spaces_preserved(self):
+        """头尾空格与中间空格同为实义字符，只参与空白判断不剥离"""
+        from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+            split_ruby_segments,
+        )
+        assert split_ruby_segments(" す", 1, "direct") == [" す"]
+        assert split_ruby_segments("す ", 1, "direct") == ["す "]
+        assert split_ruby_segments(" あ,い ", 2, "direct") == [" あ", "い "]
+        assert split_ruby_segments(" す", 1, "mora") == [" す"]
+        assert split_ruby_segments(" す", 1, "char") == [" す"]
+        assert split_ruby_segments("す ", 2, "char") == ["す", " "]
+
     def test_direct_empty_segments_become_placeholder(self):
         """direct 模式：连续/尾随逗号的空段解析为占位符，不静默丢弃"""
         from strange_uta_game.backend.infrastructure.parsers.inline_format import (
@@ -199,6 +211,15 @@ class TestSplitRubySegments:
         display = ",".join(parts)  # 对话框显示协议
         for mode in ("direct", "mora", "char"):
             assert split_ruby_segments(display, 3, mode) == parts, mode
+
+    def test_edge_space_roundtrip_idempotent(self):
+        """含头尾空格的显示文本重解析得到相同 parts（direct 显示协议）"""
+        from strange_uta_game.backend.infrastructure.parsers.inline_format import (
+            split_ruby_segments,
+        )
+        parts = [" あ", "い "]
+        display = ",".join(parts)
+        assert split_ruby_segments(display, 2, "direct") == parts
 
 
 # ──────────────────────────────────────────────

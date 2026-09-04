@@ -45,6 +45,18 @@ def test_apply_updates_ruby_and_link_state(qapp, monkeypatch):
     assert character.linked_to_next is True
 
 
+def test_apply_preserves_leading_trailing_spaces(qapp, monkeypatch):
+    """头尾空格是实义注音字符：提交时不做剥离"""
+    character = _character()
+    popup = _popup(monkeypatch, character, can_link_next=True)
+
+    popup.edit_ruby.setText(" きょ,う ")
+    popup._apply()
+
+    assert popup.was_modified()
+    assert [part.text for part in character.ruby.parts] == [" きょ", "う "]
+
+
 def test_unchanged_submit_preserves_existing_ruby_object(qapp, monkeypatch):
     character = _character(linked=True)
     original_ruby = character.ruby
