@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from PyQt6.QtCore import QEvent, QPoint, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPolygon, QWheelEvent
 from PyQt6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel
@@ -16,6 +18,9 @@ from qfluentwidgets import (
 )
 from qfluentwidgets.components.widgets.slider import SliderHandle as _SliderHandle
 
+from strange_uta_game.frontend.editor.timing.inline_edit_label import (
+    InlineEditableCaptionLabel,
+)
 from strange_uta_game.frontend.theme import theme
 
 
@@ -213,10 +218,16 @@ class TransportBar(QFrame):
         self.slider_speed.sliderReleased.connect(self._on_speed_slider_released)
         layout.addWidget(self.slider_speed)
 
-        self.lbl_speed_value = CaptionLabel("1.00x", self)
+        self.lbl_speed_value = InlineEditableCaptionLabel(
+            "1.00x",
+            self,
+            edit_scale=100.0,
+            edit_suffix="%",
+        )
         # "1.00x" 在中文/英文都是 5 字符；用 minimum 防止极端字号下挤压。
-        self.lbl_speed_value.setMinimumWidth(44)
+        self.lbl_speed_value.setMinimumWidth(60)
         self.lbl_speed_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_speed_value.value_committed.connect(self._commit_speed_text)
         layout.addWidget(self.lbl_speed_value)
         self._set_speed_label(100)
 
@@ -353,6 +364,24 @@ class TransportBar(QFrame):
             f"{self.slider_speed.minimum() / 100.0:.2f}x - "
             f"{self.slider_speed.maximum() / 100.0:.2f}x"
         )
+
+    def _commit_speed_text(self, text: str) -> None:
+        """Apply a multiplier entered in the speed value label."""
+        value = text.strip()
+        try:
+            if value.endswith("%"):
+                entered = float(value[:-1].strip())
+            else:
+                if value.lower().endswith("x"):
+                    value = value[:-1].strip()
+                entered = float(value) * 100.0
+            if not math.isfinite(entered):
+                raise ValueError("speed must be finite")
+            pct = round(entered)
+        except (TypeError, ValueError, OverflowError):
+            self._set_speed_label(self.get_speed_value())
+            return
+        self.set_speed_value(pct, emit_signal=True)
 
     def _on_speed_slider_changed(self, pct: int):
         pct = self._clamp_speed_pct(pct)

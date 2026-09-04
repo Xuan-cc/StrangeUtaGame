@@ -38,6 +38,9 @@ from PyQt6.QtWidgets import (
 from qfluentwidgets import CaptionLabel, FluentIcon, Slider, SwitchButton, TransparentToolButton
 
 from strange_uta_game.backend.infrastructure.audio import spectrum as spectrum_core
+from strange_uta_game.frontend.editor.timing.inline_edit_label import (
+    InlineEditableCaptionLabel,
+)
 from strange_uta_game.frontend.perf_log import log_slow_method
 from strange_uta_game.frontend.theme import theme
 from strange_uta_game.frontend.workers import SpectrogramWorker
@@ -2658,8 +2661,9 @@ class TimelineWidget(QWidget):
         self.zoom_slider.valueChanged.connect(self._on_zoom_slider_changed)
         bottom_layout.addWidget(self.zoom_slider)
 
-        self.zoom_label = CaptionLabel("50.0x", self)
+        self.zoom_label = InlineEditableCaptionLabel("50.0x", self)
         self.zoom_label.setMinimumWidth(40)
+        self.zoom_label.value_committed.connect(self._commit_zoom_text)
         bottom_layout.addWidget(self.zoom_label)
 
         # 横向滚动条
@@ -2924,6 +2928,28 @@ class TimelineWidget(QWidget):
         # set_zoom 不发 zoom_changed 信号（仅 Ctrl+滚轮缩放才发），故缩放滑条
         # 改变后需在此显式刷新滚动条 pageStep/range，使滑块长度跟随缩放比例。
         self._update_scroll_bar_metrics()
+
+    def _commit_zoom_text(self, text: str) -> None:
+        """Apply a multiplier entered in the zoom value label."""
+        value = text.strip()
+        if value.lower().endswith("x"):
+            value = value[:-1].strip()
+        try:
+            zoom = float(value)
+        except (TypeError, ValueError):
+            self.zoom_label.setText(
+                f"{self.waveform_display._zoom_factor:.1f}x"
+            )
+            return
+        if not math.isfinite(zoom):
+            self.zoom_label.setText(
+                f"{self.waveform_display._zoom_factor:.1f}x"
+            )
+            return
+        zoom = max(1.0, min(self.waveform_display.zoom_cap(), zoom))
+        self.waveform_display._suspend_auto_scroll()
+        self.waveform_display.set_zoom(zoom)
+        self._on_zoom_changed(zoom)
 
     def _on_scroll_bar_changed(self, value: int):
         self.waveform_display._suspend_auto_scroll()

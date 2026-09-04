@@ -633,6 +633,30 @@ class TestBpmGrid:
 
 
 class TestTimelineWidgetIntegration:
+    def test_zoom_label_commits_value_and_returns_to_display_mode(self, qapp):
+        timeline = TimelineWidget()
+
+        timeline.zoom_label.begin_edit()
+        timeline.zoom_label.editor.setText("25x")
+        timeline.zoom_label.editor.editingFinished.emit()
+
+        assert timeline.zoom_label.is_editing() is False
+        assert timeline.zoom_label.editor.isHidden()
+        assert timeline.waveform_display._zoom_factor == 25.0
+        assert timeline.zoom_label.text() == "25.0x"
+
+    def test_zoom_label_invalid_value_restores_current_display(self, qapp):
+        timeline = TimelineWidget()
+        timeline.waveform_display.set_zoom(12.5)
+        timeline._on_zoom_changed(12.5)
+
+        timeline.zoom_label.begin_edit()
+        timeline.zoom_label.editor.setText("invalid")
+        timeline.zoom_label.editor.returnPressed.emit()
+
+        assert timeline.waveform_display._zoom_factor == 12.5
+        assert timeline.zoom_label.text() == "12.5x"
+
     def test_gear_button_and_display_settings_signal(self, qapp):
         timeline = TimelineWidget()
         assert hasattr(timeline, "btn_waveform_settings")
