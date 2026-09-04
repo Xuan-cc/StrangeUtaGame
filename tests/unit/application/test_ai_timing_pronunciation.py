@@ -185,7 +185,7 @@ class TestCollectExistingAnnotations:
         assert plan.units == []
 
     def test_sentence_end_virtual_unit(self):
-        """句尾呼吸点成为虚拟单元：无读音、无 token，checkpoint_idx=check_count。"""
+        """停顿点成为虚拟单元：无读音、无 token，checkpoint_idx=check_count。"""
         s = _sentence([("い", 1, None, True)])
         plan = PronunciationResolver().collect_existing_annotations(
             _project_with_sentence(s)

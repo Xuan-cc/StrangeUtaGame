@@ -22,16 +22,16 @@ class Ruby:
 ```
 
 ### Character (字符实体)
-卡拉OK打轴的最小单位。包含注音、时间戳、演唱者、句尾标记。
+卡拉OK打轴的最小单位。包含注音、时间戳、演唱者、停顿点标记。
 
 ```python
 @dataclass
 class Character:
     char: str
     ruby: Optional[Ruby] = None
-    check_count: int = 1              # 普通节奏点数量，不含句尾释放点
+    check_count: int = 1              # 普通节奏点数量，不含停顿点
     timestamps: List[int] = field(default_factory=list)
-    sentence_end_ts: Optional[int] = None   # 句尾释放时间戳
+    sentence_end_ts: Optional[int] = None   # 停顿点时间戳
     linked_to_next: bool = False
     is_line_end: bool = False
     is_sentence_end: bool = False

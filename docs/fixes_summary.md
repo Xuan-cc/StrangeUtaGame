@@ -9,10 +9,10 @@
 | 批次 | 日期 | 改动概述 |
 |:---:|:---:|:---|
 | 1 | 2025-04-16 | 统一 .sug 文件格式字段（singer_id 等），修正 6 个文档冲突点与 5 个遗漏项；附录记录 .rlf → .sug 迁移、字段类型规范、撤销/重做机制。 |
-| 2 | 2026-04-18 | 修复多项 BUG：注音残留、时间标签延后归属、空格视为句尾、默认 offset 校准；新增 Nicokara 导入、演唱者预设持久化。 |
+| 2 | 2026-04-18 | 修复多项 BUG：注音残留、时间标签延后归属、空格视为停顿点、默认 offset 校准；新增 Nicokara 导入、演唱者预设持久化。 |
 | 3 | 2026-04-18 | 重设计架构：linked_to_next 跨字符注音、AutoCheck 假名/拗音处理、Offset 校准窗口可视化、撤销重做命令模型固化。 |
 | 4 | 2026-04-18 | F3 连词渲染重构（Ruby 跨字符），双击跳转、批量编辑器、播放控制提示完善。 |
-| 5 | 2026-04-19 | 句尾设计：checkpoint 句尾时间戳独立存储（sentence_end_ts），支持自动顺延、F4 切换。 |
+| 5 | 2026-04-19 | 停顿点设计：checkpoint 停顿点时间戳独立存储（sentence_end_ts），支持自动顺延、F4 切换。 |
 | 6 | 2026-04-19 | 渲染/导出 offset 预览逻辑重构，简化 Exporter 实现，导出全格式实时 offset 矫正。 |
 | 7 | 2026-04-20 | 修复 Nicokara Ruby 跨块对齐、补全字符级 singer 染色、固定深浅色主题模式色彩冲突。 |
 | 8 | 2026-04-21 | 接入 e2k 英文注音缓存，实现快捷键打轴/编辑双模式键映射，支持快进光标精确同步。 |
@@ -24,8 +24,8 @@
 | 14 | 2026-04-22 | inline_format 方案 B（RubyPart 数据结构）回归测试收尾，废弃 # 字符串语义。 |
 | 15 | 2026-04-22 | #9 选中 checkpoint 大白框根治（防御性 clip / 透明 BGMode 等若干尝试）。 |
 | 16 | 2026-04-22 | #9 架构性根治选中高亮大白框（最终方案）。 |
-| 17 | 2026-04-23 | Ruby 数据结构 Ruby(text=) → Ruby(parts=[RubyPart]) 全量重构；十项需求：英文 fallback、重复注音空组防护、自动注音解耦节奏点、用户字典 # 隔离、标点节奏点开关（默认关）、句中编辑（删除/插空/合并行）、快捷键冲突阻止、选中 cp 越界自动顺延；TimingService 重构为 `on_key_changed` 统一入口，句尾末尾 cp 仅 key-up 写入。 |
-| 18 | 2026-04-23 | 快捷键冲突检测与即时生效修复（#4+#5）；ModifyCharacterDialog 重建为字符级行 + `,` 分 RubyPart（#1+#2+#3）；空行导入剥除/导出不再自动补空行（#6）；英文 contraction 词边界加 apostrophe，修复 `what's` 被 `what` 半覆盖导致 `'s` 裸露（#7）；`update_checkpoints_from_rubies` 插入英文词组节奏点规则：首字=1 cp、中间=0、末字标句尾（#9）。 |
+| 17 | 2026-04-23 | Ruby 数据结构 Ruby(text=) → Ruby(parts=[RubyPart]) 全量重构；十项需求：英文 fallback、重复注音空组防护、自动注音解耦节奏点、用户字典 # 隔离、标点节奏点开关（默认关）、句中编辑（删除/插空/合并行）、快捷键冲突阻止、选中 cp 越界自动顺延；TimingService 重构为 `on_key_changed` 统一入口，停顿点 cp 仅 key-up 写入。 |
+| 18 | 2026-04-23 | 快捷键冲突检测与即时生效修复（#4+#5）；ModifyCharacterDialog 重建为字符级行 + `,` 分 RubyPart（#1+#2+#3）；空行导入剥除/导出不再自动补空行（#6）；英文 contraction 词边界加 apostrophe，修复 `what's` 被 `what` 半覆盖导致 `'s` 裸露（#7）；`update_checkpoints_from_rubies` 插入英文词组节奏点规则：首字=1 cp、中间=0、末字标停顿点（#9）。 |
 | 19 | 2026-05-08 | 注音拆分重构：引入 KANJIDIC2 全量音读字典（`kanji_readings.json`，12356 字）；`_try_split_to_chars` 新增 Pass 2 单字字典组合匹配（含「々」继承前字候选 + 连浊变体）；`_is_kanji` / `get_char_type` 将 `々` (U+3005) 归为汉字；Pass 顺序：约束回溯→音读字典→pykakasi参考→モーラ均分→无约束。 |
 
 ---

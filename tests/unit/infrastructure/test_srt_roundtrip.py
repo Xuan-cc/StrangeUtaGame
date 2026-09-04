@@ -5,7 +5,7 @@ SRT 格式只携带行级 Start/End——逐字时间、注音、演唱者、连
 
 1. 每行文本一致；
 2. 行起始 ts 落在首字符（= 导出 Start）；
-3. 行末字符的句尾释放 ts = 导出 End（下一行 Start，末行 +5s）；
+3. 行末字符的停顿点 ts = 导出 End（下一行 Start，末行 +5s）；
 4. 导入 → 再导出，SRT 文本逐字相同（idempotent）。
 """
 from __future__ import annotations
@@ -77,7 +77,7 @@ def _import_srt(content: str) -> Project:
 
 class TestSRTRoundtrip:
     def test_line_texts_and_bounds_preserved(self):
-        """行文本 / 行首 ts / 行末句尾释放 ts 与导出的 Start/End 一致。"""
+        """行文本 / 行首 ts / 行末停顿点 ts 与导出的 Start/End 一致。"""
         project = _make_project()
         srt1 = _export_srt(project)
         p2 = _import_srt(srt1)

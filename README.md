@@ -173,7 +173,7 @@
   <td align="center">🇯🇵</td>
   <td>
     <b>自动注音（多引擎 + LLM + 罗马音） / Auto-furigana (multi-engine + LLM + romaji)</b><br/>
-    <sub>主引擎 <b>WinRT JapanesePhoneticAnalyzer</b>（main 变体）/ <b>SudachiPy</b>（noWinIME·mac 变体），辅以 <code>pykakasi</code> + 本地/联网词典；可在 <b>设置 → 读音词典 → LLM 注音</b> 启用 LLM 并配置 API；支持<b>一键转罗马音</b>与「仅注音」模式；按平假名/片假名/汉字/字母/数字分类启停，自动补全句首句尾、促音、长音、括号、英文音节等规则。片假名英文注音开关位于 <b>设置 → 读音词典 → 根据用户词典给片假名标注英文</b>。<br/>
+    <sub>主引擎 <b>WinRT JapanesePhoneticAnalyzer</b>（main 变体）/ <b>SudachiPy</b>（noWinIME·mac 变体），辅以 <code>pykakasi</code> + 本地/联网词典；可在 <b>设置 → 读音词典 → LLM 注音</b> 启用 LLM 并配置 API；支持<b>一键转罗马音</b>与「仅注音」模式；按平假名/片假名/汉字/字母/数字分类启停，自动补全句首停顿点、促音、长音、括号、英文音节等规则。片假名英文注音开关位于 <b>设置 → 读音词典 → 根据用户词典给片假名标注英文</b>。<br/>
     Primary engine is <b>WinRT JapanesePhoneticAnalyzer</b> (main build) or <b>SudachiPy</b> (noWinIME/mac); <code>pykakasi</code> + local/online dictionaries fall in behind. Optional <b>LLM-based furigana</b> (bring-your-own API, auto-fallback) and <b>one-click romaji</b>. Per-category toggles plus rules for sokuon, long vowel, parentheses, English syllables …</sub>
   </td>
 </tr>
@@ -205,7 +205,7 @@
   <td align="center">📝</td>
   <td>
     <b>全文本编辑模式 / Inline full-text editor</b><br/>
-    <sub>整段 inline 格式：<code>{原文||读音}</code> 注音 + <code>[mm:ss.cc]</code> 时间戳 + 句尾 <code>[>...]</code> + 演唱者 <code>【名】</code>，所见即所得，键盘流编辑神器。<br/>
+    <sub>整段 inline 格式：<code>{原文||读音}</code> 注音 + <code>[mm:ss.cc]</code> 时间戳 + 停顿点 <code>[>...]</code> + 演唱者 <code>【名】</code>，所见即所得，键盘流编辑神器。<br/>
     Edit lyrics as one fluent text: <code>{text||reading}</code> furigana, <code>[mm:ss.cc]</code> timestamps, end-of-line <code>[&gt;...]</code> and <code>【singer】</code> all live inline.</sub>
   </td>
 </tr>
@@ -213,7 +213,7 @@
   <td align="center">🧠</td>
   <td>
     <b>AutoCheck 智能补全 / AutoCheck rules engine</b><br/>
-    <sub>按字符类型、句首句尾、空格、标点、英语音节等多达 20+ 项规则一键补全节奏点；删除节奏点时智能回跳 <code>jump_before_ms</code> 毫秒以便复听。<br/>
+    <sub>按字符类型、句首停顿点、空格、标点、英语音节等多达 20+ 项规则一键补全节奏点；删除节奏点时智能回跳 <code>jump_before_ms</code> 毫秒以便复听。<br/>
     20+ rules cover character class, sentence boundaries, spaces, punctuation, English syllables; deleting a checkpoint smart-rewinds to let you re-listen.</sub>
   </td>
 </tr>
@@ -437,12 +437,12 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
   <td>仅清除时间戳，不删字</td>
 </tr>
 <tr>
-  <td>句尾标记切换 · Toggle line-end</td>
+  <td>停顿点标记切换 · Toggle line-end</td>
   <td align="center"><kbd>2</kbd></td>
-  <td>句尾「●」标记</td>
+  <td>停顿点「●」标记</td>
 </tr>
 <tr>
-  <td>打到句尾 · Mark up to line-end</td>
+  <td>打到停顿点 · Mark up to line-end</td>
   <td align="center"><kbd>P</kbd></td>
   <td>把剩余字符全部打上时间戳</td>
 </tr>
@@ -589,7 +589,7 @@ The packaged executable will appear in `dist/StrangeUtaGame/`.
 </tr>
 </table>
 
-<sub>💡 还有一个独立的 <b>编辑模式（Edit Mode）</b>：其中 <kbd>Space</kbd> / <kbd>Backspace</kbd> / <kbd>.</kbd> 分别用于增加节奏点、删除节奏点和切换句尾；上表列出的是音乐播放时使用的打轴模式键位。<br/>
+<sub>💡 还有一个独立的 <b>编辑模式（Edit Mode）</b>：其中 <kbd>Space</kbd> / <kbd>Backspace</kbd> / <kbd>.</kbd> 分别用于增加节奏点、删除节奏点和切换停顿点；上表列出的是音乐播放时使用的打轴模式键位。<br/>
 <i>Edit Mode uses <kbd>Space</kbd> / <kbd>Backspace</kbd> / <kbd>.</kbd> to add a checkpoint, remove one, and toggle the line end. The table above lists the Timing Mode bindings used during playback.</i></sub>
 
 </div>

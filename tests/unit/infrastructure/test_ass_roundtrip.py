@@ -2,7 +2,7 @@
 
 覆盖 5 类典型场景，保证：
 1. 第一次导出和第二次导出文本逐字相同（idempotent）。
-2. 原始 Project 的关键字段（每字 ts、句尾释放 ts、ruby、连词、per-char singer）
+2. 原始 Project 的关键字段（每字 ts、停顿点 ts、ruby、连词、per-char singer）
    被重导入后完整保留。
 
 不覆盖 line_end_ts 兜底场景；不覆盖前导无 ts 字符的边角情况。
@@ -196,7 +196,7 @@ def _make_project_basic() -> Project:
         ch.set_offset(0)
     project.add_sentence(sent)
 
-    # Sentence 6: ♫ 间奏行（单字符符号，带 ts + 句尾释放）
+    # Sentence 6: ♫ 间奏行（单字符符号，带 ts + 停顿点）
     sent = Sentence.from_text("♫", s1.id)
     sent.characters[0].add_timestamp(11000)
     sent.characters[0].is_sentence_end = True
@@ -285,7 +285,7 @@ class TestASSRoundtrip:
         )
 
     def test_project_signature_preserved(self):
-        """每字 ts、句尾释放、ruby、连词、per-char singer 都被保留。"""
+        """每字 ts、停顿点、ruby、连词、per-char singer 都被保留。"""
         project = _make_project_basic()
         sig_before = _signature(project)
         _, _, p2 = _roundtrip(project)
@@ -338,11 +338,11 @@ class TestASSRoundtrip:
         sent4 = p2.sentences[3]  # 大冒険
         # 大不应当 is_sentence_end
         assert sent4.characters[0].is_sentence_end is False, (
-            "锚字「大」不应当持有句尾释放点"
+            "锚字「大」不应当持有停顿点"
         )
         # 険 应当是 is_sentence_end + end_ts=8000
         tail = sent4.characters[2]
-        assert tail.is_sentence_end is True, "链尾「険」应当是句尾"
+        assert tail.is_sentence_end is True, "链尾「険」应当是停顿点"
         assert tail.global_sentence_end_ts == 8000, (
             f"链尾「険」end_ts 错: {tail.global_sentence_end_ts}"
         )
@@ -371,7 +371,7 @@ class TestASSRoundtrip:
         )
 
     def test_musical_note_interlude_roundtrip(self):
-        """♫ 间奏行：ts + 句尾释放经 ASS 往返完整保留。"""
+        """♫ 间奏行：ts + 停顿点经 ASS 往返完整保留。"""
         project = _make_project_basic()
         _, _, p2 = _roundtrip(project)
 

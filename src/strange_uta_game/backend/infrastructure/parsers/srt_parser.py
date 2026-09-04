@@ -18,7 +18,7 @@ class SRTParser(LyricParser):
     字幕文本
 
     每个字幕块提取起始时间戳作为行级时间标签，
-    结束时间戳作为 line_end_ts（句尾释放点，绑在行末字符上）。
+    结束时间戳作为 line_end_ts（停顿点，绑在行末字符上）。
     """
 
     # SRT 时间戳行: HH:MM:SS,mmm --> HH:MM:SS,mmm

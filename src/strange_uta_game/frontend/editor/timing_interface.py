@@ -1326,7 +1326,7 @@ class EditorInterface(QWidget):
     ):
         """根据当前设置的快捷键映射，动态更新底部提示。
 
-        #6：只显示 9 项核心动作（播放/停止/前进/后退/加速/减速/加节奏点/减节奏点/句尾），
+        #6：只显示 9 项核心动作（播放/停止/前进/后退/加速/减速/加节奏点/减节奏点/停顿点），
         按当前模式（播放中=打轴模式，否则=编辑模式）取快捷键文本。
         """
         action_labels = [
@@ -1338,7 +1338,7 @@ class EditorInterface(QWidget):
             ("speed_up", self.tr("加速")),
             ("add_checkpoint", self.tr("加节奏点")),
             ("remove_checkpoint", self.tr("减节奏点")),
-            ("toggle_line_end", self.tr("句尾")),
+            ("toggle_line_end", self.tr("停顿点")),
         ]
         playing = bool(self._timing_service and self._timing_service.is_playing())
         active = timing_actions if playing else (edit_actions or timing_actions)
@@ -1530,7 +1530,7 @@ class EditorInterface(QWidget):
     # ==================== 工具栏操作 ====================
 
     # 判断文本是否为全文本编辑器的内联格式。匹配以下任意一种特征：
-    # - [>...] 句尾 token（我们格式独有）
+    # - [>...] 停顿点 token（我们格式独有）
     # - {原文||...} 双竖线注音块（我们格式独有）
     # - [T] 占位符（我们格式独有）
     # - [ts]X[ 连续逐字时间戳（LRC 每行只有一个起始 token，不会出现此模式）
@@ -1541,7 +1541,7 @@ class EditorInterface(QWidget):
     def _on_paste_lyrics(self):
         """从剪贴板粘贴（Ctrl+V）。
 
-        - 内联格式（含 [>...] 句尾 token 或 {原文||} 注音块）：调用 _paste_inline_format。
+        - 内联格式（含 [>...] 停顿点 token 或 {原文||} 注音块）：调用 _paste_inline_format。
         - 空项目 / 无歌词行：整批加载歌词文本。
         - 已有歌词：在当前光标处插入（富信息 or 纯文本）。
         """
@@ -2880,7 +2880,7 @@ class EditorInterface(QWidget):
                 message_info(
                     self,
                     self.tr("部分连词设置未应用"),
-                    self.tr("以下位置为末字/句尾/行尾，不能设置连词，已自动跳过：\n\n")
+                    self.tr("以下位置为末字/行尾，不能设置连词，已自动跳过：\n\n")
                     + "\n".join(lines)
                     + more,
                 )
@@ -4593,7 +4593,7 @@ class EditorInterface(QWidget):
         def _find_prev_timestamp(line_idx: int, char_idx: int) -> Optional[int]:
             """向前逐字查找最近的时间戳（在同一行内）
 
-            同时检查普通时间戳和句尾时间戳，取较大者（更接近目标字符）。
+            同时检查普通时间戳和停顿点时间戳，取较大者（更接近目标字符）。
             """
             sentence = self._project.sentences[line_idx]
             for ci in range(char_idx - 1, -1, -1):
@@ -4610,7 +4610,7 @@ class EditorInterface(QWidget):
         def _find_next_timestamp(line_idx: int, char_idx: int) -> Optional[int]:
             """向后逐字查找最近的时间戳（在同一行内）
 
-            同时检查普通时间戳和句尾时间戳，取较小者（更接近目标字符）。
+            同时检查普通时间戳和停顿点时间戳，取较小者（更接近目标字符）。
             """
             sentence = self._project.sentences[line_idx]
             for ci in range(char_idx + 1, len(sentence.characters)):
@@ -4634,10 +4634,10 @@ class EditorInterface(QWidget):
                 chars = sentence.characters
                 total_chars = len(chars)
 
-                # 预处理：句尾特殊符号（cc=0 + is_sentence_end + sentence_end_ts）。
-                # 无论行中还是行尾，都先把句尾释放点降级为普通 cp 并把句尾后推
-                # tail_offset，使其成为后续插值的锚点。否则行中的句尾符号会落入
-                # 通用插值分支，丢弃真实句尾释放点、也拿不到符号特殊补偿。
+                # 预处理：停顿点特殊符号（cc=0 + is_sentence_end + sentence_end_ts）。
+                # 无论行中还是行尾，都先把停顿点点降级为普通 cp 并把停顿点后推
+                # tail_offset，使其成为后续插值的锚点。否则行中的停顿点符号会落入
+                # 通用插值分支，丢弃真实停顿点点、也拿不到符号特殊补偿。
                 for ci in range(total_chars):
                     ch = chars[ci]
                     if (ch.check_count == 0
@@ -4660,7 +4660,7 @@ class EditorInterface(QWidget):
 
                     # 收集连续的待补全字符段。
                     # 遇到带 sentence_end_ts 的非符号字符时，将其纳入当前段
-                    # 但立即结束：句尾时间戳本身就是天然边界，不应与后文混段。
+                    # 但立即结束：停顿点时间戳本身就是天然边界，不应与后文混段。
                     segment_start = i
                     while i < total_chars and _is_target_char(chars[i], i, chars):
                         cur = chars[i]
@@ -4681,21 +4681,21 @@ class EditorInterface(QWidget):
                     prev_ts = _find_prev_timestamp(line_idx, segment_start)
                     next_ts = _find_next_timestamp(line_idx, segment_end - 1)
 
-                    # 分段保证了：若段内有句尾字符，它一定是段的最后一个。
+                    # 分段保证了：若段内有停顿点字符，它一定是段的最后一个。
                     # 其 sentence_end_ts 是比 _find_next_timestamp 更紧的上限。
                     last_char = chars[segment_end - 1]
                     if last_char.is_sentence_end and last_char.sentence_end_ts is not None:
                         if next_ts is None or last_char.sentence_end_ts < next_ts:
                             next_ts = last_char.sentence_end_ts
 
-                    # 行尾：段之后若仅剩“多余空格占位符”（句尾 token 贴轴后被解析
+                    # 行尾：段之后若仅剩“多余空格占位符”（停顿点 token 贴轴后被解析
                     # 出来的裸空格），也视为行尾。必须校验 check_count==0，避免误吞
                     # 真正带轴的空格字符。
-                    # 句尾以 is_sentence_end 为准，而非单纯行尾位置：句尾停顿标记可能
+                    # 停顿点以 is_sentence_end 为准，而非单纯行尾位置：停顿标记可能
                     # 落在段后的尾随空格上，此时 _find_next_timestamp 会命中其
-                    # sentence_end_ts（next_ts 非空）。这种情况应按句尾锚点插值，
+                    # sentence_end_ts（next_ts 非空）。这种情况应按停顿点锚点插值，
                     # 不能当作“无后方锚点的行尾”走 prev_ts+tail 兜底，否则会丢弃
-                    # 真实的句尾时间戳。
+                    # 真实的停顿点时间戳。
                     is_at_end = next_ts is None and all(
                         chars[ci].check_count == 0
                         and get_char_type(chars[ci].char) in (CharType.SPACE, CharType.FULL_SPACE)
@@ -4721,12 +4721,12 @@ class EditorInterface(QWidget):
                             total_count += 1
                     elif is_at_end:
                         # 行尾：只有前方时间戳。
-                        # 句尾特殊符号已在预处理 pass 中降级为锚点，这里 last_char
-                        # 不会再是带 sentence_end_ts 的句尾符号，故统一走均分。
+                        # 停顿点特殊符号已在预处理 pass 中降级为锚点，这里 last_char
+                        # 不会再是带 sentence_end_ts 的停顿点符号，故统一走均分。
                         if prev_ts is None:
                             continue
                         last_char = chars[segment_end - 1]
-                        # 均分(prev_ts, 句尾时间戳)；无句尾时以 prev_ts + tail_offset 兜底
+                        # 均分(prev_ts, 停顿点时间戳)；无停顿点时以 prev_ts + tail_offset 兜底
                         end_ts = (last_char.sentence_end_ts
                                   if last_char.is_sentence_end
                                      and last_char.sentence_end_ts is not None
@@ -4868,12 +4868,12 @@ class EditorInterface(QWidget):
         """强制复制模式：连续符号视为整体，不检测相邻非符号字符状态。
 
         后补偿（从右向左扫描）：
-          连续句尾符号视为整体 → 符号组全部普通时间戳集中赋予前一字符，
+          连续停顿点符号视为整体 → 符号组全部普通时间戳集中赋予前一字符，
           组首获 sentence_end_ts 作为普通时间戳，其余符号均匀分配后补偿区间，
           组尾保持 sentence_end 标记并后移。
 
         前补偿（从左向右扫描）：
-          连续非句尾符号视为整体 → 符号组全部时间戳 prepend 至后一字符，
+          连续非停顿点符号视为整体 → 符号组全部时间戳 prepend 至后一字符，
           组首时间戳前移 pre_comp_ms，其余符号均匀分配前补偿区间。
         """
         post_count = 0
@@ -4892,7 +4892,7 @@ class EditorInterface(QWidget):
             processed: set[int] = set()
 
             # ═══════════════════════════════════════════════
-            #  后补偿：连续句尾符号整体处理（从右向左扫描）
+            #  后补偿：连续停顿点符号整体处理（从右向左扫描）
             # ═══════════════════════════════════════════════
             for i in range(n - 1, -1, -1):
                 ch = all_chars[i]
@@ -4943,12 +4943,12 @@ class EditorInterface(QWidget):
                     all_chars[j].timestamps = [val]
                     all_chars[j].set_check_count(1, force=True)
 
-                # 句尾符号保持标记并后移
+                # 停顿点符号保持标记并后移
                 ch.sentence_end_ts = new_sent_end
                 post_count += 1
 
             # ═══════════════════════════════════════════════
-            #  前补偿：连续非句尾符号整体处理（从左向右扫描）
+            #  前补偿：连续非停顿点符号整体处理（从左向右扫描）
             # ═══════════════════════════════════════════════
             for i, ch in enumerate(all_chars):
                 if ch.char not in symbol_chars or ch.is_sentence_end:
@@ -4958,7 +4958,7 @@ class EditorInterface(QWidget):
                 if ch.check_count < 1 or not ch.timestamps:
                     continue
 
-                # 向后找连续非句尾符号组的终点
+                # 向后找连续非停顿点符号组的终点
                 group_end = i
                 while (
                     group_end + 1 < n
@@ -5825,7 +5825,7 @@ class EditorInterface(QWidget):
 
     def _on_timeline_tag_clicked(self, line_idx: int, char_idx: int, cp_idx: int, is_sentence_end: bool):
         """单击波形时间标签把手：同步 preview 选中到该字符（seek 由 seek_requested 处理）。"""
-        _ = is_sentence_end  # 句尾点 cp_idx == check_count，move_to_checkpoint 可解析
+        _ = is_sentence_end  # 停顿点 cp_idx == check_count，move_to_checkpoint 可解析
         self._sync_preview_to_handle(line_idx, char_idx, cp_idx)
 
     def _on_timeline_tags_drag_committed(self, handles, delta_ms: int):
@@ -5881,7 +5881,7 @@ class EditorInterface(QWidget):
     def _on_char_selected(self, line_idx: int, char_idx: int):
         """点击字符选中 — 移动到该字符的第一个 checkpoint。
 
-        若字符无 checkpoint（check_count=0 且非句尾），保持视觉焦点在
+        若字符无 checkpoint（check_count=0 且非停顿点），保持视觉焦点在
         该字符上，方便用户通过 F4 添加节奏点；内部打轴位置仍移到最近的
         下一个有效 checkpoint，确保按空格时能正确赋时间戳。
         """
@@ -6091,7 +6091,7 @@ class EditorInterface(QWidget):
            (line = _focus_line_idx, char = min(sel_start, sel_end))。
         2. 否则回退到 TimingService.get_current_position()（播放/打轴上下文）。
 
-        句尾字符若带 is_sentence_end，则句尾 checkpoint 也在循环序列内
+        停顿点字符若带 is_sentence_end，则停顿点 checkpoint 也在循环序列内
         （位置为 check_count）。
 
         Args:
@@ -6398,7 +6398,7 @@ class EditorInterface(QWidget):
             return
 
         self._execute_structural_edit(
-            "切换句尾",
+            "切换停顿点",
             lambda: (
                 sentence.toggle_sentence_end(char_idx)
                 or (line_idx, char_idx, 0, "checkpoints")
@@ -6406,7 +6406,7 @@ class EditorInterface(QWidget):
         )
 
     def _convert_timestamps_to_sentence_end(self):
-        """取消当前字符所有节奏点、清除时间戳并标记为句尾。"""
+        """取消当前字符所有节奏点、清除时间戳并标记为停顿点。"""
         if not self._project:
             return
         line_idx, char_idx = self._resolve_target_char()
@@ -6424,7 +6424,7 @@ class EditorInterface(QWidget):
                 char.is_sentence_end = True
             return line_idx, char_idx, 0, "checkpoints"
 
-        self._execute_structural_edit("时间戳转句尾", _mutate)
+        self._execute_structural_edit("时间戳转停顿点", _mutate)
 
     def _tag_at_current_position_in_edit_mode(self):
         """编辑模式下打轴：读取当前进度条位置并写入当前节奏点，不启动音频。"""
@@ -6537,9 +6537,9 @@ class EditorInterface(QWidget):
         self._execute_structural_edit("调整节奏点", _mutate)
 
     def _toggle_line_end(self):
-        """F6 切换当前字符的句尾标记 (is_line_end)。
+        """F6 切换当前字符的停顿点标记 (is_line_end)。
 
-        句尾标记独立于普通 checkpoint 数量。
+        停顿点标记独立于普通 checkpoint 数量。
         """
         if not self._project:
             return
@@ -6551,7 +6551,7 @@ class EditorInterface(QWidget):
             return
 
         self._execute_structural_edit(
-            "切换句尾",
+            "切换停顿点",
             lambda: (
                 sentence.toggle_sentence_end(char_idx)
                 or (line_idx, char_idx, 0, "checkpoints")
@@ -7353,7 +7353,7 @@ class EditorInterface(QWidget):
         project = self._project
 
         self._execute_structural_edit(
-            "切换句尾",
+            "切换停顿点",
             lambda: (
                 project.sentences[line_idx].toggle_sentence_end(char_idx)
                 or (line_idx, char_idx, 0, "checkpoints")
@@ -7800,7 +7800,7 @@ class EditorInterface(QWidget):
                 a0.ignore()
                 return
             if self._timing_service and key_name not in self._pressed_keys:
-                # 按键音：普通 cp → 按下时播放 press；句尾 cp → 忽略（等 release）
+                # 按键音：普通 cp → 按下时播放 press；停顿点 cp → 忽略（等 release）
                 if self._keysound_player is not None:
                     if not self._timing_service.is_current_cp_sentence_end_tail():
                         self._keysound_player.play_press()
@@ -7906,7 +7906,7 @@ class EditorInterface(QWidget):
                 a0.ignore()
                 return
             if self._timing_service and key_name in self._pressed_keys:
-                # 按键音：句尾 cp → 抬起时播放 release；普通 cp → 忽略
+                # 按键音：停顿点 cp → 抬起时播放 release；普通 cp → 忽略
                 if self._keysound_player is not None:
                     if self._timing_service.is_current_cp_sentence_end_tail():
                         self._keysound_player.play_release()
@@ -8547,7 +8547,7 @@ class EditorInterface(QWidget):
                     ets = ch.global_sentence_end_ts
                     m, s = divmod(ets // 1000, 60)
                     ms = ets % 1000
-                    ts_parts.append(self.tr("句尾{m:02d}:{s:02d}.{ms:03d}").format(m=m, s=s, ms=ms))
+                    ts_parts.append(self.tr("停顿点{m:02d}:{s:02d}.{ms:03d}").format(m=m, s=s, ms=ms))
                 if ts_parts:
                     char_info = self.tr(" | 字 {n}/{total} | 「{ch}」 {tags}").format(
                         n=char_idx + 1, total=total_chars, ch=ch.char, tags=', '.join(ts_parts))

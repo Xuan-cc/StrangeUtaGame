@@ -94,7 +94,7 @@ class PronunciationResolver:
                     self._assign_existing(unit, ch.char, parts, ch.check_count, script)
                     plan.units.append(unit)
                 if ch.is_sentence_end:
-                    # 句尾呼吸点：无读音、不生成 token，仅保留结构映射
+                    # 停顿点：无读音、不生成 token，仅保留结构映射
                     plan.units.append(
                         PronunciationUnit(
                             line_idx=line_idx,

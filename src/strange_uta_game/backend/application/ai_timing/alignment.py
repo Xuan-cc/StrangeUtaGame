@@ -198,7 +198,7 @@ def _build_tokens_and_word_groups(
             romanized = readings
         rom_by_id = {id(u): romanized[i] for i, u in enumerate(line_units)}
 
-        # 完整非句尾单元序列（含无读音的结构单元）：分组判据需要看见
+        # 完整非停顿点单元序列（含无读音的结构单元）：分组判据需要看见
         # 空白/停顿等分隔符——它们 reading 为 None，会被 line_units 的
         # u.reading 过滤掉，只按 line_units 迭代会把不同词误并成组
         ordered_units = [

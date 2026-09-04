@@ -117,9 +117,9 @@ class UISubInterface(SubSettingInterface):
         self.card_lyrics_alignment.set_item_sources(["左对齐", "居中对齐", "右对齐"])
         self.card_checkpoint_markers = self._tr_register(
             SettingCard(FIF.FONT_SIZE, tr("Checkpoint 字符设定"),
-                tr("自定义节奏点标记的显示字符（首节奏点 / 后续 / 句尾，已打轴 / 未打轴）"), g),
+                tr("自定义节奏点标记的显示字符（首节奏点 / 后续 / 停顿点，已打轴 / 未打轴）"), g),
             title_source="Checkpoint 字符设定",
-            content_source="自定义节奏点标记的显示字符（首节奏点 / 后续 / 句尾，已打轴 / 未打轴）")
+            content_source="自定义节奏点标记的显示字符（首节奏点 / 后续 / 停顿点，已打轴 / 未打轴）")
         self.btn_cp_markers = PushButton(tr("设置字符"), self.card_checkpoint_markers)
         self._tr_register_text(self.btn_cp_markers, "setText", "设置字符")
         self.btn_cp_markers.clicked.connect(self._on_open_checkpoint_markers)

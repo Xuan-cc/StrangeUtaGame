@@ -119,7 +119,7 @@ class TestAutoCheckService:
         # 验证 characters 被创建
         assert len(sentence.characters) == 3
 
-        # 验证最后一个字符标记为句尾
+        # 验证最后一个字符标记为停顿点
         assert sentence.characters[2].is_line_end
 
     def test_mixed_consecutive_spaces_do_not_shift_ruby_results(self):
@@ -871,12 +871,12 @@ class TestEnglishWordCheckpoints:
 
 
 class TestEnglishWordEndSpaceConflict:
-    """英文单词结尾句尾 vs 空格视为句尾 冲突修复
+    """英文单词结尾停顿点 vs 空格视为停顿点 冲突修复
 
     当 check_english_word_end=False 时，英文单词结尾不应被空格规则
     （check_space_as_line_end）间接标记为 is_sentence_end。
     英文单词后面通常有空格，如果空格规则仍然生效，
-    则关闭英文单词结尾句尾的设置形同虚设。
+    则关闭英文单词结尾停顿点的设置形同虚设。
     """
 
     def _apply_with_flags(self, text: str, flags: dict):
@@ -901,19 +901,19 @@ class TestEnglishWordEndSpaceConflict:
             "check_english_word_end": False,
         }
         chars = self._apply_with_flags("Hello world today", flags)
-        # 'o' (idx 4) 是 "Hello" 末字母，后面有空格，但不应被标句尾
+        # 'o' (idx 4) 是 "Hello" 末字母，后面有空格，但不应被标停顿点
         assert not chars[4].is_sentence_end, (
             f"'o' (idx=4) 不应 is_sentence_end (check_english_word_end=False), "
             f"实际 {chars[4].is_sentence_end}"
         )
-        # 'd' (idx 10) 是 "world" 末字母，后面有空格，也不应被标句尾
+        # 'd' (idx 10) 是 "world" 末字母，后面有空格，也不应被标停顿点
         assert not chars[10].is_sentence_end, (
             f"'d' (idx=10) 不应 is_sentence_end (check_english_word_end=False), "
             f"实际 {chars[10].is_sentence_end}"
         )
 
     def test_apply_english_word_end_enabled_still_works(self):
-        """apply_to_sentence: check_english_word_end=True → 英文单词末字母正常标句尾"""
+        """apply_to_sentence: check_english_word_end=True → 英文单词末字母正常标停顿点"""
         flags = {
             "check_space_as_line_end": True,
             "check_english_word_end": True,
@@ -944,7 +944,7 @@ class TestEnglishWordEndSpaceConflict:
             "check_english_word_end": False,
         }
         chars = self._apply_with_flags("あいう えお", flags)
-        # 'う' (idx 2) 后面是空格，应被标句尾
+        # 'う' (idx 2) 后面是空格，应被标停顿点
         assert chars[2].is_sentence_end, "'う' 后有空格，应 is_sentence_end"
 
     def test_mixed_japanese_english_conflict(self):
@@ -954,7 +954,7 @@ class TestEnglishWordEndSpaceConflict:
             "check_english_word_end": False,
         }
         chars = self._apply_with_flags("今日はHello world", flags)
-        # 'お' (idx 2) 后面紧跟 'H'（非空格），不标句尾 — 正常
+        # 'お' (idx 2) 后面紧跟 'H'（非空格），不标停顿点 — 正常
         # 'o' (idx 7) 是 "Hello" 末字母，后面有空格，但 check_english_word_end=False
         assert not chars[7].is_sentence_end, (
             f"'o' (idx=7) 不应 is_sentence_end, 实际 {chars[7].is_sentence_end}"

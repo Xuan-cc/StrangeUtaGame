@@ -231,7 +231,7 @@ class BulkChangeDialog(QDialog):
         chk_linked = CheckBox(self.tr("向后连词"))
         chk_linked.setChecked(bool(linked))
         chk_linked.setToolTip(self.tr(
-            "连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；句尾=停顿点，允许连词）"
+            "连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；停顿点允许连词）"
         ))
         # 监控用户手动编辑
         edit_ruby.textEdited.connect(self._on_row_user_edited)
@@ -514,7 +514,7 @@ class BulkChangeDialog(QDialog):
                         tgt.set_ruby(per_char_ruby[i])
                         tgt.set_check_count(per_char_check[i], force=True)
                         tgt.push_to_ruby()
-                        # linked_to_next 校验：末字/行尾禁止连词（句尾=语气停顿点，允许连词）
+                        # linked_to_next 校验：末字/行尾禁止连词（停顿点=语气停顿点，允许连词）
                         req_linked = per_char_linked_req[i]
                         sentence_len = len(sentence.characters)
                         is_last_in_sentence = ci >= sentence_len - 1

@@ -1,4 +1,4 @@
-﻿"""Nicokara (ニコカラ) LRC 格式导出器。
+"""Nicokara (ニコカラ) LRC 格式导出器。
 
 输出 RhythmicaLyrics 风格的 Nicokara 逐字 LRC 格式：
 - 时间戳格式: [MM:SS.CC]（分:秒:厘秒，冒号分隔）
@@ -683,7 +683,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                 if first_ch.global_timestamps:
                     pos1_ts = first_ch.global_timestamps[0]
                 if pos1_ts is None:
-                    # 向前在本句找最近 ts（优先句尾释放 ts，否则最后一个 ts）
+                    # 向前在本句找最近 ts（优先停顿点 ts，否则最后一个 ts）
                     for k in range(start_idx - 1, -1, -1):
                         if chars[k].global_sentence_end_ts is not None:
                             pos1_ts = chars[k].global_sentence_end_ts
@@ -761,7 +761,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
                             if found:
                                 break
                     if pos2_ts is None:
-                        # 全文最后一字且未标句尾 → pos2 省略
+                        # 全文最后一字且未标停顿点 → pos2 省略
                         pos2_omit = True
 
                 # 倒挂钳制：极端重叠下（本行既无后续起始 ts 也无释放 ts，
@@ -775,7 +775,7 @@ class NicokaraWithRubyExporter(NicokaraExporter):
 
                 pos1_str = _format_nicokara_ts(pos1_ts) if pos1_ts is not None else ""
                 if pos2_omit:
-                    # 全文最后一字未标句尾 → 省略 pos2 字段
+                    # 全文最后一字未标停顿点 → 省略 pos2 字段
                     result.append(f"{kanji},{reading_display},{pos1_str}")
                 else:
                     pos2_str = _format_nicokara_ts(pos2_ts) if pos2_ts is not None else ""

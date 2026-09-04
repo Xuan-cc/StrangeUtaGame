@@ -5,7 +5,7 @@
 核心功能：
 1. 全局 Checkpoint 管理 - 维护跨所有演唱者的打轴位置
 2. 打轴按键处理 - Space/F1-F9 通过统一入口 on_key_changed 路由
-3. 角色化 cp 过滤 - 普通 cp 仅响应 pressed；句尾末尾 cp 仅响应 released
+3. 角色化 cp 过滤 - 普通 cp 仅响应 pressed；停顿点 cp 仅响应 released
 4. 多演唱者自动切换 - 后台管理，用户无感知
 5. 音频协调 - 播放控制、变速、位置同步
 """
@@ -469,7 +469,7 @@ class TimingService:
         return (self._global_checkpoint_idx, len(self._global_checkpoints))
 
     def is_current_cp_sentence_end_tail(self) -> bool:
-        """当前待打轴的 checkpoint 是否为句尾末尾 cp（release 语义触发）。
+        """当前待打轴的 checkpoint 是否为停顿点 cp（release 语义触发）。
 
         供前端在按键事件中立即判断，用于按键音路由。
         """
@@ -489,7 +489,7 @@ class TimingService:
 
         路由规则（角色化过滤）：
           - 普通 cp：仅响应 'pressed'，写入时间戳并推进；忽略 'released'
-          - 句尾末尾 cp（is_sentence_end 且 cp_idx == check_count）：
+          - 停顿点 cp（is_sentence_end 且 cp_idx == check_count）：
             仅响应 'released'，写入 sentence_end_ts 并推进；忽略 'pressed'
         写入后单次推进到下一个 cp。
 
@@ -597,7 +597,7 @@ class TimingService:
     ) -> None:
         """打轴并删除下一节奏点（原子操作）。
 
-        路由规则与 on_key_changed 完全一致（句尾尾部 cp 需 'released'，普通 cp
+        路由规则与 on_key_changed 完全一致（停顿点尾部 cp 需 'released'，普通 cp
         需 'pressed'）。通过后执行：
         1. 将 timestamp_ms 写入当前 cp
         2. 删除下一个节奏点本身（结构性变更：减少 check_count 或清除 is_sentence_end）
@@ -663,7 +663,7 @@ class TimingService:
             if next_pos.char_idx < len(next_sentence.characters):
                 next_char = next_sentence.characters[next_pos.char_idx]
                 if next_char.is_sentence_end_tail_cp(next_pos.checkpoint_idx):
-                    # 句尾尾部 cp：清除 is_sentence_end 标记
+                    # 停顿点尾部 cp：清除 is_sentence_end 标记
                     next_char.is_sentence_end = False
                     next_char.sentence_end_ts = None
                     next_char._update_offset_timestamps()
@@ -721,9 +721,9 @@ class TimingService:
     def on_edit_mode_tag(self) -> None:
         """编辑模式下打轴：不启动音频，读取当前进度条位置并写入当前节奏点。
 
-        根据当前 checkpoint 是否为句尾末尾 cp 自动选择 key_type：
+        根据当前 checkpoint 是否为停顿点 cp 自动选择 key_type：
         - 普通 cp  → 'pressed'
-        - 句尾末尾 cp → 'released'
+        - 停顿点 cp → 'released'
         """
         if not self._project:
             return
@@ -792,9 +792,9 @@ class TimingService:
     def adjust_current_timestamp(self, delta_ms: int) -> bool:
         """微调当前选中 checkpoint 的时间戳（批 18 #8）。
 
-        TimingService 作为时间戳唯一写入入口，统一处理普通 cp / 句尾 cp
+        TimingService 作为时间戳唯一写入入口，统一处理普通 cp / 停顿点 cp
         两分支：
-          - 句尾 cp（is_sentence_end 且 cp_idx == check_count）走
+          - 停顿点 cp（is_sentence_end 且 cp_idx == check_count）走
             Character.set_sentence_end_ts，内部已 _update_offset_timestamps +
             push_to_ruby。
           - 普通 cp 直接覆写 Character.timestamps[cp_idx]，必须显式调

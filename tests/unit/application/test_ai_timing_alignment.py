@@ -156,8 +156,8 @@ class TestBuildAlignmentTokens:
         )
         project, plan = _resolved_project([s])
         tokens = build_alignment_tokens(plan)
-        # 停顿拍与标点无 token；句尾字符的正常 checkpoint 仍是 token，
-        # 仅其虚拟句尾点（cp=check_count）不产生 token
+        # 停顿拍与标点无 token；停顿点字符的正常 checkpoint 仍是 token，
+        # 仅其虚拟停顿点（cp=check_count）不产生 token
         assert [t.location for t in tokens] == [(0, 0, 0), (0, 2, 0)]
 
     def test_pending_units_block_token_build(self):
@@ -359,7 +359,7 @@ class TestApplyAiTimingCommand:
         )
         cmd = ApplyAiTimingCommand(project, plan, request, result)
         cmd.execute()
-        # 句尾释放点由对齐推导：い 的 token 区间 (500,700) → 释放=700
+        # 停顿点由对齐推导：い 的 token 区间 (500,700) → 释放=700
         assert project.sentences[0].characters[1].sentence_end_ts == 700
         cmd.undo()
         restored = project.sentences[0]
@@ -529,7 +529,7 @@ class TestUnalignableChars:
 
     def test_applied_result_respects_project_structure(self):
         """应用后的结构不变量：timestamps 长度==check_count、ruby 同步、
-        句尾释放点清空、既有标注结构不变。"""
+        停顿点清空、既有标注结构不变。"""
         from strange_uta_game.backend.application.ai_timing.alignment import (
             AlignmentResult,
             EmissionSpan,
@@ -581,7 +581,7 @@ class TestUnalignableChars:
         ch0, ch1 = project.sentences[0].characters
         assert len(ch0.timestamps) == ch0.check_count == 2
         assert len(ch1.timestamps) == ch1.check_count == 1
-        # 赤 是句尾字符：其末 token か 的区间终点（100,150）→ 释放点 150
+        # 赤 是停顿点字符：其末 token か 的区间终点（100,150）→ 释放点 150
         assert ch0.sentence_end_ts == 150
         assert ch0.ruby is not None and ch0.ruby.timestamps == ch0.all_timestamps
         assert [p.text for p in ch0.ruby.parts] == ["あ", "か"]  # 既有标注原样
@@ -739,7 +739,7 @@ class TestPhonemeLatinPath:
 
 
 class TestSentenceEndPlaceholder:
-    """句尾呼吸占位（0cp 无法标注字符）：尾音释放点取行内末 token 终点。"""
+    """停顿点占位（0cp 无法标注字符）：尾音释放点取行内末 token 终点。"""
 
     def test_zero_checkpoint_breath_char_gets_line_tail(self):
         from strange_uta_game.backend.application.ai_timing.commands import (

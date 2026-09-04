@@ -1208,13 +1208,13 @@ class FileLoader:
         """完全按文件导入（纯文件信任路径）。
 
         Nicokara 的 body + @Ruby、ASS 的 \\k 链 + 注音、KRL 的注音块都已
-        无歧义地编码了每个字符的节奏点数量 (check_count)、句尾/演唱停顿
+        无歧义地编码了每个字符的节奏点数量 (check_count)、停顿点/演唱停顿
         释放 (is_sentence_end/sentence_end_ts)、行尾 (is_line_end) 与
         连词 (linked_to_next)，各解析器已将其全部还原为终态。
 
         因此这里**不**调用 AutoCheckService 的 flag 驱动节奏点重算，
         也不跑注音分析——避免用户的 auto_check 开关（check_n / 标点 /
-        空格 / 行尾等）覆盖文件里的事实，凭空增删节奏点与句尾。
+        空格 / 行尾等）覆盖文件里的事实，凭空增删节奏点与停顿点。
         解析即终态，这里仅确保 UI 与模型同步。
         """
         if not self._project:

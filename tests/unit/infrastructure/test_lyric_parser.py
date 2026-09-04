@@ -330,7 +330,7 @@ class TestParseToSentences:
         sentences = parse_to_sentences([parsed], "singer_1")
         chars = sentences[0].characters
 
-        # 行末「か」持有句尾释放 ts；首字只持有起始 ts
+        # 行末「か」持有停顿点 ts；首字只持有起始 ts
         assert chars[0].sentence_end_ts is None
         tail = chars[-1]
         assert tail.is_sentence_end is True
@@ -696,7 +696,7 @@ class TestApplyRubyEntries:
 
 
 class TestNicokaraBodyModel:
-    """Nicokara body 逐字事实的解析（cc / 句尾 / 行尾 / 前导空格），不依赖 @Ruby。"""
+    """Nicokara body 逐字事实的解析（cc / 停顿点 / 行尾 / 前导空格），不依赖 @Ruby。"""
 
     def _sents(self, content: str):
         from strange_uta_game.backend.infrastructure.parsers.lyric_parser import (
@@ -709,7 +709,7 @@ class TestNicokaraBodyModel:
 
     def test_pure_kana_follower_cc_zero_line_end_not_sentence_end(self):
         """连读 follower（无独立 ts 的纯假名，如 ちゃ 的 ゃ）：cc=0；
-        行末无释放 ts 时，末字是行尾(is_line_end) 但不是句尾(is_sentence_end)。"""
+        行末无释放 ts 时，末字是行尾(is_line_end) 但不是停顿点(is_sentence_end)。"""
         content = "[00:00:21]く[00:00:40]ちゃ\n"
         s = self._sents(content)[0]
         assert s.text == "くちゃ"
@@ -719,7 +719,7 @@ class TestNicokaraBodyModel:
         assert ch_ya.check_count == 0
         assert ch_ya.timestamps == []
         assert ch_ya.is_line_end is True      # 行尾（结构事实）
-        assert ch_ya.is_sentence_end is False  # 非句尾（文件无释放 ts）
+        assert ch_ya.is_sentence_end is False  # 非停顿点（文件无释放 ts）
         assert ch_ya.sentence_end_ts is None
 
     def test_english_word_followers_cc_zero(self):
@@ -771,7 +771,7 @@ class TestNicokaraBodyModel:
         assert [s.text for s in sents] == ["あ", "", "い"]
 
     def test_line_end_release_sets_sentence_end(self):
-        """行末有释放 ts 时，末字应为句尾并携带释放时间戳。"""
+        """行末有释放 ts 时，末字应为停顿点并携带释放时间戳。"""
         content = "[00:00:21]あ[00:00:40]い[00:00:60]\n"
         s = self._sents(content)[0]
         last = s.characters[-1]

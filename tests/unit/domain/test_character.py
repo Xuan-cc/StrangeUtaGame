@@ -52,7 +52,7 @@ class TestCharacter:
             Character(char="a", check_count=-1)
 
     def test_sentence_end_allows_zero_checkpoints(self):
-        """句尾字符允许 check_count=0（B7-7a：句尾无需普通节奏点）"""
+        """停顿点字符允许 check_count=0（B7-7a：停顿点无需普通节奏点）"""
         ch = Character(char="a", check_count=0, is_sentence_end=True)
         assert ch.is_sentence_end is True
         assert ch.check_count == 0

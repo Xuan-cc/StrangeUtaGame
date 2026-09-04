@@ -157,15 +157,15 @@ def sentence_to_annotated_line(characters: "Sequence[Character]") -> str:
 # 带内联时间戳的行级格式（全文本编辑器专用，无损往返）
 # ----------------------------------------------------------------------
 # 在 {原文||读音} 基础上，把每个 checkpoint（= rubypart / 纯假名的单点）
-# 的起始时间戳内联进去，并把句尾(释放)时间戳贴在字符后方，使整行文本
+# 的起始时间戳内联进去，并把停顿点(释放)时间戳贴在字符后方，使整行文本
 # 自带完整时间轴 —— 编辑器逐行独立解码，行的增删/重排/文本撞车都不会
 # 丢失或错配时间戳。
 #
 # Token：
 #   [mm:ss.xx]       某 checkpoint 的起始时间戳（2 位厘秒，轴主流消费精度）
 #   [T]              该 checkpoint 应有但尚无时间戳（占位，T = todo）
-#   [>mm:ss.xx]      该字符的句尾(释放)时间戳，贴字符后方
-#   [>T]             该字符是句尾但句尾时间戳尚无
+#   [>mm:ss.xx]      该字符的停顿点(释放)时间戳，贴字符后方
+#   [>T]             该字符是停顿点但时间戳尚无
 #   【演唱者名】       演唱者切换标签（与 Nicokara 一致，出现在切换处）
 #   【>Guide】          导唱待办标记（字符 needs_guide=True）
 #   【>GuideBlock】     紧随其后的字符/连词块为实际导唱字符（is_guide=True）
@@ -175,15 +175,15 @@ def sentence_to_annotated_line(characters: "Sequence[Character]") -> str:
 #
 # 编码约定：
 #   - 有 ruby 的字（在 {…||…} 块内）：每个 mora 前缀其 [起始ts]，
-#     mora 间用 |，字间用 ,；句尾 token 贴在该字读音段末尾。
-#   - 无 ruby 的字：按 check_count 个 [起始ts] 前缀 + 字符；句尾 token 贴后。
+#     mora 间用 |，字间用 ,；停顿点 token 贴在该字读音段末尾。
+#   - 无 ruby 的字：按 check_count 个 [起始ts] 前缀 + 字符；停顿点 token 贴后。
 #   - check_count==0 的字：裸字符，无任何 token。
 #   - 连词(linked_to_next) 由 {…} 块归组表达（块内相邻字 linked，块尾不 linked）。
 # ══════════════════════════════════════════════════════════════════════
 
 # 起始 token：``[...]`` 且不以 > 开头（容错：任意内容都当 token，非法→占位）
 _START_TOKEN_RE = re.compile(r"\[(?!>)[^\]]*\]")
-# 行内末尾的句尾 token：``[>...]`` 贴在读音段最后
+# 行内末尾的停顿点 token：``[>...]`` 贴在读音段最后
 _END_TOKEN_AT_END_RE = re.compile(r"\[>[^\]]*\]$")
 _TODO = "T"
 # 默认演唱者（或无具名 singer）切换回来时使用的统一标签，
@@ -535,7 +535,7 @@ def _parse_block(content: str, singer_id: str, offset_ms: int = 0):
     for idx, chc in enumerate(text_chars):
         seg = segs[idx] if idx < len(segs) else ""
 
-        # 行尾句尾 token（贴在读音段末尾）
+        # 行尾停顿点 token（贴在读音段末尾）
         is_end = False
         end_ms: Optional[int] = None
         m_end = _END_TOKEN_AT_END_RE.search(seg)
@@ -675,7 +675,7 @@ def parse_timed_line(
                 is_valid_tok = (val_str == _TODO) or (_parse_ts_value(val_str) is not None)
                 if is_valid_tok:
                     if is_end_tok:
-                        # 句尾 token → 贴到上一个字符
+                        # 停顿点 token → 贴到上一个字符
                         ms = _sub_off(_parse_ts_value(val_str), offset_ms)
                         if chars:
                             chars[-1].is_sentence_end = True

@@ -33,7 +33,7 @@
 - fulltext_interface 的"自动分析全部注音"用三选项弹窗：全部重新分析 / 仅未注音 / 取消。
 - **英文词条的词边界必须把 apostrophe（`'` U+0027 和 `'` U+2019）视为词内字符**，否则 `what` 会命中 `what's` 中部，导致 `'s` 被占用冲突、裸露无注音。用户词典子串匹配的边界检查不能只看 `isalpha()`。
 - 用户词典在 `analyze_sentence` 中**先于** e2k 执行（dict_covered → e2k_covered → fallback）。这与直觉"英文优先 e2k"相反，是有意的覆盖优先级设计（允许用户词典强制改写英文读音）。影响：用户词典的英文词条边界必须严格，否则污染下游 e2k。
-- `update_checkpoints_from_rubies` 的节奏点覆写要在"标点/flag 过滤之后"插入英文词组规则（首=1/中=0/末=句尾），否则会被 flag 过滤抹掉。英文句尾判定合并进 `is_sentence_end` 逻辑，不单独一段。
+- `update_checkpoints_from_rubies` 的节奏点覆写要在"标点/flag 过滤之后"插入英文词组规则（首=1/中=0/末=停顿点），否则会被 flag 过滤抹掉。英文停顿点判定合并进 `is_sentence_end` 逻辑，不单独一段。
 - **汉字注音拆分的根本矛盾**：SudachiPy/pykakasi 是基于「词」的形态素分析器，对单字只返回训读（傷→キズ），不返回音读（ショウ）。复合词（傷痕→ショウコン）被当作整体返回，无法直接拆出单字音读。`_try_split_to_chars` 的 5 级 Pass 链（约束回溯→音读字典组合匹配→pykakasi参考分区→モーラ均分→无约束分区）逐级 fallback，其中音读字典匹配（Pass 2）是唯一能准确拆分音读复合词的路径。
 - **`々` (U+3005 IDEOGRAPHIC ITERATION MARK) 不在 CJK Unified Ideographs 区块**，必须在 `_is_kanji` 和 `get_char_type` 中显式加入。否则含々的词（上々、堂々等）会被 `all_kanji` 判定为 False，跳过字典匹配。
 - **`々` 的候选读音**：字典匹配时，々应继承前一个汉字的候选读音池，并追加连浊变体（清音首字母→浊音/半浊音）。例如「上」候选 `[ジョウ]`，「々」继承 `[ジョウ, ダクテン(ジョウ)]` → 匹配 `ジョウジョウ`。
@@ -43,8 +43,8 @@
 ## TimingService / Checkpoint
 
 - TimingService 是节奏点时间戳的**唯一**写入入口（domain 层只读取）。
-- 按键事件统一走 `on_key_changed(timestamp_ms, key_type)`：按下/抬起都推送给当前选中 cp，由 cp 角色过滤——普通 cp 仅响应 `pressed`，句尾末尾 cp 仅响应 `released`。写入后单次推进。
-- 句尾末尾 cp 判定：`Character.is_sentence_end_tail_cp(cp_idx)`，即 `is_sentence_end and cp_idx == check_count`。
+- 按键事件统一走 `on_key_changed(timestamp_ms, key_type)`：按下/抬起都推送给当前选中 cp，由 cp 角色过滤——普通 cp 仅响应 `pressed`，停顿点 cp 仅响应 `released`。写入后单次推进。
+- 停顿点 cp 判定：`Character.is_sentence_end_tail_cp(cp_idx)`，即 `is_sentence_end and cp_idx == check_count`。
 - 打轴游标 = `Project.selected_cp` = TimingService 的 `_current_position`，三者必须同步，是同一个概念。
 - 选中 cp（selected_checkpoint_idx）全局唯一不变量：增删对称，每次 set 必先 clear。
 - 标点 cp 默认 0；启用 `checkpoint_on_punctuation` 时 max(1)。
@@ -54,7 +54,7 @@
 
 - domain/ 目录零框架依赖（不引 PyQt6）。
 - 字符级演唱者用 `singer_id`（int）字段，颜色由 SingerService 维护。
-- 句尾时间戳用 `Character.sentence_end_ts`，与 `is_sentence_end` 配套；非句尾自动 `clear_sentence_end_ts()`。
+- 停顿点时间戳用 `Character.sentence_end_ts`，与 `is_sentence_end` 配套；非停顿点自动 `clear_sentence_end_ts()`。
 
 ## UI
 
@@ -64,8 +64,8 @@
 - **ShortcutSettingCard 的 `value_changed` 信号必须在 `_init_shortcut_group` 创建卡片时立即 connect**（非 `_connect_auto_save_signals` 里统一 connect）——后者路径会漏掉部分 scope，导致冲突检测与即时保存都失效。
 - 字符级编辑对话框用字符行布局（`[字][ruby][check]`）比"整句输入框 + # 分隔"更直观；RubyPart 分组用逗号 `,`，与词典条目惯例一致，避免歧义。
 - 字符数相同的修改走 `push_to_ruby` 原地改、保留 timestamps；字符数变化走 slice 替换（新建 Character），这是"修改节奏点无效"的根因修复模式。
-- **快捷键调试先确认实际分发分支**：`keyPressEvent` 内常存在两套机制——配置化 `action == "..."` 映射（来自 ShortcutSettingCard）和硬编码 `a0.text() in (...)` / `key == Qt.Key.X` 的 elif 串。当用户已在 settings 配置过该键时，硬编码 elif 会变成**永远不被命中的死代码**。改 `.` 句尾切换时曾连续 4 次改错那段死分支（`elif a0.text() in (".", "。")`），实际入口是 `elif action == "toggle_line_end"`。**调试键盘问题第一步：搜 action 字符串 + 硬编码 key/text，确认哪条 elif 真正被命中**（最简单的验证：临时 print，而不是凭代码阅读推断）。
-- **同一 widget 上键盘快捷键和右键菜单做"同一件事"时，应共用 emit 信号路径**（让键盘也 emit 右键用的信号），而不是两套各自 resolve target 的代码。`.` 句尾切换的最终修复就是让键盘走 `toggle_sentence_end_requested.emit(line, char)` 复用右键 slot——单一事实源、单一目标解析点，避免长期分歧。
+- **快捷键调试先确认实际分发分支**：`keyPressEvent` 内常存在两套机制——配置化 `action == "..."` 映射（来自 ShortcutSettingCard）和硬编码 `a0.text() in (...)` / `key == Qt.Key.X` 的 elif 串。当用户已在 settings 配置过该键时，硬编码 elif 会变成**永远不被命中的死代码**。改 `.` 停顿点切换时曾连续 4 次改错那段死分支（`elif a0.text() in (".", "。")`），实际入口是 `elif action == "toggle_line_end"`。**调试键盘问题第一步：搜 action 字符串 + 硬编码 key/text，确认哪条 elif 真正被命中**（最简单的验证：临时 print，而不是凭代码阅读推断）。
+- **同一 widget 上键盘快捷键和右键菜单做"同一件事"时，应共用 emit 信号路径**（让键盘也 emit 右键用的信号），而不是两套各自 resolve target 的代码。`.` 停顿点切换的最终修复就是让键盘走 `toggle_sentence_end_requested.emit(line, char)` 复用右键 slot——单一事实源、单一目标解析点，避免长期分歧。
 
 ## 导入导出
 

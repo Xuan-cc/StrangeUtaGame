@@ -331,7 +331,7 @@ def test_drag_sentence_end_point():
     project.add_sentence(s)
     editor, calls = _make_editor(project)
 
-    # 句尾呼吸点 cp_idx == check_count == 1, is_end=True
+    # 停顿点 cp_idx == check_count == 1, is_end=True
     EditorInterface._on_timeline_tags_drag_committed(
         editor, [(0, 0, 1, True)], 250
     )

@@ -41,7 +41,7 @@ def _export_timestamps(char: Character) -> List[int]:
 
 
 def _export_sentence_end_ts(char: Character) -> Optional[int]:
-    """返回导出用的句尾时间戳（带全局偏移，若已计算）。"""
+    """返回导出用的停顿点时间戳（带全局偏移，若已计算）。"""
     if char.sentence_end_ts is None:
         return None
     if char.global_sentence_end_ts is not None:
@@ -86,7 +86,7 @@ def encode_check_n(
     """编码 check_count 和 is_line_end 到 N 字符串。
 
     规则: 末尾 "0" 表示 line_end。
-    注: is_sentence_end 不编码到 N 中，句尾时间戳单独处理。
+    注: is_sentence_end 不编码到 N 中，停顿点时间戳单独处理。
     """
     suffix = ""
     if is_line_end:
@@ -245,14 +245,14 @@ def align_ruby_parts_to_checkpoints(
 ) -> List[str]:
     """将 Ruby 分段列表对齐到 check_count。
 
-    入参: parts 原始分段列表; check_count 目标分段数; is_sentence_end 是否为句尾。
-    出参: 对齐后的分段列表；cp<2 或句尾合并为单段，多余合并到末段，缺失用空格填充。
+    入参: parts 原始分段列表; check_count 目标分段数; is_sentence_end 是否为停顿点。
+    出参: 对齐后的分段列表；cp<2 或停顿点合并为单段，多余合并到末段，缺失用空格填充。
     """
     joined = "".join(parts)
     if not joined:
         return []
 
-    # cp<2 或句尾 → 不分组
+    # cp<2 或停顿点 → 不分组
     if check_count < 2 or is_sentence_end:
         return [joined]
 
@@ -349,14 +349,14 @@ def _single_char_to_normal_node(char: Character) -> str:
     - 无 CP (check_count=0): 直接输出字符本身（如空格）
     - 有 CP 有时间戳: [1|ts]char
     - 有 CP 无时间戳: [1]char
-    - 有句尾 CP 有时间戳: char[10|ts]
-    - 有句尾 CP 无时间戳: char[10]
+    - 有停顿点 CP 有时间戳: char[10|ts]
+    - 有停顿点 CP 无时间戳: char[10]
     """
     display_char = REST_CHAR if char.is_rest else char.char
 
     # 无 CP 的字符（如空格）直接输出
     if char.check_count == 0:
-        # 检查是否有句尾标记
+        # 检查是否有停顿点标记
         if char.is_sentence_end:
             _se = _export_sentence_end_ts(char)
             if _se is not None:
@@ -378,7 +378,7 @@ def _single_char_to_normal_node(char: Character) -> str:
     # 字符本身
     char_parts.append(display_char)
 
-    # 句尾标记
+    # 停顿点标记
     if char.is_sentence_end:
         _se = _export_sentence_end_ts(char)
         if _se is not None:
@@ -395,8 +395,8 @@ def _single_char_to_ruby_node(char: Character) -> str:
     格式:
     - 有时间戳: {display|[count|ts]ruby[ts]ruby}
     - 无时间戳: {display|[count]ruby}
-    - 有句尾 CP 有时间戳: ...}[10|ts]
-    - 有句尾 CP 无时间戳: ...}[10]
+    - 有停顿点 CP 有时间戳: ...}[10|ts]
+    - 有停顿点 CP 无时间戳: ...}[10]
 
     停顿符占位 part 原样保留：RL 编辑模式面向打轴软件
     （RhythmicaLyrics），占位拍在该侧是有意义的，不剥离。
@@ -435,7 +435,7 @@ def _single_char_to_ruby_node(char: Character) -> str:
         ruby_text = "".join(ruby_segments[:count])
         result = f"{{{display}|[{count}]{ruby_text}}}"
 
-    # 句尾标记
+    # 停顿点标记
     if char.is_sentence_end:
         _se = _export_sentence_end_ts(char)
         if _se is not None:
@@ -455,7 +455,7 @@ def _linked_group_to_normal_node(group: List[Character]) -> str:
     - 无 CP (check_count=0): 直接输出文本
     - 有 CP 有时间戳: [1|ts]char[1|ts]char...
     - 有 CP 无时间戳: [1]char[1]char...
-    - 句尾字符后面加 [10|ts] 或 [10]
+    - 停顿点字符后面加 [10|ts] 或 [10]
     """
     # 无 CP 的字符组直接输出
     if all(c.check_count == 0 for c in group):
@@ -477,7 +477,7 @@ def _linked_group_to_normal_node(group: List[Character]) -> str:
             # 无 CP 的字符
             parts.append(display_char)
 
-        # 句尾标记（无论是否有 CP）
+        # 停顿点标记（无论是否有 CP）
         if c.is_sentence_end:
             _se = _export_sentence_end_ts(c)
             if _se is not None:
@@ -551,7 +551,7 @@ def _linked_group_to_ruby_node(group: List[Character]) -> str:
     inner = RUBY_SEP.join(ruby_portions)
     result = f"{{{display}|{inner}}}"
 
-    # 句尾标记（取最后一个字符的句尾标记）
+    # 停顿点标记（取最后一个字符的停顿点标记）
     last_char = group[-1]
     if last_char.is_sentence_end:
         _se = _export_sentence_end_ts(last_char)
@@ -681,9 +681,9 @@ def from_inline_text(text: str, singer_id: str) -> Sentence:
         if seg_type == "ruby":
             _parse_ruby_group(seg_content, characters, singer_id)
         else:
-            # 检查是否是 ruby 组后面的句尾标记 [10|ts] 或 [10]
+            # 检查是否是 ruby 组后面的停顿点标记 [10|ts] 或 [10]
             if characters and seg_content.startswith("[10"):
-                # 尝试解析为句尾标记
+                # 尝试解析为停顿点标记
                 m_ts = _TAG_RE.match(seg_content)
                 m_no_ts = _TAG_NO_TS_RE.match(seg_content)
 
@@ -718,7 +718,7 @@ def from_inline_text(text: str, singer_id: str) -> Sentence:
     for i in range(len(characters) - 1):
         curr = characters[i]
         next_char = characters[i + 1]
-        # 句尾字符不链接到后面的字符
+        # 停顿点字符不链接到后面的字符
         if curr.is_sentence_end:
             continue
         if next_char.check_count == 0 and not curr.linked_to_next:
@@ -777,7 +777,7 @@ def _parse_ruby_group(
 
     格式: "漢字|[count|ts]ruby[ts]ruby[10|ts]"
     - [count|ts]ruby: count 是 1-9，表示 ruby 分段数
-    - [10|ts]: 句尾时间戳（可选，在末尾）
+    - [10|ts]: 停顿点时间戳（可选，在末尾）
     """
     pipe_pos = content.index("|")
     display_text = content[:pipe_pos]
@@ -825,7 +825,7 @@ def _parse_ruby_group(
         is_sentence_end = False
 
         for token_n, ts_ms, seg_text in tokens:
-            # 检查是否是句尾标记 [10|ts] 或 [10]
+            # 检查是否是停顿点标记 [10|ts] 或 [10]
             if token_n == "10" and not seg_text:
                 sentence_end_ts = ts_ms  # ts_ms 可能是 None（无时间戳）
                 is_sentence_end = True
@@ -878,8 +878,8 @@ def _parse_plain_segment(
     - 无 CP (check_count=0): 直接输出字符本身（如空格）
     - 有 CP 有时间戳: [1|ts]char
     - 有 CP 无时间戳: [1]char
-    - 有句尾 CP 有时间戳: char[10|ts]
-    - 有句尾 CP 无时间戳: char[10]
+    - 有停顿点 CP 有时间戳: char[10|ts]
+    - 有停顿点 CP 无时间戳: char[10]
     """
     pos = 0
     pending_tags: List[Tuple[Optional[str], int]] = []
@@ -969,7 +969,7 @@ def _parse_plain_segment(
             else:
                 # 没有后续字符
                 if n_str is not None and n_str == "10" and characters:
-                    # [10|ts] 没有后续字符 → 这是句尾时间戳
+                    # [10|ts] 没有后续字符 → 这是停顿点时间戳
                     last_char = characters[-1]
                     last_char.is_sentence_end = True
                     last_char.sentence_end_ts = ts_ms
@@ -1001,7 +1001,7 @@ def _parse_plain_segment(
                 else:
                     # [N] 没有后续字符
                     if n_str == "10" and characters:
-                        # [10] 没有后续字符 → 这是句尾标记
+                        # [10] 没有后续字符 → 这是停顿点标记
                         last_char = characters[-1]
                         last_char.is_sentence_end = True
             else:

@@ -1,7 +1,7 @@
 r"""ASS 字幕格式解析器
 
 支持 ASS/SSA 字幕文件的解析。提取卡拉OK时间标签（\k/\kf/\ko/\K/\kF/\kO）、
-Aegisub 注音 (`{\k...}汉字|<かな`)，末尾 \k 的尾部时长（绑为句尾释放点），
+Aegisub 注音 (`{\k...}汉字|<かな`)，末尾 \k 的尾部时长（绑为停顿点），
 非末尾空文本 \k 段的段起点（绑为句中停顿/断句轴点释放 ts），
 以及 SUG 私有 `{\\sing_<name>}` per-char 演唱者切换标记。
 
@@ -413,7 +413,7 @@ class ASSParser(LyricParser):
                 if ci >= leading
             }
 
-        # 句尾释放：最后一片 \k 的 duration_ms 不丢弃
+        # 停顿点：最后一片 \k 的 duration_ms 不丢弃
         line_end_ts: Optional[int] = None
         if timetags or extra_checkpoints_map:
             line_end_ts = current_ms

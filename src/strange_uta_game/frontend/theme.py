@@ -242,7 +242,7 @@ class ThemeColors:
 
     @property
     def syntax_timestamp_end(self) -> QColor:
-        """语法着色：句尾时间戳 [>..]"""
+        """语法着色：停顿点时间戳 [>..]"""
         return QColor("#CE9178" if self._is_dark else "#A31515")
 
     # ── 进度状态色 ──

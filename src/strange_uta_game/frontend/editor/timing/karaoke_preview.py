@@ -325,7 +325,7 @@ class KaraokePreview(QWidget):
         self._current_checkpoint_idx: Optional[int] = None
         self._current_time_ms = 0
         self._global_offset_ms = 0
-        self._duration_ms = 0  # 音频总时长（用于行尾非句尾时的wipe右边界）
+        self._duration_ms = 0  # 音频总时长（用于行尾非停顿点时的wipe右边界）
         self._visible_lines = 7  # 视口内可见行数（决定行高）
         # 可见行数下限：常规 3 行；双谱模式下时间轴占用翻倍，经
         # set_min_visible_lines(1) 放宽到单行（EditorInterface 协商让位时切换）
@@ -636,7 +636,7 @@ class KaraokePreview(QWidget):
         self.update()
 
     def set_duration(self, duration_ms: int):
-        """设置音频总时长（用于行尾非句尾时的wipe右边界）"""
+        """设置音频总时长（用于行尾非停顿点时的wipe右边界）"""
         self._duration_ms = duration_ms
 
     def set_project(self, project: Project):
@@ -1728,7 +1728,7 @@ class KaraokePreview(QWidget):
         300ms 超时 → 确认是单击而非双击，兜底同步 current 域到 focus 位置，
         防止期间有状态漂移。
 
-        例外：当 focus 落在无 checkpoint 字符（cc=0 且非句尾）时跳过同步，
+        例外：当 focus 落在无 checkpoint 字符（cc=0 且非停顿点）时跳过同步，
         保持 _on_char_selected 中已正确设置的 current 域（指向最近有效 cp）。
         """
         self._click_snapshot = None
@@ -1902,7 +1902,7 @@ class KaraokePreview(QWidget):
         )
         menu.addAction(remove_checkpoint_action)
 
-        toggle_sentence_end_action = Action(self.tr("设置/取消句尾"), menu)
+        toggle_sentence_end_action = Action(self.tr("设置/取消停顿点"), menu)
         toggle_sentence_end_action.triggered.connect(
             lambda checked=False: self.toggle_sentence_end_requested.emit(
                 target_line_idx, target_char_idx
@@ -1965,7 +1965,7 @@ class KaraokePreview(QWidget):
         menu.exec(global_pos)
 
     def _find_next_line_first_timestamp(self, current_line_idx: int) -> Optional[int]:
-        """向后逐行查找最近一个有时间戳行的第一个时间戳，用于行尾非句尾时的 wipe 右边界。
+        """向后逐行查找最近一个有时间戳行的第一个时间戳，用于行尾非停顿点时的 wipe 右边界。
 
         对每一行执行早停检测：若该行存在 is_sentence_end=True 但无 global_sentence_end_ts，
         或存在 check_count>0 但无 global_timestamps，视为该行未完整打轴，则结束（返回 None）。
@@ -2056,7 +2056,7 @@ class KaraokePreview(QWidget):
 
         # 字符像素宽度（初始为字符本身的 advance width，含侧 bearings/字间距）
         # 同时计算字符的"墨水"边界（tightBoundingRect）—— wipe 严格按墨水边界裁剪，
-        # 不再扫过字形周围的透明像素或句尾扩展区，确保 wipe 的视觉起止与时间戳一致。
+        # 不再扫过字形周围的透明像素或停顿点扩展区，确保 wipe 的视觉起止与时间戳一致。
         fm_ruby = self._fm_ruby
         avg_char_w = main_fm.averageCharWidth()
         char_widths = []
@@ -2122,7 +2122,7 @@ class KaraokePreview(QWidget):
                 char_widths[ci] = max(char_widths[ci], ruby_w)
 
         # 确保字符宽度 >= CP标记总宽度（避免CP标记重叠）
-        # 句尾marker独立于普通marker，在字符右侧扩展半字符宽度
+        # 停顿点marker独立于普通marker，在字符右侧扩展半字符宽度
         fm_checkpoint = self._fm_checkpoint
         end_sentence_w: dict[int, int] = {}
         for ci, ch_obj in enumerate(characters):
@@ -2133,21 +2133,21 @@ class KaraokePreview(QWidget):
                         ch_obj.is_sentence_end and cp_idx == ch_obj.check_count
                     )
                     if is_sentence_end_marker:
-                        continue  # 句尾marker不计入普通CP宽度
+                        continue  # 停顿点marker不计入普通CP宽度
                     elif cp_idx == 0:
                         marker_char = self._checkpoint_markers["cp_first_timed"] if cp_idx < len(ch_obj.global_timestamps) else self._checkpoint_markers["cp_first_empty"]
                     else:
                         marker_char = self._checkpoint_markers["cp_multi_timed"] if cp_idx < len(ch_obj.global_timestamps) else self._checkpoint_markers["cp_multi_empty"]
                     total_cp_w += fm_checkpoint.horizontalAdvance(marker_char)
                 char_widths[ci] = max(char_widths[ci], total_cp_w)
-            # 句尾字符扩展一个全角汉字宽度的一半用于放置句尾marker（单独追踪，不混入 char_widths）
+            # 停顿点字符扩展一个全角汉字宽度的一半用于放置停顿点marker（单独追踪，不混入 char_widths）
             if ch_obj.is_sentence_end:
                 end_sentence_w[ci] = main_fm.horizontalAdvance("一") // 2
 
         # ---------- wipe 时间线（离散字符开始时间模型） ----------
         # 每个字符的 wipe 开始时间 = 该字符第一个 cp 的时间戳（global_timestamps[0]）。
         # 字符 wipe 结束时间 = 同句子内下一个有 start_ts 的字符的开始时间；
-        # 若后面无 start_ts，则使用句尾时间戳（global_sentence_end_ts）。
+        # 若后面无 start_ts，则使用停顿点时间戳（global_sentence_end_ts）。
         # 中间无 timestamp 的字符与上一个有 timestamp 的字符连读，共享同一段 wipe。
         # 一行可能含多个句子（多个 is_sentence_end），各句子独立计算段。
         start_times: dict[int, int] = {}
@@ -2165,8 +2165,8 @@ class KaraokePreview(QWidget):
         if s_start < n_chars:
             sent_ranges.append((s_start, n_chars - 1))
 
-        # 预处理：为行尾非句尾的情况准备右边界
-        # 如果最后一个 sent_range 的最后一个字符不是句尾，去下一行借时间戳
+        # 预处理：为行尾非停顿点的情况准备右边界
+        # 如果最后一个 sent_range 的最后一个字符不是停顿点，去下一行借时间戳
         fallback_sentence_end_ts: Optional[int] = None
         if sent_ranges:
             last_sent_start, last_sent_end = sent_ranges[-1]
@@ -2202,7 +2202,7 @@ class KaraokePreview(QWidget):
                         break
                 if no_cc_end <= sent_start:
                     continue  # 行首第一个字符就有 cc，无需处理
-                # 终点：优先取本句句尾字符自身的 sentence_end_ts（cc=0 + is_sentence_end 场景），
+                # 终点：优先取本句停顿点字符自身的 sentence_end_ts（cc=0 + is_sentence_end 场景），
                 # 其次找本行后续第一个有时间戳字符的 ts，最后回落到 fallback
                 end_ts_nl: Optional[int] = None
                 sent_end_char = characters[sent_end]
@@ -3277,7 +3277,7 @@ class KaraokePreview(QWidget):
                         # - 起点 = char_draw_x + ink_left（字形真正起墨像素列）
                         # - 终点 = 起点 + ink_width × ratio（字形墨水终止像素列）
                         # 这样 wipe 不会扫过字符左右两侧的透明侧 bearings；
-                        # 句尾扩展区（_esw）只用于放置 marker，不再参与 wipe。
+                        # 停顿点扩展区（_esw）只用于放置 marker，不再参与 wipe。
                         ink_w = _char_ink_widths[char_pos]
                         if ink_w > 0:
                             ink_off = _char_ink_offsets[char_pos]
@@ -3360,12 +3360,12 @@ class KaraokePreview(QWidget):
                     )
 
                 # Checkpoint 标记（逐 checkpoint 绘制）
-                # 句尾marker独立于普通marker，绘制在字符右侧扩展区域
+                # 停顿点marker独立于普通marker，绘制在字符右侧扩展区域
                 ch_obj = line.characters[char_pos]
                 if ch_obj.total_timing_points > 0:
                     painter.setFont(font_checkpoint)
 
-                    # 普通markers（不含句尾marker）
+                    # 普通markers（不含停顿点marker）
                     regular_markers = []
                     for cp_idx in range(ch_obj.check_count):
                         has_timed = cp_idx < len(ch_obj.global_timestamps)
@@ -3417,7 +3417,7 @@ class KaraokePreview(QWidget):
 
                         mx += mw
 
-                    # 句尾marker：独立绘制在字符右侧扩展区域
+                    # 停顿点marker：独立绘制在字符右侧扩展区域
                     if ch_obj.is_sentence_end:
                         se_cp_idx = ch_obj.check_count
                         has_timed = ch_obj.global_sentence_end_ts is not None
@@ -3437,7 +3437,7 @@ class KaraokePreview(QWidget):
                         se_area_x = curr_x + char_w
                         se_area_w = _end_sentence_w.get(char_pos, 0)
 
-                        # 矢量轮廓填充（同上，保证句尾 marker 完整）
+                        # 矢量轮廓填充（同上，保证停顿点 marker 完整）
                         painter.fillPath(
                             self._marker_path(marker_char, float(int(se_area_x)), float(marker_y)),
                             color,

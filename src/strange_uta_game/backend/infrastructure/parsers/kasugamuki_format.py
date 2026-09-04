@@ -254,7 +254,7 @@ def _get_sentence_end_ts(char: Character) -> Optional[int]:
 
 
 def _format_sentence_end(char: Character) -> str:
-    """如果字符是句尾，返回句尾时间标签字符串；否则返回空串。"""
+    """如果字符是停顿点，返回停顿点时间标签字符串；否则返回空串。"""
     if not char.is_sentence_end:
         return ""
     se_ts = _get_sentence_end_ts(char)

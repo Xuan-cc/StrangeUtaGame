@@ -4,7 +4,7 @@
   Ruby → Character → Word → Sentence → Project
 
 - Ruby:      最小单元，存储假名文本；checkpoint 时间戳和演唱者由母对象推送
-- Character: 主要单元，存储单字、Ruby、节奏点配置、时间戳、连词/句尾标记、演唱者
+- Character: 主要单元，存储单字、Ruby、节奏点配置、时间戳、连词/停顿点标记、演唱者
 - Word:      逻辑单元，由连词字符组成；不存储 Ruby，但收集字符的 Ruby 用于渲染和输出
 """
 
@@ -118,7 +118,7 @@ class TimeTagType(Enum):
 
     在新层次模型中，tag_type 由上下文推导：
       - CHAR_START   : Character.timestamps[0]
-      - CHAR_MIDDLE  : Character.timestamps[1:]（非句尾字符）
+      - CHAR_MIDDLE  : Character.timestamps[1:]（非停顿点字符）
       - LINE_END     : is_line_end 字符的最后一个 timestamp
       - SENTENCE_END : is_sentence_end 字符的最后一个 timestamp
       - REST         : is_rest 字符的 timestamp
@@ -198,7 +198,7 @@ class Ruby:
 class Character:
     """字符 — 主要数据结构单元
 
-    存储单个字符及其注音、节奏点配置、时间戳、连词/句尾标记、演唱者。
+    存储单个字符及其注音、节奏点配置、时间戳、连词/停顿点标记、演唱者。
     当时间戳或演唱者更新时，主动将变更推送给 Ruby 对象。
 
     Attributes:
@@ -208,7 +208,7 @@ class Character:
         timestamps: checkpoint 时间戳列表（毫秒），索引 = checkpoint_idx
         linked_to_next: 是否与下一字符连词
         is_line_end: 是否是行尾字符（行级换行标记，一行只有一个）
-        is_sentence_end: 是否是句尾字符（句尾标记，一行内可有多个，额外 +1 checkpoint）
+        is_sentence_end: 是否是停顿点字符（停顿点标记，一行内可有多个，额外 +1 checkpoint）
         is_rest: 是否是休止符
         singer_id: 演唱者 UUID
 
@@ -340,17 +340,17 @@ class Character:
         self.push_to_ruby()
 
     def set_sentence_end_ts(self, ts: int) -> None:
-        """设置句尾释放时间戳"""
+        """设置停顿点时间戳"""
         if ts < 0:
             raise ValidationError(f"时间戳不能为负数: {ts}")
         if not self.is_sentence_end:
-            raise ValidationError("当前字符不是句尾字符")
+            raise ValidationError("当前字符未标记为停顿点")
         self.sentence_end_ts = ts
         self._update_offset_timestamps()
         self.push_to_ruby()
 
     def clear_sentence_end_ts(self) -> None:
-        """清除句尾释放时间戳"""
+        """清除停顿点时间戳"""
         self.sentence_end_ts = None
         self._update_offset_timestamps()
         self.push_to_ruby()
@@ -547,7 +547,7 @@ class Character:
 
     @property
     def total_timing_points(self) -> int:
-        """总打轴点数（普通 checkpoint + 句尾释放点）"""
+        """总打轴点数（普通 checkpoint + 停顿点）"""
         return self.check_count + (1 if self.is_sentence_end else 0)
 
     @property
@@ -571,16 +571,16 @@ class Character:
         return self.char in PUNCTUATION_SET
 
     def is_sentence_end_tail_cp(self, cp_idx: int) -> bool:
-        """判定 cp_idx 是否为本字符的"句尾末尾 cp"。
+        """判定 cp_idx 是否为本字符的"停顿点 cp"。
 
-        语义：句尾字符在 check_count 个普通 cp 之后追加 1 个虚拟 cp（索引 = check_count），
+        语义：停顿点字符在 check_count 个普通 cp 之后追加 1 个虚拟 cp（索引 = check_count），
         该虚拟 cp 仅响应打轴键的 released 事件；普通 cp 仅响应 pressed 事件。
 
         Args:
             cp_idx: 待判定的 cp 索引（all_timestamps 域）
 
         Returns:
-            True 表示该 cp 是句尾末尾 cp（仅 released 写入）；False 表示普通 cp（仅 pressed 写入）。
+            True 表示该 cp 是停顿点 cp（仅 released 写入）；False 表示普通 cp（仅 pressed 写入）。
         """
         if not self.is_sentence_end:
             return False

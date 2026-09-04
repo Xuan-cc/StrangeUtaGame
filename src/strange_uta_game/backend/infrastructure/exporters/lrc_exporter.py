@@ -12,7 +12,7 @@ LRC 格式是通用歌词格式：
 1. 时间永远从 char.global_timestamps / char.global_sentence_end_ts 取，
    领域层已经把偏移量算好了，导出器不再二次叠加 offset。
 2. 每个字符在输出文本里只出现一次。多 checkpoint（一字多拍）的字符
-   只取第一个时间戳 global_timestamps[0]，行尾拖音用句尾字符的
+   只取第一个时间戳 global_timestamps[0]，行尾拖音用停顿点字符的
    global_sentence_end_ts 单独追加一个标签，不再生成重复字符。
 3. 没有时间戳的字符（标点、未打轴字符）原样附在前一个标签之后，
    不为它单独生成时间标签。
@@ -80,7 +80,7 @@ class LRCExporter(BaseExporter):
         except Exception as e:
             raise ExportError(f"写入文件失败: {e}")
 
-    # ── 辅助：定位句尾拖音时间戳 ──
+    # ── 辅助：定位停顿点拖音时间戳 ──
     def _find_sentence_end_ts(self, sentence: Sentence) -> Optional[int]:
         """取本行最后一个标记为 is_sentence_end 的字符的 global_sentence_end_ts。
 

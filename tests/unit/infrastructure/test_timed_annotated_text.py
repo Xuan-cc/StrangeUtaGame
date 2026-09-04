@@ -2,7 +2,7 @@
 
 覆盖：
 - 有 ruby 多 mora 块 + 逐 checkpoint 起始时间戳
-- 块内/块外句尾时间戳 [>...]
+- 块内/块外停顿点时间戳 [>...]
 - 占位 [--:--.---]（应有 checkpoint 但无 ts）
 - 纯假名单点、check_count==0 裸字符
 - 演唱者切换 【名】 标签
@@ -216,10 +216,10 @@ def test_decode_malformed_bracket_becomes_literal():
     assert [c.char for c in chars] == list("[99x]あ[oops]い")
     assert all(c.check_count == 0 for c in chars)
 
-    # 合法起始 token + 后接非法句尾 token → あ 正常带 ts，非法 [>bad] 变 6 个普通字符
+    # 合法起始 token + 后接非法停顿点 token → あ 正常带 ts，非法 [>bad] 变 6 个普通字符
     chars2, _ = parse_timed_line("[00:01.00]う[>bad]")
     assert chars2[0].char == "う" and chars2[0].timestamps == [1000]
-    assert not chars2[0].is_sentence_end   # [>bad] 未被识别为句尾
+    assert not chars2[0].is_sentence_end   # [>bad] 未被识别为停顿点
     assert [c.char for c in chars2[1:]] == list("[>bad]")
     assert all(c.check_count == 0 for c in chars2[1:])
 
@@ -227,7 +227,7 @@ def test_decode_malformed_bracket_becomes_literal():
     # 场景：[00:09.61][约30秒][>00:39.30]
     chars3, _ = parse_timed_line("[00:09.61][XXX][>00:39.30]")
     # '[' 消耗 pending_starts(9610)；'X','X','X',']' check_count=0；
-    # ']' 末尾的 [>00:39.30] 作为句尾附到最后一个字符
+    # ']' 末尾的 [>00:39.30] 作为停顿点附到最后一个字符
     assert chars3[0].char == "[" and chars3[0].timestamps == [9610]
     assert all(c.check_count == 0 for c in chars3[1:-1])
     assert chars3[-1].is_sentence_end and chars3[-1].sentence_end_ts == 39300

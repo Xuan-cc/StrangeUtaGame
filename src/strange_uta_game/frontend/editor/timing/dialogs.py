@@ -248,7 +248,7 @@ class ModifyCharacterDialog(QDialog):
       - 文本修改时自动重建字符行，并按位置尽量保留已输入值
       - 单字符修改时直接原地 set_ruby/check_count/linked_to_next/push_to_ruby，保留 timestamps
       - 字符数变化时才走替换 slice 流程（必然丢旧 timestamps）
-      - 连词校验：末字/行尾字符禁止 linked_to_next=True（句尾=语气停顿点，允许连词），
+      - 连词校验：末字/行尾字符禁止 linked_to_next=True（停顿点=语气停顿点，允许连词），
         提交时若有违规项则跳过该项的 linked_to_next 并在 failures 列表返回。
     """
 
@@ -400,7 +400,7 @@ class ModifyCharacterDialog(QDialog):
         chk_linked = CheckBox(self.tr("向后连词"))
         chk_linked.setChecked(bool(linked))
         chk_linked.setToolTip(self.tr(
-            "连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；句尾=停顿点，允许连词）"
+            "连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；停顿点允许连词）"
         ))
         # 监控用户手动编辑
         edit_ruby.textEdited.connect(self._on_row_user_edited)
@@ -519,7 +519,7 @@ class ModifyCharacterDialog(QDialog):
                 tgt.set_ruby(per_char_ruby[i])
                 tgt.set_check_count(per_char_check[i], force=True)
                 tgt.push_to_ruby()
-                # linked_to_next 校验：末字/行尾禁止连词（句尾=语气停顿点，可以连词）
+                # linked_to_next 校验：末字/行尾禁止连词（停顿点=语气停顿点，可以连词）
                 req_linked = per_char_linked_req[i]
                 abs_idx = self._start_idx + i
                 sentence_len = len(self._sentence.characters)
@@ -533,7 +533,7 @@ class ModifyCharacterDialog(QDialog):
                     tgt.linked_to_next = False
                 else:
                     tgt.linked_to_next = req_linked
-            # 句尾 / 行末由原字符保留，不动 is_sentence_end / is_line_end
+            # 停顿点 / 行末由原字符保留，不动 is_sentence_end / is_line_end
         else:
             # 字符数变化 → 替换 slice（无法保留 timestamps）
             new_chars = []
@@ -552,7 +552,7 @@ class ModifyCharacterDialog(QDialog):
                 new_chars[-1].is_sentence_end = True
             if old_last_is_line_end:
                 new_chars[-1].is_line_end = True
-            # 应用 linked_to_next（需与新的句尾/行尾/末字状态校验）
+            # 应用 linked_to_next（需与新的停顿点/行尾/末字状态校验）
             total_after = (
                 len(self._sentence.characters) - len(old_chars) + len(new_chars)
             )
@@ -605,7 +605,7 @@ class ModifyCharacterDialog(QDialog):
 
 
 def _find_prev_timestamp(sentence, char_idx: int) -> int:
-    """向前搜索最近的一个时间戳（含句尾时间戳）作为时间起点。
+    """向前搜索最近的一个时间戳（含停顿点时间戳）作为时间起点。
 
     从 char_idx-1 往前逐字符查找，取最近一个有时间戳字符的最大时间戳。
     搜索不到时返回 0（歌曲开始处 00:00:00）。
@@ -652,7 +652,7 @@ def _build_guide_chars(sentence, char_idx, symbol, count, duration_ms, reverse):
                 new_ch.add_timestamp(ts)
             guide_chars.append(new_ch)
     # 反向导唱的尾部 [>…] 标记：外部渲染软件要求在最后一个导唱字符上
-    # 附上句尾释放时间戳——继续等差数列再往下推一步（末个导唱时间戳再减
+    # 附上停顿点时间戳——继续等差数列再往下推一步（末个导唱时间戳再减
     # 一个间隔 = ref_ts - (count+1)*duration），非反向不插入。
     if reverse and ref_ts is not None and guide_chars:
         end_ts = ref_ts - duration_ms * (count + 1)
@@ -1141,7 +1141,7 @@ class CharEditDialog(QDialog):
         chk_linked = CheckBox(self.tr("向后连词"))
         chk_linked.setChecked(bool(linked))
         chk_linked.setToolTip(self.tr(
-            "连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；句尾=停顿点，允许连词）"
+            "连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；停顿点允许连词）"
         ))
         # 监控用户手动编辑
         edit_ruby.textEdited.connect(self._on_row_user_edited)
@@ -2169,7 +2169,7 @@ class SeparateSymbolTimestampDialog(QDialog):
     针对歌词中常见符号自动处理时间戳：
 
     * **后补偿**：符号 cc=0 且 is_sentence_end=True 且有 sentence_end_ts 时，
-      将句尾时间戳提升为普通时间戳（cc 改为 1），并将 sentence_end_ts 后移
+      将停顿点时间戳提升为普通时间戳（cc 改为 1），并将 sentence_end_ts 后移
       「后补偿」毫秒。
     * **前补偿**：符号 cc=1 且紧跟的第一个非符号字符 cc=0 时，将符号时间戳
       传递给该后续字符（cc 改为 1），并将符号自身时间戳前移「前补偿」毫秒。
@@ -2215,8 +2215,8 @@ class SeparateSymbolTimestampDialog(QDialog):
         # ── 说明文本 ──
         desc = QLabel(self.tr(
             "针对选中的符号分组，自动处理时间戳：\n"
-            "• 后补偿：符号无普通时间戳（cc=0）但有句尾停顿标记时，将停顿时间提升为普通时间戳，"
-            "并将句尾时间戳后移「后补偿」值。\n"
+            "• 后补偿：符号无普通时间戳（cc=0）但有停顿标记时，将停顿时间提升为普通时间戳，"
+            "并将停顿点时间戳后移「后补偿」值。\n"
             "• 前补偿：符号已有时间戳（cc=1）且紧跟的第一个非符号字符无时间戳（cc=0）时，"
             "将符号时间戳传递给该字符，并将符号时间戳前移「前补偿」值。\n\n"
             "点击分组旁的「详情」可细化选择组内具体符号。"
@@ -2296,7 +2296,7 @@ class SeparateSymbolTimestampDialog(QDialog):
         hint = QLabel(self.tr("ⓘ 悬停查看详情"))
         hint.setToolTip(self.tr(
             "前补偿：不考虑后方字符是否已有时间戳，前移符号时间戳并强制复制给后一字符\n"
-            "后补偿：连续句尾符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配"
+            "后补偿：连续停顿点符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配"
         ))
         hint.setCursor(Qt.CursorShape.WhatsThisCursor)
         sel_row.addWidget(hint)
@@ -2307,7 +2307,7 @@ class SeparateSymbolTimestampDialog(QDialog):
         self.sw_force_copy.setChecked(self._saved_force_copy)
         self.sw_force_copy.setToolTip(self.tr(
             "前补偿：不考虑后方字符是否已有时间戳，前移符号时间戳并强制复制给后一字符\n"
-            "后补偿：连续句尾符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配"
+            "后补偿：连续停顿点符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配"
         ))
         sel_row.addWidget(self.sw_force_copy)
         layout.addLayout(sel_row)
@@ -2332,9 +2332,9 @@ class SeparateSymbolTimestampDialog(QDialog):
         self.spin_post_comp.setValue(self._saved_post_comp)
         self.spin_post_comp.setSuffix(" ms")
         self.spin_post_comp.setToolTip(self.tr(
-            "符号无普通时间戳（cc=0）但有句尾停顿时，将句尾时间戳后移的量"
+            "符号无普通时间戳（cc=0）但有停顿时，将停顿点时间戳后移的量"
         ))
-        comp_form.addRow(self.tr("后补偿（后移句尾时间戳）:"), self.spin_post_comp)
+        comp_form.addRow(self.tr("后补偿（后移停顿点时间戳）:"), self.spin_post_comp)
 
         layout.addWidget(comp_box)
 
@@ -2755,7 +2755,7 @@ class AutoGenerateInterludeGuideDialog(QDialog):
         self.edit_back_margin = LineEdit(self)
         self.edit_back_margin.setText(str(self._saved_back_margin))
         self.edit_back_margin.setPlaceholderText("150")
-        self.edit_back_margin.setToolTip(self.tr("生成文本最后一个字符的句尾时间戳回退"))
+        self.edit_back_margin.setToolTip(self.tr("生成文本最后一个字符的停顿点时间戳回退"))
         back_row.addWidget(self.edit_back_margin)
         back_row.addWidget(CaptionLabel("ms"))
         back_row.addStretch()

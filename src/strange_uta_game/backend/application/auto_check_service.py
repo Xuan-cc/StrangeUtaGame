@@ -1240,11 +1240,11 @@ class AutoCheckService:
         sentence: Sentence,
         check_counts: List[int],
     ) -> None:
-        """英文词音节规则 + 行尾/句尾标记 + check_count 写入（共用）。
+        """英文词音节规则 + 行尾/停顿点标记 + check_count 写入（共用）。
 
         前置条件：sentence.characters 已建好；check_counts 已经过
         _apply_flags_filter / ruby 计算等前序步骤。
-        本方法在 check_counts 基础上叠加英文音节规则、行尾句尾标记，
+        本方法在 check_counts 基础上叠加英文音节规则、行尾停顿点标记，
         并最终调用 set_check_count 写入字符。
         """
         if not sentence.characters:
@@ -1275,7 +1275,7 @@ class AutoCheckService:
             if end < len(text) and text[end] in _TRAILING_COMMA_CHARS:
                 english_word_trailing_comma_idx.add(end)
 
-        # ── 行尾 / 空格视为句尾 ──
+        # ── 行尾 / 空格视为停顿点 ──
         _is_blank_line = not text.strip()
         add_line_end = self._flags.get("check_line_end", True) and not _is_blank_line
         check_space_as_line_end = (
@@ -1403,7 +1403,7 @@ class AutoCheckService:
         if keep_existing_timetags:
             for i, char in enumerate(sentence.characters):
                 if i in old_sentence_end_ts:
-                    # 句尾释放 ts 按原字符位恢复并强制句尾标记——
+                    # 停顿点 ts 按原字符位恢复并强制停顿点标记——
                     # 释放点是行尾时刻（时间事实），不随节奏点重算丢弃
                     char.is_sentence_end = True
                     char.sentence_end_ts = old_sentence_end_ts[i]
@@ -2025,14 +2025,14 @@ class AutoCheckService:
             old_singer_map[i] = char.singer_id
 
         # 构建新的 Character 对象列表
-        # 空行（text.strip() 为空）不应被 check_line_end/check_space_as_line_end 强制打句尾 CP
+        # 空行（text.strip() 为空）不应被 check_line_end/check_space_as_line_end 强制打停顿点 CP
         _is_blank_line = not sentence.text.strip()
         add_line_end = self._flags.get("check_line_end", True) and not _is_blank_line
         check_space_as_line_end = (
             self._flags.get("check_space_as_line_end", True) and not _is_blank_line
         )
 
-        # 批 18 #9：英文词组末字母自动标句尾。
+        # 批 18 #9：英文词组末字母自动标停顿点。
         # find_english_words 基于 sentence.text 的字符索引，与 results 一一对应
         # （analyze_sentence 内 chars 由 split_text(text) 产出，逐字符英文路径保持索引对齐）。
         english_sentence_end_idx: set = set()
@@ -2045,15 +2045,15 @@ class AutoCheckService:
                 english_word_end_idx.add(_end - 1)  # 含单字母词，确保空格豁免生效
                 if not _is_single and check_english_word_end:
                     english_sentence_end_idx.add(_end - 1)
-            # 收集紧跟英文单词的逗号，避免其被空格规则误标句尾
+            # 收集紧跟英文单词的逗号，避免其被空格规则误标停顿点
             if _end < len(sentence.text) and sentence.text[_end] in _TRAILING_COMMA_CHARS:
                 english_word_trailing_comma_idx.add(_end)
 
         new_characters: List[Character] = []
         for i, result in enumerate(results):
             is_last = i == len(results) - 1
-            # 空格视为句尾：当前字符后面紧跟空格时额外+1
-            # 当英文单词结尾句尾关闭时，英文单词结尾不受空格规则影响
+            # 空格视为停顿点：当前字符后面紧跟空格时额外+1
+            # 当英文单词结尾停顿点关闭时，英文单词结尾不受空格规则影响
             # 英文单词后的逗号也不受空格规则影响（如 "Smile, Love" 中的逗号）
             is_before_space = (
                 not is_last
@@ -2175,7 +2175,7 @@ class AutoCheckService:
                     # 的「已持有 timestamps 的字符不可被截断」守卫统一处理
                     #（不区分分析模式，与日文/中文路径一致）
                 if i in old_sentence_end_ts:
-                    # 句尾释放 ts 按原字符位恢复并强制句尾标记——重分析后
+                    # 停顿点 ts 按原字符位恢复并强制停顿点标记——重分析后
                     # 该位可能不再被行尾/空格规则标记（如英文词中段承接了
                     # 文件的行尾释放）；释放点是行尾时刻（时间事实），不随
                     # 节奏点重算丢弃
@@ -2729,7 +2729,7 @@ class AutoCheckService:
 
         # Step 5: 还原节奏点（不更新节奏点模式）。在所有改动之后兜底还原，
         # 权威 setter 会把新注音的 ruby.parts 重新对齐回原节奏点数。
-        # 同时还原 is_sentence_end / is_line_end，避免「仅注音」意外改变句尾标记。
+        # 同时还原 is_sentence_end / is_line_end，避免「仅注音」意外改变停顿点标记。
         if saved_cc is not None:
             for s, ccs, ses, les in zip(project.sentences, saved_cc, saved_se, saved_le):
                 self._restore_sentence_check_counts(s, ccs)

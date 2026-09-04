@@ -112,7 +112,7 @@ def compute_annotation_digest(project) -> str:
     """计算工程标注摘要（sha256）。
 
     摘要覆盖对齐所依赖的标注与节奏结构：行数、每字符文本、check_count、
-    句尾标记与全部 RubyPart 文本。刻意不包含时间戳——AI 打轴的目的就是
+    停顿点标记与全部 RubyPart 文本。刻意不包含时间戳——AI 打轴的目的就是
     覆盖时间戳，时间戳变化不应使快照失效。
     """
     payload: List = []
@@ -137,7 +137,7 @@ class PronunciationUnit:
     """一个可打轴 checkpoint 对应的对齐单元。
 
     checkpoint_idx 与 Character 的 all_timestamps 域一致：
-    普通节奏点为 0..check_count-1；句尾呼吸点为虚拟索引 check_count
+    普通节奏点为 0..check_count-1；停顿点为虚拟索引 check_count
     （is_sentence_end=True，无读音、不生成 token）。
     """
 
@@ -176,7 +176,7 @@ class PronunciationUnit:
     ) -> bool:
         """是否为对齐器生成模型 token。
 
-        停顿符占位 part、空白读音与句尾呼吸点不生成 token，但单元仍保留
+        停顿符占位 part、空白读音与停顿点不生成 token，但单元仍保留
         在 plan 中以维持结构映射。pause_chars 由调用方按用户停顿符配置显式
         传入（默认 '^' 的全半角变体）。
         """

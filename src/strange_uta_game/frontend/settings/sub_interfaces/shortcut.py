@@ -64,14 +64,14 @@ class ShortcutSubInterface(SubSettingInterface):
         ("timestamp_up", FIF.UP, "时间戳+步长", "增加选中节奏点时间戳", "ALT+UP:short", "ALT+UP:short", "both", None, None, False),
         ("timestamp_down", FIF.DOWN, "时间戳-步长", "减少选中节奏点时间戳", "ALT+DOWN:short", "ALT+DOWN:short", "both", None, None, False),
 
-        # ── 节奏点与句尾 ──
+        # ── 节奏点与停顿点 ──
         ("add_checkpoint", FIF.PIN, "增加节奏点", "增加当前字符的节奏点数量", "1:short", "Space:short", "split", "增加当前字符的节奏点数量（默认 1）", "增加当前字符的节奏点数量（默认 Space）", False),
         ("remove_checkpoint", FIF.REMOVE, "删除节奏点", "减少当前字符的节奏点数量", "3:short", "BACKSPACE:short", "split", "减少当前字符的节奏点数量（默认 3）", "减少当前字符的节奏点数量（默认 Backspace）", False),
         ("cycle_checkpoint", FIF.SYNC, "切换字内节奏点", "在当前字符的多个节奏点之间循环切换（Alt+→）", "ALT+RIGHT:short", "ALT+RIGHT:short", "both", None, None, False),
         ("cycle_checkpoint_prev", FIF.SYNC, "切换字内节奏点（反向）", "在当前字符的多个节奏点之间反向循环切换（Alt+←）", "ALT+LEFT:short", "ALT+LEFT:short", "both", None, None, False),
-        ("clear_all_checkpoints", FIF.DELETE, "清除所有节奏点", "删除当前字符全部节奏点并取消句尾标记（cc=0，is_sentence_end=False）", "CTRL+\\:short", "CTRL+\\:short", "both", None, None, False),
-        ("toggle_line_end", FIF.TAG, "切换句尾", "切换当前字符的句尾标记", "2:short", ".:short", "split", "切换当前字符的句尾标记（默认 2）", "切换当前字符的句尾标记（默认句号）", False),
-        ("timestamps_to_sentence_end", FIF.TAG, "时间戳转句尾", "取消所有节奏点、清除时间戳并标记为句尾", "P:short", "P:short", "both", None, None, False),
+        ("clear_all_checkpoints", FIF.DELETE, "清除所有节奏点", "删除当前字符全部节奏点并取消停顿点标记（cc=0，is_sentence_end=False）", "CTRL+\\:short", "CTRL+\\:short", "both", None, None, False),
+        ("toggle_line_end", FIF.TAG, "切换停顿点", "切换当前字符的停顿点标记", "2:short", ".:short", "split", "切换当前字符的停顿点标记（默认 2）", "切换当前字符的停顿点标记（默认句号）", False),
+        ("timestamps_to_sentence_end", FIF.TAG, "时间戳转停顿点", "取消所有节奏点、清除时间戳并标记为停顿点", "P:short", "P:short", "both", None, None, False),
 
         # ── 字符与行编辑 ──
         ("edit_ruby", FIF.EDIT, "注音编辑", "编辑当前字符注音", "F2:short", "F2:short", "both", None, None, False),
@@ -147,7 +147,7 @@ class ShortcutSubInterface(SubSettingInterface):
         ("导航与跳转", "nav_prev_line"),
         ("时间轴显示", "toggle_waveform_spectrum"),
         ("打轴与时间戳微调", "tag_now"),
-        ("节奏点与句尾", "add_checkpoint"),
+        ("节奏点与停顿点", "add_checkpoint"),
         ("字符与行编辑", "edit_ruby"),
         ("自动注音", "analyze_rubies"),
         ("演唱者", "singer_manager"),
@@ -248,13 +248,13 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("打轴键（编辑模式）"); tr("打轴键 Extra（编辑模式）")
         tr("后退"); tr("前进"); tr("删除当前时间戳并回滚")
         tr("切换波形/声谱/双谱")
-        tr("增加节奏点"); tr("删除节奏点"); tr("切换句尾")
+        tr("增加节奏点"); tr("删除节奏点"); tr("切换停顿点")
         tr("批量变更"); tr("修改所选字符"); tr("插入导唱符"); tr("自动插入导唱符")
         tr("切换导唱待办"); tr("修改选中行")
         tr("注音分析"); tr("按行注音分析"); tr("注音分析所选字符")
         tr("全文本编辑"); tr("按类型删除注音")
         tr("按行设置演唱者"); tr("应用演唱者")
-        tr("时间戳转句尾"); tr("清除所有节奏点")
+        tr("时间戳转停顿点"); tr("清除所有节奏点")
         tr("快捷导出"); tr("插入空格")
         # 新增：工具栏功能对应的可设置快捷键 title（默认留空）
         tr("注音分析（仅注音）"); tr("按行注音分析（仅注音）")
@@ -296,8 +296,8 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("减少当前字符的节奏点数量")
         tr("减少当前字符的节奏点数量（默认 ]")
         tr("减少当前字符的节奏点数量（默认 Backspace）")
-        tr("切换当前字符的句尾标记")
-        tr("切换当前字符的句尾标记（默认 句号）")
+        tr("切换当前字符的停顿点标记")
+        tr("切换当前字符的停顿点标记（默认 句号）")
         tr("打开批量变更对话框"); tr("打开修改所选字符对话框")
         tr("打开插入导唱符对话框"); tr("根据时间戳自动插入导唱符")
         tr("切换当前字符的导唱待办标记（在字符左上角显示半透明 ✚，提示稍后需要插入导唱符）")
@@ -306,8 +306,8 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("仅分析当前行选中字符的注音")
         tr("打开全文本编辑界面"); tr("按类型删除注音对话框")
         tr("按行批量设置演唱者"); tr("为选中字符设置演唱者")
-        tr("取消所有节奏点、清除时间戳并标记为句尾")
-        tr("删除当前字符全部节奏点并取消句尾标记（cc=0，is_sentence_end=False）")
+        tr("取消所有节奏点、清除时间戳并标记为停顿点")
+        tr("删除当前字符全部节奏点并取消停顿点标记（cc=0，is_sentence_end=False）")
         tr("使用默认导出格式快速导出到文件")
         tr("在当前字符后插入空格")
         # 新增：工具栏功能对应的 content
@@ -337,7 +337,7 @@ class ShortcutSubInterface(SubSettingInterface):
         tr("打轴模式（音乐播放时）"); tr("编辑模式（音乐暂停时）")
         # _SHORTCUT_GROUPS 分组标题
         tr("播放控制"); tr("导航与跳转"); tr("时间轴显示"); tr("打轴与时间戳微调")
-        tr("节奏点与句尾"); tr("字符与行编辑"); tr("自动注音")
+        tr("节奏点与停顿点"); tr("字符与行编辑"); tr("自动注音")
         tr("演唱者"); tr("时间戳工具"); tr("文件与导出")
         tr("固定功能（不可修改）")
 

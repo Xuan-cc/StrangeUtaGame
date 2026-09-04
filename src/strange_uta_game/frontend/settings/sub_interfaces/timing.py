@@ -163,8 +163,8 @@ class TimingSubInterface(SubSettingInterface):
         self._tr_register(g_sound, title_source="按键音效")
         self.card_keysound = self._tr_register(
             SwitchSettingCard(FIF.MUSIC, tr("按键音"),
-                tr("打轴时按下按键播放按下音、抬起句尾按键播放抬起音"), parent=g_sound),
-            title_source="按键音", content_source="打轴时按下按键播放按下音、抬起句尾按键播放抬起音")
+                tr("打轴时按下按键播放按下音、抬起停顿点按键播放抬起音"), parent=g_sound),
+            title_source="按键音", content_source="打轴时按下按键播放按下音、抬起停顿点按键播放抬起音")
         self.card_keysound_volume = self._tr_register(
             SpinSettingCard(FIF.VOLUME, tr("按键音音量"),
                 tr("按键音的播放音量（100 = 原始音量）"),

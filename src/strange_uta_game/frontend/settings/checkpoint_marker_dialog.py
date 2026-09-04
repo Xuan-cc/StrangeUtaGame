@@ -27,7 +27,7 @@ DEFAULT_MARKERS = {
 _LAYOUT = [
     ("cp_first",        "首节奏点",   "cp_first_timed",          "cp_first_empty"),
     ("cp_multi",        "后续节奏点", "cp_multi_timed",          "cp_multi_empty"),
-    ("cp_sentence_end", "句尾标记",   "cp_sentence_end_timed",   "cp_sentence_end_empty"),
+    ("cp_sentence_end", "停顿点标记",   "cp_sentence_end_timed",   "cp_sentence_end_empty"),
 ]
 
 

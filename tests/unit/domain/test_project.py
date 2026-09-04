@@ -102,7 +102,7 @@ class TestProject:
         s.characters[0].check_count = 2
         s.characters[0].timestamps = [1000, 1500]
         s.characters[0]._update_offset_timestamps()
-        # b: 一个 checkpoint + 句尾呼吸点
+        # b: 一个 checkpoint + 停顿点
         s.characters[1].check_count = 1
         s.characters[1].timestamps = [2000]
         s.characters[1].is_sentence_end = True
@@ -122,7 +122,7 @@ class TestProject:
         assert out[0][2:6] == (0, 0, 0, False)
         assert out[1][2:6] == (0, 0, 1, False)
         assert out[2][2:6] == (0, 1, 0, False)
-        # 句尾呼吸点：cp_idx == check_count，is_sentence_end True
+        # 停顿点：cp_idx == check_count，is_sentence_end True
         assert out[3][2:6] == (0, 1, 1, True) and out[3][0] == 2600
         # 同一字符仅首个 checkpoint 在前端去重逻辑里携带标签（此处验证字符文本一致）
         assert out[0][1] == "a" and out[1][1] == "a"

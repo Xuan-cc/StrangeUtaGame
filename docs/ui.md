@@ -9,16 +9,16 @@ StrangeUtaGame 提供了三套主要的编辑界面，分别针对打轴、行�
 
 - **职责**：
     - 类似节奏游戏的打轴体验，全键盘驱动；实时预览卡拉OK走字 (KaraokePreview)。
-    - **工具栏**：「修改所选字符」(ModifyCharacterDialog) 修改文本/注音/节奏点数量，可注册到用户字典，保持句尾标记与演唱者继承；「插入导唱符」(InsertGuideSymbolDialog) 在选中字符前批量插入导唱字符（如 `>`），自动计算时间戳并设置 `linked_to_next`。撤销/重做保留 Ctrl+Z/Y 快捷键。
+    - **工具栏**：「修改所选字符」(ModifyCharacterDialog) 修改文本/注音/节奏点数量，可注册到用户字典，保持停顿点标记与演唱者继承；「插入导唱符」(InsertGuideSymbolDialog) 在选中字符前批量插入导唱字符（如 `>`），自动计算时间戳并设置 `linked_to_next`。撤销/重做保留 Ctrl+Z/Y 快捷键。
     - **查询候补字典**（`dict_candidate_dialog`）：批量变更 / 修改所选字符 / 编辑字符(F2) 三个对话框在执行(确定)与取消之间新增「查询候补字典」按钮。点击弹出 `DictCandidateDialog`，列出词典（本地 + 启用网络源，经 `load_effective_dictionary`）中与原文**完全匹配**的条目；双击或选中点「应用」后，按所选条目的 annotated reading 完整解析（RubyPart 按 `|` 拆 mora、check_count = RubyPart 数、同 block 相邻字符连词），强制「直接应用」分段模式填充字符行，随即执行原对话框的应用逻辑并关闭两个窗口。复用后端 `_parse_dict_reading`。
     - **变速控制**：Transport Bar QLineEdit 直接输入 20-200% 值（速度滑块范围 0.2×–2.0×），Q/W 快捷键 ±5% 步进，音量 Ctrl+Q/Ctrl+W ±5%。
     - **全局 Offset**：工具栏 QLineEdit 实时调整 -2000~2000ms，经 `Character.set_offset()` 联动 `global_timestamps`。
-    - **单击跳转**：单击字符跳到其第一个 checkpoint；无 checkpoint 的字符（check_count=0 且非句尾）视觉焦点保持该字符（便于添加节奏点），内部位置仍移到最近有效 checkpoint。
+    - **单击跳转**：单击字符跳到其第一个 checkpoint；无 checkpoint 的字符（check_count=0 且非停顿点）视觉焦点保持该字符（便于添加节奏点），内部位置仍移到最近有效 checkpoint。
     - **渲染**：逐字高亮同步 Ruby；无时间戳字符按邻近组时间连读；连词组合并渲染。
     - **Enter 换行**：在编辑模式下按 Enter 键，在当前字符处插入换行，将当前行拆分为两行。
     - **Shift+Enter 合并上一行**：在编辑模式下按 Shift+Enter 键，将当前行合并到上一行末尾。
     - **Delete 删除**：在编辑模式下按 Delete 键，删除选中字符（支持划词多选）。
-    - **右键菜单**：右键点击字符弹出上下文菜单，提供删除字符、删除时间戳、插入空格、合并行、删除行、插入空行、增减节奏点、切换句尾、设置演唱者等快捷操作。
+    - **右键菜单**：右键点击字符弹出上下文菜单，提供删除字符、删除时间戳、插入空格、合并行、删除行、插入空行、增减节奏点、切换停顿点、设置演唱者等快捷操作。
 
 ### 2. EditInterface (行编辑界面)
 提供基于表格的项目全局视图。
@@ -27,10 +27,10 @@ StrangeUtaGame 提供了三套主要的编辑界面，分别针对打轴、行�
     - 展示所有歌词行及其元数据（行号、演唱者、连词标记等）。
     - **行级操作**：添加行、删除行、复制行、插入行，支持多行选择。
     - **键盘快捷键**：Ctrl+C 复制行、Ctrl+V 粘贴行、Delete 删除行。
-    - **LineDetailDialog**：双击行打开详细编辑对话框，可逐个 Character 编辑注音、节奏点、句尾标记（is_sentence_end）和演唱者。
+    - **LineDetailDialog**：双击行打开详细编辑对话框，可逐个 Character 编辑注音、节奏点、停顿点标记（is_sentence_end）和演唱者。
     - **批量变更对话框**：支持多字符划选自动填充注音；移除"将匹配词设为连词"复选框，变更为继承原字符的连词属性。
     - **字符级操作**：在行详情中支持添加、删除、复制、插入字符，Ctrl+C/V/Delete 快捷键。
-    - 操作后自动维护领域不变量（is_line_end、is_sentence_end、check_count、linked_to_next）。句尾字符允许 check_count=0（无普通节奏点时以前一个字符的 checkpoint 为开始）。
+    - 操作后自动维护领域不变量（is_line_end、is_sentence_end、check_count、linked_to_next）。停顿点字符允许 check_count=0（无普通节奏点时以前一个字符的 checkpoint 为开始）。
 
 ### 3. RubyInterface (全文本编辑（已废弃不建议使用）界面)
 专注于注音编辑和文本调整。
@@ -48,7 +48,7 @@ StrangeUtaGame 提供了三套主要的编辑界面，分别针对打轴、行�
 - **职责**：
     - **Offset 校准（可视化弹窗）**：深色画布上 2 个白色滑块按 BPM 匀速滑过中央红色判定线（接近时放大），`sd.OutputStream` 实时生成节拍器点击音，spin-wait 亚毫秒级定时；空格敲击记录偏移，左上角实时显示最近/平均偏移；BPM 60-240 可调；窗口关闭调 `_stop_metronome()` 清理。
     - **打轴设定**：默认打轴偏移 `tag_offset_ms`（默认 0ms）；全局偏移按项目存于 `Project.global_offset_ms`（渲染/导出共用同一套 `global_timestamps`）；微调时间戳步长 `timing_adjust_step_ms`（默认 10ms）；后退/前进默认 2000/3000ms。快捷键可在「设置 → 快捷键」配置（默认 `add_checkpoint`=`[`、`remove_checkpoint`=`]`、`speed_down`/`speed_up`=Q/W、`toggle_line_end`=`.`、`toggle_word_join`=F3 等），支持双绑定与长按绑定（按键持续 300ms 以上触发不同功能）。
-    - **Auto Check 设置**：小写假名 check 开关、句尾判定开关。
+    - **Auto Check 设置**：小写假名 check 开关、停顿点判定开关。
     - **定时自动保存**：启用开关 + 间隔 1~60 分钟。
     - **用户字典管理**：条目按优先级排列（新增置顶），上移/下移调整；支持导入 RL 字典（`原文\t注音1,注音2...`，`＋` 代表连词）；独立存储于 `dictionary.json`，首次启动自动从内嵌 1757 条初始化，重置配置不影响字典。
     - **配置管理（About 界面）**：「打开目录」「更改位置」(通过 `.config_redirect`)；`config/` 作为 package data 嵌入，缺失时回退内嵌版本。

@@ -25,12 +25,12 @@
 ### 关键不变式 / 写入链路
 
 - `Character.push_to_ruby()`（`models.py:255`）做三件事：
-  1. `ruby.timestamps = self.all_timestamps`（= `timestamps[]` + 句尾点，绝对时间戳）
+  1. `ruby.timestamps = self.all_timestamps`（= `timestamps[]` + 停顿点，绝对时间戳）
   2. `ruby.singer_id = self.singer_id`
   3. 每个 part：`part.offset_ms = timestamps[i] - timestamps[0]`（**相对该字符第一个 cp**）
 - 改时间戳的标准副作用：写 raw → `_update_offset_timestamps()` → `push_to_ruby()`
   （见参考实现 `TimingService.adjust_current_timestamp`，`timing_service.py:784`）。
-- 句尾呼吸点走 `Character.set_sentence_end_ts()`（内部已含上面两步），它进 `ruby.timestamps`
+- 停顿点走 `Character.set_sentence_end_ts()`（内部已含上面两步），它进 `ruby.timestamps`
   末位但**不是 part**（无 `part.offset_ms`）。
 - `rebuild_global_checkpoints()` 只按 `check_count` 重建 cp **位置索引**，与时间戳值无关 →
   **拖拽改值不需要 rebuild**。
@@ -46,7 +46,7 @@
 | D3 | 选择 | 单击把手 = seek + 选中；Ctrl+单击 = 多选切换；拖已选把手 = 改时间 |
 | D4 | 批量拖动 | 多选 = 刚性平移，共享单一 `delta_ms` |
 | D5 | 越界 | **允许**越过相邻点，提交后自动重判为既有紫色非单调警告线 |
-| D6 | 句尾呼吸点 | **可拖**（走 `set_sentence_end_ts` 分支） |
+| D6 | 停顿点 | **可拖**（走 `set_sentence_end_ts` 分支） |
 | D7 | 吸附 | **不做** |
 | D8 | 撤销 | ~~拖拽不接入撤销命令~~ → **修订：拖拽接入撤销**（实测发现拖拽是大幅手势、无简单反向，缺撤销痛点明显）。复用 `_register_timestamp_undo` + `SentenceSnapshotCommand`，Ctrl+Z/Ctrl+Y 经既有 `_on_undo`/`_on_redo` 还原。不改 Alt+↑/↓ 现有逻辑 |
 | D9 | 拖拽反馈 | 跟随光标的**偏差值徽标**（主），锚点绝对时间（辅） |
@@ -95,10 +95,10 @@
 
 1. **按 Character 分组**应用：
    - 普通 cp：`char.timestamps[cp_idx] += delta_ms`
-   - 句尾点：`char.set_sentence_end_ts(raw + delta_ms)`
+   - 停顿点：`char.set_sentence_end_ts(raw + delta_ms)`
    - **组级 0 夹紧**：`delta = max(delta, -min(本组选中 raw_ts))`，保证整体刚性、无 cp 跌破 0。
    - 每个 Character 全部写完后 **只调一次** `_update_offset_timestamps()` + `push_to_ruby()`
-     （句尾分支已内含，不重复）。
+     （停顿点分支已内含，不重复）。
 2. **不**调 `rebuild_global_checkpoints`。
 3. **delta 域恒等**：因 offset 是项目级统一值，`delta_raw == delta_global`，写入直接用 `delta_ms`。
 
@@ -127,7 +127,7 @@
 ```python
 self._suppress_cp_cursor_move = True
 try:
-    self._timing_service.move_to_checkpoint(line, char, cp)  # 句尾点 cp=check_count 亦可解析
+    self._timing_service.move_to_checkpoint(line, char, cp)  # 停顿点 cp=check_count 亦可解析
 finally:
     self._suppress_cp_cursor_move = False
 self.preview.set_current_position(line, char)
@@ -296,7 +296,7 @@ test_timeline_tag_drag 提交槽 6 项不变式），全量 `tests/unit` 相对 
 
 - [x] 单击把手：seek + 选中蓝把手 + preview 选中同步（`tag_clicked` → `_sync_preview_to_handle`）。
 - [x] Ctrl 多选：多选切换；刚性拖动共享 delta（`tags_drag_committed` 携带 handles+delta）。
-- [x] 拖 cp0 / 拖句尾点：ruby.timestamps 与 part.offset_ms 正确（test_timeline_tag_drag 覆盖）。
+- [x] 拖 cp0 / 拖停顿点：ruby.timestamps 与 part.offset_ms 正确（test_timeline_tag_drag 覆盖）。
 - [x] 越界：提交后由 `set_time_tags` 按 running_max 自动重判为紫色非单调线。
 - [x] 组级 0 夹紧：`_clamp_drag_delta`（widget 预览）+ 提交槽逐 cp `max(0)` 安全网。
 - [x] preview / 行字信息 / 状态栏 / 脏标记 + auto-save：提交槽四件套 + `notify('timetags')`。

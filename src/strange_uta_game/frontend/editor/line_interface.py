@@ -45,7 +45,7 @@ import re
 #   - Checkpoint 列：每字符一个计数，逗号分隔（如 "2,2,1"）；累加 = 全行 cp 总数 K
 #   - 注音 列：每个 RubyPart(mora) 一段，逗号分隔，全行展平（共 K 段）；空段=无注音
 #   - 时间标签 列：每个 checkpoint 一段时间戳，逗号分隔，按序对齐到 K 个 cp；
-#     允许空段（缺省/未打轴）；句尾释放点附在第 K 段之后
+#     允许空段（缺省/未打轴）；停顿点点附在第 K 段之后
 #   - 演唱者 列：每字符一个名字，逗号分隔
 # 写回：把各列重新拼成项目「带时间戳行内格式」(annotated_text)，交由
 #   parse_timed_line 解析为 Character —— 绝不在前端重切 mora。
@@ -78,7 +78,7 @@ def _row_cells_from_chars(
                 ruby_segs.append("")
     ruby_str = ",".join(ruby_segs) if has_ruby else ""
 
-    # 时间标签：每 cp 一段全局时间戳 + 句尾释放点；整行无时间戳则留空
+    # 时间标签：每 cp 一段全局时间戳 + 停顿点点；整行无时间戳则留空
     time_segs: List[str] = []
     any_ts = False
     for c in chars:
@@ -114,7 +114,7 @@ def _row_to_block_str(
     """把一行扁平列数据拼成 annotated_text 的 ``{原文||...}`` 带时间戳块串。
 
     每字符按其 check_count 取走对应的 mora / 时间戳段，组成
-    ``[ts]mora|[ts]mora`` 段；缺省时间戳用占位 ``[T]``；句尾释放点贴在末字段尾。
+    ``[ts]mora|[ts]mora`` 段；缺省时间戳用占位 ``[T]``；停顿点点贴在末字段尾。
     """
     total = sum(check_counts)
     segs: List[str] = []
@@ -409,12 +409,12 @@ class LineDetailDialog(QDialog):
         # 提示
         hint = QLabel(self.tr(
             "连词合并为一行；除「字符」外各列均用逗号「,」分隔\n"
-            "双击可编辑「字符」「注音」「Checkpoint数」「句尾」「时间标签」「演唱者」列\n"
+            "双击可编辑「字符」「注音」「Checkpoint数」「停顿点」「时间标签」「演唱者」列\n"
             "Checkpoint数：每字符一项（如 2,2,1），累加为本行节奏点总数 K\n"
             "注音：每个 mora 一段、全行展平，段数须等于 K；留空表示整行无注音，不再自动重切\n"
             "时间标签：每个节奏点一段、按序对齐到 K 个节奏点，允许空段(,,)留空；"
-            "句尾释放点写在最后；总数不得超过 K(+句尾1)\n"
-            "句尾列填写「是」标记为句尾（独立记录释放时间），留空取消；演唱者每字符一项"
+            "停顿点写在最后；总数不得超过 K(+停顿点1)\n"
+            "停顿点列填写「是」标记为停顿点（独立记录释放时间），留空取消；演唱者每字符一项"
         ))
         self.vbox.addWidget(hint)
 
@@ -439,7 +439,7 @@ class LineDetailDialog(QDialog):
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels([
             self.tr("字符"), self.tr("注音"), self.tr("Checkpoint数"),
-            self.tr("句尾"), self.tr("时间标签"), self.tr("演唱者"),
+            self.tr("停顿点"), self.tr("时间标签"), self.tr("演唱者"),
         ])
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -743,7 +743,7 @@ class LineDetailDialog(QDialog):
             return None, errors
         total_cp = sum(check_counts)
 
-        # --- 句尾 (col 3) —— 末字 ---
+        # --- 停顿点 (col 3) —— 末字 ---
         is_sentence_end = cell(3).strip() == "是"
 
         # --- 注音 (col 1) —— 全行展平，每段一个 mora；段数须 == K ---
@@ -777,7 +777,7 @@ class LineDetailDialog(QDialog):
                 errors.append(
                     f"行 {row_idx + 1}: 时间戳个数 {len(segs)} 超过上限 "
                     f"{max_allowed}（节奏点 {total_cp}"
-                    f"{'+句尾1' if is_sentence_end else ''}）"
+                    f"{'+停顿点1' if is_sentence_end else ''}）"
                 )
                 return None, errors
             for seg in segs:

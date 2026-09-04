@@ -8,7 +8,7 @@
 
 节奏点时间戳的**唯一**写入入口（AGENTS.md 不变量）。
 
-- `on_key_changed(timestamp_ms, key_type)`：统一按键入口，pressed/released 全推给当前选中 cp，由 cp 角色过滤——普通 cp 仅响应 `pressed`，句尾末尾 cp（`is_sentence_end_tail_cp`）仅响应 `released`。写入后单次推进。
+- `on_key_changed(timestamp_ms, key_type)`：统一按键入口，pressed/released 全推给当前选中 cp，由 cp 角色过滤——普通 cp 仅响应 `pressed`，停顿点 cp（`is_sentence_end_tail_cp`）仅响应 `released`。写入后单次推进。
 - `adjust_current_timestamp(delta_ms)`：微调当前 cp 时间戳。普通 cp 分支显式调 `_update_offset_timestamps()` + `push_to_ruby()`，避免 `global_timestamps` 与基础时间戳失同步。
 - 播放位置与选中 cp（`Project.selected_checkpoint_*` / `_current_position`）同步维护。
 - Offset 校准基于按键按下。打轴时覆盖现有时间戳，不提示时间倒退。
@@ -17,7 +17,7 @@
 
 - `analyze_sentence`：为所有字符类型生成注音（汉字、假名、英文、数字、符号、空格）。执行链路：用户词典 → e2k 引擎 → 用户词典整词回退 → e2k 静态词表 → 英文 fallback。
 - `apply_to_project`：将分析结果写入 Sentence（设置 check_count 和 Ruby）。
-- `update_checkpoints_from_rubies`：基于当前注音数据和 auto_check_flags 重算节奏点，不重新分析。批 18 #9 起覆写英文词组节奏点（首=1 cp，中=0，末字标句尾）。
+- `update_checkpoints_from_rubies`：基于当前注音数据和 auto_check_flags 重算节奏点，不重新分析。批 18 #9 起覆写英文词组节奏点（首=1 cp，中=0，末字标停顿点）。
 - **节奏点 vs 注音**：两个独立过程。注音流程不含标点；节奏点流程含标点（`checkpoint_on_punctuation` 控制，默认关）。
 - **单字拆分（`_try_split_to_chars`）**：5 级 Pass 逐级 fallback：
     1. 约束回溯（分析器 + pykakasi 候选读音精确匹配前缀）
@@ -28,7 +28,7 @@
     失败则连词（首字承载全部读音，其余 check_count=0）。
 - **auto_check_flags**：按字符类型控制节奏点（hiragana / katakana / kanji / alphabet / digit / symbol / space / small_kana / check_n / check_sokuon / check_space_as_line_end / check_parentheses / check_line_start 等）。
 - **only_noruby 模式**：`apply_to_project(only_noruby=True)` 跳过已注音字符，用于启动/主页自动注音避免覆盖用户导入。
-- 句尾字符允许 check_count=0（无普通 cp，仅靠 sentence_end_ts 结束句子）。
+- 停顿点字符允许 check_count=0（无普通 cp，仅靠 sentence_end_ts 结束句子）。
 
 ### ProjectService（项目服务）
 

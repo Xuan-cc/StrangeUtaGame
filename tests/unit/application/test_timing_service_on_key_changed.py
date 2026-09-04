@@ -3,9 +3,9 @@
 覆盖 5 个场景:
 1. 普通 cp 收到 'pressed' → 写入时间戳 + 推进
 2. 普通 cp 收到 'released' → 忽略，不推进
-3. 句尾末尾 cp 收到 'pressed' → 忽略，不推进
-4. 句尾末尾 cp 收到 'released' → 写入 sentence_end_ts + 推进
-5. 句尾字符 check_count=0 时仅有句尾 cp，'released' 写入 sentence_end_ts
+3. 停顿点 cp 收到 'pressed' → 忽略，不推进
+4. 停顿点 cp 收到 'released' → 写入 sentence_end_ts + 推进
+5. 停顿点字符 check_count=0 时仅有停顿点 cp，'released' 写入 sentence_end_ts
 """
 
 from typing import Callable, Optional
@@ -90,8 +90,8 @@ class FakeAudioEngine(IAudioEngine):
 
 
 def _make_project_normal_then_sentence_end():
-    """构造: '愛' (check_count=2, 非句尾) + '空' (check_count=2, is_sentence_end=True)
-    全局 cp 序列: (0,0,0), (0,0,1), (0,1,0), (0,1,1), (0,1,2)←句尾末尾
+    """构造: '愛' (check_count=2, 非停顿点) + '空' (check_count=2, is_sentence_end=True)
+    全局 cp 序列: (0,0,0), (0,0,1), (0,1,0), (0,1,1), (0,1,2)←停顿点
     """
     project = Project()
     singer = Singer(name="default")
@@ -109,8 +109,8 @@ def _make_project_normal_then_sentence_end():
 
 
 def _make_project_sentence_end_zero_check():
-    """构造: '光' (check_count=2, 非句尾) + '。' (check_count=0, is_sentence_end=True)
-    全局 cp 序列: (0,0,0), (0,0,1), (0,1,0)←句尾末尾 (check_count=0 时 cp_idx==0==check_count)
+    """构造: '光' (check_count=2, 非停顿点) + '。' (check_count=0, is_sentence_end=True)
+    全局 cp 序列: (0,0,0), (0,0,1), (0,1,0)←停顿点 (check_count=0 时 cp_idx==0==check_count)
     """
     project = Project()
     singer = Singer(name="default")
@@ -171,18 +171,18 @@ def test_normal_cp_released_ignored(service):
 
 
 def test_sentence_end_tail_cp_pressed_ignored(service):
-    """场景3: 句尾末尾 cp 收到 pressed → 忽略"""
+    """场景3: 停顿点 cp 收到 pressed → 忽略"""
     project, sentence, c1, c2 = _make_project_normal_then_sentence_end()
     service.set_project(project)
 
-    # 推进到句尾末尾 cp = (0,1,2)
+    # 推进到停顿点 cp = (0,1,2)
     assert service.move_to_checkpoint(0, 1, 2)
     pos = service.get_current_position()
     assert (pos.line_idx, pos.char_idx, pos.checkpoint_idx) == (0, 1, 2)
 
     service.on_key_changed(2000, "pressed")
 
-    # 句尾 ts 不应被写入
+    # 停顿点 ts 不应被写入
     assert c2.sentence_end_ts is None
     # 位置不变
     pos_after = service.get_current_position()
@@ -190,7 +190,7 @@ def test_sentence_end_tail_cp_pressed_ignored(service):
 
 
 def test_sentence_end_tail_cp_released_writes(service):
-    """场景4: 句尾末尾 cp 收到 released → 写入 sentence_end_ts + 推进"""
+    """场景4: 停顿点 cp 收到 released → 写入 sentence_end_ts + 推进"""
     project, sentence, c1, c2 = _make_project_normal_then_sentence_end()
     service.set_project(project)
 
@@ -206,16 +206,16 @@ def test_sentence_end_tail_cp_released_writes(service):
 
 
 def test_sentence_end_zero_check_count_released_writes(service):
-    """场景5: 句尾字符 check_count=0 时仅有句尾 cp（cp_idx=0=check_count），released 写入"""
+    """场景5: 停顿点字符 check_count=0 时仅有停顿点 cp（cp_idx=0=check_count），released 写入"""
     project, sentence, c1, c_end = _make_project_sentence_end_zero_check()
     service.set_project(project)
 
-    # 推进到句尾末尾 cp = (0, 1, 0)
+    # 推进到停顿点 cp = (0, 1, 0)
     assert service.move_to_checkpoint(0, 1, 0)
     pos = service.get_current_position()
     assert (pos.line_idx, pos.char_idx, pos.checkpoint_idx) == (0, 1, 0)
 
-    # pressed 应被忽略（因为是句尾末尾 cp）
+    # pressed 应被忽略（因为是停顿点 cp）
     service.on_key_changed(4000, "pressed")
     assert c_end.sentence_end_ts is None
 

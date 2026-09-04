@@ -41,7 +41,7 @@ class ParsedLine:
     Attributes:
         text: 行文本
         timetags: [(char_idx, timestamp_ms), ...] 列表（每字首 ts）
-        line_end_ts: 行尾释放时间戳（句尾拖音终止点，毫秒）。
+        line_end_ts: 行尾释放时间戳（停顿点拖音终止点，毫秒）。
             ASS 解析器会把最后一个 \\k 的尾部时长写到这里，
             转换时绑给末字符的 sentence_end_ts。
         ruby_map: char_idx → (parts_list, span_length)。
@@ -87,7 +87,7 @@ class NicokaraParsedLine:
     # char_idx → singer_key 映射（singer_key 如 "sv1"、"sv9"）
     char_singer_map: Dict[int, str] = field(default_factory=dict)
     line_singer_key: str = ""  # 行级别默认演唱者 key
-    line_end_ts: Optional[int] = None  # 行末未消费的时间戳（句尾释放 ts）
+    line_end_ts: Optional[int] = None  # 行末未消费的时间戳（停顿点 ts）
     # char_idx → 释放 ts（句中双 ts 模式，绑给 linked group 尾字符）
     release_ts_map: Dict[int, int] = field(default_factory=dict)
 
@@ -380,7 +380,7 @@ class LRCParser(LyricParser):
 
         格式：[00:00.000]春[00:01.086]日[00:01.629]影[00:02.500]
                                                     ^ 末尾无文字的时间戳
-                                                      = 句尾释放点 line_end_ts
+                                                      = 停顿点 line_end_ts
 
         Returns:
             (歌词文本, 时间标签列表, line_end_ts)
@@ -404,7 +404,7 @@ class LRCParser(LyricParser):
             # 提取字符
             chars = line_text[start_pos:end_pos]
 
-            # 末尾时间戳后只有空白（含全角空格）仍表示句尾释放点。
+            # 末尾时间戳后只有空白（含全角空格）仍表示停顿点。
             # 行中间的全角空格继续作为歌词字符保留。
             if i == len(matches) - 1 and timetags and (
                 not chars or chars.isspace()
@@ -497,7 +497,7 @@ class LRCParser(LyricParser):
 
             chars = line_text[start_pos:end_pos]
 
-            # 末尾增强标签后只有空白（含全角空格）仍是句尾释放点，
+            # 末尾增强标签后只有空白（含全角空格）仍是停顿点，
             # 不把尾随排版空格变成歌词；中间的全角空格仍保留。
             if i == len(angle_matches) - 1 and timetags and (
                 not chars or chars.isspace()
@@ -840,7 +840,7 @@ class NicokaraParser:
             for ch in text_between:
                 lyric_chars.append(ch)
                 if pending_ts is not None:
-                    # 空格不接收起始 ts：将 pending_ts 转为前一字符的句尾释放 ts
+                    # 空格不接收起始 ts：将 pending_ts 转为前一字符的停顿点 ts
                     if ch.isspace() and len(lyric_chars) >= 2:
                         release_ts_map[len(lyric_chars) - 2] = pending_ts
                         pending_ts = None
@@ -880,7 +880,7 @@ class NicokaraParser:
                 char_singer_map[char_idx] = current_singer
             char_idx += 1
 
-        # 如果最后有未消费的时间戳（行末时间戳），作为整行的句尾释放 ts
+        # 如果最后有未消费的时间戳（行末时间戳），作为整行的停顿点 ts
         # 由 nicokara_result_to_sentences 绑定到最后一个有起始 ts 的字符
         line_end_ts: Optional[int] = pending_ts if pending_ts is not None else None
 
@@ -989,8 +989,8 @@ def nicokara_result_to_sentences(
 
     解析规则（与导出器对齐）：
     - 每个字符的第一个时间戳是起始时间戳
-    - 如果一个字符有2个时间戳，第二个是句尾释放时间戳（is_sentence_end=True）
-    - 行末的未消费时间戳是最后一个字符的句尾释放时间戳
+    - 如果一个字符有2个时间戳，第二个是停顿点时间戳（is_sentence_end=True）
+    - 行末的未消费时间戳是最后一个字符的停顿点时间戳
 
     Args:
         result: Nicokara 解析结果
@@ -1117,7 +1117,7 @@ def nicokara_result_to_sentences(
         # 不该占自己的节奏点。覆盖 from_text 默认的 cc=1，以及 release_ts_map /
         # line_end_ts 分支为「无起始 ts 的释放字」临时设的 cc=1。
         # 例：ちゃ 的 ゃ、how 的 o/w、many 的 a/n/y、さん 的 ん、行首空格。
-        # 句尾释放（is_sentence_end + sentence_end_ts）与此独立：follower 仍可携带
+        # 停顿点（is_sentence_end + sentence_end_ts）与此独立：follower 仍可携带
         # 释放 ts（total_timing_points = 0 + 1），导出时只写释放 ts、不写起始 ts。
         for _ch in sentence.characters:
             if not _ch.timestamps and _ch.ruby is None and _ch.check_count != 0:
@@ -1868,7 +1868,7 @@ def parse_to_sentences(
                     anchor.is_sentence_end = False
                     anchor.sentence_end_ts = None
             # 文件没有行尾释放事实（如逐行 LRC 无行尾标签）时不做兜底：
-            # 不凭空伪造 sentence_end_ts——句尾标记留给 from_text/分析规则，
+            # 不凭空伪造 sentence_end_ts——停顿点标记留给 from_text/分析规则，
             # 释放时刻保持「待测」（[>T]），导出侧各自决定缺省策略。
 
         # 核心：派生 global_timestamps / global_sentence_end_ts，

@@ -1247,8 +1247,8 @@ Install log: {p}</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_check.py" line="49" />
-        <source>空格视为句尾</source>
-        <translation>Treat space as sentence end</translation>
+        <source>空格视为停顿点</source>
+        <translation>Treat space as pause point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_check.py" line="47" />
@@ -1272,8 +1272,8 @@ Install log: {p}</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_check.py" line="50" />
-        <source>英文单词结尾句尾</source>
-        <translation>Treat English word-end as sentence-end</translation>
+        <source>英文单词结尾停顿点</source>
+        <translation>Treat English word-end as pause-point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/auto_check.py" line="48" />
@@ -1437,8 +1437,8 @@ Install log: {p}</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2758" />
-        <source>生成文本最后一个字符的句尾时间戳回退</source>
-        <translation>Sentence-end timestamp rollback for the last character</translation>
+        <source>生成文本最后一个字符的停顿点时间戳回退</source>
+        <translation>Pause-point timestamp rollback for the last character</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2748" />
@@ -2025,8 +2025,8 @@ All {n} matched timestamps will be lost. Continue?</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/bulk_change_dialog.py" line="233" />
-        <source>连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；句尾=停顿点，允许连词）</source>
-        <translation>Link to next character (last char/line end cannot be linked — skipped and warned on submit; sentence end = pause, can be linked)</translation>
+        <source>连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；停顿点允许连词）</source>
+        <translation>Link to next character (last char/line end cannot be linked — skipped and warned on submit; pause points can be linked)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/bulk_change_dialog.py" line="681" />
@@ -2176,8 +2176,8 @@ All {n} matched timestamps will be lost. Continue?</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="1143" />
-        <source>连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；句尾=停顿点，允许连词）</source>
-        <translation>Link to next character (last char/line end cannot be linked — skipped and warned on submit; sentence end = pause, can be linked)</translation>
+        <source>连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；停顿点允许连词）</source>
+        <translation>Link to next character (last char/line end cannot be linked — skipped and warned on submit; pause points can be linked)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="1072" />
@@ -3130,10 +3130,10 @@ Continue anyway?</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2881" />
-        <source>以下位置为末字/句尾/行尾，不能设置连词，已自动跳过：
+        <source>以下位置为末字/行尾，不能设置连词，已自动跳过：
 
 </source>
-        <translation>These positions are last-char/sentence-end/line-end and cannot be linked — auto-skipped:
+        <translation>These positions are last-char/line-end and cannot be linked — auto-skipped:
 
 </translation>
     </message>
@@ -3318,13 +3318,13 @@ Never — disable auto-scroll</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="1339" />
-        <source>句尾</source>
-        <translation>Sentence end</translation>
+        <source>停顿点</source>
+        <translation>Pause point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="8545" />
-        <source>句尾{m:02d}:{s:02d}.{ms:03d}</source>
-        <translation>End {m:02d}:{s:02d}.{ms:03d}</translation>
+        <source>停顿点{m:02d}:{s:02d}.{ms:03d}</source>
+        <translation>Pause point {m:02d}:{s:02d}.{ms:03d}</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing_interface.py" line="2171" />
@@ -5744,8 +5744,8 @@ Imported files fill this area and are parsed when creating a project.</translati
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1890" />
-        <source>设置/取消句尾</source>
-        <translation>Toggle sentence end</translation>
+        <source>设置/取消停顿点</source>
+        <translation>Toggle pause point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/karaoke_preview.py" line="1909" />
@@ -5794,8 +5794,8 @@ Imported files fill this area and are parsed when creating a project.</translati
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="442" />
-        <source>句尾</source>
-        <translation>Sentence end</translation>
+        <source>停顿点</source>
+        <translation>Pause point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="429" />
@@ -5885,17 +5885,17 @@ Imported files fill this area and are parsed when creating a project.</translati
     <message>
         <location filename="src/strange_uta_game/frontend/editor/line_interface.py" line="410" />
         <source>连词合并为一行；除「字符」外各列均用逗号「,」分隔
-双击可编辑「字符」「注音」「Checkpoint数」「句尾」「时间标签」「演唱者」列
+双击可编辑「字符」「注音」「Checkpoint数」「停顿点」「时间标签」「演唱者」列
 Checkpoint数：每字符一项（如 2,2,1），累加为本行节奏点总数 K
 注音：每个 mora 一段、全行展平，段数须等于 K；留空表示整行无注音，不再自动重切
-时间标签：每个节奏点一段、按序对齐到 K 个节奏点，允许空段(,,)留空；句尾释放点写在最后；总数不得超过 K(+句尾1)
-句尾列填写「是」标记为句尾（独立记录释放时间），留空取消；演唱者每字符一项</source>
+时间标签：每个节奏点一段、按序对齐到 K 个节奏点，允许空段(,,)留空；停顿点写在最后；总数不得超过 K(+停顿点1)
+停顿点列填写「是」标记为停顿点（独立记录释放时间），留空取消；演唱者每字符一项</source>
         <translation>Linked words merge into one row; columns other than 'Char' are comma-separated.
-Double-click to edit Char/Ruby/Checkpoints/SentenceEnd/Timetags/Singer.
+Double-click to edit Char/Ruby/Checkpoints/PausePoint/Timetags/Singer.
 Checkpoints: one entry per char (e.g. 2,2,1); their sum is the row checkpoint total K.
 Ruby: one segment per mora, flattened across the row; segment count must equal K. Empty = no ruby for the whole row, no auto re-split.
-Timetags: one entry per checkpoint, aligned to K; empty segments (,,) allowed. The sentence-end release point goes last; total must not exceed K(+1 for sentence end).
-SentenceEnd column: 'Yes' marks sentence end (separate release time), empty cancels. Singer is one entry per char.</translation>
+Timetags: one entry per checkpoint, aligned to K; empty segments (,,) allowed. The pause point goes last; total must not exceed K(+1 for pause point).
+PausePoint column: 'Yes' marks pause point (separate release time), empty cancels. Singer is one entry per char.</translation>
     </message>
 </context>
 <context>
@@ -6402,8 +6402,8 @@ Load to restore?</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="402" />
-        <source>连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；句尾=停顿点，允许连词）</source>
-        <translation>Link to next character (last char/line end cannot be linked — skipped and warned on submit; sentence end = pause, can be linked)</translation>
+        <source>连接到下一字符（末字/行尾不可连词，提交时将跳过并提示；停顿点允许连词）</source>
+        <translation>Link to next character (last char/line end cannot be linked — skipped and warned on submit; pause points can be linked)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="334" />
@@ -7341,8 +7341,8 @@ Example: {大冒険||[00:01.00]だ|[00:01.20]い,...}</translation>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/fulltext_interface.py" line="488" />
         <location filename="src/strange_uta_game/frontend/editor/fulltext_interface.py" line="1556" />
-        <source>逐行编辑整篇歌词。格式：{原文||读音} 为注音块，注音块中`|` 分 RubyPart、`,` 分字；时间戳在字前 [分:秒.厘秒]（空=[T]），句尾 [&gt;…] 贴在字后，演唱者切换用 【名】。</source>
-        <translation>Edit the whole lyrics line by line. Format: {source||reading} is a ruby block; `|` splits RubyParts and `,` splits chars inside; timestamps go before the char [m:ss.cc] (empty = [T]); sentence-end [&gt;…] goes after the char; singer changes use [name].</translation>
+        <source>逐行编辑整篇歌词。格式：{原文||读音} 为注音块，注音块中`|` 分 RubyPart、`,` 分字；时间戳在字前 [分:秒.厘秒]（空=[T]），停顿点 [&gt;…] 贴在字后，演唱者切换用 【名】。</source>
+        <translation>Edit the whole lyrics line by line. Format: {source||reading} is a ruby block; `|` splits RubyParts and `,` splits chars inside; timestamps go before the char [m:ss.cc] (empty = [T]); pause-point [&gt;…] goes after the char; singer changes use [name].</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/fulltext_interface.py" line="1507" />
@@ -7493,9 +7493,9 @@ Choose an auto-even option to fix and continue, or ignore and continue exporting
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2297" />
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2308" />
         <source>前补偿：不考虑后方字符是否已有时间戳，前移符号时间戳并强制复制给后一字符
-后补偿：连续句尾符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配</source>
+后补偿：连续停顿点符号视为整体，符号组时间戳集中赋予前一字符，组内均匀分配</source>
         <translation>Pre-comp: move symbol timestamps forward and force-copy to next char regardless of existing timestamps
-Post-comp: treat consecutive sentence-end symbols as a group, give all timestamps to previous char, distribute evenly within group</translation>
+Post-comp: treat consecutive pause-point symbols as a group, give all timestamps to previous char, distribute evenly within group</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2348" />
@@ -7509,8 +7509,8 @@ Post-comp: treat consecutive sentence-end symbols as a group, give all timestamp
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2337" />
-        <source>后补偿（后移句尾时间戳）:</source>
-        <translation>Backward compensation (delay sentence-end timestamp):</translation>
+        <source>后补偿（后移停顿点时间戳）:</source>
+        <translation>Backward compensation (delay pause-point timestamp):</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2252" />
@@ -7592,8 +7592,8 @@ and transfer the original symbol timestamp to the immediately following non-symb
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2334" />
-        <source>符号无普通时间戳（cc=0）但有句尾停顿时，将句尾时间戳后移的量</source>
-        <translation>If a symbol has no regular timestamp (cc=0) but has a sentence-end pause, the amount to delay the sentence-end timestamp</translation>
+        <source>符号无普通时间戳（cc=0）但有停顿时，将停顿点时间戳后移的量</source>
+        <translation>If a symbol has no regular timestamp (cc=0) but has a pause, the amount to delay the pause-point timestamp</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2316" />
@@ -7619,12 +7619,12 @@ and transfer the original symbol timestamp to the immediately following non-symb
     <message>
         <location filename="src/strange_uta_game/frontend/editor/timing/dialogs.py" line="2216" />
         <source>针对选中的符号分组，自动处理时间戳：
-• 后补偿：符号无普通时间戳（cc=0）但有句尾停顿标记时，将停顿时间提升为普通时间戳，并将句尾时间戳后移「后补偿」值。
+• 后补偿：符号无普通时间戳（cc=0）但有停顿标记时，将停顿时间提升为普通时间戳，并将停顿点时间戳后移「后补偿」值。
 • 前补偿：符号已有时间戳（cc=1）且紧跟的第一个非符号字符无时间戳（cc=0）时，将符号时间戳传递给该字符，并将符号时间戳前移「前补偿」值。
 
 点击分组旁的「详情」可细化选择组内具体符号。</source>
         <translation>For the selected symbol groups, process timestamps automatically:
-• Backward compensation: when a symbol has no regular timestamp (cc=0) but a sentence-end pause mark, promote the pause time to a regular timestamp and delay the sentence-end timestamp by "backward".
+• Backward compensation: when a symbol has no regular timestamp (cc=0) but a pause-point mark, promote the pause time to a regular timestamp and delay the pause-point timestamp by "backward".
 • Forward compensation: when a symbol has a timestamp (cc=1) and the next non-symbol char has none (cc=0), transfer the symbol's timestamp to that char and advance the symbol's timestamp by "forward".
 
 Click "Detail" beside a group to select specific symbols within it.</translation>
@@ -8182,8 +8182,8 @@ This overwrites your current settings (user dict and singer presets are unaffect
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="250" />
-        <source>切换句尾</source>
-        <translation>Toggle sentence end</translation>
+        <source>切换停顿点</source>
+        <translation>Toggle pause point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="244" />
@@ -8202,13 +8202,13 @@ This overwrites your current settings (user dict and singer presets are unaffect
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="298" />
-        <source>切换当前字符的句尾标记</source>
-        <translation>Toggle sentence-end mark on current character</translation>
+        <source>切换当前字符的停顿点标记</source>
+        <translation>Toggle pause-point mark on current character</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="299" />
-        <source>切换当前字符的句尾标记（默认 句号）</source>
-        <translation>Toggle sentence-end mark (default period)</translation>
+        <source>切换当前字符的停顿点标记（默认 句号）</source>
+        <translation>Toggle pause-point mark (default period)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="302" />
@@ -8237,8 +8237,8 @@ This overwrites your current settings (user dict and singer presets are unaffect
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="309" />
-        <source>删除当前字符全部节奏点并取消句尾标记（cc=0，is_sentence_end=False）</source>
-        <translation>Delete all checkpoints of current character and clear sentence-end (cc=0, is_sentence_end=False)</translation>
+        <source>删除当前字符全部节奏点并取消停顿点标记（cc=0，is_sentence_end=False）</source>
+        <translation>Delete all checkpoints of current character and clear pause-point (cc=0, is_sentence_end=False)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="248" />
@@ -8327,8 +8327,8 @@ This overwrites your current settings (user dict and singer presets are unaffect
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="308" />
-        <source>取消所有节奏点、清除时间戳并标记为句尾</source>
-        <translation>Clear all checkpoints, wipe timestamps, mark as sentence end</translation>
+        <source>取消所有节奏点、清除时间戳并标记为停顿点</source>
+        <translation>Clear all checkpoints, wipe timestamps, mark as pause point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="269" />
@@ -8712,8 +8712,8 @@ This overwrites your current settings (user dict and singer presets are unaffect
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="256" />
-        <source>时间戳转句尾</source>
-        <translation>Timestamps to sentence end</translation>
+        <source>时间戳转停顿点</source>
+        <translation>Timestamps to pause point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="338" />
@@ -8842,8 +8842,8 @@ This overwrites your current settings (user dict and singer presets are unaffect
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="339" />
-        <source>节奏点与句尾</source>
-        <translation>Checkpoints &amp; Line End</translation>
+        <source>节奏点与停顿点</source>
+        <translation>Checkpoints &amp; Pause Point</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/shortcut.py" line="263" />
@@ -9817,8 +9817,8 @@ Drag cards to reorder; edit offset/length/interval to generate a new SUG project
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="166" />
-        <source>打轴时按下按键播放按下音、抬起句尾按键播放抬起音</source>
-        <translation>Play press sound on key-down and release sound on sentence-end key-up during tagging</translation>
+        <source>打轴时按下按键播放按下音、抬起停顿点按键播放抬起音</source>
+        <translation>Play press sound on key-down and release sound on pause-point key-up during tagging</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/timing.py" line="56" />
@@ -10186,8 +10186,8 @@ Drag cards to reorder; edit offset/length/interval to generate a new SUG project
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="120" />
-        <source>自定义节奏点标记的显示字符（首节奏点 / 后续 / 句尾，已打轴 / 未打轴）</source>
-        <translation>Customize checkpoint marker characters (first / subsequent / sentence-end, tagged / un-tagged)</translation>
+        <source>自定义节奏点标记的显示字符（首节奏点 / 后续 / 停顿点，已打轴 / 未打轴）</source>
+        <translation>Customize checkpoint marker characters (first / subsequent / pause-point, tagged / un-tagged)</translation>
     </message>
     <message>
         <location filename="src/strange_uta_game/frontend/settings/sub_interfaces/ui_settings.py" line="94" />

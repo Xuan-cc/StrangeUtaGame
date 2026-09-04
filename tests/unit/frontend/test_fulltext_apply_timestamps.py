@@ -2,7 +2,7 @@
 
 新模型：全文本编辑器显示带内联时间戳的文本，应用时逐行独立解码。
 时间轴随文本走，因此行的重排/增删/文本撞车都不丢轴。本测试覆盖：
-- 显示→应用 往返恒等（时间戳/ruby/句尾/演唱者/连词全保留）
+- 显示→应用 往返恒等（时间戳/ruby/停顿点/演唱者/连词全保留）
 - 整行重排后各行时间轴跟随文本
 - 应用后全局偏移派生到所有字符
 - 新增的裸文本行 → 空轴（无 token）
@@ -82,7 +82,7 @@ def _snapshot(p):
 
 
 def test_roundtrip_identity_preserves_all(qapp):
-    """显示→不改→应用：时间戳/ruby/句尾/连词/演唱者完全保留。"""
+    """显示→不改→应用：时间戳/ruby/停顿点/连词/演唱者完全保留。"""
     p, taro, hanako = _build_project()
     before = _snapshot(p)
     w = RubyInterface()
@@ -101,7 +101,7 @@ def test_line_swap_follows_text(qapp):
     assert len(lines) == 2
     w.text_edit.setPlainText("\n".join(reversed(lines)))
     w._on_apply_changes()
-    # 原 line1(あ, 花子, ts500/句尾900) 现在排第一
+    # 原 line1(あ, 花子, ts500/停顿点900) 现在排第一
     assert [c.char for c in p.sentences[0].characters] == ["あ"]
     assert p.sentences[0].characters[0].timestamps == [500]
     assert p.sentences[0].characters[0].sentence_end_ts == 900

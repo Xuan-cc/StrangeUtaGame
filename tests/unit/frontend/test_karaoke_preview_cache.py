@@ -23,7 +23,7 @@ def test_full_width_space_is_skipped_by_wipe():
 def test_space_without_rhythm_consumes_no_wipe_time(qapp, monkeypatch):
     """回归：无节奏点空格是无渲染字符，不得占用走字时长。
 
-    「あ い。」（あ=1000、い=2000、句尾释放 3000，空格 cc=0 无时间戳）：
+    「あ い。」（あ=1000、い=2000、停顿点 3000，空格 cc=0 无时间戳）：
     旧算法把空格的排版宽度计入加权，空格分走一段时间而绘制层又因无墨水
     跳过它——走字在空格处停顿、后续字符窗口被压缩（前一字加「。」停顿
     标记时空格落入停顿区间才不受影响）。修复后空格得到零时长窗口，
@@ -53,7 +53,7 @@ def test_space_without_rhythm_consumes_no_wipe_time(qapp, monkeypatch):
     assert wt[1][0] == wt[1][1] == 2000
     # あ：wipe 延伸到 い 的起始（旧算法会提前结束再停顿）
     assert wt[0] == (1000, 2000)
-    # 末段不受影响：い 从 2000 起步、。收尾于句尾释放 3000
+    # 末段不受影响：い 从 2000 起步、。收尾于停顿点 3000
     assert wt[2][0] == 2000
     assert wt[3][1] == 3000
 

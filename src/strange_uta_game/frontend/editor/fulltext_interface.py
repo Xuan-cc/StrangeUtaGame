@@ -279,7 +279,7 @@ class LineNumberPlainTextEdit(QPlainTextEdit):
 class _TimedFormatHighlighter(QSyntaxHighlighter):
     """带时间戳全文本格式的语法着色（类 VSCode）。
 
-    着色：起始时间戳 [..]、句尾时间戳 [>..]、演唱者标签 【..】、
+    着色：起始时间戳 [..]、停顿点时间戳 [>..]、演唱者标签 【..】、
     花括号/分隔符 { } || | ,。颜色随深/浅主题切换。
     """
 
@@ -488,7 +488,7 @@ class RubyInterface(QWidget):
         self._lbl_desc = CaptionLabel(self.tr(
             "逐行编辑整篇歌词。格式：{原文||读音} 为注音块，"
             "注音块中`|` 分 RubyPart、`,` 分字；时间戳在字前 [分:秒.厘秒]（空=[T]），"
-            "句尾 [>…] 贴在字后，演唱者切换用 【名】。"
+            "停顿点 [>…] 贴在字后，演唱者切换用 【名】。"
         ))
         self._lbl_desc.setWordWrap(True)
         layout.addWidget(self._lbl_desc)
@@ -1457,7 +1457,7 @@ class RubyInterface(QWidget):
         """将文本编辑器内容应用回项目（逐行独立解码，自带完整时间轴）。
 
         采用带内联时间戳的全文本格式：每行用 ``parse_timed_line`` 独立解码成
-        一条 Sentence，时间戳/句尾/连词/演唱者全部来自文本本身。因此**不再做
+        一条 Sentence，时间戳/停顿点/连词/演唱者全部来自文本本身。因此**不再做
         任何跨行映射或 diff** —— 行的增删、重排、文本撞车都不会丢失或错配
         时间戳；新增的无 token 字符自然得到空轴。
         """
@@ -1556,7 +1556,7 @@ class RubyInterface(QWidget):
             self._lbl_desc.setText(self.tr(
                 "逐行编辑整篇歌词。格式：{原文||读音} 为注音块，"
                 "注音块中`|` 分 RubyPart、`,` 分字；时间戳在字前 [分:秒.厘秒]（空=[T]），"
-                "句尾 [>…] 贴在字后，演唱者切换用 【名】。"
+                "停顿点 [>…] 贴在字后，演唱者切换用 【名】。"
             ))
         if hasattr(self, "_lbl_font_size"):
             self._lbl_font_size.setText(self.tr("字号"))

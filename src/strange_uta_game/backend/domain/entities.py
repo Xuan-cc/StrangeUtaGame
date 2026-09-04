@@ -301,7 +301,7 @@ class Sentence:
         return False
 
     def toggle_sentence_end(self, idx: int) -> None:
-        """切换指定字符的句尾标记。"""
+        """切换指定字符的停顿点标记。"""
         char = self.get_character(idx)
         if not char:
             raise ValidationError(
@@ -506,7 +506,7 @@ class Sentence:
         """从纯文本创建句子
 
         自动拆分为单字符，设置默认 checkpoint 配置。
-        最后一个字符标记为句尾（check_count=1）。
+        最后一个字符标记为停顿点（check_count=1）。
 
         Args:
             text: 歌词文本
