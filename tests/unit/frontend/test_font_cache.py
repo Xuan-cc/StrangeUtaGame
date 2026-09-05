@@ -7,6 +7,49 @@ from PyQt6.QtGui import QFontDatabase
 from strange_uta_game.frontend import font_cache, font_names
 
 
+def test_localized_alias_map_keeps_legacy_and_typographic_families():
+    result = {}
+    records = [
+        (3, 1, 0x0409, font_names._NAME_FAMILY, "A-OTF Shin Maru Go Pro DB"),
+        (3, 1, 0x0411, font_names._NAME_FAMILY, "A-OTF 新丸ゴ Pro DB"),
+        (3, 1, 0x0409, font_names._NAME_PREF_FAMILY, "A-OTF Shin Maru Go Pro"),
+        (3, 1, 0x0411, font_names._NAME_PREF_FAMILY, "A-OTF 新丸ゴ Pro"),
+    ]
+
+    font_names._merge_records(result, records)
+
+    assert result == {
+        "A-OTF Shin Maru Go Pro DB": {0x0411: "A-OTF 新丸ゴ Pro DB"},
+        "A-OTF Shin Maru Go Pro": {0x0411: "A-OTF 新丸ゴ Pro"},
+    }
+
+
+def test_localized_alias_map_keeps_all_family_naming_models():
+    result = {}
+    records = [
+        (3, 1, 0x0409, font_names._NAME_FAMILY, "Legacy Family Bold"),
+        (3, 1, 0x0411, font_names._NAME_FAMILY, "従来ファミリー太字"),
+        (3, 1, 0x0409, font_names._NAME_PREF_FAMILY, "Typographic Family"),
+        (3, 1, 0x0411, font_names._NAME_PREF_FAMILY, "組版ファミリー"),
+        (3, 1, 0x0409, font_names._NAME_WWS_FAMILY, "WWS Family"),
+        (3, 1, 0x0411, font_names._NAME_WWS_FAMILY, "WWSファミリー"),
+        # 子族、完整名和 PostScript 名不是字体族，不能污染选择器。
+        (3, 1, 0x0409, 2, "Bold"),
+        (3, 1, 0x0409, 17, "Display Bold"),
+        (3, 1, 0x0409, 22, "WWS Bold"),
+        (3, 1, 0x0409, 4, "Typographic Family Display Bold"),
+        (3, 1, 0x0409, 6, "TypographicFamily-DisplayBold"),
+    ]
+
+    font_names._merge_records(result, records)
+
+    assert result == {
+        "Legacy Family Bold": {0x0411: "従来ファミリー太字"},
+        "Typographic Family": {0x0411: "組版ファミリー"},
+        "WWS Family": {0x0411: "WWSファミリー"},
+    }
+
+
 def _patch_families(monkeypatch, names: list[str]) -> dict:
     """替换 ``QFontDatabase.families`` 并统计调用次数（缓存应复用单次枚举）。
 

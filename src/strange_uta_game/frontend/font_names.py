@@ -21,6 +21,8 @@ from functools import lru_cache
 # OpenType name 表 nameID
 _NAME_FAMILY = 1          # Font Family name
 _NAME_PREF_FAMILY = 16    # Typographic/Preferred Family
+_NAME_WWS_FAMILY = 21     # WWS Family name
+_FAMILY_NAME_IDS = (_NAME_FAMILY, _NAME_PREF_FAMILY, _NAME_WWS_FAMILY)
 
 # platformID
 _PLAT_MAC = 1
@@ -91,7 +93,7 @@ def _parse_name_table(f, table_offset: int) -> list[tuple[int, int, int, int, st
         if len(rec) < 12:
             break
         pid, eid, lid, nid, length, offset = struct.unpack(">HHHHHH", rec)
-        if nid not in (_NAME_FAMILY, _NAME_PREF_FAMILY):
+        if nid not in _FAMILY_NAME_IDS:
             continue
         f.seek(storage + offset)
         s = _decode_name(pid, eid, f.read(length))
@@ -201,34 +203,44 @@ def _merge_records(
     records: list[tuple[int, int, int, int, str]],
 ) -> None:
     """从单个子字体的 name 记录中提取英文族名与各语言本地化名并并入 result。"""
-    # 英文族名候选：Windows 英文（优先 nameID 16），其次 Mac 英文(lang 0)
-    english: str | None = None
-    eng_pref = None  # nameID 16 优先
-    for pid, eid, lid, nid, s in records:
-        if pid == _PLAT_WIN and lid in _ENGLISH_LANGS:
-            if nid == _NAME_PREF_FAMILY:
-                eng_pref = s
-            elif english is None:
-                english = s
-    english = eng_pref or english
-    if english is None:
-        for pid, eid, lid, nid, s in records:
-            if pid == _PLAT_MAC and lid == 0:
-                english = s
-                break
-    if not english:
-        return
-
-    # 本地化名：非英文语言的 Windows 名（nameID 16 优先于 1）
-    natives: dict[int, str] = {}
-    for pid, eid, lid, nid, s in records:
-        if pid != _PLAT_WIN or lid in _ENGLISH_LANGS:
+    # 1/16/21 分别代表 legacy、typographic、WWS 三套独立的字体族模型。
+    # 同一字体中它们可能故意不同，例如 legacy family 把 DB 字重放进族名，
+    # typographic family 则把全部字重归到一个族。不能用 16 覆盖 1，否则
+    # Qt/N3 仍可能使用的 legacy 族名会从别名表中消失。
+    for family_name_id in _FAMILY_NAME_IDS:
+        english = next(
+            (
+                s
+                for pid, _eid, lid, nid, s in records
+                if pid == _PLAT_WIN
+                and lid in _ENGLISH_LANGS
+                and nid == family_name_id
+            ),
+            None,
+        )
+        if english is None:
+            english = next(
+                (
+                    s
+                    for pid, _eid, lid, nid, s in records
+                    if pid == _PLAT_MAC and lid == 0 and nid == family_name_id
+                ),
+                None,
+            )
+        if not english:
             continue
-        if lid not in natives or nid == _NAME_PREF_FAMILY:
-            natives[lid] = s
-    if not natives:
-        return
-    # 同一英文名可能来自多个子字体（不同字重），合并语言条目
-    bucket = result.setdefault(english, {})
-    for lid, s in natives.items():
-        bucket.setdefault(lid, s)
+
+        natives: dict[int, str] = {}
+        for pid, _eid, lid, nid, s in records:
+            if (
+                pid == _PLAT_WIN
+                and lid not in _ENGLISH_LANGS
+                and nid == family_name_id
+            ):
+                natives.setdefault(lid, s)
+        if not natives:
+            continue
+
+        bucket = result.setdefault(english, {})
+        for lid, name in natives.items():
+            bucket.setdefault(lid, name)
