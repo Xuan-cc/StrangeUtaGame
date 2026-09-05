@@ -106,6 +106,71 @@ def _card_inner_bg() -> QColor:
     return theme.bg_tertiary
 
 
+class _SingerCheckBox(CheckBox):
+    """点名字即切换的演唱者勾选框，点击上报给卡片做 Shift 范围多选。
+
+    fluent CheckBox 沿用 QCheckBox 的热区口径，名字区域的点击不可靠；
+    这里把整块热区交给 ``hitButton``，切换动作则统一上收到卡片处理。
+    """
+
+    clicked_at = pyqtSignal(int, bool)  # (行索引, 是否按住 Shift)
+
+    def __init__(self, text: str, index: int, parent: Optional[QWidget] = None):
+        # 不能走 fluent 的 singledispatch 构造器：其 str 重载内部再调
+        # self.__init__(parent) 会递归回本子类 __init__
+        CheckBox.__init__(self, parent)
+        self.setText(text)
+        self._index = index
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def hitButton(self, pos) -> bool:
+        """名字文字也算点击热区。"""
+        return self.rect().contains(pos)
+
+    def mousePressEvent(self, e) -> None:
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.isPressed = True  # 保留 fluent 按下态外观
+            self.update()
+            self.clicked_at.emit(
+                self._index,
+                bool(e.modifiers() & Qt.KeyboardModifier.ShiftModifier),
+            )
+            e.accept()
+            return
+        super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e) -> None:
+        self.isPressed = False
+        self.update()
+        # 拦截原生 toggle：切换/范围多选由卡片统一处理，避免双重切换
+        e.accept()
+
+
+class _SingerRow(QWidget):
+    """演唱者勾选行：勾选框以外的空白区域点击同样切换（带悬停底色）。"""
+
+    clicked_at = pyqtSignal(int, bool)  # (行索引, 是否按住 Shift)
+
+    def __init__(self, index: int, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._index = index
+        self.setObjectName("singerRow")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._row_layout = QHBoxLayout(self)
+        self._row_layout.setContentsMargins(2, 1, 2, 1)
+        self._row_layout.setSpacing(0)
+
+    def mousePressEvent(self, e) -> None:
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.clicked_at.emit(
+                self._index,
+                bool(e.modifiers() & Qt.KeyboardModifier.ShiftModifier),
+            )
+            e.accept()
+            return
+        super().mousePressEvent(e)
+
+
 class _AxisGroupCard(SimpleCardWidget):
     """单张轴分组卡片：可编辑组名 + 删除按钮 + 主分组单选 + 演唱者勾选列表。"""
 
@@ -154,17 +219,35 @@ class _AxisGroupCard(SimpleCardWidget):
         layout.addWidget(self.radio_primary)
 
         layout.addSpacing(2)
-        layout.addWidget(StrongBodyLabel(self.tr("演唱者")))
 
-        self.checkboxes: List[CheckBox] = []
-        for singer_id, singer_name, color in singers:
-            chk = CheckBox(singer_name)
+        # 演唱者小节：标题 + 全选/全不选
+        members_header = QHBoxLayout()
+        members_header.setSpacing(4)
+        members_header.addWidget(StrongBodyLabel(self.tr("演唱者")))
+        members_header.addStretch(1)
+        self.btn_select_all = PushButton(self.tr("全选"))
+        self.btn_select_all.setToolTip(self.tr("全选或全不选本组演唱者"))
+        self.btn_select_all.clicked.connect(self._toggle_select_all)
+        members_header.addWidget(self.btn_select_all)
+        layout.addLayout(members_header)
+
+        self.checkboxes: List[_SingerCheckBox] = []
+        self._singer_rows: List[_SingerRow] = []
+        self._anchor: Optional[int] = None  # Shift 范围多选的锚点行
+        for i, (singer_id, singer_name, color) in enumerate(singers):
+            chk = _SingerCheckBox(singer_name, i)
             chk.setProperty("singer_id", singer_id)
             chk.setProperty("singer_color", color)
             chk.setChecked(singer_id in checked_ids)
-            layout.addWidget(chk)
+            chk.clicked_at.connect(self._on_singer_clicked)
+            row = _SingerRow(i)
+            row.clicked_at.connect(self._on_singer_clicked)
+            row._row_layout.addWidget(chk)
+            layout.addWidget(row)
             self.checkboxes.append(chk)
+            self._singer_rows.append(row)
         self._apply_singer_colors()
+        self._update_select_all_text()
 
         layout.addStretch(1)
 
@@ -185,6 +268,7 @@ class _AxisGroupCard(SimpleCardWidget):
         演唱者主色直接做文字色时，浅色模式下亮色（如黄色）几乎不可读；
         用 ``theme.ensure_contrast`` 对卡片底色校正明度——保留色相、保证
         对比度，勾选框本身的 QSS 仍由 qfluentwidgets 自管理。
+        行的悬停底色也随主题在此刷新。
         """
         bg = _card_inner_bg()
         for chk in self.checkboxes:
@@ -192,6 +276,41 @@ class _AxisGroupCard(SimpleCardWidget):
             color = theme.ensure_contrast(raw, bg).name()
             qss = f"CheckBox {{ color: {color}; font-weight: bold; }}"
             setCustomStyleSheet(chk, qss, qss)
+        hover = "rgba(255, 255, 255, 22)" if theme.is_dark else "rgba(0, 0, 0, 10)"
+        row_qss = f"QWidget#singerRow:hover {{ background: {hover}; border-radius: 4px; }}"
+        for row in self._singer_rows:
+            row.setStyleSheet(row_qss)
+
+    def _on_singer_clicked(self, index: int, shift: bool) -> None:
+        """点名字/行空白切换勾选；按住 Shift 从锚点行选到当前行。
+
+        Shift 范围以点击项切换后的状态填充（与资源管理器等多选一致）；
+        锚点只在普通点击时移动。
+        """
+        chk = self.checkboxes[index]
+        if shift and self._anchor is not None:
+            state = not chk.isChecked()
+            for i in range(min(self._anchor, index), max(self._anchor, index) + 1):
+                self.checkboxes[i].setChecked(state)
+        else:
+            chk.setChecked(not chk.isChecked())
+            self._anchor = index
+        self._update_select_all_text()
+
+    def _toggle_select_all(self) -> None:
+        """已全选 → 一键全不选；否则一键全选。"""
+        state = not all(c.isChecked() for c in self.checkboxes)
+        for c in self.checkboxes:
+            c.setChecked(state)
+        self._anchor = None
+        self._update_select_all_text()
+
+    def _update_select_all_text(self) -> None:
+        """按钮文案随状态切换：已全选时显示「全不选」，否则「全选」。"""
+        all_checked = all(c.isChecked() for c in self.checkboxes)
+        self.btn_select_all.setText(
+            self.tr("全不选") if all_checked else self.tr("全选")
+        )
 
     def checked_singer_ids(self) -> Set[str]:
         """本组当前勾选的演唱者 ID 集合。"""

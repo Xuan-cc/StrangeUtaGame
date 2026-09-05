@@ -837,19 +837,24 @@ class ExportInterface(QWidget):
         row_layout.addWidget(StrongBodyLabel(group.name, row))
 
         members = CaptionLabel(row)
-        if group.singer_ids:
-            chips = []
-            for sid in group.singer_ids:
-                name = html.escape(used.get(sid, self.tr("未知")))
-                # 色点与对话框勾选框同口径：原始演唱者色对行底色做对比度
-                # 校正（保留色相），否则浅色主题下亮色（黄等）几乎不可读
-                raw = QColor(colors.get(sid, "#888888"))
-                dot_color = _theme.ensure_contrast(raw, row_bg).name()
-                chips.append(f'<span style="color:{dot_color};">●</span>{name}')
-            members.setText("&nbsp;&nbsp;".join(chips))
-        else:
-            # 空 = 全部演唱者（过滤器「不勾选则导出全部」口径）
-            members.setText(self.tr("全部"))
+        # 组内未勾选 = 全部演唱者（过滤器口径）：外侧把所有人真实列出，
+        # 用户不必点开编辑器就能看清这一轴包含谁
+        member_ids = group.singer_ids or list(used.keys())
+        chips = []
+        for sid in member_ids:
+            name = html.escape(used.get(sid, self.tr("未知")))
+            # 名字内部的不换行空格：保证断行只发生在成员之间，
+            # 「●名字」永不被拆开
+            name = name.replace(" ", "&nbsp;")
+            # 色点与对话框勾选框同口径：原始演唱者色对行底色做对比度
+            # 校正（保留色相），否则浅色主题下亮色（黄等）几乎不可读
+            raw = QColor(colors.get(sid, "#888888"))
+            dot_color = _theme.ensure_contrast(raw, row_bg).name()
+            chips.append(f'<span style="color:{dot_color};">●</span>{name}')
+        # 普通空格连接 = 成员之间的可断行点；配合下方 wordWrap，
+        # 演唱者较多时成员名单自动折行而不是被裁掉
+        members.setText(" ".join(chips))
+        members.setWordWrap(True)
         row_layout.addWidget(members, 1)
         return row
 

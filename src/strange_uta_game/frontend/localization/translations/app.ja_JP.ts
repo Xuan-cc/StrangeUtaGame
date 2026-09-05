@@ -1811,50 +1811,49 @@
 </context><context>
     <name>AxisGroupDialog</name>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="256" />
-        <location filename="..\..\export\axis_group_dialog.py" line="228" />
+        <location filename="..\..\export\axis_group_dialog.py" line="344" />
         <source>轴分组</source>
         <translation>軸グループ</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="259" />
+        <location filename="..\..\export\axis_group_dialog.py" line="379" />
         <source>每组对应一个轴文件：按组导出时文件名追加「_组名」，主分组的文件携带完整标签信息。
 同一演唱者可同时进入多组；不勾选任何演唱者的组 = 包含全部演唱者。</source>
         <translation>各グループが 1 つの軸ファイルに対応します。グループ別書き出し時、ファイル名に「_グループ名」が付加され、メイングループのファイルには完全なタグ情報が含まれます。
 同じ歌手は複数のグループに同時に入れられます。歌手を 1 人もチェックしないグループは全員を含みます。</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="282" />
+        <location filename="..\..\export\axis_group_dialog.py" line="402" />
         <source>添加分组</source>
         <translation>グループを追加</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="303" />
+        <location filename="..\..\export\axis_group_dialog.py" line="423" />
         <source>确认</source>
         <translation>確認</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="305" />
+        <location filename="..\..\export\axis_group_dialog.py" line="425" />
         <source>取消</source>
         <translation>キャンセル</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="401" />
+        <location filename="..\..\export\axis_group_dialog.py" line="521" />
         <source>分组名不能为空</source>
         <translation>グループ名を空にすることはできません</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="402" />
+        <location filename="..\..\export\axis_group_dialog.py" line="522" />
         <source>每个分组都需要填写组名（按组导出时用作文件名后缀）。</source>
         <translation>各グループに名前を入力してください（グループ別書き出しでファイル名の接尾辞に使われます）。</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="409" />
+        <location filename="..\..\export\axis_group_dialog.py" line="529" />
         <source>分组名不能重复</source>
         <translation>グループ名を重複させることはできません</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="410" />
+        <location filename="..\..\export\axis_group_dialog.py" line="530" />
         <source>存在重复的分组名：{names}</source>
         <translation>重複するグループ名があります：{names}</translation>
     </message>
@@ -4720,13 +4719,12 @@
         <translation>未グループ：すべての歌手を書き出します</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="832" />
+        <location filename="..\..\export\export_interface.py" line="845" />
         <location filename="..\..\export\export_interface.py" line="714" />
         <source>未知</source>
         <translation>不明</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="838" />
         <location filename="..\..\export\export_interface.py" line="719" />
         <source>全部</source>
         <translation>全員</translation>
@@ -4743,149 +4741,149 @@
         <translation>未所属（どの軸にも入りません）：{names}</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="819" />
+        <location filename="..\..\export\export_interface.py" line="830" />
         <source>主分组</source>
         <translation>メイングループ</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1105" />
-        <location filename="..\..\export\export_interface.py" line="912" />
+        <location filename="..\..\export\export_interface.py" line="1124" />
+        <location filename="..\..\export\export_interface.py" line="931" />
         <source>选择导出目录</source>
         <translation>書き出しディレクトリを選択</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1074" />
-        <location filename="..\..\export\export_interface.py" line="1059" />
-        <location filename="..\..\export\export_interface.py" line="1000" />
-        <location filename="..\..\export\export_interface.py" line="944" />
+        <location filename="..\..\export\export_interface.py" line="1093" />
+        <location filename="..\..\export\export_interface.py" line="1078" />
+        <location filename="..\..\export\export_interface.py" line="1019" />
+        <location filename="..\..\export\export_interface.py" line="963" />
         <source>无项目</source>
         <translation>プロジェクトなし</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1075" />
-        <location filename="..\..\export\export_interface.py" line="1060" />
-        <location filename="..\..\export\export_interface.py" line="1001" />
-        <location filename="..\..\export\export_interface.py" line="945" />
+        <location filename="..\..\export\export_interface.py" line="1094" />
+        <location filename="..\..\export\export_interface.py" line="1079" />
+        <location filename="..\..\export\export_interface.py" line="1020" />
+        <location filename="..\..\export\export_interface.py" line="964" />
         <source>请先创建或打开项目</source>
         <translation>先にプロジェクトを作成または開いてください</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1013" />
-        <location filename="..\..\export\export_interface.py" line="962" />
+        <location filename="..\..\export\export_interface.py" line="1032" />
+        <location filename="..\..\export\export_interface.py" line="981" />
         <source>无演唱者</source>
         <translation>歌手なし</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1014" />
-        <location filename="..\..\export\export_interface.py" line="963" />
+        <location filename="..\..\export\export_interface.py" line="1033" />
+        <location filename="..\..\export\export_interface.py" line="982" />
         <source>项目中没有可用的演唱者</source>
         <translation>プロジェクトに利用可能な歌手がありません</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1087" />
+        <location filename="..\..\export\export_interface.py" line="1106" />
         <source>未选择格式</source>
         <translation>形式が選択されていません</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1088" />
+        <location filename="..\..\export\export_interface.py" line="1107" />
         <source>请选择导出格式</source>
         <translation>書き出し形式を選択してください</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1119" />
+        <location filename="..\..\export\export_interface.py" line="1138" />
         <source>第 {line} 行 第 {char} 字</source>
         <translation>{line} 行目 {char} 文字目</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1123" />
+        <location filename="..\..\export\export_interface.py" line="1142" />
         <source>
 ...另 {n} 处</source>
         <translation>
 ...他 {n} 件</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1129" />
+        <location filename="..\..\export\export_interface.py" line="1148" />
         <source>仍有导唱待办未处理</source>
         <translation>ガイド符の未処理項目があります</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1130" />
+        <location filename="..\..\export\export_interface.py" line="1149" />
         <source>还剩 {n} 个标记点未添加导唱符。</source>
         <translation>ガイド符が未追加のマーカーが {n} 件残っています。</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1134" />
+        <location filename="..\..\export\export_interface.py" line="1153" />
         <source>继续导出</source>
         <translation>書き出しを続行</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1301" />
-        <location filename="..\..\export\export_interface.py" line="1235" />
-        <location filename="..\..\export\export_interface.py" line="1135" />
+        <location filename="..\..\export\export_interface.py" line="1320" />
+        <location filename="..\..\export\export_interface.py" line="1254" />
+        <location filename="..\..\export\export_interface.py" line="1154" />
         <source>取消</source>
         <translation>キャンセル</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1143" />
+        <location filename="..\..\export\export_interface.py" line="1162" />
         <source>导出提醒</source>
         <translation>書き出し通知</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1225" />
+        <location filename="..\..\export\export_interface.py" line="1244" />
         <source>...另 {n} 个文件</source>
         <translation>...他 {n} 個のファイル</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1296" />
-        <location filename="..\..\export\export_interface.py" line="1230" />
+        <location filename="..\..\export\export_interface.py" line="1315" />
+        <location filename="..\..\export\export_interface.py" line="1249" />
         <source>文件已存在</source>
         <translation>ファイルが既に存在します</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1231" />
+        <location filename="..\..\export\export_interface.py" line="1250" />
         <source>以下文件已存在：
 {files}</source>
         <translation>以下のファイルが既に存在します：
 {files}</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1233" />
+        <location filename="..\..\export\export_interface.py" line="1252" />
         <source>是否覆盖这些文件？</source>
         <translation>これらのファイルを上書きしますか？</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1300" />
-        <location filename="..\..\export\export_interface.py" line="1234" />
+        <location filename="..\..\export\export_interface.py" line="1319" />
+        <location filename="..\..\export\export_interface.py" line="1253" />
         <source>覆盖</source>
         <translation>上書き</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1336" />
-        <location filename="..\..\export\export_interface.py" line="1260" />
+        <location filename="..\..\export\export_interface.py" line="1355" />
+        <location filename="..\..\export\export_interface.py" line="1279" />
         <source>未知错误</source>
         <translation>不明なエラー</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1325" />
-        <location filename="..\..\export\export_interface.py" line="1269" />
+        <location filename="..\..\export\export_interface.py" line="1344" />
+        <location filename="..\..\export\export_interface.py" line="1288" />
         <source>导出成功</source>
         <translation>書き出しました</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1335" />
-        <location filename="..\..\export\export_interface.py" line="1279" />
+        <location filename="..\..\export\export_interface.py" line="1354" />
+        <location filename="..\..\export\export_interface.py" line="1298" />
         <source>导出失败</source>
         <translation>書き出しに失敗しました</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1297" />
+        <location filename="..\..\export\export_interface.py" line="1316" />
         <source>文件已存在：
 {filename}</source>
         <translation>ファイルが既に存在します：
 {filename}</translation>
     </message>
     <message>
-        <location filename="..\..\export\export_interface.py" line="1299" />
+        <location filename="..\..\export\export_interface.py" line="1318" />
         <source>是否覆盖该文件？</source>
         <translation>このファイルを上書きしますか？</translation>
     </message>
@@ -4976,54 +4974,44 @@
 </context><context>
     <name>FileLoader</name>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="232" />
+        <location filename="..\..\editor\timing\file_loader.py" line="233" />
         <source>文件不存在</source>
         <translation>ファイルが見つかりません</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="233" />
+        <location filename="..\..\editor\timing\file_loader.py" line="234" />
         <source>最近打开的项目已被移动或删除。</source>
         <translation>最近開いたプロジェクトは移動または削除されています。</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="249" />
+        <location filename="..\..\editor\timing\file_loader.py" line="250" />
         <source>打开项目</source>
         <translation>プロジェクトを開く</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="250" />
+        <location filename="..\..\editor\timing\file_loader.py" line="251" />
         <source>StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)</source>
         <translation>StrangeUtaGame プロジェクト (*.sug);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="260" />
+        <location filename="..\..\editor\timing\file_loader.py" line="261" />
         <source>选择音频或视频文件</source>
         <translation>音声または動画ファイルを選択</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="261" />
+        <location filename="..\..\editor\timing\file_loader.py" line="262" />
         <source>音频/视频文件 (*.mp3 *.wav *.flac *.ogg *.mp4 *.mkv *.m4a *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts *.3gp *.vob *.mts *.m2ts *.rm *.rmvb *.asf *.f4v *.ogv *.m4b *.aac *.wma *.opus *.ape *.ac3 *.dts);;所有文件 (*.*)</source>
         <translation>音声/動画ファイル (*.mp3 *.wav *.flac *.ogg *.mp4 *.mkv *.m4a *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts *.3gp *.vob *.mts *.m2ts *.rm *.rmvb *.asf *.f4v *.ogv *.m4b *.aac *.wma *.opus *.ape *.ac3 *.dts);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="282" />
+        <location filename="..\..\editor\timing\file_loader.py" line="283" />
         <source>选择歌词文件</source>
         <translation>歌詞ファイルを選択</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="283" />
+        <location filename="..\..\editor\timing\file_loader.py" line="284" />
         <source>歌词文件 (*.lrc *.txt *.kra *.krl *.srt *.ass);;所有文件 (*.*)</source>
         <translation>歌詞ファイル (*.lrc *.txt *.kra *.krl *.srt *.ass);;すべてのファイル (*.*)</translation>
-    </message>
-    <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="297" />
-        <source>无法读取视频文件</source>
-        <translation>動画ファイルを読み込めません</translation>
-    </message>
-    <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="298" />
-        <source>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</source>
-        <translation>FFmpeg が検出されません。「設定 → 情報/言語 → ツール設定」で FFmpeg パスを指定してください。</translation>
     </message>
     <message>
         <location filename="..\..\editor\timing\file_loader.py" line="299" />
@@ -5031,209 +5019,219 @@
         <translation>FFmpeg が検出されませんでした。組み込み実行時の FFmpeg はワークベンチが一元管理しています。ワークベンチ設定の FFmpeg 設定を確認してください。</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="306" />
+        <location filename="..\..\editor\timing\file_loader.py" line="301" />
+        <source>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</source>
+        <translation>FFmpeg が検出されません。「設定 → 情報/言語 → ツール設定」で FFmpeg パスを指定してください。</translation>
+    </message>
+    <message>
+        <location filename="..\..\editor\timing\file_loader.py" line="303" />
+        <source>无法读取视频文件</source>
+        <translation>動画ファイルを読み込めません</translation>
+    </message>
+    <message>
+        <location filename="..\..\editor\timing\file_loader.py" line="312" />
         <source>正在处理视频</source>
         <translation>動画を処理中</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="306" />
+        <location filename="..\..\editor\timing\file_loader.py" line="312" />
         <source>正在检查 FFmpeg 环境...</source>
         <translation>FFmpeg 環境を確認中...</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="538" />
-        <location filename="..\..\editor\timing\file_loader.py" line="349" />
+        <location filename="..\..\editor\timing\file_loader.py" line="544" />
+        <location filename="..\..\editor\timing\file_loader.py" line="355" />
         <source>加载完成</source>
         <translation>読み込み完了</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="416" />
+        <location filename="..\..\editor\timing\file_loader.py" line="422" />
         <source>音频已加载</source>
         <translation>音声を読み込みました</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="437" />
+        <location filename="..\..\editor\timing\file_loader.py" line="443" />
         <source>视频处理失败</source>
         <translation>動画処理に失敗しました</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="472" />
+        <location filename="..\..\editor\timing\file_loader.py" line="478" />
         <source>保存当前项目</source>
         <translation>現在のプロジェクトを保存</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="473" />
+        <location filename="..\..\editor\timing\file_loader.py" line="479" />
         <source>当前项目有未保存的更改，是否保存？</source>
         <translation>現在のプロジェクトに未保存の変更があります。保存しますか？</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="475" />
+        <location filename="..\..\editor\timing\file_loader.py" line="481" />
         <source>保存</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="476" />
+        <location filename="..\..\editor\timing\file_loader.py" line="482" />
         <source>放弃</source>
         <translation>破棄</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="477" />
+        <location filename="..\..\editor\timing\file_loader.py" line="483" />
         <source>取消</source>
         <translation>キャンセル</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="500" />
+        <location filename="..\..\editor\timing\file_loader.py" line="506" />
         <source>正在加载项目</source>
         <translation>プロジェクトを読み込み中</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="500" />
+        <location filename="..\..\editor\timing\file_loader.py" line="506" />
         <source>正在解析项目数据...</source>
         <translation>プロジェクトデータを解析中...</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="587" />
+        <location filename="..\..\editor\timing\file_loader.py" line="593" />
         <source>媒体文件未找到</source>
         <translation>メディアファイルが見つかりません</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="588" />
+        <location filename="..\..\editor\timing\file_loader.py" line="594" />
         <source>上次关联的媒体文件不存在：{name}</source>
         <translation>前回関連付けたメディアファイルが存在しません：{name}</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="646" />
+        <location filename="..\..\editor\timing\file_loader.py" line="652" />
         <source>打开失败</source>
         <translation>開けませんでした</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="685" />
+        <location filename="..\..\editor\timing\file_loader.py" line="691" />
         <source>解析完成</source>
         <translation>解析完了</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1136" />
-        <location filename="..\..\editor\timing\file_loader.py" line="1082" />
-        <location filename="..\..\editor\timing\file_loader.py" line="1075" />
-        <location filename="..\..\editor\timing\file_loader.py" line="714" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1142" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1088" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1081" />
+        <location filename="..\..\editor\timing\file_loader.py" line="720" />
         <source>加载失败</source>
         <translation>読み込みに失敗しました</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1034" />
-        <location filename="..\..\editor\timing\file_loader.py" line="754" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1040" />
+        <location filename="..\..\editor\timing\file_loader.py" line="760" />
         <source>解析结果为空</source>
         <translation>解析結果が空です</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1035" />
-        <location filename="..\..\editor\timing\file_loader.py" line="754" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1041" />
+        <location filename="..\..\editor\timing\file_loader.py" line="760" />
         <source>歌词文件未解析出有效内容</source>
         <translation>歌詞ファイルから有効な内容を解析できませんでした</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1059" />
-        <location filename="..\..\editor\timing\file_loader.py" line="775" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1065" />
+        <location filename="..\..\editor\timing\file_loader.py" line="781" />
         <source>歌词已加载</source>
         <translation>歌詞を読み込みました</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1060" />
-        <location filename="..\..\editor\timing\file_loader.py" line="776" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1066" />
+        <location filename="..\..\editor\timing\file_loader.py" line="782" />
         <source>已加载 {n} 行歌词</source>
         <translation>歌詞 {n} 行を読み込みました</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="801" />
+        <location filename="..\..\editor\timing\file_loader.py" line="807" />
         <source>剪贴板为空</source>
         <translation>クリップボードが空です</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="801" />
+        <location filename="..\..\editor\timing\file_loader.py" line="807" />
         <source>剪贴板中没有文本内容</source>
         <translation>クリップボードにテキストがありません</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="997" />
-        <location filename="..\..\editor\timing\file_loader.py" line="882" />
-        <location filename="..\..\editor\timing\file_loader.py" line="831" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1003" />
+        <location filename="..\..\editor\timing\file_loader.py" line="888" />
+        <location filename="..\..\editor\timing\file_loader.py" line="837" />
         <source>无法加载</source>
         <translation>読み込めません</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="997" />
-        <location filename="..\..\editor\timing\file_loader.py" line="883" />
-        <location filename="..\..\editor\timing\file_loader.py" line="831" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1003" />
+        <location filename="..\..\editor\timing\file_loader.py" line="889" />
+        <location filename="..\..\editor\timing\file_loader.py" line="837" />
         <source>请先创建或打开一个项目</source>
         <translation>先にプロジェクトを作成または開いてください</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="852" />
+        <location filename="..\..\editor\timing\file_loader.py" line="858" />
         <source>正在解析内容...</source>
         <translation>内容を解析中...</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="925" />
+        <location filename="..\..\editor\timing\file_loader.py" line="931" />
         <source>正在读取文件...</source>
         <translation>ファイルを読み込み中...</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="951" />
+        <location filename="..\..\editor\timing\file_loader.py" line="957" />
         <source>正在解析歌词</source>
         <translation>歌詞を解析中</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1126" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1132" />
         <source>项目已加载</source>
         <translation>プロジェクトを読み込みました</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1127" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1133" />
         <source>从剪贴板加载了 SUG 项目（保存时需选择路径）</source>
         <translation>クリップボードから SUG プロジェクトを読み込みました（保存時にパスを指定してください）</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1137" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1143" />
         <source>解析 SUG 项目失败: {err}</source>
         <translation>SUG プロジェクトの解析に失敗: {err}</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1154" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1160" />
         <source>检测到 Nicokara 格式歌词（已包含注音）。</source>
         <translation>Nicokara 形式の歌詞を検出（ルビ含む）。</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1162" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1168" />
         <source>检测到含卡拉OK时间轴/注音的 ASS 字幕。</source>
         <translation>カラオケタイムライン／ルビを含む ASS 字幕を検出。</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1164" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1170" />
         <source>春日向/KRL</source>
         <translation>春日向/KRL</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1165" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1171" />
         <source>检测到春日向/KRL 格式歌词（已包含注音）。</source>
         <translation>春日向/KRL 形式の歌詞を検出（ルビ含む）。</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1167" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1173" />
         <source>歌词</source>
         <translation>歌詞</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1168" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1174" />
         <source>检测到自带注音的歌词文件。</source>
         <translation>ルビ付きの歌詞ファイルを検出。</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1185" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1191" />
         <source>{format} 格式检测</source>
         <translation>{format} 形式検出</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1187" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1193" />
         <source>「保留原有注音」使用文件中的注音与逐字时间轴。
 「全部重新分析」清除原有注音，使用自动分析；文件时间戳将按音节位置复用，无法对齐的会被忽略。
 「仅分析未注音字符」保留已有注音，补充缺失的。</source>
@@ -5242,17 +5240,17 @@
 「ルビ未付与のみ解析」は既存ルビを残し、不足分のみ補完します。</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1194" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1200" />
         <source>保留原有注音</source>
         <translation>既存ルビを保持</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1195" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1201" />
         <source>全部重新分析</source>
         <translation>すべて再解析</translation>
     </message>
     <message>
-        <location filename="..\..\editor\timing\file_loader.py" line="1196" />
+        <location filename="..\..\editor\timing\file_loader.py" line="1202" />
         <source>仅分析未注音字符</source>
         <translation>ルビ未付与のみ解析</translation>
     </message>
@@ -5396,48 +5394,48 @@
 </context><context>
     <name>HomeInterface</name>
     <message>
-        <location filename="..\..\home\home_interface.py" line="205" />
+        <location filename="..\..\home\home_interface.py" line="206" />
         <source>已导入 {n} 个歌词文件，共 {lines} 行</source>
         <translation>歌詞ファイル {n} 個、合計 {lines} 行をインポートしました</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="211" />
+        <location filename="..\..\home\home_interface.py" line="212" />
         <source>（已使用第一个音频文件）</source>
         <translation>（最初の音声ファイルを使用）</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="212" />
+        <location filename="..\..\home\home_interface.py" line="213" />
         <source>音频: {name}{suffix}</source>
         <translation>音声: {name}{suffix}</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="654" />
-        <location filename="..\..\home\home_interface.py" line="217" />
+        <location filename="..\..\home\home_interface.py" line="655" />
+        <location filename="..\..\home\home_interface.py" line="218" />
         <source>导入成功</source>
         <translation>インポートしました</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="218" />
+        <location filename="..\..\home\home_interface.py" line="219" />
         <source>；</source>
         <translation>；</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="244" />
+        <location filename="..\..\home\home_interface.py" line="245" />
         <source>歌词打轴工具</source>
         <translation>歌詞タイミングツール</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="271" />
+        <location filename="..\..\home\home_interface.py" line="272" />
         <source>新建项目</source>
         <translation>新規プロジェクト</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="275" />
+        <location filename="..\..\home\home_interface.py" line="276" />
         <source>歌词文本（支持粘贴或导入 LRC/ASS/SRT/TXT）</source>
         <translation>歌詞テキスト（貼り付けまたは LRC/ASS/SRT/TXT インポート対応）</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="279" />
+        <location filename="..\..\home\home_interface.py" line="280" />
         <source>在此粘贴歌词文本...
 支持格式：
 - 普通文本（每行一句）
@@ -5458,121 +5456,111 @@
 ファイルをインポートするとこの領域に自動で挿入され、プロジェクト作成時に解析されます</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="296" />
+        <location filename="..\..\home\home_interface.py" line="297" />
         <source>导入歌词文件</source>
         <translation>歌詞ファイルをインポート</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="301" />
+        <location filename="..\..\home\home_interface.py" line="302" />
         <source>清空</source>
         <translation>クリア</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="310" />
+        <location filename="..\..\home\home_interface.py" line="311" />
         <source>音频文件（打轴需要，可后续添加）</source>
         <translation>音声ファイル（タグ付けに必要、後から追加可）</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="317" />
+        <location filename="..\..\home\home_interface.py" line="318" />
         <source>点击右侧按钮选择音频文件...</source>
         <translation>右側のボタンで音声ファイルを選択...</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="321" />
+        <location filename="..\..\home\home_interface.py" line="322" />
         <source>选择音频</source>
         <translation>音声を選択</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="329" />
+        <location filename="..\..\home\home_interface.py" line="330" />
         <source>创建项目</source>
         <translation>プロジェクトを作成</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="604" />
-        <location filename="..\..\home\home_interface.py" line="353" />
-        <location filename="..\..\home\home_interface.py" line="345" />
+        <location filename="..\..\home\home_interface.py" line="605" />
+        <location filename="..\..\home\home_interface.py" line="354" />
+        <location filename="..\..\home\home_interface.py" line="346" />
         <source>打开项目</source>
         <translation>プロジェクトを開く</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="349" />
+        <location filename="..\..\home\home_interface.py" line="350" />
         <source>打开已有的 .sug 项目文件</source>
         <translation>既存の .sug プロジェクトを開く</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="360" />
+        <location filename="..\..\home\home_interface.py" line="361" />
         <source>保存项目</source>
         <translation>プロジェクトを保存</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="371" />
+        <location filename="..\..\home\home_interface.py" line="372" />
         <source>提示：项目文件不包含音频，请确保音频文件可访问</source>
         <translation>ヒント：プロジェクトファイルに音声は含まれません。音声ファイルへアクセス可能か確認してください</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="382" />
+        <location filename="..\..\home\home_interface.py" line="383" />
         <source>选择歌词文件</source>
         <translation>歌詞ファイルを選択</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="384" />
+        <location filename="..\..\home\home_interface.py" line="385" />
         <source>歌词文件 (*.lrc *.txt *.kra *.krl *.ass *.srt);;所有文件 (*.*)</source>
         <translation>歌詞ファイル (*.lrc *.txt *.kra *.krl *.ass *.srt);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="405" />
+        <location filename="..\..\home\home_interface.py" line="406" />
         <source>选择音频或视频文件</source>
         <translation>音声または動画ファイルを選択</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="407" />
+        <location filename="..\..\home\home_interface.py" line="408" />
         <source>音频/视频文件 (*.mp3 *.wav *.flac *.ogg *.mp4 *.mkv *.m4a *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts *.3gp *.vob *.mts *.m2ts *.rm *.rmvb *.asf *.f4v *.ogv *.m4b *.aac *.wma *.opus *.ape *.ac3 *.dts);;所有文件 (*.*)</source>
         <translation>音声/動画ファイル (*.mp3 *.wav *.flac *.ogg *.mp4 *.mkv *.m4a *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts *.3gp *.vob *.mts *.m2ts *.rm *.rmvb *.asf *.f4v *.ogv *.m4b *.aac *.wma *.opus *.ape *.ac3 *.dts);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="424" />
+        <location filename="..\..\home\home_interface.py" line="425" />
         <source>请输入歌词</source>
         <translation>歌詞を入力してください</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="425" />
+        <location filename="..\..\home\home_interface.py" line="426" />
         <source>歌词文本不能为空</source>
         <translation>歌詞テキストは空にできません</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="573" />
+        <location filename="..\..\home\home_interface.py" line="574" />
         <source>LLM 注音失败，已回退本地引擎</source>
         <translation>LLM ルビ解析に失敗しました。ローカルエンジンへフォールバック</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="590" />
+        <location filename="..\..\home\home_interface.py" line="591" />
         <source>创建失败</source>
         <translation>作成に失敗しました</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="606" />
+        <location filename="..\..\home\home_interface.py" line="607" />
         <source>StrangeUtaGame 项目 (*.sug);;所有文件 (*.*)</source>
         <translation>StrangeUtaGame プロジェクト (*.sug);;すべてのファイル (*.*)</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="655" />
+        <location filename="..\..\home\home_interface.py" line="656" />
         <source>已导入文件内容，共 {lines} 行</source>
         <translation>ファイル内容をインポートしました、合計 {lines} 行</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="667" />
+        <location filename="..\..\home\home_interface.py" line="668" />
         <source>导入失败</source>
         <translation>インポートに失敗しました</translation>
-    </message>
-    <message>
-        <location filename="..\..\home\home_interface.py" line="926" />
-        <source>无法读取视频文件</source>
-        <translation>動画ファイルを読み込めません</translation>
-    </message>
-    <message>
-        <location filename="..\..\home\home_interface.py" line="927" />
-        <source>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</source>
-        <translation>FFmpeg が検出されません。「設定 → 情報/言語 → ツール設定」で FFmpeg パスを指定してください。</translation>
     </message>
     <message>
         <location filename="..\..\home\home_interface.py" line="928" />
@@ -5580,48 +5568,58 @@
         <translation>FFmpeg が検出されませんでした。組み込み実行時の FFmpeg はワークベンチが一元管理しています。ワークベンチ設定の FFmpeg 設定を確認してください。</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="935" />
+        <location filename="..\..\home\home_interface.py" line="930" />
+        <source>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</source>
+        <translation>FFmpeg が検出されません。「設定 → 情報/言語 → ツール設定」で FFmpeg パスを指定してください。</translation>
+    </message>
+    <message>
+        <location filename="..\..\home\home_interface.py" line="932" />
+        <source>无法读取视频文件</source>
+        <translation>動画ファイルを読み込めません</translation>
+    </message>
+    <message>
+        <location filename="..\..\home\home_interface.py" line="941" />
         <source>正在处理视频</source>
         <translation>動画を処理中</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="935" />
+        <location filename="..\..\home\home_interface.py" line="941" />
         <source>正在检查 FFmpeg 环境...</source>
         <translation>FFmpeg 環境を確認中...</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="1055" />
-        <location filename="..\..\home\home_interface.py" line="977" />
+        <location filename="..\..\home\home_interface.py" line="1061" />
+        <location filename="..\..\home\home_interface.py" line="983" />
         <source>加载完成</source>
         <translation>読み込み完了</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="985" />
+        <location filename="..\..\home\home_interface.py" line="991" />
         <source>音频提取成功</source>
         <translation>音声を抽出しました</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="986" />
+        <location filename="..\..\home\home_interface.py" line="992" />
         <source>已从视频中提取音频: {name}</source>
         <translation>動画から音声を抽出しました: {name}</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="999" />
+        <location filename="..\..\home\home_interface.py" line="1005" />
         <source>视频处理失败</source>
         <translation>動画処理に失敗しました</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="1019" />
+        <location filename="..\..\home\home_interface.py" line="1025" />
         <source>正在加载项目</source>
         <translation>プロジェクトを読み込み中</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="1019" />
+        <location filename="..\..\home\home_interface.py" line="1025" />
         <source>正在解析项目数据...</source>
         <translation>プロジェクトデータを解析中...</translation>
     </message>
     <message>
-        <location filename="..\..\home\home_interface.py" line="1068" />
+        <location filename="..\..\home\home_interface.py" line="1074" />
         <source>打开失败</source>
         <translation>開けませんでした</translation>
     </message>
@@ -11094,29 +11092,45 @@ KS側の設定が優先されます。</translation>
 </context><context>
     <name>_AxisGroupCard</name>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="135" />
+        <location filename="..\..\export\axis_group_dialog.py" line="197" />
         <source>输入分组名</source>
         <translation>グループ名を入力</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="137" />
+        <location filename="..\..\export\axis_group_dialog.py" line="199" />
         <source>删除该分组</source>
         <translation>このグループを削除</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="147" />
+        <location filename="..\..\export\axis_group_dialog.py" line="209" />
         <source>主分组</source>
         <translation>メイングループ</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="149" />
+        <location filename="..\..\export\axis_group_dialog.py" line="211" />
         <source>主分组的导出文件携带完整标签信息（标题/演唱者等）；其余组只带本组的 @Emoji 分色标签</source>
         <translation>メイングループの書き出しファイルには完全なタグ情報（タイトル・歌手など）が含まれます。他のグループはそのグループの @Emoji 色分けタグのみを含みます</translation>
     </message>
     <message>
-        <location filename="..\..\export\axis_group_dialog.py" line="158" />
+        <location filename="..\..\export\axis_group_dialog.py" line="224" />
         <source>演唱者</source>
         <translation>歌手</translation>
+    </message>
+    <message>
+        <location filename="..\..\export\axis_group_dialog.py" line="310" />
+        <location filename="..\..\export\axis_group_dialog.py" line="226" />
+        <source>全选</source>
+        <translation>全選択</translation>
+    </message>
+    <message>
+        <location filename="..\..\export\axis_group_dialog.py" line="227" />
+        <source>全选或全不选本组演唱者</source>
+        <translation>このグループの歌手を全選択/全選択解除します</translation>
+    </message>
+    <message>
+        <location filename="..\..\export\axis_group_dialog.py" line="310" />
+        <source>全不选</source>
+        <translation>全選択解除</translation>
     </message>
     <message>
         <source>勾选进入本轴的演唱者（不勾选 = 全部）</source>

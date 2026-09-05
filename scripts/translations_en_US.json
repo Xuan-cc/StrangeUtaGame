@@ -1842,5 +1842,6 @@
   "自定义 URL…": "Custom URL…",
   "输入镜像端点，如 https://hf-mirror.com": "Enter mirror endpoint, e.g. https://hf-mirror.com",
   "从头播放": "Play from beginning",
-  "停止并从头播放": "Stop and play from beginning"
+  "停止并从头播放": "Stop and play from beginning",
+  "全选或全不选本组演唱者": "Select or deselect all singers in this group"
 }
