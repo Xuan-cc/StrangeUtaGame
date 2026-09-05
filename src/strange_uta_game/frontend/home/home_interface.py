@@ -35,6 +35,7 @@ from strange_uta_game.backend.domain import Project, Sentence, Singer
 from strange_uta_game.backend.application import ProjectService, AutoCheckService
 from strange_uta_game.backend.infrastructure.audio.video_converter import (
     VIDEO_EXTENSIONS,
+    is_embedded,
     is_ffmpeg_available,
     is_video_file,
 )
@@ -922,9 +923,14 @@ class HomeInterface(QWidget):
 
         # 检查 FFmpeg 是否可用
         if not is_ffmpeg_available():
+            # embedded 下「工具配置」入口被隐藏（EMBEDDING §5），指引工作台
+            if is_embedded():
+                content = self.tr("未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。")
+            else:
+                content = self.tr("未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。")
             InfoBar.error(
                 title=self.tr("无法读取视频文件"),
-                content=self.tr("未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。"),
+                content=content,
                 orient=Qt.Orientation.Horizontal, isClosable=True,
                 position=InfoBarPosition.TOP, duration=7000,
                 parent=self,

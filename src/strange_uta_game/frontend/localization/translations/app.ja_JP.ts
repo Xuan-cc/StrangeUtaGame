@@ -5026,6 +5026,11 @@
         <translation>FFmpeg が検出されません。「設定 → 情報/言語 → ツール設定」で FFmpeg パスを指定してください。</translation>
     </message>
     <message>
+        <location filename="..\..\editor\timing\file_loader.py" line="299" />
+        <source>未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。</source>
+        <translation>FFmpeg が検出されませんでした。組み込み実行時の FFmpeg はワークベンチが一元管理しています。ワークベンチ設定の FFmpeg 設定を確認してください。</translation>
+    </message>
+    <message>
         <location filename="..\..\editor\timing\file_loader.py" line="306" />
         <source>正在处理视频</source>
         <translation>動画を処理中</translation>
@@ -5568,6 +5573,11 @@
         <location filename="..\..\home\home_interface.py" line="927" />
         <source>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</source>
         <translation>FFmpeg が検出されません。「設定 → 情報/言語 → ツール設定」で FFmpeg パスを指定してください。</translation>
+    </message>
+    <message>
+        <location filename="..\..\home\home_interface.py" line="928" />
+        <source>未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。</source>
+        <translation>FFmpeg が検出されませんでした。組み込み実行時の FFmpeg はワークベンチが一元管理しています。ワークベンチ設定の FFmpeg 設定を確認してください。</translation>
     </message>
     <message>
         <location filename="..\..\home\home_interface.py" line="935" />

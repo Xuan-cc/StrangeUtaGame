@@ -794,6 +794,63 @@ class TestStandaloneNoRegression:
         assert s._config_path is not None
 
 
+class TestVideoLoadFfmpegHintContract:
+    """视频加载 FFmpeg 缺失提示的指引契约（EMBEDDING §5）。
+
+    embedded 下 SUG 自身的「设置 → 关于/语言 → 工具配置」入口被隐藏
+    （about.py tools_group），提示必须引导到工作台设置，否则用户按
+    提示找不到任何可操作入口；standalone 下保持原有设置页指引。
+    前端 InfoBar（home/file_loader）与异步路径透传的 extract_audio
+    报错共用 video_converter.is_embedded 判定源与同款文案。
+    """
+
+    def _make_video(self, tmp_path):
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"x")
+        return str(video)
+
+    def test_missing_ffmpeg_points_to_workbench_in_embedded(
+        self, tmp_path, monkeypatch, reset_default_provider
+    ):
+        from strange_uta_game.backend.infrastructure.audio import video_converter
+
+        AppSettings.set_default_provider(MockProvider())
+        monkeypatch.setattr(video_converter.shutil, "which", lambda name: None)
+
+        assert video_converter.is_embedded()
+        with pytest.raises(RuntimeError) as ei:
+            video_converter.extract_audio(self._make_video(tmp_path))
+        assert "工作台" in str(ei.value)
+        assert "设置 →" not in str(ei.value), "embedded 下不得指向被隐藏的 SUG 设置入口"
+
+    def test_exe_not_found_points_to_workbench_in_embedded(
+        self, tmp_path, monkeypatch, reset_default_provider
+    ):
+        from strange_uta_game.backend.infrastructure.audio import video_converter
+
+        AppSettings.set_default_provider(MockProvider())
+        monkeypatch.setattr(video_converter, "is_ffmpeg_available", lambda: True)
+        monkeypatch.setattr(video_converter, "get_ffmpeg_path", lambda: "Z:/nonexistent/ffmpeg.exe")
+
+        with pytest.raises(RuntimeError) as ei:
+            video_converter.extract_audio(self._make_video(tmp_path))
+        assert "工作台" in str(ei.value)
+
+    def test_missing_ffmpeg_keeps_settings_hint_in_standalone(
+        self, tmp_path, monkeypatch, reset_default_provider
+    ):
+        from strange_uta_game.backend.infrastructure.audio import video_converter
+
+        # patch get_ffmpeg_path 隔离宿主机真实 config 的干扰
+        monkeypatch.setattr(video_converter, "get_ffmpeg_path", lambda: "ffmpeg")
+        monkeypatch.setattr(video_converter.shutil, "which", lambda name: None)
+
+        assert not video_converter.is_embedded()
+        with pytest.raises(RuntimeError) as ei:
+            video_converter.extract_audio(self._make_video(tmp_path))
+        assert "设置 → 关于/语言" in str(ei.value)
+
+
 class TestEmbeddedThemeContract:
     """主题反向写入禁令：embedded 下 SUG 不能改全局 qfluentwidgets Theme，
     也不能掀翻 QApplication palette —— 这两个都归宿主独占。

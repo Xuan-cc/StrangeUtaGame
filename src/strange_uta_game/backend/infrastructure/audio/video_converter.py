@@ -66,6 +66,23 @@ def get_ffmpeg_path() -> str:
         return "ffmpeg"
 
 
+def is_embedded() -> bool:
+    """是否处于宿主接管（embedded）运行模式。
+
+    宿主接管时 MainWindow 会把宿主桥注册为进程级默认 provider
+    （AppSettings.set_default_provider），裸实例经共享缓存拿到现役
+    实例，其 ``_provider`` 即宿主桥——与设置页各隐藏点（about.py 等）
+    的判定口径一致。embedded 下 SUG 自身的 ffmpeg 设置入口被隐藏
+    （EMBEDDING §5），缺失提示必须引导到工作台设置。
+    """
+    try:
+        from strange_uta_game.frontend.settings.app_settings import AppSettings
+
+        return AppSettings()._provider is not None
+    except Exception:
+        return False
+
+
 def is_ffmpeg_available() -> bool:
     """检测 FFmpeg 是否可用。
 
@@ -107,6 +124,11 @@ def extract_audio(video_path: str, progress_cb: Optional[LoadProgressCallback] =
         raise FileNotFoundError(f"文件不存在: {video_path}")
 
     if not is_ffmpeg_available():
+        if is_embedded():
+            raise RuntimeError(
+                "当前环境未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，"
+                "请检查工作台设置中的 FFmpeg 配置。"
+            )
         raise RuntimeError(
             "当前环境未检测到 FFmpeg，请在「设置 → 关于/语言」中配置 FFmpeg 可执行文件路径。"
         )
@@ -144,6 +166,11 @@ def extract_audio(video_path: str, progress_cb: Optional[LoadProgressCallback] =
     except subprocess.TimeoutExpired:
         raise RuntimeError("FFmpeg 提取超时（超过 10 分钟）")
     except FileNotFoundError:
+        if is_embedded():
+            raise RuntimeError(
+                f"找不到 FFmpeg 可执行文件: {ffmpeg}。嵌入式运行的 FFmpeg 由工作台统一管理，"
+                "请检查工作台设置中的 FFmpeg 配置。"
+            )
         raise RuntimeError(
             f"找不到 FFmpeg 可执行文件: {ffmpeg}，请在「设置 → 关于/语言」中重新配置路径。"
         )

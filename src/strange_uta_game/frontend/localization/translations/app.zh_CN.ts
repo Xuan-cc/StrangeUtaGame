@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE TS>
+<?xml version='1.0' encoding='utf-8'?>
 <TS version="2.1" language="zh_CN">
 <context>
     <name>AboutSubInterface</name>
@@ -1009,67 +1008,63 @@
     <name>AiTimingSeparation</name>
     <message>
         <source>FFmpeg 不可用：请在「设置 → 关于/语言」配置 FFmpeg 路径后重试</source>
-        <translation type="vanished">FFmpeg 不可用：请在「设置 → 关于/语言」配置 FFmpeg 路径后重试</translation>
+        <translation>FFmpeg 不可用：请在「设置 → 关于/语言」配置 FFmpeg 路径后重试</translation>
     </message>
     <message>
         <source>FFmpeg 不可用：请检查工作台设置中的 FFmpeg 配置</source>
-        <translation type="vanished">FFmpeg 不可用：请检查工作台设置中的 FFmpeg 配置</translation>
+        <translation>FFmpeg 不可用：请检查工作台设置中的 FFmpeg 配置</translation>
     </message>
     <message>
         <source>人声分离失败（返回码 {code}）。</source>
-        <translation type="vanished">人声分离失败（返回码 {code}）。</translation>
+        <translation>人声分离失败（返回码 {code}）。</translation>
     </message>
     <message>
         <source>人声分离失败（返回码 {code}）。请确认分离环境已完整安装后重试</source>
-        <translation type="vanished">人声分离失败（返回码 {code}）。请确认分离环境已完整安装后重试</translation>
+        <translation>人声分离失败（返回码 {code}）。请确认分离环境已完整安装后重试</translation>
     </message>
     <message>
         <source>人声分离需要 FFmpeg，但未在系统中找到。请在「设置 → 关于/语言」中配置 FFmpeg 路径（或安装 FFmpeg 并加入系统 PATH）后重试</source>
-        <translation type="vanished">人声分离需要 FFmpeg，但未在系统中找到。请在「设置 → 关于/语言」中配置 FFmpeg 路径（或安装 FFmpeg 并加入系统 PATH）后重试</translation>
+        <translation>人声分离需要 FFmpeg，但未在系统中找到。请在「设置 → 关于/语言」中配置 FFmpeg 路径（或安装 FFmpeg 并加入系统 PATH）后重试</translation>
     </message>
     <message>
         <source>人声分离需要 FFmpeg，但未找到可用的 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置后重试</source>
-        <translation type="vanished">人声分离需要 FFmpeg，但未找到可用的 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置后重试</translation>
+        <translation>人声分离需要 FFmpeg，但未找到可用的 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置后重试</translation>
     </message>
     <message>
         <source>分离模型数据表已损坏，已重置（将自动重新下载）</source>
-        <translation type="vanished">分离模型数据表已损坏，已重置（将自动重新下载）</translation>
+        <translation>分离模型数据表已损坏，已重置（将自动重新下载）</translation>
     </message>
     <message>
         <source>分离模型文件不完整（下载中断残留），已自动删除，将在下次分离时重新下载</source>
-        <translation type="vanished">分离模型文件不完整（下载中断残留），已自动删除，将在下次分离时重新下载</translation>
+        <translation>分离模型文件不完整（下载中断残留），已自动删除，将在下次分离时重新下载</translation>
     </message>
     <message>
         <source>分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（代理跟随工作台的网络设置）后重试</source>
-        <translation type="vanished">分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（代理跟随工作台的网络设置）后重试</translation>
+        <translation>分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（代理跟随工作台的网络设置）后重试</translation>
     </message>
     <message>
         <source>分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（可在「设置 → 网络与代理」配置代理）后重试</source>
-        <translation type="vanished">分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（可在「设置 → 网络与代理」配置代理）后重试</translation>
+        <translation>分离模型首次使用需从 GitHub 下载，当前下载失败：请检查网络（可在「设置 → 网络与代理」配置代理）后重试</translation>
     </message>
     <message>
         <source>分离环境未安装：请先在弹窗中安装对齐环境（含分离能力）</source>
-        <translation type="vanished">分离环境未安装：请先在弹窗中安装对齐环境（含分离能力）</translation>
+        <translation>分离环境未安装：请先在弹窗中安装对齐环境（含分离能力）</translation>
     </message>
     <message>
         <source>子进程输出：{output}</source>
-        <translation type="vanished">子进程输出：{output}</translation>
+        <translation>子进程输出：{output}</translation>
     </message>
     <message>
         <source>工作台分离环境未配置，使用 AI 运行环境内置分离</source>
-        <translation type="vanished">工作台分离环境未配置，使用 AI 运行环境内置分离</translation>
+        <translation>工作台分离环境未配置，使用 AI 运行环境内置分离</translation>
     </message>
     <message>
         <source>已取消</source>
-        <translation type="vanished">已取消</translation>
+        <translation>已取消</translation>
     </message>
     <message>
         <source>已取消人声分离</source>
-        <translation type="vanished">已取消人声分离</translation>
-    </message>
-    <message>
-        <source>已补齐分离模型文件 {name}</source>
-        <translation type="vanished">已补齐分离模型文件 {name}</translation>
+        <translation>已取消人声分离</translation>
     </message>
 </context><context>
     <name>ApplySingerDialog</name>
@@ -1826,7 +1821,8 @@
         <location filename="..\..\export\axis_group_dialog.py" line="259" />
         <source>每组对应一个轴文件：按组导出时文件名追加「_组名」，主分组的文件携带完整标签信息。
 同一演唱者可同时进入多组；不勾选任何演唱者的组 = 包含全部演唱者。</source>
-        <translation type="unfinished" />
+        <translation>每组对应一个轴文件：按组导出时文件名追加「_组名」，主分组的文件携带完整标签信息。
+同一演唱者可同时进入多组；不勾选任何演唱者的组 = 包含全部演唱者。</translation>
     </message>
     <message>
         <location filename="..\..\export\axis_group_dialog.py" line="282" />
@@ -1866,7 +1862,7 @@
     <message>
         <source>把演唱者（分色）分成多个轴：每组对应宿主侧的一个轴文件。
 同一演唱者可同时进入多组；未被任何组勾选的演唱者不进入任何轴。</source>
-        <translation type="vanished">把演唱者（分色）分成多个轴：每组对应宿主侧的一个轴文件。
+        <translation>把演唱者（分色）分成多个轴：每组对应宿主侧的一个轴文件。
 同一演唱者可同时进入多组；未被任何组勾选的演唱者不进入任何轴。</translation>
     </message>
 </context><context>
@@ -2421,47 +2417,47 @@
     </message>
     <message>
         <source>その他（♪等特殊符号）</source>
-        <translation type="vanished">その他（♪等特殊符号）</translation>
+        <translation>その他（♪等特殊符号）</translation>
     </message>
     <message>
         <source>ひらがな（平假名）</source>
-        <translation type="vanished">ひらがな（平假名）</translation>
+        <translation>ひらがな（平假名）</translation>
     </message>
     <message>
         <source>アルファベット（英文字母）</source>
-        <translation type="vanished">アルファベット（英文字母）</translation>
+        <translation>アルファベット（英文字母）</translation>
     </message>
     <message>
         <source>カタカナ（片假名・注音为平假名）</source>
-        <translation type="vanished">カタカナ（片假名・注音为平假名）</translation>
+        <translation>カタカナ（片假名・注音为平假名）</translation>
     </message>
     <message>
         <source>カタカナ（片假名・注音含有英文）</source>
-        <translation type="vanished">カタカナ（片假名・注音含有英文）</translation>
+        <translation>カタカナ（片假名・注音含有英文）</translation>
     </message>
     <message>
         <source>促音（っ/ッ）</source>
-        <translation type="vanished">促音（っ/ッ）</translation>
+        <translation>促音（っ/ッ）</translation>
     </message>
     <message>
         <source>数字</source>
-        <translation type="vanished">数字</translation>
+        <translation>数字</translation>
     </message>
     <message>
         <source>漢字（汉字）</source>
-        <translation type="vanished">漢字（汉字）</translation>
+        <translation>漢字（汉字）</translation>
     </message>
     <message>
         <source>空格</source>
-        <translation type="vanished">空格</translation>
+        <translation>空格</translation>
     </message>
     <message>
         <source>記号（符号）</source>
-        <translation type="vanished">記号（符号）</translation>
+        <translation>記号（符号）</translation>
     </message>
     <message>
         <source>長音符号（ー、～等）</source>
-        <translation type="vanished">長音符号（ー、～等）</translation>
+        <translation>長音符号（ー、～等）</translation>
     </message>
 </context><context>
     <name>DictCandidateDialog</name>
@@ -4750,7 +4746,7 @@
     <message>
         <location filename="..\..\export\export_interface.py" line="819" />
         <source>主分组</source>
-        <translation type="unfinished">主分组</translation>
+        <translation>主分组</translation>
     </message>
     <message>
         <location filename="..\..\export\export_interface.py" line="1105" />
@@ -5029,6 +5025,11 @@
         <location filename="..\..\editor\timing\file_loader.py" line="298" />
         <source>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</source>
         <translation>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</translation>
+    </message>
+    <message>
+        <location filename="..\..\editor\timing\file_loader.py" line="299" />
+        <source>未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。</source>
+        <translation>未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。</translation>
     </message>
     <message>
         <location filename="..\..\editor\timing\file_loader.py" line="306" />
@@ -5575,6 +5576,11 @@
         <translation>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</translation>
     </message>
     <message>
+        <location filename="..\..\home\home_interface.py" line="928" />
+        <source>未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。</source>
+        <translation>未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。</translation>
+    </message>
+    <message>
         <location filename="..\..\home\home_interface.py" line="935" />
         <source>正在处理视频</source>
         <translation>正在处理视频</translation>
@@ -5732,39 +5738,39 @@
     <name>Installer</name>
     <message>
         <source>更新器已是最新，无需更新</source>
-        <translation type="vanished">更新器已是最新，无需更新</translation>
+        <translation>更新器已是最新，无需更新</translation>
     </message>
     <message>
         <source>更新器更新完毕</source>
-        <translation type="vanished">更新器更新完毕</translation>
+        <translation>更新器更新完毕</translation>
     </message>
     <message>
         <source>正在下载更新器…</source>
-        <translation type="vanished">正在下载更新器…</translation>
+        <translation>正在下载更新器…</translation>
     </message>
     <message>
         <source>正在下载更新器… (已下载 {done} MB)</source>
-        <translation type="vanished">正在下载更新器… (已下载 {done} MB)</translation>
+        <translation>正在下载更新器… (已下载 {done} MB)</translation>
     </message>
     <message>
         <source>正在下载更新器… {pct}%  ({done} / {total} MB)</source>
-        <translation type="vanished">正在下载更新器… {pct}%  ({done} / {total} MB)</translation>
+        <translation>正在下载更新器… {pct}%  ({done} / {total} MB)</translation>
     </message>
     <message>
         <source>正在启动更新器…</source>
-        <translation type="vanished">正在启动更新器…</translation>
+        <translation>正在启动更新器…</translation>
     </message>
     <message>
         <source>正在提取更新器…</source>
-        <translation type="vanished">正在提取更新器…</translation>
+        <translation>正在提取更新器…</translation>
     </message>
     <message>
         <source>正在校验文件完整性…</source>
-        <translation type="vanished">正在校验文件完整性…</translation>
+        <translation>正在校验文件完整性…</translation>
     </message>
     <message>
         <source>正在检查更新器版本…</source>
-        <translation type="vanished">正在检查更新器版本…</translation>
+        <translation>正在检查更新器版本…</translation>
     </message>
 </context><context>
     <name>InterfacePreview</name>
@@ -5989,31 +5995,31 @@ Checkpoint数：每字符一项（如 2,2,1），累加为本行节奏点总数 
     <name>LyricLoader</name>
     <message>
         <source>正在对齐注音 {idx}/{total} 行</source>
-        <translation type="vanished">正在对齐注音 {idx}/{total} 行</translation>
+        <translation>正在对齐注音 {idx}/{total} 行</translation>
     </message>
     <message>
         <source>正在解析 ASS 格式...</source>
-        <translation type="vanished">正在解析 ASS 格式...</translation>
+        <translation>正在解析 ASS 格式...</translation>
     </message>
     <message>
         <source>正在解析 Kirakara 格式...</source>
-        <translation type="vanished">正在解析 Kirakara 格式...</translation>
+        <translation>正在解析 Kirakara 格式...</translation>
     </message>
     <message>
         <source>正在解析 LRC 格式...</source>
-        <translation type="vanished">正在解析 LRC 格式...</translation>
+        <translation>正在解析 LRC 格式...</translation>
     </message>
     <message>
         <source>正在解析 Nicokara 格式...</source>
-        <translation type="vanished">正在解析 Nicokara 格式...</translation>
+        <translation>正在解析 Nicokara 格式...</translation>
     </message>
     <message>
         <source>正在解析 SRT 格式...</source>
-        <translation type="vanished">正在解析 SRT 格式...</translation>
+        <translation>正在解析 SRT 格式...</translation>
     </message>
     <message>
         <source>正在解析 UtaTen 格式...</source>
-        <translation type="vanished">正在解析 UtaTen 格式...</translation>
+        <translation>正在解析 UtaTen 格式...</translation>
     </message>
 </context><context>
     <name>LyricParseWorker</name>
@@ -7702,11 +7708,11 @@ Checkpoint数：每字符一项（如 2,2,1），累加为本行节奏点总数 
     </message>
     <message>
         <source>收起 ▾</source>
-        <translation type="vanished">收起 ▾</translation>
+        <translation>收起 ▾</translation>
     </message>
     <message>
         <source>详情 ▸</source>
-        <translation type="vanished">详情 ▸</translation>
+        <translation>详情 ▸</translation>
     </message>
 </context><context>
     <name>SetSingerByLineDialog</name>
@@ -8955,31 +8961,31 @@ KS 来源的配置将优先覆盖同名设置。</translation>
     </message>
     <message>
         <source>[{mode}]「{action}」已占用{trigger}按键 {key}</source>
-        <translation type="vanished">[{mode}]「{action}」已占用{trigger}按键 {key}</translation>
+        <translation>[{mode}]「{action}」已占用{trigger}按键 {key}</translation>
     </message>
     <message>
         <source>[打轴]</source>
-        <translation type="vanished">[打轴]</translation>
+        <translation>[打轴]</translation>
     </message>
     <message>
         <source>[编辑]</source>
-        <translation type="vanished">[编辑]</translation>
+        <translation>[编辑]</translation>
     </message>
     <message>
         <source>[通用]</source>
-        <translation type="vanished">[通用]</translation>
+        <translation>[通用]</translation>
     </message>
     <message>
         <source>快捷键冲突</source>
-        <translation type="vanished">快捷键冲突</translation>
+        <translation>快捷键冲突</translation>
     </message>
     <message>
         <source>短按</source>
-        <translation type="vanished">短按</translation>
+        <translation>短按</translation>
     </message>
     <message>
         <source>长按</source>
-        <translation type="vanished">长按</translation>
+        <translation>长按</translation>
     </message>
 </context><context>
     <name>SingerColorPreviewPanel</name>
@@ -10272,347 +10278,347 @@ KS 来源的配置将优先覆盖同名设置。</translation>
     <name>UpdateProgressWindow</name>
     <message>
         <source>取消更新</source>
-        <translation type="vanished">取消更新</translation>
+        <translation>取消更新</translation>
     </message>
     <message>
         <source>正在准备更新</source>
-        <translation type="vanished">正在准备更新</translation>
+        <translation>正在准备更新</translation>
     </message>
     <message>
         <source>正在取消…</source>
-        <translation type="vanished">正在取消…</translation>
+        <translation>正在取消…</translation>
     </message>
     <message>
         <source>正在获取最新更新器，请稍候…</source>
-        <translation type="vanished">正在获取最新更新器，请稍候…</translation>
+        <translation>正在获取最新更新器，请稍候…</translation>
     </message>
 </context><context>
     <name>UpdaterUI</name>
     <message>
         <source> 小时</source>
-        <translation type="vanished"> 小时</translation>
+        <translation> 小时</translation>
     </message>
     <message>
         <source>GitHub 可达</source>
-        <translation type="vanished">GitHub 可达</translation>
+        <translation>GitHub 可达</translation>
     </message>
     <message>
         <source>Windows 系统代理未启用，但 {hint}。建议切换为「自动检测代理」或「手动指定地址」。</source>
-        <translation type="vanished">Windows 系统代理未启用，但 {hint}。建议切换为「自动检测代理」或「手动指定地址」。</translation>
+        <translation>Windows 系统代理未启用，但 {hint}。建议切换为「自动检测代理」或「手动指定地址」。</translation>
     </message>
     <message>
         <source>Windows 系统代理未启用，本机也未发现常用代理端口监听。若你的代理软件正在运行，请改用「手动指定地址」。</source>
-        <translation type="vanished">Windows 系统代理未启用，本机也未发现常用代理端口监听。若你的代理软件正在运行，请改用「手动指定地址」。</translation>
+        <translation>Windows 系统代理未启用，本机也未发现常用代理端口监听。若你的代理软件正在运行，请改用「手动指定地址」。</translation>
     </message>
     <message>
         <source>{url}　已生效（{mode} · 来源：{source}）</source>
-        <translation type="vanished">{url}　已生效（{mode} · 来源：{source}）</translation>
+        <translation>{url}　已生效（{mode} · 来源：{source}）</translation>
     </message>
     <message>
         <source>↑ 上移</source>
-        <translation type="vanished">↑ 上移</translation>
+        <translation>↑ 上移</translation>
     </message>
     <message>
         <source>↓ 下移</source>
-        <translation type="vanished">↓ 下移</translation>
+        <translation>↓ 下移</translation>
     </message>
     <message>
         <source>下载源：{label}</source>
-        <translation type="vanished">下载源：{label}</translation>
+        <translation>下载源：{label}</translation>
     </message>
     <message>
         <source>代理可正常访问 GitHub，但官方 API 对你的出口 IP 限流（403）。检查更新会自动改用网页端探测，通常不受影响。</source>
-        <translation type="vanished">代理可正常访问 GitHub，但官方 API 对你的出口 IP 限流（403）。检查更新会自动改用网页端探测，通常不受影响。</translation>
+        <translation>代理可正常访问 GitHub，但官方 API 对你的出口 IP 限流（403）。检查更新会自动改用网页端探测，通常不受影响。</translation>
     </message>
     <message>
         <source>代理模式</source>
-        <translation type="vanished">代理模式</translation>
+        <translation>代理模式</translation>
     </message>
     <message>
         <source>使用系统代理</source>
-        <translation type="vanished">使用系统代理</translation>
+        <translation>使用系统代理</translation>
     </message>
     <message>
         <source>例如 http://127.0.0.1:7890 ；仅在选择「手动指定地址」时生效</source>
-        <translation type="vanished">例如 http://127.0.0.1:7890 ；仅在选择「手动指定地址」时生效</translation>
+        <translation>例如 http://127.0.0.1:7890 ；仅在选择「手动指定地址」时生效</translation>
     </message>
     <message>
         <source>关闭代理</source>
-        <translation type="vanished">关闭代理</translation>
+        <translation>关闭代理</translation>
     </message>
     <message>
         <source>即将退出当前应用，由 Updater 完成替换并自动重启…</source>
-        <translation type="vanished">即将退出当前应用，由 Updater 完成替换并自动重启…</translation>
+        <translation>即将退出当前应用，由 Updater 完成替换并自动重启…</translation>
     </message>
     <message>
         <source>发现新版本</source>
-        <translation type="vanished">发现新版本</translation>
+        <translation>发现新版本</translation>
     </message>
     <message>
         <source>取消</source>
-        <translation type="vanished">取消</translation>
+        <translation>取消</translation>
     </message>
     <message>
         <source>启动时检查更新</source>
-        <translation type="vanished">启动时检查更新</translation>
+        <translation>启动时检查更新</translation>
     </message>
     <message>
         <source>启动检查间隔</source>
-        <translation type="vanished">启动检查间隔</translation>
+        <translation>启动检查间隔</translation>
     </message>
     <message>
         <source>在本机端口 {ports} 上检测到代理监听</source>
-        <translation type="vanished">在本机端口 {ports} 上检测到代理监听</translation>
+        <translation>在本机端口 {ports} 上检测到代理监听</translation>
     </message>
     <message>
         <source>在浏览器中查看完整发布说明</source>
-        <translation type="vanished">在浏览器中查看完整发布说明</translation>
+        <translation>在浏览器中查看完整发布说明</translation>
     </message>
     <message>
         <source>尚未填写手动代理地址，例如 http://127.0.0.1:7897</source>
-        <translation type="vanished">尚未填写手动代理地址，例如 http://127.0.0.1:7897</translation>
+        <translation>尚未填写手动代理地址，例如 http://127.0.0.1:7897</translation>
     </message>
     <message>
         <source>已使用代理 {url}（来源：{source}）</source>
-        <translation type="vanished">已使用代理 {url}（来源：{source}）</translation>
+        <translation>已使用代理 {url}（来源：{source}）</translation>
     </message>
     <message>
         <source>已关闭代理 —— 应用将直接访问网络。</source>
-        <translation type="vanished">已关闭代理 —— 应用将直接访问网络。</translation>
+        <translation>已关闭代理 —— 应用将直接访问网络。</translation>
     </message>
     <message>
         <source>已是最新版本</source>
-        <translation type="vanished">已是最新版本</translation>
+        <translation>已是最新版本</translation>
     </message>
     <message>
         <source>已跳过此版本</source>
-        <translation type="vanished">已跳过此版本</translation>
+        <translation>已跳过此版本</translation>
     </message>
     <message>
         <source>应用启动后在后台轻量检查 GitHub Release，发现新版本时弹窗提示</source>
-        <translation type="vanished">应用启动后在后台轻量检查 GitHub Release，发现新版本时弹窗提示</translation>
+        <translation>应用启动后在后台轻量检查 GitHub Release，发现新版本时弹窗提示</translation>
     </message>
     <message>
         <source>应用更新</source>
-        <translation type="vanished">应用更新</translation>
+        <translation>应用更新</translation>
     </message>
     <message>
         <source>当前版本 v{local}　|　发布于 {date}</source>
-        <translation type="vanished">当前版本 v{local}　|　发布于 {date}</translation>
+        <translation>当前版本 v{local}　|　发布于 {date}</translation>
     </message>
     <message>
         <source>当前版本 v{version} 已是最新</source>
-        <translation type="vanished">当前版本 v{version} 已是最新</translation>
+        <translation>当前版本 v{version} 已是最新</translation>
     </message>
     <message>
         <source>当前生效代理</source>
-        <translation type="vanished">当前生效代理</translation>
+        <translation>当前生效代理</translation>
     </message>
     <message>
         <source>恢复默认</source>
-        <translation type="vanished">恢复默认</translation>
+        <translation>恢复默认</translation>
     </message>
     <message>
         <source>您可以稍后在设置中重新检查更新</source>
-        <translation type="vanished">您可以稍后在设置中重新检查更新</translation>
+        <translation>您可以稍后在设置中重新检查更新</translation>
     </message>
     <message>
         <source>我知道了</source>
-        <translation type="vanished">我知道了</translation>
+        <translation>我知道了</translation>
     </message>
     <message>
         <source>手动代理地址</source>
-        <translation type="vanished">手动代理地址</translation>
+        <translation>手动代理地址</translation>
     </message>
     <message>
         <source>手动地址 {url!r} 无效，请检查协议与端口。</source>
-        <translation type="vanished">手动地址 {url!r} 无效，请检查协议与端口。</translation>
+        <translation>手动地址 {url!r} 无效，请检查协议与端口。</translation>
     </message>
     <message>
         <source>手动指定</source>
-        <translation type="vanished">手动指定</translation>
+        <translation>手动指定</translation>
     </message>
     <message>
         <source>手动指定地址</source>
-        <translation type="vanished">手动指定地址</translation>
+        <translation>手动指定地址</translation>
     </message>
     <message>
         <source>按顺序尝试，前一项失败时自动降级到下一项。
 你可以拖动条目，或选中条目后用右侧 ↑/↓ 按钮调整。</source>
-        <translation type="vanished">按顺序尝试，前一项失败时自动降级到下一项。
+        <translation>按顺序尝试，前一项失败时自动降级到下一项。
 你可以拖动条目，或选中条目后用右侧 ↑/↓ 按钮调整。</translation>
     </message>
     <message>
         <source>无法启动 Updater</source>
-        <translation type="vanished">无法启动 Updater</translation>
+        <translation>无法启动 Updater</translation>
     </message>
     <message>
         <source>更新内容：</source>
-        <translation type="vanished">更新内容：</translation>
+        <translation>更新内容：</translation>
     </message>
     <message>
         <source>更新器未就绪</source>
-        <translation type="vanished">更新器未就绪</translation>
+        <translation>更新器未就绪</translation>
     </message>
     <message>
         <source>更新已取消</source>
-        <translation type="vanished">更新已取消</translation>
+        <translation>更新已取消</translation>
     </message>
     <message>
         <source>更新已启动</source>
-        <translation type="vanished">更新已启动</translation>
+        <translation>更新已启动</translation>
     </message>
     <message>
         <source>更新源优先级</source>
-        <translation type="vanished">更新源优先级</translation>
+        <translation>更新源优先级</translation>
     </message>
     <message>
         <source>未发现系统代理，也未在常用端口（{ports} 等）发现监听</source>
-        <translation type="vanished">未发现系统代理，也未在常用端口（{ports} 等）发现监听</translation>
+        <translation>未发现系统代理，也未在常用端口（{ports} 等）发现监听</translation>
     </message>
     <message>
         <source>未启用代理</source>
-        <translation type="vanished">未启用代理</translation>
+        <translation>未启用代理</translation>
     </message>
     <message>
         <source>未来不再为 v{version} 提示。重新检测可重新启用。</source>
-        <translation type="vanished">未来不再为 v{version} 提示。重新检测可重新启用。</translation>
+        <translation>未来不再为 v{version} 提示。重新检测可重新启用。</translation>
     </message>
     <message>
         <source>未检测到代理</source>
-        <translation type="vanished">未检测到代理</translation>
+        <translation>未检测到代理</translation>
     </message>
     <message>
         <source>未知</source>
-        <translation type="vanished">未知</translation>
+        <translation>未知</translation>
     </message>
     <message>
         <source>未知日期</source>
-        <translation type="vanished">未知日期</translation>
+        <translation>未知日期</translation>
     </message>
     <message>
         <source>未知错误</source>
-        <translation type="vanished">未知错误</translation>
+        <translation>未知错误</translation>
     </message>
     <message>
         <source>检查中...</source>
-        <translation type="vanished">检查中...</translation>
+        <translation>检查中...</translation>
     </message>
     <message>
         <source>检查更新</source>
-        <translation type="vanished">检查更新</translation>
+        <translation>检查更新</translation>
     </message>
     <message>
         <source>检查更新失败</source>
-        <translation type="vanished">检查更新失败</translation>
+        <translation>检查更新失败</translation>
     </message>
     <message>
         <source>检测成功</source>
-        <translation type="vanished">检测成功</translation>
+        <translation>检测成功</translation>
     </message>
     <message>
         <source>测试中...</source>
-        <translation type="vanished">测试中...</translation>
+        <translation>测试中...</translation>
     </message>
     <message>
         <source>测试连通性</source>
-        <translation type="vanished">测试连通性</translation>
+        <translation>测试连通性</translation>
     </message>
     <message>
         <source>源尝试记录：</source>
-        <translation type="vanished">源尝试记录：</translation>
+        <translation>源尝试记录：</translation>
     </message>
     <message>
         <source>版本 v{ver}  |  由 RhythmicaLyrics 启发</source>
-        <translation type="vanished">版本 v{ver}  |  由 RhythmicaLyrics 启发</translation>
+        <translation>版本 v{ver}  |  由 RhythmicaLyrics 启发</translation>
     </message>
     <message>
         <source>确定</source>
-        <translation type="vanished">确定</translation>
+        <translation>确定</translation>
     </message>
     <message>
         <source>稍后再说</source>
-        <translation type="vanished">稍后再说</translation>
+        <translation>稍后再说</translation>
     </message>
     <message>
         <source>立即从所选源拉取最新发布信息（不受启动检查间隔限制）</source>
-        <translation type="vanished">立即从所选源拉取最新发布信息（不受启动检查间隔限制）</translation>
+        <translation>立即从所选源拉取最新发布信息（不受启动检查间隔限制）</translation>
     </message>
     <message>
         <source>立即更新</source>
-        <translation type="vanished">立即更新</translation>
+        <translation>立即更新</translation>
     </message>
     <message>
         <source>立即检查更新</source>
-        <translation type="vanished">立即检查更新</translation>
+        <translation>立即检查更新</translation>
     </message>
     <message>
         <source>系统代理</source>
-        <translation type="vanished">系统代理</translation>
+        <translation>系统代理</translation>
     </message>
     <message>
         <source>编辑顺序</source>
-        <translation type="vanished">编辑顺序</translation>
+        <translation>编辑顺序</translation>
     </message>
     <message>
         <source>缺少 Updater.exe。请到 GitHub Release 手动下载最新版本。</source>
-        <translation type="vanished">缺少 Updater.exe。请到 GitHub Release 手动下载最新版本。</translation>
+        <translation>缺少 Updater.exe。请到 GitHub Release 手动下载最新版本。</translation>
     </message>
     <message>
         <source>网络与代理（更新源）</source>
-        <translation type="vanished">网络与代理（更新源）</translation>
+        <translation>网络与代理（更新源）</translation>
     </message>
     <message>
         <source>自动检测</source>
-        <translation type="vanished">自动检测</translation>
+        <translation>自动检测</translation>
     </message>
     <message>
         <source>自动检测代理</source>
-        <translation type="vanished">自动检测代理</translation>
+        <translation>自动检测代理</translation>
     </message>
     <message>
         <source>自动检测未发现可用代理。如确有代理在运行，请改用「手动指定地址」。</source>
-        <translation type="vanished">自动检测未发现可用代理。如确有代理在运行，请改用「手动指定地址」。</translation>
+        <translation>自动检测未发现可用代理。如确有代理在运行，请改用「手动指定地址」。</translation>
     </message>
     <message>
         <source>访问 GitHub 时是否经过代理；自动检测会探测常用本地代理端口</source>
-        <translation type="vanished">访问 GitHub 时是否经过代理；自动检测会探测常用本地代理端口</translation>
+        <translation>访问 GitHub 时是否经过代理；自动检测会探测常用本地代理端口</translation>
     </message>
     <message>
         <source>调整更新源优先级</source>
-        <translation type="vanished">调整更新源优先级</translation>
+        <translation>调整更新源优先级</translation>
     </message>
     <message>
         <source>距上次检查不足该时长时，启动期不再发起请求（手动检查不受限）</source>
-        <translation type="vanished">距上次检查不足该时长时，启动期不再发起请求（手动检查不受限）</translation>
+        <translation>距上次检查不足该时长时，启动期不再发起请求（手动检查不受限）</translation>
     </message>
     <message>
         <source>跳过此版本</source>
-        <translation type="vanished">跳过此版本</translation>
+        <translation>跳过此版本</translation>
     </message>
     <message>
         <source>连通失败</source>
-        <translation type="vanished">连通失败</translation>
+        <translation>连通失败</translation>
     </message>
     <message>
         <source>连通成功</source>
-        <translation type="vanished">连通成功</translation>
+        <translation>连通成功</translation>
     </message>
     <message>
         <source>连通成功（API 限流中）</source>
-        <translation type="vanished">连通成功（API 限流中）</translation>
+        <translation>连通成功（API 限流中）</translation>
     </message>
     <message>
         <source>（发布说明为空）</source>
-        <translation type="vanished">（发布说明为空）</translation>
+        <translation>（发布说明为空）</translation>
     </message>
     <message>
         <source>（尚未检测）</source>
-        <translation type="vanished">（尚未检测）</translation>
+        <translation>（尚未检测）</translation>
     </message>
     <message>
         <source>（尚未读取）</source>
-        <translation type="vanished">（尚未读取）</translation>
+        <translation>（尚未读取）</translation>
     </message>
 </context><context>
     <name>VideoExtractOnlyWorker</name>
@@ -10988,95 +10994,95 @@ KS 来源的配置将优先覆盖同名设置。</translation>
     <name>WinRTJapaneseGuide</name>
     <message>
         <source>否</source>
-        <translation type="vanished">否</translation>
+        <translation>否</translation>
     </message>
     <message>
         <source>复制命令</source>
-        <translation type="vanished">复制命令</translation>
+        <translation>复制命令</translation>
     </message>
     <message>
         <source>安装完成</source>
-        <translation type="vanished">安装完成</translation>
+        <translation>安装完成</translation>
     </message>
     <message>
         <source>我知道了</source>
-        <translation type="vanished">我知道了</translation>
+        <translation>我知道了</translation>
     </message>
     <message>
         <source>手动安装</source>
-        <translation type="vanished">手动安装</translation>
+        <translation>手动安装</translation>
     </message>
     <message>
         <source>手动安装日语注音组件</source>
-        <translation type="vanished">手动安装日语注音组件</translation>
+        <translation>手动安装日语注音组件</translation>
     </message>
     <message>
         <source>授权安装</source>
-        <translation type="vanished">授权安装</translation>
+        <translation>授权安装</translation>
     </message>
     <message>
         <source>接下来会弹出 Windows 的「用户账户控制 (UAC)」窗口，
 请点击「是」以授权安装日语组件。
 
 是否继续？</source>
-        <translation type="vanished">接下来会弹出 Windows 的「用户账户控制 (UAC)」窗口，
+        <translation>接下来会弹出 Windows 的「用户账户控制 (UAC)」窗口，
 请点击「是」以授权安装日语组件。
 
 是否继续？</translation>
     </message>
     <message>
         <source>日语注音组件已安装，可以开始注音了。</source>
-        <translation type="vanished">日语注音组件已安装，可以开始注音了。</translation>
+        <translation>日语注音组件已安装，可以开始注音了。</translation>
     </message>
     <message>
         <source>日语注音需要 Windows 的日语功能（含日语 IME），当前系统未安装。
 约几十 MB，从 Windows Update 联网下载，不会更改系统显示语言。
 
 是否现在安装？</source>
-        <translation type="vanished">日语注音需要 Windows 的日语功能（含日语 IME），当前系统未安装。
+        <translation>日语注音需要 Windows 的日语功能（含日语 IME），当前系统未安装。
 约几十 MB，从 Windows Update 联网下载，不会更改系统显示语言。
 
 是否现在安装？</translation>
     </message>
     <message>
         <source>是</source>
-        <translation type="vanished">是</translation>
+        <translation>是</translation>
     </message>
     <message>
         <source>暂不</source>
-        <translation type="vanished">暂不</translation>
+        <translation>暂不</translation>
     </message>
     <message>
         <source>未找到 winrt 运行库（winrt-Windows.Globalization）。
 这通常是安装包不完整导致，请重新安装本应用或联系开发者。</source>
-        <translation type="vanished">未找到 winrt 运行库（winrt-Windows.Globalization）。
+        <translation>未找到 winrt 运行库（winrt-Windows.Globalization）。
 这通常是安装包不完整导致，请重新安装本应用或联系开发者。</translation>
     </message>
     <message>
         <source>正在从 Windows Update 下载并安装日语注音组件，请稍候…
 （请在弹出的 UAC 窗口点击「是」以授权安装）</source>
-        <translation type="vanished">正在从 Windows Update 下载并安装日语注音组件，请稍候…
+        <translation>正在从 Windows Update 下载并安装日语注音组件，请稍候…
 （请在弹出的 UAC 窗口点击「是」以授权安装）</translation>
     </message>
     <message>
         <source>正在安装</source>
-        <translation type="vanished">正在安装</translation>
+        <translation>正在安装</translation>
     </message>
     <message>
         <source>现在安装</source>
-        <translation type="vanished">现在安装</translation>
+        <translation>现在安装</translation>
     </message>
     <message>
         <source>缺少注音组件</source>
-        <translation type="vanished">缺少注音组件</translation>
+        <translation>缺少注音组件</translation>
     </message>
     <message>
         <source>自动安装未完成（可能未授权 UAC 或下载失败）。可按下面的方式手动安装：</source>
-        <translation type="vanished">自动安装未完成（可能未授权 UAC 或下载失败）。可按下面的方式手动安装：</translation>
+        <translation>自动安装未完成（可能未授权 UAC 或下载失败）。可按下面的方式手动安装：</translation>
     </message>
     <message>
         <source>需要安装日语注音组件</source>
-        <translation type="vanished">需要安装日语注音组件</translation>
+        <translation>需要安装日语注音组件</translation>
     </message>
 </context><context>
     <name>WorkspaceSwitcher</name>
@@ -11090,7 +11096,7 @@ KS 来源的配置将优先覆盖同名设置。</translation>
     <message>
         <location filename="..\..\export\axis_group_dialog.py" line="135" />
         <source>输入分组名</source>
-        <translation type="unfinished" />
+        <translation>输入分组名</translation>
     </message>
     <message>
         <location filename="..\..\export\axis_group_dialog.py" line="137" />
@@ -11110,11 +11116,11 @@ KS 来源的配置将优先覆盖同名设置。</translation>
     <message>
         <location filename="..\..\export\axis_group_dialog.py" line="158" />
         <source>演唱者</source>
-        <translation type="unfinished">演唱者</translation>
+        <translation>演唱者</translation>
     </message>
     <message>
         <source>勾选进入本轴的演唱者（不勾选 = 全部）</source>
-        <translation type="vanished">勾选进入本轴的演唱者（不勾选 = 全部）</translation>
+        <translation>勾选进入本轴的演唱者（不勾选 = 全部）</translation>
     </message>
 </context><context>
     <name>_ColorSwatch</name>

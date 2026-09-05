@@ -5026,6 +5026,11 @@ Leave empty to disable, and automatically use the saved project / last loaded fi
         <translation>FFmpeg not detected. Set the FFmpeg path in Settings → About/Language → Tool configuration.</translation>
     </message>
     <message>
+        <location filename="..\..\editor\timing\file_loader.py" line="299" />
+        <source>未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。</source>
+        <translation>FFmpeg not detected. In embedded mode FFmpeg is managed by the workbench; check the FFmpeg configuration in workbench settings.</translation>
+    </message>
+    <message>
         <location filename="..\..\editor\timing\file_loader.py" line="306" />
         <source>正在处理视频</source>
         <translation>Processing video</translation>
@@ -5568,6 +5573,11 @@ Imported files fill this area and are parsed when creating a project.</translati
         <location filename="..\..\home\home_interface.py" line="927" />
         <source>未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。</source>
         <translation>FFmpeg not detected. Set the FFmpeg path in Settings → About/Language → Tool configuration.</translation>
+    </message>
+    <message>
+        <location filename="..\..\home\home_interface.py" line="928" />
+        <source>未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。</source>
+        <translation>FFmpeg not detected. In embedded mode FFmpeg is managed by the workbench; check the FFmpeg configuration in workbench settings.</translation>
     </message>
     <message>
         <location filename="..\..\home\home_interface.py" line="935" />

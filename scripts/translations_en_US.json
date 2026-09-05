@@ -761,6 +761,7 @@
   "未找到有效的词典条目": "No valid dictionary entry found",
   "未来不再为 v{version} 提示。重新检测可重新启用。": "Will not notify for v{version} again. Re-check to re-enable.",
   "未检测到 FFmpeg，请在「设置 → 关于/语言 → 工具配置」中浏览并设置 FFmpeg 路径。": "FFmpeg not detected. Set the FFmpeg path in Settings → About/Language → Tool configuration.",
+  "未检测到 FFmpeg。嵌入式运行的 FFmpeg 由工作台统一管理，请检查工作台设置中的 FFmpeg 配置。": "FFmpeg not detected. In embedded mode FFmpeg is managed by the workbench; check the FFmpeg configuration in workbench settings.",
   "未检测到代理": "No proxy detected",
   "未知": "Unknown",
   "未知日期": "Unknown date",
