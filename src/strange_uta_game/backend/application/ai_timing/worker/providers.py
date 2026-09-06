@@ -25,13 +25,21 @@ CancelFn = Callable[[], bool]
 
 DEFAULT_WAV2VEC2_MODEL = "NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn"
 
-# 尾音静音判据（2026-08 用户决策口径）：相对分离人声整轨平均功率的
-# 比例阈值——帧功率低于 ratio × 整轨平均功率视为静音，且需连续
-# min_frames 帧才认定「进入静音」（吸收换气与持续音的瞬时低谷）。
-# 用整轨平均功率作基准可以自适应不同素材的响度，不依赖绝对电平。
-# 0.2 首版实测偏高（弱尾音被误判为静音截断），2026-08-15 调至 0.1。
-TAIL_SILENCE_POWER_RATIO = 0.1
+# 尾音静音判据（2026-08 用户决策口径）：相对分离人声整轨能量上四分位
+# （≈典型有声帧电平，见 _frames_to_spans）的比例阈值——帧功率低于
+# ratio × 基线视为静音，且需连续 min_frames 帧才认定「进入静音」
+# （吸收换气与持续音的瞬时低谷）。用整轨统计量作基准可以自适应不同
+# 素材的响度，不依赖绝对电平。
+# 0.2 首版实测偏高（弱尾音被误判为静音截断），2026-08-15 调至 0.1；
+# 2026-09-07 放宽到 0.15：0.1×P75 在分离残留/混响拖尾普遍偏高的素材
+# 上几乎判不出静音，停顿点频繁整段吸附到下一字起点。
+TAIL_SILENCE_POWER_RATIO = 0.15
 TAIL_SILENCE_MIN_FRAMES = 4
+# 吸附回退（2026-09-07 用户决策）：静音判据失效时不再完全吸附到下一
+# token 起点，而是回退该毫秒数——停顿点与下一字符首时间戳完全重合
+# 会导致两个 Tag 重叠、不可点选；回退后仍不早于自身起点 + 同值
+# （与前一时间戳至少保留 20ms，不产生逆序）。
+TAIL_SNAP_BACKOFF_MS = 20
 
 
 def apply_word_group_resplit(
@@ -72,20 +80,52 @@ def apply_word_group_resplit(
     return grouped
 
 
+def _adaptive_min_frames(window_frames: int) -> int:
+    """短窗自适应：连续静音帧数要求 = min(标准值, ceil(窗口帧数/2))，下限 1。
+
+    20ms/帧下标准值 4 帧 = 80ms；字间间隙不足 80ms 时固定 4 帧永远凑
+    不满，静音判定必然失败（终点只能整段吸附下一 token 起点）。短窗按
+    「静音至少占窗口一半」折减，仍能吸收孤立的瞬时低谷。
+    """
+    if window_frames <= 0:
+        return 1
+    return max(1, min(TAIL_SILENCE_MIN_FRAMES, (window_frames + 1) // 2))
+
+
 def _silence_boundary(
     energies: Any, mean_power: float, from_frame: int, to_frame: int
 ) -> int:
-    """从 from_frame 向后找第一段持续静音的起始帧；未找到返回 to_frame。"""
+    """从 from_frame 向后找第一段持续静音的起始帧；未找到返回 to_frame。
+
+    持续帧数要求按窗口长度自适应（_adaptive_min_frames）。
+    """
     threshold = TAIL_SILENCE_POWER_RATIO * mean_power
+    start = max(0, from_frame)
+    min_frames = _adaptive_min_frames(to_frame - start)
     run = 0
-    for f in range(max(0, from_frame), to_frame):
+    for f in range(start, to_frame):
         if float(energies[f]) < threshold:
             run += 1
-            if run >= TAIL_SILENCE_MIN_FRAMES:
-                return f - TAIL_SILENCE_MIN_FRAMES + 1
+            if run >= min_frames:
+                return f - min_frames + 1
         else:
             run = 0
     return to_frame
+
+
+def _snap_end_with_backoff(start_ms: int, ctc_end_ms: int, cand_ms: int) -> int:
+    """静音判据失效时的吸附终点：cand - 20ms，且不产生逆序。
+
+    约束按序收敛（2026-09-07 用户决策）：
+    - 回退后不早于自身起点 + TAIL_SNAP_BACKOFF_MS（与前一时间戳至少
+      保留 20ms，停顿点不得早于本字符节拍起点）；
+    - 不短于 CTC 原始终点（不切掉已确认的发声）；
+    - 不越过 cand（下一 token 起点/音频末尾），保持 token 区间单调。
+    极端小间隙下前两者与上限冲突时退化为紧贴 cand。
+    """
+    target = cand_ms - TAIL_SNAP_BACKOFF_MS
+    target = max(target, start_ms + TAIL_SNAP_BACKOFF_MS, ctc_end_ms)
+    return min(target, cand_ms)
 
 
 def normalize_latn_text(text: str) -> str:
@@ -395,7 +435,7 @@ class _TorchProviderBase(ForcedAlignmentProvider):
     def _frame_energies(self, waveform: Any, num_frames: int) -> Any:
         """按 emission 帧计算平均功率（numpy 数组）；不可用时返回 None。
 
-        返回 None 时尾音退回纯「吸附下一起点」行为（与旧版一致）。
+        返回 None 时尾音退回「吸附下一起点但回退 20ms」的行为。
         """
         try:
             import numpy as np
@@ -426,9 +466,11 @@ class _TorchProviderBase(ForcedAlignmentProvider):
         """帧区间 → 毫秒 EmissionSpan；空组用相邻 token 插值补齐。
 
         尾音修正（tail_snap）：先吸附到下一 token 起点（弥补 CTC 对
-        长音/尾音的截断，FA-Kara 思路），再按整轨平均功率的比例判据
+        长音/尾音的截断，FA-Kara 思路），再按整轨能量的比例判据
         裁到静音边界——否则行尾尾音会一路延伸跨过整段间奏静音；
         末个 token 也借此把被 CTC 截断的真实尾音延伸到静音边界。
+        窗口内找不到持续静音时不再完全吸附，而是回退 20ms
+        （_snap_end_with_backoff），避免停顿点与下一字符首时间戳重合。
         """
         ratio = (num_samples / num_frames) / sample_rate * 1000.0  # ms / frame
         spans: List[EmissionSpan] = []
@@ -489,13 +531,22 @@ class _TorchProviderBase(ForcedAlignmentProvider):
                     boundary_f = _silence_boundary(
                         energies, mean_power, raw_end_f, cand_f
                     )
-                    new_end = int(round(boundary_f * ratio))
-                    # 不短于 CTC 原始终点，不超过下一 token 起点/音频末尾
-                    new_end = max(cur.end_ms, min(new_end, cand))
+                    if boundary_f >= cand_f:
+                        # 窗口内找不到持续静音：吸附但回退 20ms，
+                        # 不与下一 token 起点完全重合
+                        new_end = _snap_end_with_backoff(
+                            cur.start_ms, cur.end_ms, cand
+                        )
+                    else:
+                        new_end = int(round(boundary_f * ratio))
+                        # 不短于 CTC 原始终点，不超过下一 token 起点/音频末尾
+                        new_end = max(cur.end_ms, min(new_end, cand))
                     if new_end <= cur.start_ms:
                         continue
                 else:
-                    new_end = cand
+                    new_end = _snap_end_with_backoff(
+                        cur.start_ms, cur.end_ms, cand
+                    )
                 spans[i] = EmissionSpan(
                     token_index=cur.token_index,
                     start_ms=cur.start_ms,

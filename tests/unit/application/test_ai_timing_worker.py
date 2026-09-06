@@ -494,11 +494,12 @@ class TestTailSilenceCriterion:
         energies = [1.0] * 26 + [0.0] * 14
         spans = self._spans([(0, 10), (12, 20), (22, 24)], energies)
         assert spans[2].end_ms == 26 * 20
-        # 中间 token 之间全程有声：保持吸附下一起点
-        assert spans[1].end_ms == 22 * 20
+        # 中间 token 之间全程有声：吸附下一起点但回退 20ms，
+        # 不与下一 token 起点完全重合
+        assert spans[1].end_ms == 21 * 20
 
-    def test_no_waveform_falls_back_to_plain_snap(self):
-        """无波形（旧调用路径）：退回纯吸附下一起点行为。"""
+    def test_no_waveform_falls_back_to_snap_backoff(self):
+        """无波形（旧调用路径）：吸附下一起点但回退 20ms。"""
         from strange_uta_game.backend.application.ai_timing.alignment import (
             AlignmentRequest,
             AlignmentToken,
@@ -522,7 +523,8 @@ class TestTailSilenceCriterion:
             tail_snap=True,
             waveform=None,
         )
-        assert spans[0].end_ms == 30 * 20  # 吸附到下一 token 起点
+        # 吸附到下一 token 起点前 20ms（29 帧 = 580ms）
+        assert spans[0].end_ms == 30 * 20 - 20
 
     def test_separation_residual_still_clamps(self):
         """真实电平回归：有声占少数、间奏是分离残留（0.04~0.1×有声）
@@ -536,23 +538,71 @@ class TestTailSilenceCriterion:
         # (0.30,0.24,0.18,0.14,0.11,0.09,0.07,0.05)；20-39 残底(0.04)
         residual = [0.30, 0.24, 0.18, 0.14, 0.11, 0.09, 0.07, 0.05]
         energies = [1.0] * 12 + residual + [0.04] * 20
-        # 上四分位 ≈ 1.0 → 阈值 0.1：残留自第 17 帧（0.09）起连续低于
-        # 阈值，≥4 帧后边界落在第 17 帧（=340ms）
+        # 上四分位 ≈ 1.0 → 阈值 0.15：残留自第 15 帧（0.14）起连续低于
+        # 阈值，≥4 帧后边界落在第 15 帧（=300ms）
         spans = self._spans([(0, 10), (30, 32)], energies)
-        assert spans[0].end_ms == 17 * 20
+        assert spans[0].end_ms == 15 * 20
 
     def test_silence_boundary_min_frames(self):
-        """持续静音需连续 ≥TAIL_SILENCE_MIN_FRAMES 帧，瞬时低谷不截断。"""
+        """持续静音需连续 ≥TAIL_SILENCE_MIN_FRAMES 帧，瞬时低谷不截断。
+
+        长窗口（35 帧）下自适应要求仍为标准值 4。
+        """
         from strange_uta_game.backend.application.ai_timing.worker.providers import (
             TAIL_SILENCE_MIN_FRAMES,
             _silence_boundary,
         )
 
         energies = [1.0] * 20 + [0.0] * 3 + [1.0] * 7 + [0.0] * 10
-        # mean = 27/40 → 阈值 0.1×0.675 = 0.0675；3 帧低谷不算静音
+        # mean = 27/40 → 阈值 0.15×0.675 = 0.101；3 帧低谷不算静音
         b = _silence_boundary(energies, sum(energies) / len(energies), 5, 40)
         assert b == 30  # 第一段 ≥4 帧静音的起点
         assert TAIL_SILENCE_MIN_FRAMES == 4
+
+    def test_adaptive_min_frames_values(self):
+        """短窗自适应：要求 = min(4, ceil(窗口/2))，下限 1。"""
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            _adaptive_min_frames,
+        )
+
+        assert _adaptive_min_frames(0) == 1
+        assert _adaptive_min_frames(1) == 1
+        assert _adaptive_min_frames(2) == 1
+        assert _adaptive_min_frames(3) == 2
+        assert _adaptive_min_frames(4) == 2
+        assert _adaptive_min_frames(5) == 3
+        assert _adaptive_min_frames(7) == 4
+        assert _adaptive_min_frames(8) == 4
+        assert _adaptive_min_frames(100) == 4
+
+    def test_short_gap_detects_silence_adaptively(self):
+        """短于 80ms 的字间间隙也能判出静音（不再整段吸附）。
+
+        旧口径固定 4 帧：3 帧窗口永远凑不满，终点必然吸附下一 token
+        起点（停顿点与下一字符首时间戳重合）。自适应折半后 2 帧即可。
+        """
+        # 帧 0-20 有声、21-22 静音、23 起下一 token 有声
+        energies = [1.0] * 21 + [0.0] * 2 + [1.0] * 10
+        spans = self._spans([(0, 20), (23, 25)], energies)
+        # 窗口 3 帧 → 要求 2 帧 → 静音边界=第 21 帧=420ms
+        assert spans[0].end_ms == 21 * 20
+
+    def test_snap_end_with_backoff_ordering(self):
+        """吸附回退 20ms 的保序约束：不逆序、不早于自身起点+20ms、不越 cand。"""
+        from strange_uta_game.backend.application.ai_timing.worker.providers import (
+            TAIL_SNAP_BACKOFF_MS,
+            _snap_end_with_backoff,
+        )
+
+        assert TAIL_SNAP_BACKOFF_MS == 20
+        # 常规：cand-20
+        assert _snap_end_with_backoff(1000, 1020, 1100) == 1080
+        # 间隙偏小：cand-20 早于自身起点+20 → 取起点+20（不逆序）
+        assert _snap_end_with_backoff(1000, 1015, 1030) == 1020
+        # 回退不得早于自身起点+20（与前一时间戳至少保留 20ms）
+        assert _snap_end_with_backoff(1000, 1005, 1030) == 1020
+        # 极端小间隙（起点+20 超过 cand）：保序优先，退化为紧贴 cand
+        assert _snap_end_with_backoff(1000, 1010, 1015) == 1015
 
 
 class TestExternalInterpreterBootstrap:
